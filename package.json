@@ -2,9 +2,11 @@
   "name": "notebooks",
   "version": "1.0.0",
   "main": "index.js",
+  "type": "module",
   "scripts": {
-    "preview": "notebooks preview --root src",
-    "build": "notebooks build --root src -- src/**/*.html && mv src/.observable/dist docs"
+    "start": "vite preview -c vite.config.js",
+    "preview": "notebooks preview --root notebooks --template src/template.html",
+    "build": "notebooks build --root notebooks -- notebooks/**/*.html --template src/template.html && mv notebooks/.observable/dist docs"
   },
   "keywords": [],
   "author": "",
@@ -12,5 +14,8 @@
   "description": "",
   "dependencies": {
     "@observablehq/notebook-kit": "^1.0.1"
+  },
+  "devDependencies": {
+    "vite": "^7.0.6"
   }
 }
