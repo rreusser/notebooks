@@ -8,13 +8,13 @@ import { glob } from "glob";
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
-const TEMPLATE_PATH = path.join(__dirname, "src/template.html");
+const TEMPLATE_PATH = path.join(__dirname, "lib/template.html");
 
 const githubUrlBase =
-  "https://github.com/rreusser/notebooks/tree/main/notebooks";
+  "https://github.com/rreusser/notebooks/tree/main/src";
 
 const notebooksPath = glob.sync(
-  path.join(__dirname, "notebooks", "**", "*.html"),
+  path.join(__dirname, "src", "**", "*.html"),
   {
     nodir: true,
     absolute: true,
@@ -71,7 +71,7 @@ export default defineConfig({
       input: notebooksPath,
     },
   },
-  root: "notebooks",
+  root: "src",
   base: "/notebooks/",
   clearScreen: false,
 });
