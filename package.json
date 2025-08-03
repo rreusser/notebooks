@@ -4,9 +4,8 @@
   "main": "index.js",
   "type": "module",
   "scripts": {
-    "start": "vite preview -c vite.config.js",
-    "preview": "notebooks preview --root notebooks --template src/template.html",
-    "build": "notebooks build --root notebooks -- notebooks/**/*.html --template src/template.html && mv notebooks/.observable/dist docs"
+    "start": "vite -c vite.config.js",
+    "build": "vite build -c vite.config.js"
   },
   "keywords": [],
   "author": "",
@@ -16,6 +15,8 @@
     "@observablehq/notebook-kit": "^1.0.1"
   },
   "devDependencies": {
-    "vite": "^7.0.6"
+    "handlebars": "^4.7.8",
+    "vite": "^7.0.6",
+    "yaml": "^2.8.0"
   }
 }
