@@ -93,13 +93,13 @@
     rotation // Fails to import the animating slider!
   </script>
   <script id="66" type="text/markdown">
-    Importing the variable `rotation` only imports its value, when what we really want to import is its view, i.e. the animating slider. We’d write that like this on observablehq.com, but it fails here.
+    Importing the variable `rotation` only imports its value, when what we really want to import `viewof rotation`, i.e. the animating slider. In the web interface, we’d write that like the following:
   </script>
   <script id="65" type="application/vnd.observable.javascript" pinned="">
     // import { viewof rotation } from '@rreusser/drawing-3d-objects-with-svg'
   </script>
   <script id="60" type="text/markdown">
-    In fact, it doesn’t only fail to *run*, `viewof` is a syntax error which causes the static site to fail to *build*. Compare with the successful import [here](https://observablehq.com/d/fd061c92e0975083).
+    but in Notebooks 2.0, this fails. (In fact, it doesn’t only fail to *run*, `viewof` is a syntax error which causes the static site to fail to *build*.) Compare with the successful import [here](https://observablehq.com/d/fd061c92e0975083).
   </script>
   <script id="38" type="text/markdown">
     ## Integration
@@ -117,6 +117,6 @@
     ## Conclusion
   </script>
   <script id="53" type="text/markdown">
-    I’ve always been a fan of Observable, but with this new tooling, it feels like we’ve sort of arrived. I wanted sort of a combo blogging platform slash notebook, and for the first time ever, it’s sort of just unfolded in front of me without any major obstacles.
+    I’ve always been a fan of Observable, but with this new tooling, it feels like we’ve sort of arrived. I always wanted sort of a combo blogging platform slash notebook development environment, and for the first time ever, it’s sort of just unfolded in front of me without any major obstacles.
   </script>
 </notebook>
