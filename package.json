@@ -11,10 +11,8 @@
   "author": "",
   "license": "ISC",
   "description": "",
-  "dependencies": {
-    "@observablehq/notebook-kit": "^1.0.1"
-  },
   "devDependencies": {
+    "@observablehq/notebook-kit": "^1.0.1",
     "glob": "^11.0.3",
     "handlebars": "^4.7.8",
     "vite": "^7.0.6",

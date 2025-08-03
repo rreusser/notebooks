@@ -1,23 +1,20 @@
 <!doctype html>
 <notebook theme="air">
-  <title>Hello, Observable Notebook Kit</title>
+  <title>Hello, Observable Notebook Kit!</title>
   <script id="1" type="text/markdown">
-    # Hello, Observable Notebook Kit
+    # Hello, Observable Notebook Kit!
   </script>
   <script id="21" type="text/markdown">
     [Observable Notebooks 2.0](https://observablehq.com/notebook-kit/) is here! And my first impression is… it’s good. 🎉🍾
   </script>
   <script id="2" type="text/markdown">
-    Let’s back up. I’ve been a strong believer in [Observable](https://observablehq.com/) notebooks since the public beta launched in 2018. It’s what I always wanted but never myself been able to will into existence. The reactive cell evaluation conforms easily to my mental model of how code should run, and Observable’s editor UI/UX and product execution has always been top-notch. [Observable Plot](https://observablehq.com/plot/) is wonderful. I have about 520 private notebooks, about about [sixty of which](https://observablehq.com/collection/@rreusser/writeups) are somewhat presentable.
+    Let’s back up. I’ve been a strong believer in [Observable](https://observablehq.com/) notebooks since the public beta launched in 2018. It’s the coding environment I always wanted but had not myself managed to will into existence. Reactive cell evaluation conforms easily to my mental model of how code should run, and Observable’s editor UI/UX and product execution has always been top-notch. [Observable Plot](https://observablehq.com/plot/) is wonderful. I have about 520 private notebooks, about about [sixty of which](https://observablehq.com/collection/@rreusser/writeups) are somewhat presentable.
   </script>
   <script id="15" type="text/markdown">
-    Of course Observable isn't without imperfections. JavaScript libraries to power numerical analysis have always been underpowered. The vertically-tall notebook format doesn’t conform well to horizontally-wide screens, so I oddly structure my notebooks to be developed in two side-by-side windows, one for editing code and the other for viewing the output. And “[Please](https://talk.observablehq.com/t/dataflow-a-self-hosted-observable-notebook-editor/5055) [allow](https://talk.observablehq.com/t/offline-editor/4905) [us](https://talk.observablehq.com/t/noob-can-you-run-your-own-observable-server/757/1) [to](https://talk.observablehq.com/t/private-installations/501) [edit](https://talk.observablehq.com/t/notebooks-as-offline-first-single-webfiles/10145) [notebooks](https://talk.observablehq.com/t/where-is-observable-going/10372) [outside of Observable](https://talk.observablehq.com/t/source-control-observable/3117)” is one of the longest-running feature requests I can recall.
+    Of course Observable isn't without imperfections. [Observable-flavored JavaScript](https://observablehq.com/documentation/cells/observable-javascript) isn’t for everyone. JavaScript libraries to power numerical analysis have always been underpowered. The vertically-tall notebook format doesn’t perfectly fit horizontally-wide screens. And “[Please](https://talk.observablehq.com/t/dataflow-a-self-hosted-observable-notebook-editor/5055) [allow](https://talk.observablehq.com/t/offline-editor/4905) [us](https://talk.observablehq.com/t/noob-can-you-run-your-own-observable-server/757/1) [to](https://talk.observablehq.com/t/private-installations/501) [edit](https://talk.observablehq.com/t/notebooks-as-offline-first-single-webfiles/10145) [notebooks](https://talk.observablehq.com/t/where-is-observable-going/10372) [outside of Observable](https://talk.observablehq.com/t/source-control-observable/3117)” is the longest-running feature requests I can recall.
   </script>
   <script id="16" type="text/markdown">
-    Finally, and perhaps most importantly, I’ve always been uneasy about ceding control over my data to a private company. They’re good—they’re really, really good—but it’s a roll of the dice to trust that notebooks I create today will be there tomorrow.
-  </script>
-  <script id="3" type="text/markdown">
-    I’d already made a few aborted attempts to shoehorn downloaded Observable notebooks into my personal website template, but they’d be—at best—static snapshots of my editable notebooks, and at any rate, any approach I’d tried was tacky enough that I’d never actually carried through
+    Finally, and perhaps most importantly, I’ve always been uneasy about ceding control over my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, it’s a roll of the dice to trust that notebooks I create today will be there tomorrow, and even if the company folded up and left static notebooks online in perpetuity—more than they actually owe us—I’d still lose the ability to edit the notebooks I’ve created.
   </script>
   <script id="17" type="text/markdown">
     When I saw the [Observable Desktop](https://observablehq.com/notebook-kit/desktop) and [Observable Notebook Kit](https://github.com/observablehq/notebook-kit) product announcements, it was quickly clear they’d done it right.
@@ -26,7 +23,7 @@
     ## Observable Desktop
   </script>
   <script id="19" type="text/markdown">
-    I mean, this is it, right? An offline editor whose output is a human-readable HTML file. What else is there? Notebooks are now just a few lines of code.
+    I mean, this is it, right? An offline editor application whose output is a human-readable HTML file. What else is there? Notebooks are now just a few lines of code. The interface works offline and if you install a lightweight dev server, you can sidestep the app in favor of a text editor and a web browser.
   </script>
   <script id="20" type="text/markdown">
     ```html
@@ -38,23 +35,59 @@
       <\/script>
       ...
     </notebook>
-      ```
+    ```
+  </script>
+  <script id="37" type="text/markdown">
+    There’s no sense talking this to death. You should [go try the app](https://observablehq.com/notebook-kit/desktop)!
   </script>
   <script id="11" type="text/markdown">
-    ### Updating my mental model
+    ## Notebook Kit
   </script>
-  <script id="14" type="text/markdown">
-    Most notably, there’s a new editor interface.
+  <script id="39" type="text/markdown">
+    The second new component is [Notebook Kit](https://observablehq.com/notebook-kit/kit). There’s a bit more to understand here. There are different library components—vite, build, utility, and runtime—and I’ve only scratched the surface.
   </script>
-  <script id="9" type="module" pinned="">
-    const z = y + 5;
+  <script id="25" type="text/markdown">
+    As far as the coding experience goes, there are some subtle differences. In addition to [Observable JavaScript](https://observablehq.com/documentation/cells/observable-javascript), you can now code in *plain old* JavaScript. It took me a bit of experimentation to understand how this plays with reactive cell evaluation.
+  </script>
+  <script id="29" type="text/markdown">
+    Recall that with Observable JavaScript, each cell has a single output. The runtime performs a topological sort of cell inputs and outputs and executes cells in whatever order is required. Cells look like either a bare value, e.g.
+  </script>
+  <script id="26" type="application/vnd.observable.javascript" pinned="">
+    x = y + 5
+  </script>
+  <script id="27" type="text/markdown">
+    or wrapped in a block with a return statement like this
+  </script>
+  <script id="28" type="application/vnd.observable.javascript" pinned="">
+    y = { return z + 1; }
+  </script>
+  <script id="40" type="text/markdown">
+    The new development is that plain old JavaScript now also plays well with Observable notebooks, though it now takes a `display()` helper to produce visual output.
+  </script>
+  <script id="32" type="module" pinned="">
+    const z = r;
     display(z);
   </script>
-  <script id="6" type="application/vnd.observable.javascript" pinned="">
-    y = x + 2
+  <script id="41" type="text/markdown" pinned="">
+    Notice that `z` has already been used above when defining `x` in an Observable JavaScript cell! This only works in different cells; variables within a single cell are of course not reactive.
   </script>
-  <script id="10" type="module" pinned="">
-    const x = 1;
-    display(x);
+  <script id="36" type="module" pinned="">
+    const t = s + 2;
+    const s = 1;
+  </script>
+  <script id="48" type="text/markdown">
+    And as always, this is still Observable, so it’s all running live and has access to lovely libraries like [Observable Inputs](https://observablehq.com/documentation/inputs/overview).
+  </script>
+  <script id="47" type="application/vnd.observable.javascript" pinned="">
+    viewof r = Inputs.range([1, 10], {step: 1, label: 'r'})
+  </script>
+  <script id="38" type="text/markdown">
+    ## Integration
+  </script>
+  <script id="42" type="text/markdown">
+    There are other major features like being able to pull directly from source on the disk and no longer having to live inside Observable's magic `<iframe>`.
+  </script>
+  <script id="46" type="text/markdown">
+    The real moment of truth for me though was discovering what it means to integrate this into my personal website.
   </script>
 </notebook>

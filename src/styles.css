@@ -50,15 +50,23 @@ main {
   padding-bottom: 100px;
 }
 
-main > div:first-child {
+main h1,
+main h2,
+main h3,
+main h4,
+main h5,
+main h6 {
   font-family: "Open Sans", sans-serif;
+  -webkit-font-smoothing: auto;
+}
+
+main > div:first-child {
   margin: 0 auto 100px;
   background-color: var(--rrtheme-color);
   text-align: center;
   padding-top: 100px;
   padding-bottom: 100px;
   position: relative;
-  -webkit-font-smoothing: auto;
 }
 
 main > div:first-child:before,
@@ -103,4 +111,19 @@ main > div:first-child h1 {
   main > div:first-child {
     text-align: left;
   }
+}
+main h1,
+main h2,
+main h3,
+main h4,
+main h5,
+main h6 {
+  font-weight: 400;
+}
+
+main h2 {
+  margin-top: 3em;
+}
+main h3 {
+  margin-top: 2em;
 }

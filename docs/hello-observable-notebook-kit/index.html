@@ -2,8 +2,8 @@
     
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="twitter:title" content="Hello, Observable Notebook Kit" />
-    <meta property="og:title" content="Hello, Observable Notebook Kit" />
+    <meta name="twitter:title" content="Hello, Observable Notebook Kit!" />
+    <meta property="og:title" content="Hello, Observable Notebook Kit!" />
     <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
       /* Copyright 2025 Observable, Inc. */
       :root {
@@ -1224,15 +1224,22 @@ body {
   width: 100%;
   padding-bottom: 100px;
 }
-      main > div:first-child {
+      main h1,
+main h2,
+main h3,
+main h4,
+main h5,
+main h6 {
   font-family: "Open Sans", sans-serif;
+  -webkit-font-smoothing: auto;
+}
+      main > div:first-child {
   margin: 0 auto 100px;
   background-color: var(--rrtheme-color);
   text-align: center;
   padding-top: 100px;
   padding-bottom: 100px;
   position: relative;
-  -webkit-font-smoothing: auto;
 }
       main > div:first-child:before,
 main > div:first-child:after {
@@ -1273,9 +1280,23 @@ main > div:first-child a {
     text-align: left;
   }
 }
+      main h1,
+main h2,
+main h3,
+main h4,
+main h5,
+main h6 {
+  font-weight: 400;
+}
+      main h2 {
+  margin-top: 3em;
+}
+      main h3 {
+  margin-top: 2em;
+}
     </style>
      <style> main { max-width: 640px; }</style> 
-  <meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Hello, Observable Notebook Kit</title>  <script type="module" crossorigin src="/notebooks/assets/index-iL_t-vSS.js"></script>
+  <meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Hello, Observable Notebook Kit!</title>  <script type="module" crossorigin src="/notebooks/assets/index-BToEMoP7.js"></script>
 </head>
   <body>
     <nav class="menu">
@@ -1285,16 +1306,15 @@ main > div:first-child a {
       <a class="menu__item" href="/running/">running</a>
     </nav>
     <div class="container">
-      <main><div id="cell-1" class="observablehq observablehq--cell"><div><h1>Hello, Observable Notebook Kit</h1>
+      <main><div id="cell-1" class="observablehq observablehq--cell"><div><h1>Hello, Observable Notebook Kit!</h1>
 <p><a href="https://rreusser.github.io">Ricky Reusser</a><br />August 1, 2025<br /><a href="https:/github.com/rreusser/notebooks/tree/main/src/hello-observable-notebook-kit/index.html">View source →</a></p>
 </div></div><div id="cell-21" class="observablehq observablehq--cell"><div><p><a href="https://observablehq.com/notebook-kit/">Observable Notebooks 2.0</a> is here! And my first impression is… it’s good. 🎉🍾</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"><div><p>Let’s back up. I’ve been a strong believer in <a href="https://observablehq.com/">Observable</a> notebooks since the public beta launched in 2018. It’s what I always wanted but never myself been able to will into existence. The reactive cell evaluation conforms easily to my mental model of how code should run, and Observable’s editor UI/UX and product execution has always been top-notch. <a href="https://observablehq.com/plot/">Observable Plot</a> is wonderful. I have about 520 private notebooks, about about <a href="https://observablehq.com/collection/@rreusser/writeups">sixty of which</a> are somewhat presentable.</p>
-</div></div><div id="cell-15" class="observablehq observablehq--cell"><div><p>Of course Observable isn’t without imperfections. JavaScript libraries to power numerical analysis have always been underpowered. The vertically-tall notebook format doesn’t conform well to horizontally-wide screens, so I oddly structure my notebooks to be developed in two side-by-side windows, one for editing code and the other for viewing the output. And “<a href="https://talk.observablehq.com/t/dataflow-a-self-hosted-observable-notebook-editor/5055">Please</a> <a href="https://talk.observablehq.com/t/offline-editor/4905">allow</a> <a href="https://talk.observablehq.com/t/noob-can-you-run-your-own-observable-server/757/1">us</a> <a href="https://talk.observablehq.com/t/private-installations/501">to</a> <a href="https://talk.observablehq.com/t/notebooks-as-offline-first-single-webfiles/10145">edit</a> <a href="https://talk.observablehq.com/t/where-is-observable-going/10372">notebooks</a> <a href="https://talk.observablehq.com/t/source-control-observable/3117">outside of Observable</a>” is one of the longest-running feature requests I can recall.</p>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>Finally, and perhaps most importantly, I’ve always been uneasy about ceding control over my data to a private company. They’re good—they’re really, really good—but it’s a roll of the dice to trust that notebooks I create today will be there tomorrow.</p>
-</div></div><div id="cell-3" class="observablehq observablehq--cell"><div><p>I’d already made a few aborted attempts to shoehorn downloaded Observable notebooks into my personal website template, but they’d be—at best—static snapshots of my editable notebooks, and at any rate, any approach I’d tried was tacky enough that I’d never actually carried through</p>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"><div><p>Let’s back up. I’ve been a strong believer in <a href="https://observablehq.com/">Observable</a> notebooks since the public beta launched in 2018. It’s the coding environment I always wanted but had not myself managed to will into existence. Reactive cell evaluation conforms easily to my mental model of how code should run, and Observable’s editor UI/UX and product execution has always been top-notch. <a href="https://observablehq.com/plot/">Observable Plot</a> is wonderful. I have about 520 private notebooks, about about <a href="https://observablehq.com/collection/@rreusser/writeups">sixty of which</a> are somewhat presentable.</p>
+</div></div><div id="cell-15" class="observablehq observablehq--cell"><div><p>Of course Observable isn’t without imperfections. <a href="https://observablehq.com/documentation/cells/observable-javascript">Observable-flavored JavaScript</a> isn’t for everyone. JavaScript libraries to power numerical analysis have always been underpowered. The vertically-tall notebook format doesn’t perfectly fit horizontally-wide screens. And “<a href="https://talk.observablehq.com/t/dataflow-a-self-hosted-observable-notebook-editor/5055">Please</a> <a href="https://talk.observablehq.com/t/offline-editor/4905">allow</a> <a href="https://talk.observablehq.com/t/noob-can-you-run-your-own-observable-server/757/1">us</a> <a href="https://talk.observablehq.com/t/private-installations/501">to</a> <a href="https://talk.observablehq.com/t/notebooks-as-offline-first-single-webfiles/10145">edit</a> <a href="https://talk.observablehq.com/t/where-is-observable-going/10372">notebooks</a> <a href="https://talk.observablehq.com/t/source-control-observable/3117">outside of Observable</a>” is the longest-running feature requests I can recall.</p>
+</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>Finally, and perhaps most importantly, I’ve always been uneasy about ceding control over my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, it’s a roll of the dice to trust that notebooks I create today will be there tomorrow, and even if the company folded up and left static notebooks online in perpetuity—more than they actually owe us—I’d still lose the ability to edit the notebooks I’ve created.</p>
 </div></div><div id="cell-17" class="observablehq observablehq--cell"><div><p>When I saw the <a href="https://observablehq.com/notebook-kit/desktop">Observable Desktop</a> and <a href="https://github.com/observablehq/notebook-kit">Observable Notebook Kit</a> product announcements, it was quickly clear they’d done it right.</p>
 </div></div><div id="cell-18" class="observablehq observablehq--cell"><div><h2 id="observable-desktop" tabindex="-1"><a href="#observable-desktop">Observable Desktop</a></h2>
-</div></div><div id="cell-19" class="observablehq observablehq--cell"><div><p>I mean, this is it, right? An offline editor whose output is a human-readable HTML file. What else is there? Notebooks are now just a few lines of code.</p>
+</div></div><div id="cell-19" class="observablehq observablehq--cell"><div><p>I mean, this is it, right? An offline editor application whose output is a human-readable HTML file. What else is there? Notebooks are now just a few lines of code. The interface works offline and if you install a lightweight dev server, you can sidestep the app in favor of a text editor and a web browser.</p>
 </div></div><div id="cell-20" class="observablehq observablehq--cell"><div><pre data-language="html"><code class="language-html"><span class="tok-meta">&lt;!doctype html&gt;</span>
 &lt;<span class="tok-keyword">notebook</span> <span class="tok-definition">theme</span>=<span class="tok-string">"air"</span>&gt;
   &lt;<span class="tok-keyword">title</span>&gt;Hello, Observable Notebook Kit&lt;/<span class="tok-keyword">title</span>&gt;
@@ -1304,11 +1324,21 @@ main > div:first-child a {
   ...
 &lt;/<span class="tok-keyword">notebook</span>&gt;
 </code></pre>
-</div></div><div id="cell-11" class="observablehq observablehq--cell"><div><h3 id="updating-my-mental-model" tabindex="-1"><a href="#updating-my-mental-model">Updating my mental model</a></h3>
-</div></div><div id="cell-14" class="observablehq observablehq--cell"><div><p>Most notably, there’s a new editor interface.</p>
-</div></div><div id="cell-9" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">z</span> = <span class="tok-variable">y</span> + <span class="tok-literal">5</span>;
-<span class="tok-variable">display</span>(<span class="tok-variable">z</span>);</code></pre><div id="cell-6" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">y = x + 2</code></pre><div id="cell-10" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">x</span> = <span class="tok-literal">1</span>;
-<span class="tok-variable">display</span>(<span class="tok-variable">x</span>);</code></pre></main>
+</div></div><div id="cell-37" class="observablehq observablehq--cell"><div><p>There’s no sense talking this to death. You should <a href="https://observablehq.com/notebook-kit/desktop">go try the app</a>!</p>
+</div></div><div id="cell-11" class="observablehq observablehq--cell"><div><h2 id="notebook-kit" tabindex="-1"><a href="#notebook-kit">Notebook Kit</a></h2>
+</div></div><div id="cell-39" class="observablehq observablehq--cell"><div><p>The second new component is <a href="https://observablehq.com/notebook-kit/kit">Notebook Kit</a>. There’s a bit more to understand here. There are different library components—vite, build, utility, and runtime—and I’ve only scratched the surface.</p>
+</div></div><div id="cell-25" class="observablehq observablehq--cell"><div><p>As far as the coding experience goes, there are some subtle differences. In addition to <a href="https://observablehq.com/documentation/cells/observable-javascript">Observable JavaScript</a>, you can now code in <em>plain old</em> JavaScript. It took me a bit of experimentation to understand how this plays with reactive cell evaluation.</p>
+</div></div><div id="cell-29" class="observablehq observablehq--cell"><div><p>Recall that with Observable JavaScript, each cell has a single output. The runtime performs a topological sort of cell inputs and outputs and executes cells in whatever order is required. Cells look like either a bare value, e.g.</p>
+</div></div><div id="cell-26" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">x = y + 5</code></pre><div id="cell-27" class="observablehq observablehq--cell"><div><p>or wrapped in a block with a return statement like this</p>
+</div></div><div id="cell-28" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">y = { return z + 1; }</code></pre><div id="cell-40" class="observablehq observablehq--cell"><div><p>The new development is that plain old JavaScript now also plays well with Observable notebooks, though it now takes a <code>display()</code> helper to produce visual output.</p>
+</div></div><div id="cell-32" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">z</span> = <span class="tok-variable">r</span>;
+<span class="tok-variable">display</span>(<span class="tok-variable">z</span>);</code></pre><div id="cell-41" class="observablehq observablehq--cell"><div><p>Notice that <code>z</code> has already been used above when defining <code>x</code> in an Observable JavaScript cell! This only works in different cells; variables within a single cell are of course not reactive.</p>
+</div></div><pre data-language="md"><code class="language-md">Notice that <span class="tok-meta">`</span>z<span class="tok-meta">`</span> has already been used above when defining <span class="tok-meta">`</span>x<span class="tok-meta">`</span> in an Observable JavaScript cell! This only works in different cells; variables within a single cell are of course not reactive.</code></pre><div id="cell-36" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">t</span> = <span class="tok-variable">s</span> + <span class="tok-literal">2</span>;
+<span class="tok-keyword">const</span> <span class="tok-definition">s</span> = <span class="tok-literal">1</span>;</code></pre><div id="cell-48" class="observablehq observablehq--cell"><div><p>And as always, this is still Observable, so it’s all running live and has access to lovely libraries like <a href="https://observablehq.com/documentation/inputs/overview">Observable Inputs</a>.</p>
+</div></div><div id="cell-47" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">viewof r = Inputs.range([1, 10], {step: 1, label: 'r'})</code></pre><div id="cell-38" class="observablehq observablehq--cell"><div><h2 id="integration" tabindex="-1"><a href="#integration">Integration</a></h2>
+</div></div><div id="cell-42" class="observablehq observablehq--cell"><div><p>There are other major features like being able to pull directly from source on the disk and no longer having to live inside Observable’s magic <code>&lt;iframe&gt;</code>.</p>
+</div></div><div id="cell-46" class="observablehq observablehq--cell"><div><p>The real moment of truth for me though was discovering what it means to integrate this into my personal website.</p>
+</div></div></main>
     </div>
   
 

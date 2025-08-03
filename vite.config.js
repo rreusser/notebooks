@@ -26,7 +26,7 @@ export default defineConfig({
   plugins: [
     observable({
       template: TEMPLATE_PATH,
-      compileTemplate: function ({ template, context, notebook }) {
+      transformTemplate: function ({ template, context, notebook }) {
         const { path: sourcePath, filename } = context;
         const dir = path.dirname(filename);
         const metadataPath = path.join(dir, "metadata.yml");
