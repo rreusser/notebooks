@@ -11,13 +11,8 @@ body {
   overflow-x: hidden;
 }
 
-html {
-  background-color: var(--rrtheme-color);
-}
-
 body {
   max-width: 100%;
-  background-color: white;
 }
 
 .container {
