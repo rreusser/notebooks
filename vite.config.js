@@ -71,6 +71,6 @@ export default defineConfig({
     },
   },
   root: "notebooks",
-  base: "/",
+  base: "/notebooks/",
   clearScreen: false,
 });
