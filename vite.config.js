@@ -10,16 +10,12 @@ const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
 const TEMPLATE_PATH = path.join(__dirname, "lib/template.html");
 
-const githubUrlBase =
-  "https://github.com/rreusser/notebooks/tree/main/src";
+const githubUrlBase = "https://github.com/rreusser/notebooks/tree/main/src";
 
-const notebooksPath = glob.sync(
-  path.join(__dirname, "src", "**", "*.html"),
-  {
-    nodir: true,
-    absolute: true,
-  }
-);
+const notebooksPath = glob.sync(path.join(__dirname, "src", "**", "*.html"), {
+  nodir: true,
+  absolute: true,
+});
 
 export default defineConfig({
   ...config(),
