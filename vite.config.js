@@ -4,6 +4,7 @@ import { readFileSync, existsSync } from "node:fs";
 import Handlebars from "handlebars";
 import path from "node:path";
 import yaml from "yaml";
+import { glob } from "glob";
 
 const __dirname = path.dirname(new URL(import.meta.url).pathname);
 
@@ -11,6 +12,14 @@ const TEMPLATE_PATH = path.join(__dirname, "src/template.html");
 
 const githubUrlBase =
   "https://github.com/rreusser/notebooks/tree/main/notebooks";
+
+const notebooksPath = glob.sync(
+  path.join(__dirname, "notebooks", "**", "*.html"),
+  {
+    nodir: true,
+    absolute: true,
+  }
+);
 
 export default defineConfig({
   ...config(),
@@ -55,6 +64,13 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    outDir: path.join(__dirname, "docs"),
+    rollupOptions: {
+      input: notebooksPath,
+    },
+  },
   root: "notebooks",
   base: "/",
+  clearScreen: false,
 });
