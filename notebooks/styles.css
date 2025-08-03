@@ -1,10 +1,105 @@
+@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
+
+:root {
+  --rrtheme-color: #ca4747;
+}
+
 html,
 body {
   margin: 0;
   padding: 0;
 }
 
+body {
+  max-width: none;
+}
+
+.container {
+  padding-left: 20px;
+  padding-right: 20px;
+}
+
+nav {
+  padding: 2px;
+  display: block;
+  background: var(--rrtheme-color);
+  font-family: "Open Sans", sans-serif;
+  font-size: 16px;
+  -webkit-font-smoothing: auto;
+}
+
+nav .menu__item {
+  padding: 5px 8px;
+  font-size: 0.9em;
+  text-shadow: 0 0 1px #000;
+}
+nav .menu__item[href] {
+  color: white;
+}
+
+a[href] {
+  color: var(--rrtheme-color);
+  text-decoration: none;
+}
+
 main {
   max-width: var(--max-width);
+  margin: auto;
   width: 100%;
+  padding-bottom: 100px;
+}
+
+main > div:first-child {
+  font-family: "Open Sans", sans-serif;
+  margin: 0 auto 100px;
+  background-color: var(--rrtheme-color);
+  text-align: center;
+  padding-top: 100px;
+  padding-bottom: 100px;
+  position: relative;
+  -webkit-font-smoothing: auto;
+}
+
+main > div:first-child:before,
+main > div:first-child:after {
+  content: "";
+  display: block;
+  top: 0;
+  bottom: 0;
+  width: 100vh;
+  position: absolute;
+  background-color: var(--rrtheme-color);
+}
+main > div:first-child:before {
+  left: 0;
+  transform: translate(-100%, 0);
+}
+
+main > div:first-child:after {
+  right: 0;
+  transform: translate(100%, 0);
+}
+main > div:first-child h1,
+main > div:first-child p {
+  max-width: none;
+}
+
+main > div:first-child,
+main > div:first-child h1,
+main > div:first-child h2,
+main > div:first-child h3,
+main > div:first-child h4,
+main > div:first-child a {
+  color: white;
+  font-weight: 200;
+}
+
+main > div:first-child h1 {
+  font-size: 34px;
+}
+
+@media (max-width: 640px) {
+  main > div:first-child {
+    text-align: left;
+  }
 }

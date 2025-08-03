@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
+    </nav>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     {{#if title}}
@@ -29,8 +30,17 @@
       @import "@fontsource/inter/700-italic.css";
       @import "../styles.css";
     </style>
+    {{#if maxWidth}} <style> main { max-width: {{maxWidth}}; }</style> {{/if}}
   </head>
   <body>
-    <main></main>
+    <nav class="menu">
+      <a class="menu__item" href="/">rreusser.github.io</a>
+      <a class="menu__item" href="/sketches/">sketches</a>
+      <a class="menu__item" href="/projects/">projects</a>
+      <a class="menu__item" href="/running/">running</a>
+    </nav>
+    <div class="container">
+      <main></main>
+    </div>
   </body>
 </html>

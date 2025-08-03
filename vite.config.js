@@ -35,11 +35,11 @@ export default defineConfig({
           : {};
         const sourceUrl = path.join(githubUrlBase, sourcePath);
 
-        if (notebook && notebook.cells.length) {
-          const titleCell = notebook.cells[0];
-          if (titleCell.value.startsWith("# ")) {
-            titleCell.value = [
-              titleCell.value + "\n",
+        if (notebook?.cells?.[0]?.value?.startsWith("# ")) {
+          const lines = notebook.cells[0].value.split("\n");
+
+          const headerContent =
+            [
               "[Ricky Reusser](https://rreusser.github.io)",
               metadata.publishedAt
                 ? new Date(metadata.publishedAt).toLocaleDateString("default", {
@@ -51,8 +51,9 @@ export default defineConfig({
               "[View source →](" + sourceUrl + ")",
             ]
               .filter(Boolean)
-              .join("<br>");
-          }
+              .join("<br>") + "\n";
+          lines.splice(1, 0, headerContent);
+          notebook.cells[0].value = lines.join("\n");
         }
 
         return Handlebars.compile(template)({
