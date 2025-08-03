@@ -43,4 +43,16 @@
       <main></main>
     </div>
   </body>
+  {{#if mastodonPostId}}
+    <script src="../comments.js" type="module"></script>
+    <style>
+      #comment-root {
+        margin: auto;
+        max-width: 640px;
+      }
+    </style>
+    <div id="comment-root" data-post-id="{{mastodonPostId}}"></div>
+  {{/if}}
+
+  <footer><div class="footer__attrib">&copy; Ricky Reusser 2025</div></footer>
 </html>

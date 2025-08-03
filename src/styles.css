@@ -67,6 +67,8 @@ main > div:first-child {
   padding-top: 100px;
   padding-bottom: 100px;
   position: relative;
+  font-family: "Open Sans", sans-serif;
+  -webkit-font-smoothing: auto;
 }
 
 main > div:first-child:before,
@@ -126,4 +128,125 @@ main h2 {
 }
 main h3 {
   margin-top: 2em;
+}
+
+.comments_meta {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+
+.comments {
+  padding-top: 30px;
+  font-family: sans-serif;
+}
+
+.comments_count {
+  font-weight: 700;
+}
+
+.comments_loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.comments .spinner {
+  margin-bottom: 5px;
+}
+
+.comment[href] {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin: 15px 0;
+  padding: 15px;
+  color: black;
+  text-decoration: none;
+}
+.comment[href]:visited {
+  color: black;
+}
+.comment[href]:hover {
+  border-color: #999;
+  text-decoration: none;
+}
+.comment[href]:last-child {
+  margin-bottom: 0;
+}
+
+.comment_meta {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+
+.comment_ago {
+  color: #666;
+}
+.comment_ago:visited {
+  color: #666;
+}
+
+.comment_user {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  color: black;
+  text-decoration: none;
+  font-family: sans-serif;
+  font-weight: 700;
+}
+.comment_user:visited {
+  color: black;
+}
+.comment_commenter {
+  font-weight: 400;
+  color: #666;
+}
+
+.comment_content p:first-child {
+  margin-top: 10px;
+}
+.comment_content p:last-child {
+  margin-bottom: 0;
+}
+
+.comment_user img {
+  margin-right: 10px;
+  border-radius: 2px;
+  border: 1px solid #ddd;
+  width: 30px;
+  height: 30px;
+}
+
+.threebody{width:60px;height:60px;position:relative}
+.threebody-o{position:absolute;top:50%;left:50%}
+.threebody-o>div{position:absolute;animation:3s infinite linear}
+.threebody-o>div:after{content:'';position:absolute;width:12px;height:12px;border-radius:100%;transform:translate(-50%,-50%);background:inherit}
+.threebody-o>div:nth-child(1){background:#a0d323;animation-name:threebody-0}
+.threebody-o>div:nth-child(2){background:#23a0d3;animation-name:threebody-1}
+.threebody-o>div:nth-child(3){background:#d323a0;animation-name:threebody-2}
+@keyframes threebody-0{from{transform:rotate(0)translatex(0.01px)rotate(0)translatex(0.01px)rotate(0)translatex(0.03px)rotate(0)translatex(0.07px)rotate(0)translatex(0.16px)rotate(0)translatex(0.41px)rotate(0)translatex(1.3px)rotate(0)translatex(8px)rotate(0)translatex(-17px)rotate(0)translatex(0.21px)rotate(0)translatex(0.01px)}to{transform:rotate(-31turn)translatex(0.01px)rotate(4turn)translatex(0.01px)rotate(4turn)translatex(0.03px)rotate(4turn)translatex(0.07px)rotate(4turn)translatex(0.16px)rotate(4turn)translatex(0.41px)rotate(4turn)translatex(1.3px)rotate(4turn)translatex(8px)rotate(4turn)translatex(-17px)rotate(4turn)translatex(0.21px)rotate(8turn)translatex(0.01px)}}
+@keyframes threebody-1{from{transform:rotate(0)translatex(-0.01px)rotate(0)translatex(0.01px)rotate(0)translatex(-0.03px)rotate(0)translatex(0.07px)rotate(0)translatex(-0.16px)rotate(0)translatex(0.41px)rotate(0)translatex(-1.3px)rotate(0)translatex(8px)rotate(0)translatex(17px)rotate(0)translatex(0.21px)rotate(0)translatex(0.01px)}to{transform:rotate(-31turn)translatex(-0.01px)rotate(4turn)translatex(0.01px)rotate(4turn)translatex(-0.03px)rotate(4turn)translatex(0.07px)rotate(4turn)translatex(-0.16px)rotate(4turn)translatex(0.41px)rotate(4turn)translatex(-1.3px)rotate(4turn)translatex(8px)rotate(4turn)translatex(17px)rotate(4turn)translatex(0.21px)rotate(8turn)translatex(0.01px)}}
+@keyframes threebody-2{from{transform:rotate(0)translatex(-0.01px)rotate(0)translatex(-0.03px)rotate(0)translatex(-0.13px)rotate(0)translatex(-0.81px)rotate(0)translatex(-16px)rotate(0)translatex(-0.42px)rotate(0)translatex(-0.02px)}to{transform:rotate(-35turn)translatex(-0.01px)rotate(8turn)translatex(-0.03px)rotate(8turn)translatex(-0.13px)rotate(8turn)translatex(-0.81px)rotate(8turn)translatex(-16px)rotate(8turn)translatex(-0.42px)rotate(8turn)translatex(-0.02px)}}
+
+
+footer {
+  background: var(--rrtheme-color);
+  color: white;
+  font-family: "Open Sans", sans-serif;
+  padding: 30px 20px;
+  text-align: right;
+  margin-top: 50px;
+}
+.footer__attrib {
+  max-width: 640px;
+  margin: auto;
+
 }

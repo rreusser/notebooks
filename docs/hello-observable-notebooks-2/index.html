@@ -2,8 +2,8 @@
     
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="twitter:title" content="Hello, Observable Notebook Kit!" />
-    <meta property="og:title" content="Hello, Observable Notebook Kit!" />
+    <meta name="twitter:title" content="Hello, Observable Notebooks 2.0!" />
+    <meta property="og:title" content="Hello, Observable Notebooks 2.0!" />
     <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
       /* Copyright 2025 Observable, Inc. */
       :root {
@@ -1240,6 +1240,8 @@ main h6 {
   padding-top: 100px;
   padding-bottom: 100px;
   position: relative;
+  font-family: "Open Sans", sans-serif;
+  -webkit-font-smoothing: auto;
 }
       main > div:first-child:before,
 main > div:first-child:after {
@@ -1294,9 +1296,117 @@ main h6 {
       main h3 {
   margin-top: 2em;
 }
+      .comments_meta {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+      .comments {
+  padding-top: 30px;
+  font-family: sans-serif;
+}
+      .comments_count {
+  font-weight: 700;
+}
+      .comments_loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-bottom: 10px;
+}
+      .comments .spinner {
+  margin-bottom: 5px;
+}
+      .comment[href] {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #ccc;
+  border-radius: 5px;
+  margin: 15px 0;
+  padding: 15px;
+  color: black;
+  text-decoration: none;
+}
+      .comment[href]:visited {
+  color: black;
+}
+      .comment[href]:hover {
+  border-color: #999;
+  text-decoration: none;
+}
+      .comment[href]:last-child {
+  margin-bottom: 0;
+}
+      .comment_meta {
+  display: flex;
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 13px;
+}
+      .comment_ago {
+  color: #666;
+}
+      .comment_ago:visited {
+  color: #666;
+}
+      .comment_user {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  color: black;
+  text-decoration: none;
+  font-family: sans-serif;
+  font-weight: 700;
+}
+      .comment_user:visited {
+  color: black;
+}
+      .comment_commenter {
+  font-weight: 400;
+  color: #666;
+}
+      .comment_content p:first-child {
+  margin-top: 10px;
+}
+      .comment_content p:last-child {
+  margin-bottom: 0;
+}
+      .comment_user img {
+  margin-right: 10px;
+  border-radius: 2px;
+  border: 1px solid #ddd;
+  width: 30px;
+  height: 30px;
+}
+      .threebody{width:60px;height:60px;position:relative}
+      .threebody-o{position:absolute;top:50%;left:50%}
+      .threebody-o>div{position:absolute;animation:3s infinite linear}
+      .threebody-o>div:after{content:'';position:absolute;width:12px;height:12px;border-radius:100%;transform:translate(-50%,-50%);background:inherit}
+      .threebody-o>div:nth-child(1){background:#a0d323;animation-name:threebody-0}
+      .threebody-o>div:nth-child(2){background:#23a0d3;animation-name:threebody-1}
+      .threebody-o>div:nth-child(3){background:#d323a0;animation-name:threebody-2}
+      @keyframes threebody-0{from{transform:rotate(0)translatex(0.01px)rotate(0)translatex(0.01px)rotate(0)translatex(0.03px)rotate(0)translatex(0.07px)rotate(0)translatex(0.16px)rotate(0)translatex(0.41px)rotate(0)translatex(1.3px)rotate(0)translatex(8px)rotate(0)translatex(-17px)rotate(0)translatex(0.21px)rotate(0)translatex(0.01px)}to{transform:rotate(-31turn)translatex(0.01px)rotate(4turn)translatex(0.01px)rotate(4turn)translatex(0.03px)rotate(4turn)translatex(0.07px)rotate(4turn)translatex(0.16px)rotate(4turn)translatex(0.41px)rotate(4turn)translatex(1.3px)rotate(4turn)translatex(8px)rotate(4turn)translatex(-17px)rotate(4turn)translatex(0.21px)rotate(8turn)translatex(0.01px)}}
+      @keyframes threebody-1{from{transform:rotate(0)translatex(-0.01px)rotate(0)translatex(0.01px)rotate(0)translatex(-0.03px)rotate(0)translatex(0.07px)rotate(0)translatex(-0.16px)rotate(0)translatex(0.41px)rotate(0)translatex(-1.3px)rotate(0)translatex(8px)rotate(0)translatex(17px)rotate(0)translatex(0.21px)rotate(0)translatex(0.01px)}to{transform:rotate(-31turn)translatex(-0.01px)rotate(4turn)translatex(0.01px)rotate(4turn)translatex(-0.03px)rotate(4turn)translatex(0.07px)rotate(4turn)translatex(-0.16px)rotate(4turn)translatex(0.41px)rotate(4turn)translatex(-1.3px)rotate(4turn)translatex(8px)rotate(4turn)translatex(17px)rotate(4turn)translatex(0.21px)rotate(8turn)translatex(0.01px)}}
+      @keyframes threebody-2{from{transform:rotate(0)translatex(-0.01px)rotate(0)translatex(-0.03px)rotate(0)translatex(-0.13px)rotate(0)translatex(-0.81px)rotate(0)translatex(-16px)rotate(0)translatex(-0.42px)rotate(0)translatex(-0.02px)}to{transform:rotate(-35turn)translatex(-0.01px)rotate(8turn)translatex(-0.03px)rotate(8turn)translatex(-0.13px)rotate(8turn)translatex(-0.81px)rotate(8turn)translatex(-16px)rotate(8turn)translatex(-0.42px)rotate(8turn)translatex(-0.02px)}}
+      footer {
+  background: var(--rrtheme-color);
+  color: white;
+  font-family: "Open Sans", sans-serif;
+  padding: 30px 20px;
+  text-align: right;
+  margin-top: 50px;
+}
+      .footer__attrib {
+  max-width: 640px;
+  margin: auto;
+
+}
     </style>
      <style> main { max-width: 640px; }</style> 
-  <meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Hello, Observable Notebook Kit!</title>  <script type="module" crossorigin src="/notebooks/assets/index-CXyALL2r.js"></script>
+  <meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Hello, Observable Notebooks 2.0!</title>  <script type="module" crossorigin src="/notebooks/assets/index-GoTDrGL1.js"></script>
 </head>
   <body>
     <nav class="menu">
@@ -1306,12 +1416,13 @@ main h6 {
       <a class="menu__item" href="/running/">running</a>
     </nav>
     <div class="container">
-      <main><div id="cell-1" class="observablehq observablehq--cell"><div><h1>Hello, Observable Notebook Kit!</h1>
-<p><a href="https://rreusser.github.io">Ricky Reusser</a><br />August 1, 2025<br /><a href="https:/github.com/rreusser/notebooks/tree/main/src/hello-observable-notebook-kit/index.html">View source →</a></p>
-</div></div><div id="cell-21" class="observablehq observablehq--cell"><div><p><a href="https://observablehq.com/notebook-kit/">Observable Notebooks 2.0</a> is here! And my first impression is… it’s good. 🎉🍾</p>
+      <main><div id="cell-1" class="observablehq observablehq--cell"><div><h1>Hello, Observable Notebooks 2.0!</h1>
+<p><a href="https://rreusser.github.io">Ricky Reusser</a><br />August 1, 2025<br /><a href="https:/github.com/rreusser/notebooks/tree/main/src/hello-observable-notebooks-2/index.html">View source →</a></p>
+</div></div><div id="cell-21" class="observablehq observablehq--cell"><div><p><a href="https://observablehq.com/notebook-kit/">Observable Notebooks 2.0</a> is here! And my first impression is… it’s good.</p>
+</div></div><div id="cell-67" class="observablehq observablehq--cell"><div><p>More important than anything I have to say about it, it was perfectly easy to integrate into my website and <em>you’re looking at it.</em>  🎉🍾🥳</p>
 </div></div><div id="cell-2" class="observablehq observablehq--cell"><div><p>Let’s back up. I’ve been a strong believer in <a href="https://observablehq.com/">Observable</a> notebooks since the public beta launched in 2018. It’s the coding environment I always wanted but had not myself managed to will into existence. Reactive cell evaluation conforms easily to my mental model of how code should run, and Observable’s editor UI/UX and product execution has always been top-notch. <a href="https://observablehq.com/plot/">Observable Plot</a> is wonderful. I have about 520 private notebooks, about about <a href="https://observablehq.com/collection/@rreusser/writeups">sixty of which</a> are somewhat presentable.</p>
 </div></div><div id="cell-15" class="observablehq observablehq--cell"><div><p>Of course Observable isn’t without imperfections. <a href="https://observablehq.com/documentation/cells/observable-javascript">Observable-flavored JavaScript</a> isn’t for everyone. JavaScript libraries to power numerical analysis have always been underpowered. The vertically-tall notebook format doesn’t perfectly fit horizontally-wide screens. And “<a href="https://talk.observablehq.com/t/dataflow-a-self-hosted-observable-notebook-editor/5055">Please</a> <a href="https://talk.observablehq.com/t/offline-editor/4905">allow</a> <a href="https://talk.observablehq.com/t/noob-can-you-run-your-own-observable-server/757/1">us</a> <a href="https://talk.observablehq.com/t/private-installations/501">to</a> <a href="https://talk.observablehq.com/t/notebooks-as-offline-first-single-webfiles/10145">edit</a> <a href="https://talk.observablehq.com/t/where-is-observable-going/10372">notebooks</a> <a href="https://talk.observablehq.com/t/source-control-observable/3117">outside of Observable</a>” is the longest-running feature requests I can recall.</p>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>Finally, and perhaps most importantly, I’ve always been uneasy about ceding control over my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, it’s a roll of the dice to trust that notebooks I create today will be there tomorrow, and even if the company folded up and left static notebooks online in perpetuity—more than they actually owe us—I’d still lose the ability to edit the notebooks I’ve created.</p>
+</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>Finally, and perhaps most importantly, I’ve always been uneasy about ceding control over my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, it’s a roll of the dice to fully trust that notebooks I create today will be here tomorrow.</p>
 </div></div><div id="cell-17" class="observablehq observablehq--cell"><div><p>When I saw the <a href="https://observablehq.com/notebook-kit/desktop">Observable Desktop</a> and <a href="https://github.com/observablehq/notebook-kit">Observable Notebook Kit</a> product announcements, it was quickly clear they’d done it right.</p>
 </div></div><div id="cell-18" class="observablehq observablehq--cell"><div><h2 id="observable-desktop" tabindex="-1"><a href="#observable-desktop">Observable Desktop</a></h2>
 </div></div><div id="cell-19" class="observablehq observablehq--cell"><div><p>I mean, this is it, right? An offline editor application whose output is a human-readable HTML file. What else is there? Notebooks are now just a few lines of code. The interface works offline and if you install a lightweight dev server, you can sidestep the app in favor of a text editor and a web browser.</p>
@@ -1340,15 +1451,24 @@ main h6 {
 </div></div><div id="cell-61" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">import { figure, rotation } from '@rreusser/drawing-3d-objects-with-svg'</code></pre><div id="cell-63" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">figure</span></code></pre><div id="cell-62" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">rotation </span><span class="tok-comment">// Fails to import the animating slider!</span></code></pre><div id="cell-66" class="observablehq observablehq--cell"><div><p>Importing the variable <code>rotation</code> only imports its value, when what we really want to import is its view, i.e. the animating slider. We’d write that like this on <a href="http://observablehq.com">observablehq.com</a>, but it fails here.</p>
 </div></div><div id="cell-65" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">// import { viewof rotation } from '@rreusser/drawing-3d-objects-with-svg'</code></pre><div id="cell-60" class="observablehq observablehq--cell"><div><p>In fact, it doesn’t only fail to <em>run</em>, <code>viewof</code> is a syntax error which causes the static site to fail to <em>build</em>. Compare with the successful import <a href="https://observablehq.com/d/fd061c92e0975083">here</a>.</p>
 </div></div><div id="cell-38" class="observablehq observablehq--cell"><div><h2 id="integration" tabindex="-1"><a href="#integration">Integration</a></h2>
-</div></div><div id="cell-42" class="observablehq observablehq--cell"><div><p>There are other major features like being able to pull directly from source on the disk and no longer having to live inside Observable’s magic <code>&lt;iframe&gt;</code>. The real moment of truth for me though was discovering what it means to integrate this into my personal website.</p>
+</div></div><div id="cell-42" class="observablehq observablehq--cell"><div><p>The real moment of truth for me though was discovering what it means to integrate this into my personal website.</p>
 </div></div><div id="cell-49" class="observablehq observablehq--cell"><div><p>Overall, the story is quite good. It uses the wonderful <a href="https://vite.dev/">Vite</a> tooling to produce static output. Multiple pages are easy to set up. And you can provide a HTML template to wrap content.</p>
 </div></div><div id="cell-50" class="observablehq observablehq--cell"><div><p>In fact, the only issue I ran into was figuring out how to more tightly integrate the page with my own site. This meant pulling metadata like the page title into the surrounding HTML template so that I could add proper meta tags. Similarly, I wanted to construct a nice article header without constructing the website appearance part of my notebook editing experience.</p>
 </div></div><div id="cell-51" class="observablehq observablehq--cell"><div><p>I’ve pulled my changes into a Notebook Kit PR <a href="https://github.com/observablehq/notebook-kit/compare/main...rreusser:notebook-kit:transform-template?expand=1">here</a>. It implements a <code>transformTemplate()</code> function which receives the HTML template and page metadata and can modify the template accordingly. In my case, that meant plugging it into Handlebars.js and injecting some extra content.</p>
 </div></div><div id="cell-52" class="observablehq observablehq--cell"><div><h2 id="conclusion" tabindex="-1"><a href="#conclusion">Conclusion</a></h2>
-</div></div><div id="cell-53" class="observablehq observablehq--cell"><div><p>I’ve always been a fan of Observable, but with this new tooling, it feels like we’ve sort of arrived.</p>
+</div></div><div id="cell-53" class="observablehq observablehq--cell"><div><p>I’ve always been a fan of Observable, but with this new tooling, it feels like we’ve sort of arrived. I wanted sort of a combo blogging platform slash notebook, and for the first time ever, it’s sort of just unfolded in front of me without any major obstacles.</p>
 </div></div></main>
     </div>
   
+    <style>
+      #comment-root {
+        margin: auto;
+        max-width: 640px;
+      }
+    </style>
+    <div id="comment-root" data-post-id="114046693784863982"></div>
+
+  <footer><div class="footer__attrib">© Ricky Reusser 2025</div></footer>
 
 <style type="text/css">:root {
   --syntax-link: var(--theme-foreground-focus);
