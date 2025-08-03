@@ -1,0 +1,16 @@
+{
+  "name": "notebooks",
+  "version": "1.0.0",
+  "main": "index.js",
+  "scripts": {
+    "preview": "notebooks preview --root src",
+    "build": "notebooks build --root src -- src/*.html && mv src/.observable/dist docs"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "@observablehq/notebook-kit": "^1.0.1"
+  }
+}
