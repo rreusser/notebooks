@@ -4,7 +4,7 @@
   "main": "index.js",
   "scripts": {
     "preview": "notebooks preview --root src",
-    "build": "notebooks build --root src -- src/*.html && mv src/.observable/dist docs"
+    "build": "notebooks build --root src -- src/**/*.html && mv src/.observable/dist docs"
   },
   "keywords": [],
   "author": "",
