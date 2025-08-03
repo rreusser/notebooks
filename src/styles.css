@@ -12,6 +12,7 @@ body {
 
 body {
   max-width: none;
+  overflow-x: hidden;
 }
 
 .container {
