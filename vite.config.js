@@ -26,8 +26,7 @@ export default defineConfig({
   plugins: [
     observable({
       template: TEMPLATE_PATH,
-      compileTemplate: function ({ template, input, context, notebook }) {
-        console.log(input);
+      compileTemplate: function ({ template, context, notebook }) {
         const { path: sourcePath, filename } = context;
         const dir = path.dirname(filename);
         const metadataPath = path.join(dir, "metadata.yml");
@@ -66,6 +65,7 @@ export default defineConfig({
   ],
   build: {
     outDir: path.join(__dirname, "docs"),
+    emptyOutDir: true,
     rollupOptions: {
       input: notebooksPath,
     },
