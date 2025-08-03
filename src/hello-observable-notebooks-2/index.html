@@ -17,7 +17,7 @@
     Of course Observable isn't without imperfections. [Observable-flavored JavaScript](https://observablehq.com/documentation/cells/observable-javascript) isn’t for everyone. JavaScript libraries to power numerical analysis have always been underpowered. The vertically-tall notebook format doesn’t perfectly fit horizontally-wide screens. And “[Please](https://talk.observablehq.com/t/dataflow-a-self-hosted-observable-notebook-editor/5055) [allow](https://talk.observablehq.com/t/offline-editor/4905) [us](https://talk.observablehq.com/t/noob-can-you-run-your-own-observable-server/757/1) [to](https://talk.observablehq.com/t/private-installations/501) [edit](https://talk.observablehq.com/t/notebooks-as-offline-first-single-webfiles/10145) [notebooks](https://talk.observablehq.com/t/where-is-observable-going/10372) [outside of Observable](https://talk.observablehq.com/t/source-control-observable/3117)” is the longest-running feature requests I can recall.
   </script>
   <script id="16" type="text/markdown">
-    Finally, and perhaps most importantly, I’ve always been uneasy about ceding control over my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, it’s a roll of the dice to fully trust that notebooks I create today will be here tomorrow.
+    Finally, and perhaps most importantly, I’ve always been uneasy about ceding control of my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, it’s a roll of the dice to fully trust that notebooks I create today will be here tomorrow.
   </script>
   <script id="17" type="text/markdown">
     When I saw the [Observable Desktop](https://observablehq.com/notebook-kit/desktop) and [Observable Notebook Kit](https://github.com/observablehq/notebook-kit) product announcements, it was quickly clear they’d done it right.
@@ -72,12 +72,7 @@
     display(z);
   </script>
   <script id="41" type="text/markdown">
-    Notice that `z` has already been used above when defining `x` in an Observable JavaScript cell! This only works in different cells; variables within a single cell are of course not reactive.
-  </script>
-  <script id="36" type="module" pinned="">
-    // Error!
-    const t = s + 2;
-    const s = 1;
+    Notice that `z` has already been used above when defining `x` in an Observable JavaScript cell! It’s still reactive. From what I can tell, it’s still working `.js` cells into the topologically-sorted execution order; it’s just that it now permits plain JavaScript with multiple outputs.
   </script>
   <script id="48" type="text/markdown">
     And as always, this is still Observable, so it’s all running live and has access to lovely libraries like [Observable Inputs](https://observablehq.com/documentation/inputs/overview).
