@@ -29,7 +29,7 @@ export default defineConfig({
         const metadata = existsSync(metadataPath)
           ? yaml.parse(readFileSync(metadataPath, "utf8"))
           : {};
-        const sourceUrl = path.join(githubUrlBase, sourcePath);
+        const sourceUrl = `${githubUrlBase}/${sourcePath}`;
 
         if (notebook?.cells?.[0]?.value?.startsWith("# ")) {
           const lines = notebook.cells[0].value.split("\n");
