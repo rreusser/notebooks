@@ -71,7 +71,7 @@
     display(y2);
   </script>
   <script id="41" type="text/markdown">
-    From what I can tell, it still processes top-level variables of `.js` cells in topologically-sorted execution order; it’s just that it now permits such variables as plain old JavaScript with multiple outputs.
+    From what I can tell, it still processes top-level variables of `.js` cells in cell-wise topologically-sorted execution order; it’s just that it now permits such variables as plain old JavaScript with multiple outputs.
   </script>
   <script id="48" type="text/markdown">
     And as always, this is still Observable, so it’s all running live and has access to lovely libraries like [Observable Inputs](https://observablehq.com/documentation/inputs/overview). You just need to swap out `viewof` with `view()`.
