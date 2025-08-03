@@ -1,3 +1,10 @@
-html, body {
-  background: green;
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+main {
+  max-width: var(--max-width);
+  width: 100%;
 }
