@@ -68,10 +68,11 @@
     const z = r;
     display(z);
   </script>
-  <script id="41" type="text/markdown" pinned="">
+  <script id="41" type="text/markdown">
     Notice that `z` has already been used above when defining `x` in an Observable JavaScript cell! This only works in different cells; variables within a single cell are of course not reactive.
   </script>
   <script id="36" type="module" pinned="">
+    // Error!
     const t = s + 2;
     const s = 1;
   </script>
@@ -81,13 +82,46 @@
   <script id="47" type="application/vnd.observable.javascript" pinned="">
     viewof r = Inputs.range([1, 10], {step: 1, label: 'r'})
   </script>
+  <script id="59" type="text/markdown">
+    There do appear to be a few missing features, though of course that’s to be expected since it’s billed as a technology preview. For example, pulling in Observable notebook cells with `import` works great. But importing a `viewof` does not.
+  </script>
+  <script id="61" type="application/vnd.observable.javascript" pinned="">
+    import { figure, rotation } from '@rreusser/drawing-3d-objects-with-svg'
+  </script>
+  <script id="63" type="module" pinned="">
+    figure
+  </script>
+  <script id="62" type="module" pinned="">
+    rotation // Fails to import the animating slider!
+  </script>
+  <script id="66" type="text/markdown">
+    Importing the variable `rotation` only imports its value, when what we really want to import is its view, i.e. the animating slider. We’d write that like this on observablehq.com, but it fails here.
+  </script>
+  <script id="65" type="application/vnd.observable.javascript" pinned="">
+    // import { viewof rotation } from '@rreusser/drawing-3d-objects-with-svg'
+  </script>
+  <script id="60" type="text/markdown">
+    In fact, it doesn’t only fail to *run*, `viewof` is a syntax error which causes the static site to fail to *build*. Compare with the successful import [here](https://observablehq.com/d/fd061c92e0975083).
+  </script>
   <script id="38" type="text/markdown">
     ## Integration
   </script>
   <script id="42" type="text/markdown">
-    There are other major features like being able to pull directly from source on the disk and no longer having to live inside Observable's magic `<iframe>`.
+    There are other major features like being able to pull directly from source on the disk and no longer having to live inside Observable's magic `<iframe>`. The real moment of truth for me though was discovering what it means to integrate this into my personal website.
   </script>
-  <script id="46" type="text/markdown">
-    The real moment of truth for me though was discovering what it means to integrate this into my personal website.
+  <script id="49" type="text/markdown">
+    Overall, the story is quite good. It uses the wonderful [Vite](https://vite.dev/) tooling to produce static output. Multiple pages are easy to set up. And you can provide a HTML template to wrap content.
+  </script>
+  <script id="50" type="text/markdown">
+    In fact, the only issue I ran into was figuring out how to more tightly integrate the page with my own site. This meant pulling metadata like the page title into the surrounding HTML template so that I could add proper meta tags. Similarly, I wanted to construct a nice article header without constructing the website appearance part of my notebook editing experience.
+  </script>
+  <script id="51" type="text/markdown">
+    I’ve pulled my changes into a Notebook Kit PR [here](https://github.com/observablehq/notebook-kit/compare/main...rreusser:notebook-kit:transform-template?expand=1). It implements a `transformTemplate()` function which receives the HTML template and page metadata and can modify the template accordingly. In my case, that meant plugging it into Handlebars.js and injecting some extra content.
+  </script>
+  <script id="52" type="text/markdown">
+    ## Conclusion
+  </script>
+  <script id="53" type="text/markdown">
+    I’ve always been a fan of Observable, but with this new tooling, it feels like we’ve sort of arrived.
   </script>
 </notebook>
