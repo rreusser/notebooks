@@ -67,7 +67,9 @@ export default defineConfig({
       input: notebooksPath,
     },
   },
+  /*server: {
+    host: '0.0.0.0',
+  },*/
   root: "src",
   base: "/notebooks/",
-  clearScreen: false,
 });

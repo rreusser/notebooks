@@ -8,11 +8,11 @@ html,
 body {
   margin: 0;
   padding: 0;
+  overflow-x: hidden;
 }
 
 body {
-  max-width: none;
-  overflow-x: hidden;
+  max-width: 100%;
 }
 
 .container {
@@ -137,7 +137,7 @@ main h3 {
 }
 
 .comments {
-  padding-top: 30px;
+  padding: 30px 20px 0;
   font-family: sans-serif;
 }
 
