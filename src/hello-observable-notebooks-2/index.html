@@ -17,7 +17,7 @@
     Of course Observable isn’t perfect. [Observable-flavored JavaScript](https://observablehq.com/documentation/cells/observable-javascript) isn’t for everyone. JavaScript libraries to power numerical analysis have always been underpowered. The vertically-tall notebook format doesn’t perfectly fit horizontally-wide screens. And “[Please](https://talk.observablehq.com/t/dataflow-a-self-hosted-observable-notebook-editor/5055) [allow](https://talk.observablehq.com/t/offline-editor/4905) [us](https://talk.observablehq.com/t/noob-can-you-run-your-own-observable-server/757/1) [to](https://talk.observablehq.com/t/private-installations/501) [edit](https://talk.observablehq.com/t/notebooks-as-offline-first-single-webfiles/10145) [notebooks](https://talk.observablehq.com/t/where-is-observable-going/10372) [outside of Observable](https://talk.observablehq.com/t/source-control-observable/3117)” has been a long-running feature request.
   </script>
   <script id="16" type="text/markdown">
-    Finally, and perhaps most importantly, I’ve always been uneasy about ceding control of my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, it’s a roll of the dice to fully trust that notebooks I create today will be here tomorrow.
+    Finally, and perhaps most importantly, I’ve always been uneasy about ceding control of my work to a private company. From everything I can see as an outsider, they’re wonderful people making wonderful products. Still, sometimes I’d like to poke around at medical, legal, or propietary data, and even for casual notebooks, it’s a roll of the dice to fully trust that notebooks I create today will be here tomorrow.
   </script>
   <script id="17" type="text/markdown">
     They haven’t suddenly solved everything, but when I saw the [Observable Desktop](https://observablehq.com/notebook-kit/desktop) and [Observable Notebook Kit](https://github.com/observablehq/notebook-kit) product announcements, it was quickly clear they’d done something meaningful and done it well.
@@ -32,9 +32,9 @@
     ```html
     <!doctype html>
     <notebook theme="air">
-      <title>Hello, Observable Notebook Kit</title>
+      <title>Hello, Observable Notebooks 2.0!</title>
       <script id="1" type="text/markdown">
-        # Hello, Observable Notebook Kit
+        # Hello, Observable Notebooks 2.0!
       <\/script>
       ...
     </notebook>
@@ -53,53 +53,51 @@
     As far as the coding experience goes, there are some subtle differences. In addition to [Observable JavaScript](https://observablehq.com/documentation/cells/observable-javascript), you can now code in *plain old* JavaScript. It took me a bit of experimentation to understand how this plays with reactive cell evaluation.
   </script>
   <script id="29" type="text/markdown">
-    Recall that with Observable JavaScript, each cell has a single output. The runtime performs a topological sort of cell inputs and outputs and executes cells in whatever order is required. Cells look like either a bare value, e.g.
+    Recall that with Observable JavaScript, each cell has a single output. What we may previously have written as a bare and block statements `x1` and `y1`, respectively,
   </script>
   <script id="26" type="application/vnd.observable.javascript" pinned="">
-    x = y + 5
-  </script>
-  <script id="27" type="text/markdown">
-    or wrapped in a block with a return statement like this
+    x1 = y1 + 5
   </script>
   <script id="28" type="application/vnd.observable.javascript" pinned="">
-    y = { return z + 1; }
+    y1 = { return r; }
   </script>
   <script id="40" type="text/markdown">
-    The new development is that plain old JavaScript now also plays well with Observable notebooks, though it now takes a `display()` helper to produce visual output.
+    we now write as plain old JavaScript,
   </script>
-  <script id="32" type="module" pinned="">
-    const z = r;
-    display(z);
+  <script id="72" type="module" pinned="">
+    const y2 = r;
+    const x2 = y2 + y2;
+    display(x1);
+    display(y2);
   </script>
   <script id="41" type="text/markdown">
-    Notice that `z` has already been used above when defining `x` in an Observable JavaScript cell! It’s still reactive. From what I can tell, it’s still working `.js` cells into the topologically-sorted execution order; it’s just that it now permits plain JavaScript with multiple outputs.
+    From what I can tell, it still processes top-level variables of `.js` cells in topologically-sorted execution order; it’s just that it now permits such variables as plain old JavaScript with multiple outputs.
   </script>
   <script id="48" type="text/markdown">
-    And as always, this is still Observable, so it’s all running live and has access to lovely libraries like [Observable Inputs](https://observablehq.com/documentation/inputs/overview).
+    And as always, this is still Observable, so it’s all running live and has access to lovely libraries like [Observable Inputs](https://observablehq.com/documentation/inputs/overview). You just need to swap out `viewof` with `view()`.
   </script>
-  <script id="47" type="application/vnd.observable.javascript" pinned="">
-    viewof r = Inputs.range([1, 10], {step: 1, label: 'r'})
+  <script id="47" type="module" pinned="">
+    const r = view(Inputs.range([1, 10], {step: 1, label: 'r'}))
+  </script>
+  <script id="74" type="text/markdown">
+    ~~There do appear to be a few missing features, though of course that’s to be expected since it’s billed as a technology preview. For example, pulling in Observable notebook cells with `import` works great. But importing a `viewof` does not.~~
+
   </script>
   <script id="59" type="text/markdown">
-    There do appear to be a few missing features, though of course that’s to be expected since it’s billed as a technology preview. For example, pulling in Observable notebook cells with `import` works great. But importing a `viewof` does not.
+    ***Update***: Mike Bostock has [provided some assistance](https://bsky.app/profile/ocks.org/post/3lvjhyimjuc2x) and gently nudged me toward JavaScript rather than Observable JavaScript as the path forward. I’ve updated the code below correspondingly.
+
   </script>
-  <script id="61" type="application/vnd.observable.javascript" pinned="">
-    import { figure, rotation } from '@rreusser/drawing-3d-objects-with-svg'
+  <script id="75" type="text/markdown">
+    It seems that `"viewof$*"` in JavaScript takes the place of `"viewof *"` in Observable JavaScript, and with that, we’re back up and running.
+  </script>
+  <script id="61" type="module" pinned="">
+    import { figure, viewof$rotation } from 'observable:@rreusser/drawing-3d-objects-with-svg'
   </script>
   <script id="63" type="module" pinned="">
     figure
   </script>
   <script id="62" type="module" pinned="">
-    rotation // Fails to import the animating slider!
-  </script>
-  <script id="66" type="text/markdown">
-    Importing the variable `rotation` only imports its value, when what we really want to import `viewof rotation`, i.e. the animating slider. In the web interface, we’d write that like the following:
-  </script>
-  <script id="65" type="application/vnd.observable.javascript" pinned="">
-    // import { viewof rotation } from '@rreusser/drawing-3d-objects-with-svg'
-  </script>
-  <script id="60" type="text/markdown">
-    but in Notebooks 2.0, this fails. (In fact, it doesn’t only fail to *run*, `viewof` is a syntax error which causes the static site to fail to *build*.) Compare with the successful import [here](https://observablehq.com/d/fd061c92e0975083).
+    viewof$rotation
   </script>
   <script id="38" type="text/markdown">
     ## Integration
