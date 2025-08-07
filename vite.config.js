@@ -33,7 +33,7 @@ export default defineConfig({
         const notebook = deserialize(await readFile(filename, "utf8"), { parser });
         const metadata = await readMetadata(filename);
         return Handlebars.compile(template)({
-          sourceUrl: join(GITHUB_BASE_URL, path),
+          sourceUrl: `${GITHUB_BASE_URL}/${path.replace(/^\//, '')}`,
           ...notebook,
           ...metadata,
         });
