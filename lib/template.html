@@ -47,6 +47,14 @@
       <a class="menu__item" href="/projects/">projects</a>
       <a class="menu__item" href="/trains-and-trails/">running</a>
     </nav>
+    <header>
+      <h1>{{title}}</h1>
+      <p>
+        <a href="https://rreusser.github.io">Ricky Reusser</a><br>
+        {{#if publishedAt}}{{publishedAt}}<br>{{/if}}
+        {{#if sourceUrl}}<a href="{{sourceUrl}}">View source &rarr;</a>{{/if}}
+      </p>
+    </header>
     <div class="container">
       <main></main>
     </div>

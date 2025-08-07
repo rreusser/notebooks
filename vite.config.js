@@ -1,75 +1,66 @@
 import { observable, config } from "@observablehq/notebook-kit/vite";
 import { defineConfig } from "vite";
-import { readFileSync, existsSync } from "node:fs";
+import { readFile } from "node:fs/promises";
 import Handlebars from "handlebars";
-import path from "node:path";
+import { join, dirname, resolve } from "node:path";
 import yaml from "yaml";
 import { glob } from "glob";
+import { deserialize } from '@observablehq/notebook-kit';
+import { JSDOM } from 'jsdom';
+const window = new JSDOM().window;
+const parser = new window.DOMParser();
 
-const __dirname = path.dirname(new URL(import.meta.url).pathname);
+const __dirname = dirname(new URL(import.meta.url).pathname);
 
-const TEMPLATE_PATH = path.join(__dirname, "lib/template.html");
+const TEMPLATE_PATH = join(__dirname, "lib/template.html");
+const GITHUB_BASE_URL = "https://github.com/rreusser/notebooks/tree/main/src";
 
-const githubUrlBase = "https://github.com/rreusser/notebooks/tree/main/src";
-
-const notebooksPath = glob.sync(path.join(__dirname, "src", "**", "*.html"), {
-  nodir: true,
-  absolute: true,
-});
+async function readMetadata(filename) {
+  let metadataYAML = '';
+  const metadataPath = join(dirname(filename), "metadata.yml");
+  try {
+    metadataYAML = await readFile(metadataPath, "utf8");
+  } catch (e) { }
+  return yaml.parse(metadataYAML);
+}
 
 export default defineConfig({
   ...config(),
   plugins: [
     observable({
       template: TEMPLATE_PATH,
-      transformTemplate: function ({ template, context, notebook }) {
-        const { path: sourcePath, filename } = context;
-        const dir = path.dirname(filename);
-        const metadataPath = path.join(dir, "metadata.yml");
-        const metadata = existsSync(metadataPath)
-          ? yaml.parse(readFileSync(metadataPath, "utf8"))
-          : {};
-        const sourceUrl = `${githubUrlBase}/${sourcePath}`;
-
-        if (notebook?.cells?.[0]?.value?.startsWith("# ")) {
-          const lines = notebook.cells[0].value.split("\n");
-
-          const headerContent =
-            [
-              "[Ricky Reusser](https://rreusser.github.io)",
-              metadata.publishedAt
-                ? new Date(metadata.publishedAt).toLocaleDateString("default", {
-                    month: "long",
-                    day: "numeric",
-                    year: "numeric",
-                  })
-                : "",
-              "[View source →](" + sourceUrl + ")",
-            ]
-              .filter(Boolean)
-              .join("<br>") + "\n";
-          lines.splice(1, 0, headerContent);
-          notebook.cells[0].value = lines.join("\n");
-        }
-
+      transformTemplate: async function (template, {filename, path}) {
+        const notebook = deserialize(await readFile(filename, 'utf8'), {parser});
+        const metadata = await readMetadata(filename);
         return Handlebars.compile(template)({
-          sourceUrl,
-          title: notebook.title,
+          sourceUrl: join(GITHUB_BASE_URL, path),
+          ...notebook,
           ...metadata,
         });
       },
+      transformNotebook: async function (notebook, {filename}) {
+        // Remove the leading h1 cell, preserving additional cell content, if present.
+        const lines = (notebook.cells[0]?.value || '').split('\n');
+        if (lines[0].startsWith('# ')) lines.splice(0, 1);
+        if (lines.filter(Boolean).length) {
+          notebook.cells[0].value = lines.join('\n');
+        } else {
+          notebook.cells.splice(0, 1);
+        }
+        return notebook;
+      }
     }),
   ],
   build: {
-    outDir: path.join(__dirname, "docs"),
+    outDir: join(__dirname, "docs"),
     emptyOutDir: true,
     rollupOptions: {
-      input: notebooksPath,
+      input: glob.sync(join(__dirname, "src", "**", "*.html"), {
+        nodir: true,
+        absolute: true,
+      }),
     },
   },
-  /*server: {
-    host: '0.0.0.0',
-  },*/
   root: "src",
   base: "/notebooks/",
 });

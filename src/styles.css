@@ -60,60 +60,47 @@ main h6 {
   -webkit-font-smoothing: auto;
 }
 
-main > div:first-child {
+header {
   margin: 0 auto 100px;
   background-color: var(--rrtheme-color);
   text-align: center;
-  padding-top: 100px;
-  padding-bottom: 100px;
+  padding: 100px 20px;
   position: relative;
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
 }
 
-main > div:first-child:before,
-main > div:first-child:after {
-  content: "";
-  display: block;
-  top: 0;
-  bottom: 0;
-  width: 100vh;
-  position: absolute;
-  background-color: var(--rrtheme-color);
-}
-main > div:first-child:before {
+header:before {
   left: 0;
   transform: translate(-100%, 0);
 }
 
-main > div:first-child:after {
+header:after {
   right: 0;
   transform: translate(100%, 0);
 }
-main > div:first-child h1,
-main > div:first-child p {
+header h1,
+header p {
   max-width: none;
 }
 
-main > div:first-child,
-main > div:first-child h1,
-main > div:first-child h2,
-main > div:first-child h3,
-main > div:first-child h4,
-main > div:first-child a {
+header h1,
+header p,
+header a[href] {
   color: white;
   font-weight: 200;
 }
 
-main > div:first-child h1 {
+header h1 {
   font-size: 34px;
 }
 
 @media (max-width: 640px) {
-  main > div:first-child {
+  header {
     text-align: left;
   }
 }
+
 main h1,
 main h2,
 main h3,
