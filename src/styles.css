@@ -72,6 +72,7 @@ header {
   position: relative;
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
+  box-sizing: border-box;
 }
 
 header:before {
@@ -239,4 +240,10 @@ footer {
   max-width: 640px;
   margin: auto;
 
+}
+
+.index {
+  margin: 0 auto;
+  width: 640px;
+  max-width: 100%;;
 }

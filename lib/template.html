@@ -50,12 +50,20 @@
   <header>
     <h1>{{title}}</h1>
     <p>
-      <a href="https://rreusser.github.io">Ricky Reusser</a><br>
+      {{#if author}}<a href="{{authorUrl}}">{{author}}</a><br>{{/if}}
       {{#if publishedAt}}{{publishedAt}}<br>{{/if}}
       {{#if sourceUrl}}<a href="{{sourceUrl}}">View source &rarr;</a>{{/if}}
     </p>
   </header>
   <div class="container">
+    {{#if index}}
+      <div class="index">
+      {{#each index}}
+        Notebook!
+      {{/each}}
+      </div>
+    {{/if}}
+
     <main></main>
     {{#if mastodonPostId}}
       <script src="../comments.js" type="module"></script>
