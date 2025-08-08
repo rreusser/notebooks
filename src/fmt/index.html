@@ -142,26 +142,8 @@
 
     Ideas and improvements are welcome! Thanks to [Job van der Zwan](https://observablehq.com/@jobleonard) for suggesting scientific notation!`
   </script>
-  <script id="302" type="application/vnd.observable.javascript">
-    md`## Documentation`
-  </script>
   <script id="1714" type="module" pinned="">
     import { Inspector }  from 'npm:@observablehq/inspector'
-  </script>
-  <script id="1710" type="module">
-    signature(
-      fmt,
-      md`
-    Evaluate a tagged template, displaying the result in the style of an Observable cell output and passing the first non-HTML value through as the \`viewof\` value.
-
-    **Options:**
-    - \`format\` (optional): Either a [d3-format](https://github.com/d3/d3-format) string or a function which returns a formatted value.
-
-    **Returns:** If a template string is provided, returns an HTML element with its \`value\` property (for use with Observable's \`viewof\` keyword) set identically to the first non-HTML expression value. If no non-HTML value is provided, the output is equal to the first expression value.
-
-    If no template string is provided, returns the \`fmt\` function itself with format overridden.
-    `
-    )
   </script>
   <script id="34" type="module">
     const fmt = (function () {
@@ -326,44 +308,6 @@
   </script>
   <script id="1124" type="module">
     const sci = toScientific;
-  </script>
-  <script id="1114" type="application/vnd.observable.javascript">
-    signature(
-      sci,
-      md`
-    Return a function which constructs an HTML representation of a \`Number\` in scientific notation.
-
-    **Options:** 
-    - \`format\` (optional): [d3-format](https://github.com/d3/d3-format) string for the mantissa.
-
-    **Returns:** an HTML element representing the number. The original numerical value is assigned to its \`value\` property.
-
-    **Examples:**
-
-    \`\`\`js
-    toScientific('.5f')(Math.PI)
-    \`\`\`
-    ${toScientific('.5f')(Math.PI)}
-    `
-    )
-  </script>
-  <script id="824" type="module">
-    function signature(func, content) {
-      const sig = md`\`\`\`js
-    ${func
-      .toString()
-      .split('\n')[0]
-      .replace(/\s*{$/, '')}
-    \`\`\` `;
-      sig.style.display = 'inline';
-
-      return md`
-    <details open style="border:1px solid #eee;padding:25px 15px">
-    <summary style="cursor:pointer">${sig}</summary>
-    <hr style="margin:0.2em 0">
-    ${content}
-    </details>`;
-    }
   </script>
   <script id="752" type="module">
     function isElement(obj) {
