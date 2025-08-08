@@ -129,6 +129,8 @@ main h3 {
 
 main .katex-display {
   overflow-x: scroll;
+  padding-top: 8px;
+  padding-bottom: 8px;
 }
 
 .comments_meta {
