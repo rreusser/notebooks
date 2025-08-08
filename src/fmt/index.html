@@ -143,7 +143,10 @@
     Ideas and improvements are welcome! Thanks to [Job van der Zwan](https://observablehq.com/@jobleonard) for suggesting scientific notation!`
   </script>
   <script id="302" type="application/vnd.observable.javascript">
-    md`## Implementation`
+    md`## Documentation`
+  </script>
+  <script id="1714" type="module" pinned="">
+    import { Inspector }  from 'npm:@observablehq/inspector'
   </script>
   <script id="1710" type="module">
     signature(
@@ -160,11 +163,8 @@
     `
     )
   </script>
-  <script id="1704" type="module" pinned="">
-    import { Inspector }  from 'npm:@observablehq/inspector'
-  </script>
-  <script id="34" type="application/vnd.observable.javascript" pinned="">
-    fmt = {
+  <script id="34" type="module">
+    const fmt = (function () {
       // Create and extract the .observablehq--inspect element of an inspector
       function bareInspector(value) {
         const el = document.createElement("div");
@@ -305,7 +305,7 @@
       returnValue.sci = sci;
 
       return returnValue;
-    }
+    })()
   </script>
   <script id="999" type="module">
     function toScientific(format = '~f') {
