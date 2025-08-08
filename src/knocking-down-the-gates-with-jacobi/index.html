@@ -687,32 +687,30 @@
       }));
     }
   </script>
-  <script id="303" type="application/vnd.observable.javascript">
-    {
-      const ymax =
-        ((2 * k * l) / Math.cosh(u_max)) * (2 / Math.cosh(u_max) ** 2 - 1);
-      return htl.html`<figure>${Plot.plot({
-        width: Math.min(width, 640),
-        height: 200,
-        grid: true,
-        x: {
-          label: "u →"
-        },
-        y: {
-          label: "dx(u)/dt ↑"
-        },
-        marks: [
-          Plot.ruleY([0]),
-          Plot.line(upswing, { x: "uK", y: "xdot", stroke: "#c39" }),
-          Plot.dot([{ x: u_max, y: ymax }], {
-            x: "x",
-            y: "y",
-            stroke: "#c39",
-            fill: "#c39"
-          })
-        ]
-      })}<figcaption>Horizontal velocity for an upswinging pendulum with ${tex`k = 1`}, with a dot representing the extremum at ${tex`u = \ln\left(\sqrt{6} + \sqrt{5}\right)`}.</figcaption></figure>`;
-    }
+  <script id="303" type="module">
+    const ymax =
+      ((2 * k * l) / Math.cosh(u_max)) * (2 / Math.cosh(u_max) ** 2 - 1);
+    display(htl.html`<figure>${Plot.plot({
+      width: Math.min(width, 640),
+      height: 200,
+      grid: true,
+      x: {
+        label: "u →"
+      },
+      y: {
+        label: "dx(u)/dt ↑"
+      },
+      marks: [
+        Plot.ruleY([0]),
+        Plot.line(upswing, { x: "uK", y: "xdot", stroke: "#c39" }),
+        Plot.dot([{ x: u_max, y: ymax }], {
+          x: "x",
+          y: "y",
+          stroke: "#c39",
+          fill: "#c39"
+        })
+      ]
+    })}<figcaption>Horizontal velocity for an upswinging pendulum with ${tex`k = 1`}, with a dot representing the extremum at ${tex`u = \ln\left(\sqrt{6} + \sqrt{5}\right)`}.</figcaption></figure>`);
   </script>
   <script id="330" type="text/markdown">
     Success! That looks like an extremum in the horizontal velocity! And so we arrive at the endgame. At last, we plug scaled time ${tex`u`} into the equation for ${tex`\theta(u)`} to compute the angle at which the horizontal velocity is maximized. For ${tex`k = 1`}, the equation of motion is
@@ -745,8 +743,8 @@
 
     This is the horizontal distance from the pivot to the mass when the mass reaches its maximum horizontal velocity. This is also therefore the distance from the gates at which we—er, the _orcs_—should place the pivot of the pole. Substituting some numbers, we get
   </script>
-  <script id="395" type="application/vnd.observable.javascript">
-    viewof d_initial = fmt`d_initial = ${l * Math.sqrt(1 - 4 / 9)} m`
+  <script id="395" type="module">
+    fmt`d_initial = ${l * Math.sqrt(1 - 4 / 9)} m`
   </script>
   <script id="759" type="text/markdown">
     Success! I think it's kinda remarkable that after all this math, we actually manage to get a closed form solution. Let us only hope that some day the orcs and their hundred foot pole adopt the metric system. And that we find a job which doesn't involve consulting for orcs.
