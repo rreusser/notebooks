@@ -1,0 +1,563 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Shanks Transformation</title>
+  <script id="1" type="text/markdown">
+    # Shanks Transformation
+  </script>
+  <script id="855" type="text/markdown">
+    I've encountered some lovely mathematical results in my time, but the *[Shanks Transformation](https://en.wikipedia.org/wiki/Shanks_transformation)* for nonlinear series acceleration is truly one of the most delightful.
+  </script>
+  <script id="2442" type="text/markdown">
+    Let's start with a very slowly converging series for ${tex`\pi`} based on the Taylor series of the arctangent function,
+  </script>
+  <script id="859" type="application/x-tex">
+    \begin{aligned}
+    \pi &= 4 \arctan(1) \\
+    \pi &= 4 \left( 1 - \frac{1}{3} + \frac{1}{5} - \frac{1}{7} + \cdots \right)
+    \end{aligned}
+  </script>
+  <script id="1073" type="text/markdown">
+    We define partial sums of this series as the function ${tex`A(n),`}
+  </script>
+  <script id="2441" type="application/x-tex">
+    A_n = 4 \sum_{k = 0}^{n} \frac{(-1)^k}{2k + 1}
+  </script>
+  <script id="2249" type="text/markdown">
+    I'll define a little helper for ${tex`\sum_{k=0}^n`} since we'll use it repeatedly.
+  </script>
+  <script id="1920" type="application/vnd.observable.javascript" pinned="">
+    sum = (f) => (n) => {
+      let sum = 0;
+      for (let k = 0; k <= n; k++) sum += f(k);
+      return sum;
+    }
+  </script>
+  <script id="1911" type="application/vnd.observable.javascript" pinned="">
+    A = sum((k) => (4 * (k % 2 ? -1 : 1)) / (2 * k + 1))
+  </script>
+  <script id="1078" type="text/markdown">
+    How slowly does this series converge? Very, very slowly!
+  </script>
+  <script id="1014" type="text/markdown">
+    | ${tex`n`}    | ${tex`A_n`} |
+    | -------- | ------- |
+    | ${tex`0`} | ${tex`${piToTex(A(0))}`} |
+    | ${tex`1`} | ${tex`${piToTex(A(1))}`} |
+    | ${tex`2`} | ${tex`${piToTex(A(2))}`} |
+    | ${tex`{10}`} | ${tex`${piToTex(A(10))}`} |
+    | ${tex`{100}`} | ${tex`${piToTex(A(100))}`} |
+    | ${tex`{1000}`} | ${tex`${piToTex(A(1000))}`} |
+    | ${tex`{10000}`} | ${tex`${piToTex(A(10000))}`} |
+    | ${tex`{100000}`} | ${tex`${piToTex(A(100000))}`} |
+    | ${tex`{1000000}`} | ${tex`${piToTex(A(1000000))}`} |
+  </script>
+  <script id="1090" type="text/markdown">
+    Achieving error on the order of ${tex`10^{-6}`} requires about ${tex`10^6`} terms. Until I learned about Shanks transformation, I simply accepted that not every series is destined to be useful.
+  </script>
+  <script id="1397" type="text/markdown">
+    ## A first attempt
+  </script>
+  <script id="1151" type="text/markdown">
+    Upon closer inspection, this is a silly conclusion. Even cursory visual inspection shows that any two consecutive terms bracket the correct answer.
+  </script>
+  <script id="1101" type="application/vnd.observable.javascript">
+    Plot.plot({
+      grid: true,
+      width: Math.min(640, width),
+      height: 200,
+      y: { label: "A(n)" },
+      x: { label: "n" },
+      marks: [
+        Plot.line(tabulate(A, [0, 20]), {
+          x: "n",
+          y: "An",
+          stroke: "#888",
+          strokeDasharray: "1, 3",
+          strokeWidth: 1.25
+        }),
+        Plot.dot(tabulate(A, [0, 20]), {
+          x: "n",
+          y: "An",
+          stroke: "black",
+          strokeWidth: 1.5,
+          fill: d3.schemeSet1[0]
+        }),
+        Plot.ruleY([Math.PI], {}),
+        Plot.text([{ x: 19.5, y: Math.PI, text: "π" }], {
+          x: "x",
+          y: "y",
+          text: "text",
+          dy: -12,
+          fontSize: 15
+        })
+      ]
+    })
+  </script>
+  <script id="1192" type="text/markdown">
+    What happens if we just average two consecutive terms?
+  </script>
+  <script id="1158" type="text/markdown">
+    | ${tex`n`}    | ${tex`A_n`} | ${tex`\frac{1}{2}(A_n + A_{n+1})`} |
+    | -------- | ------- | ------- |
+    | ${tex`0`} | ${tex`${piToTex(A(0))}`} | ${tex`${piToTex((A(0) + A(1))/2)}`} |
+    | ${tex`1`} | ${tex`${piToTex(A(1))}`} | ${tex`${piToTex((A(1) + A(2))/2)}`} |
+    | ${tex`2`} | ${tex`${piToTex(A(2))}`} | ${tex`${piToTex((A(2) + A(3))/2)}`} |
+    | ${tex`10`} | ${tex`${piToTex(A(10))}`} | ${tex`${piToTex((A(10) + A(11))/2)}`} |
+    | ${tex`100`} | ${tex`${piToTex(A(100))}`} | ${tex`${piToTex((A(100) + A(101))/2)}`} |
+    | ${tex`1000`} | ${tex`${piToTex(A(1000))}`} | ${tex`${piToTex((A(1000) + A(1001))/2)}`} |
+  </script>
+  <script id="1419" type="text/markdown">
+    At a thousand terms, we go from three digits of accuracy to six, so it would seem we're onto something! In general we get about twice as many digits out of the average of two consecutive terms, but it still takes a *lot* of terms to get a decent answer.
+  </script>
+  <script id="1422" type="text/markdown">
+    ## Shanks Transformation
+
+  </script>
+  <script id="1413" type="text/markdown">
+    The essence of Shanks Transformation is to use consecutive terms to extrapolate as far as we can toward the right answer, only with a better choice than our averaging above. So instead we use three consecutive terms to fit a geometric sequence of three parameters, then solve for its limit.
+  </script>
+  <script id="2440" type="text/markdown">
+    To get the ball rolling, we write our series in the form of a general geometric sequence,
+  </script>
+  <script id="1428" type="application/x-tex">
+    \begin{aligned}
+    A_{n-1} &= A + \alpha \cdot q^{n-1} \\
+    A_n &= A + \alpha \cdot q^{n} \\
+    A_{n+1} &= A + \alpha \cdot q^{n+1}.
+    \end{aligned}
+  </script>
+  <script id="1513" type="text/markdown">
+    Solving the first two equations for ${tex`q`} yields
+  </script>
+  <script id="2439" type="application/x-tex">
+    q = \frac{A_n - A}{A_{n - 1} - A}
+  </script>
+  <script id="2438" type="text/markdown">
+    Performing the same operation on the second and third equations, we have
+  </script>
+  <script id="1516" type="application/x-tex">
+    q = \frac{A_n - A}{A_{n - 1} - A} = \frac{A_{n + 1} - A}{A_n - A}.
+  </script>
+  <script id="2437" type="text/markdown">
+    Cross-multiplying and solving for ${tex`A`} gives us
+
+  </script>
+  <script id="1521" type="application/x-tex">
+    A = \frac{A_{n+1}A_{n-1} - A_n^2}{A_{n+1} - 2A_n + A_{n - 1}}.
+  </script>
+  <script id="2433" type="text/markdown">
+    We could backtrack and solve for ${tex`\alpha`} and ${tex`q`}, but if the sequence is convergent then ${tex`|q| < 1,`} so that as ${tex`n \rarr \infty`}, our second equation for ${tex`A_n`} gives
+  </script>
+  <script id="2434" type="application/x-tex">
+    \lim_{n \rarr \infty} A_n = A.
+  </script>
+  <script id="1532" type="text/markdown">
+    Quantity ${tex`A`} is in fact the limit we're looking for, so we define this as the *Shanks transformation* of series ${tex`A_n`} and denote it
+  </script>
+  <script id="2435" type="application/x-tex">
+    S(A_n) = \frac{A_{n+1}A_{n-1} - A_n^2}{A_{n+1} - 2A_n + A_{n - 1}}
+  </script>
+  <script id="1559" type="text/markdown">
+    We can implement this pretty easily as a higher order JavaScript function (although please note that this is a very, very inefficient implementation for the sake of clarity, with many repeated, unnecessary function evaluations!)
+  </script>
+  <script id="51" type="application/vnd.observable.javascript" pinned="">
+    //S = (A) => (n) =>
+    //  (A(n + 1) * A(n - 1) - A(n) ** 2) / (A(n + 1) - 2 * A(n) + A(n - 1))
+
+    // An exactly equivalent and more numerically stable form:
+    S = (A) => (n) =>
+      A(n + 1) - (A(n + 1) - A(n)) ** 2 / (A(n + 1) - 2 * A(n) + A(n - 1))
+  </script>
+  <script id="1579" type="text/markdown">
+    The plot below shows the error of ${tex`A_n`} and the Shanks transformation ${tex`S(A_n)`}. Hover over various points and observe in the plot and table below how much the transformation accelerates convergence. Suddenly the twentieth term yields accuracy the original series takes nearly ten thousand terms to produce!
+  </script>
+  <script id="129" type="application/vnd.observable.javascript">
+    tabulate = (A, [start, end], { expected = Math.PI, seriesIdx } = {}) =>
+      range(start, end)
+        .map((n) => ({ n, An: A(n) }))
+        .map(({ n, An }) => ({
+          seriesIdx,
+          n,
+          An,
+          absError: Math.abs(An - expected)
+        }))
+  </script>
+  <script id="1201" type="application/vnd.observable.javascript">
+    viewof firstShanks = makePlot(
+      [
+        tabulate(Shanks(A, 0), [0, 30], { seriesIdx: 0 }),
+        tabulate(Shanks(A, 1), [1, 30], { seriesIdx: 1 })
+      ],
+      {
+        yDomain: [1e-5, 4],
+        showIndex: 4,
+        w: Math.min(width, 640),
+        h: Math.floor(0.7 * Math.min(width, 640)),
+        caption:
+          "Hover over a point to observe the values it depends upon. Inspect corresponding values in the table below."
+      }
+    )
+  </script>
+  <script id="1623" type="application/vnd.observable.javascript">
+    makeTable(firstShanks)
+  </script>
+  <script id="1437" type="text/markdown">
+    ## Iterated Shanks Transformation
+  </script>
+  <script id="1562" type="text/markdown">
+    But wait, you say! The Shanks transformation ${tex`S(A_n)`} gives us a *new* series which presumably converges to the same limit. Can we apply the Shanks transformation to the Shanks transformation and achieve an even better approximation?
+  </script>
+  <script id="1564" type="text/markdown">
+    Remarkably, the answer is *yes*! We can simply apply the Shanks transformation over and over, each time yielding a better and better approximation, each successive iteration requiring only two additional terms of ${tex`A_n`}.
+  </script>
+  <script id="292" type="application/vnd.observable.javascript" pinned="">
+    Shanks = (A, n = 1) => [...Array(n).keys()].reduce(S, A)
+  </script>
+  <script id="1728" type="text/markdown">
+    Suddenly, we're at a pretty remarkable state of affairs. Consider the fifth iterate, ${tex`S^5(A_n).`} The very first term is already ${tex`${piToTex(Shanks(A, 4)(4))}`}, and really only depends upon the first nine terms of the original series, the most accurate of which was ${tex`${piToTex(A(10))}`}!
+  </script>
+  <script id="2431" type="text/markdown">
+    Let's be clear about what happened here. We took the first eleven terms of the original series. These values only contain one or two digits of accuracy. But they contain a lot of _information_. By plugging them over and over into the Shanks transformation, we extract that information and obtain _seven digits_ of accuracy!
+  </script>
+  <script id="1815" type="text/markdown">
+    Hover over results in the table below and observe the values in the table which follows, keeping in mind that the series itself only enters in the terms of ${tex`A_n`} itself and that the Shanks transformation introduces no additional information. I've plotted up to ${tex`S^5(A_n)`}, though I've truncated the series once they run into machine precision and yield the exactly correct answer.
+  </script>
+  <script id="930" type="application/vnd.observable.javascript">
+    viewof iteratedShanks = makePlot(
+      [
+        tabulate(Shanks(A, 0), [0, 30], { seriesIdx: 0 }),
+        tabulate(Shanks(A, 1), [1, 30], { seriesIdx: 1 }),
+        tabulate(Shanks(A, 2), [2, 30], { seriesIdx: 2 }),
+        tabulate(Shanks(A, 3), [3, 30], { seriesIdx: 3 }),
+        tabulate(Shanks(A, 4), [4, 30], { seriesIdx: 4 }),
+        tabulate(Shanks(A, 5), [5, 30], { seriesIdx: 5 }),
+        tabulate(Shanks(A, 6), [6, 12], { seriesIdx: 6 }),
+        tabulate(Shanks(A, 7), [7, 11], { seriesIdx: 7 })
+      ],
+      {
+        h: Math.max(300, Math.floor(width * 0.8)),
+        showIndex: 5,
+        yDomain: [1e-16, 4],
+        //xDomain: [0, 13],
+        caption:
+          "Hover over a point to observe the values it depends upon. Inspect corresponding values in the table below."
+      }
+    )
+  </script>
+  <script id="1655" type="application/vnd.observable.javascript">
+    makeTable(iteratedShanks)
+  </script>
+  <script id="1853" type="text/markdown">
+    Since no new information enters the picture via the Shanks transformation, the stunning aspect to me is just *how much information* is contained even in the original, slowly converging, inaccurate series ${tex`A_n`}.
+  </script>
+  <script id="1937" type="text/markdown">
+    ## Taking the transformation too far
+  </script>
+  <script id="1939" type="text/markdown">
+    Now we just get reckless and greedy. How about the [comically divergent series](https://en.wikipedia.org/wiki/1_%E2%88%92_2_%2B_3_%E2%88%92_4_%2B_%E2%8B%AF)
+  </script>
+  <script id="2443" type="application/x-tex">
+    1 - 2 + 3 - 4 - \cdots = \frac{1}{4}
+  </script>
+  <script id="2209" type="application/vnd.observable.javascript" pinned="">
+    B = sum((k) => k * Math.pow(-1, k - 1))
+  </script>
+  <script id="2306" type="text/markdown">
+    The series diverges, as is should.
+  </script>
+  <script id="2267" type="application/vnd.observable.javascript" pinned="">
+    B(10000)
+  </script>
+  <script id="1950" type="text/markdown">
+    However, the first term of the fourth iterate ${tex`S^4(A_n)`} shows that the Shanks-transformed series converges just fine to ${tex`1/4`}.
+  </script>
+  <script id="1860" type="application/vnd.observable.javascript" pinned="">
+    Shanks(B, 4)(4)
+  </script>
+  <script id="2444" type="text/markdown">
+    Or perhaps the similarly divergent series
+  </script>
+  <script id="2005" type="application/x-tex">
+    1 - 2 + 4 - 8 + \cdots = \frac{1}{3}
+  </script>
+  <script id="2217" type="application/vnd.observable.javascript" pinned="">
+    C = sum((k) => Math.pow(-2, k))
+  </script>
+  <script id="2311" type="text/markdown">
+    The divergent series obviously diverges.
+  </script>
+  <script id="2270" type="application/vnd.observable.javascript" pinned="">
+    C(100)
+  </script>
+  <script id="2009" type="text/markdown">
+    Again though, a single iteration of the Shanks transformation ${tex`S(A_n)`} nails it.
+  </script>
+  <script id="1966" type="application/vnd.observable.javascript" pinned="">
+    Shanks(C)(1)
+  </script>
+  <script id="2200" type="text/markdown">
+    The Shanks transformation doesn't magically make divergent series converge, and of course *divergent series don't converge*! This extraneous "correctness" (by the yardstick of more sophisticated methods) happens because assumed *convergence* but didn't actually enforce whether ${tex`A`} was the limit to which it was *converging* or from which it was *diverging*.
+
+    Analytic continuation provides more rigorous tools with which to explain these series, as explained by Mathologer in his video [Numberphile v. Math: the truth about 1+2+3+...=-1/12](https://www.youtube.com/watch?v=YuIIjLr6vUA). The eponymous Daniel Shanks also explores these specific issues with more precision and rigor in his 1955 paper [*Non-linear Transformations of Divergent and Slowly Convergent Sequences*](https://onlinelibrary.wiley.com/doi/abs/10.1002/sapm19553411). It's a moderately approachable paper for the non-mathematician, though certainly somewhat involved.
+
+    I'll leave this exploration here for now, though I'd highly recommend [digging up a copy of the paper](https://en.wikipedia.org/wiki/Sci-Hub) and at the very least browsing through some of the more entertaining results!
+  </script>
+  <script id="1957" type="text/markdown">
+    ## Helpers
+  </script>
+  <script id="427" type="application/vnd.observable.javascript">
+    function makePlot(
+      series,
+      {
+        xDomain = [0, 20],
+        yDomain = [1e-9, 10],
+        showIndex = 0,
+        w = width,
+        h = Math.max(500, Math.floor(width * 0.7)),
+        caption
+      } = {}
+    ) {
+      const plot = Plot.plot({
+        width: w,
+        height: h,
+        grid: true,
+        x: { domain: xDomain, label: "n" },
+        y: { domain: yDomain, type: "log", label: "|A(n) - π|" }
+      });
+      const svg = d3.select(plot);
+      const margin = { t: 20, r: 10, b: 20, l: 40 };
+      const xScale = plot.scale("x");
+      const yScale = plot.scale("y");
+
+      const line = d3
+        .line()
+        .x(({ n }) => xScale.apply(n))
+        .y(({ absError }) => yScale.apply(absError));
+
+      const gArrows = svg.append("g").attr("class", "arrows");
+
+      const gLines = svg
+        .append("g")
+        .attr("class", "lines")
+        .selectAll("path.line")
+        .data(series)
+        .join((enter) =>
+          enter
+            .append("path")
+            .attr("class", "line")
+            .attr("d", (c) => line(c))
+            .attr("fill", "none")
+            .attr("stroke", "#888")
+            .attr("stroke-dasharray", "2, 2")
+            .attr("stroke-width", 1)
+        );
+
+      const gPoints = svg
+        .append("g")
+        .attr("class", "points")
+        .selectAll("g.trace")
+        .data(series)
+        .join((enter) => enter.append("g").attr("class", "trace"))
+        .selectAll("g.circle")
+        .data((s) => s) //.filter(({ n }) => n > 0))
+        .join((enter) => {
+          const g = enter
+            .append("g")
+            .attr("class", "circle")
+            .attr(
+              "transform",
+              ({ n, absError }) =>
+                `translate(${xScale.apply(n)},${yScale.apply(absError)})`
+            );
+          g.append("circle")
+            .attr("r", 3)
+            .style("fill", (d) => d3.schemeSet1[d.seriesIdx])
+            .style("stroke", "black")
+            .style("stroke-width", 1);
+
+          g.append("circle")
+            .attr("r", 20)
+            .style("fill", "transparent")
+            .style("cursor", "pointer")
+            .on("click", hover)
+            .on("mouseover", hover);
+        });
+      function hover(event, { seriesIdx = null, n } = {}) {
+        if (seriesIdx === null) {
+          gArrows.selectAll("*").remove();
+          return;
+        }
+        const arrows = [];
+        for (let s = 0; s < seriesIdx; s++) {
+          for (let m = n - seriesIdx; m < n + seriesIdx - s * 2 - 1; m++) {
+            arrows.push([series[s][m], series[s + 1][m]]);
+            arrows.push([series[s][m + 1], series[s + 1][m]]);
+            arrows.push([series[s][m + 2], series[s + 1][m]]);
+          }
+        }
+        const hierarchy = [];
+        for (let s = 0; s <= seriesIdx; s++) {
+          const h = [];
+          for (let m = n - seriesIdx; m <= n + seriesIdx - s * 2; m++) {
+            h.push(series[s][m]);
+          }
+          hierarchy.push(h);
+        }
+        figure.value = hierarchy;
+        figure.dispatchEvent(new CustomEvent("input"));
+        gArrows
+          .selectAll("g.arrows")
+          .data(arrows)
+          .join(
+            (enter) => enter.append("g").attr("class", "arrows").call(arrow),
+            (update) => update.call(arrow),
+            (remove) => remove.remove()
+          );
+      }
+
+      function makeArrow(el) {
+        function computeArrow([d0, d1]) {
+          const x1 = xScale.apply(d0.n);
+          const x2 = xScale.apply(d1.n);
+          const y1 = yScale.apply(d0.absError);
+          const y2 = yScale.apply(d1.absError);
+          const rx = x2 - x1;
+          const ry = y2 - y1;
+          const l = Math.hypot(rx, ry);
+          const tx = rx / l;
+          const ty = ry / l;
+          const nx = ty;
+          const ny = -tx;
+          const inset = 10;
+          const al = 7 + inset;
+          const aw = 2.5;
+          const hw = 0.75;
+
+          return (
+            d3.line()([
+              [x1 + hw * nx + tx * inset, y1 + hw * ny + ty * inset],
+              [x2 + hw * nx - tx * al, y2 + hw * ny - ty * al],
+              [x2 + aw * nx - tx * al, y2 + aw * ny - ty * al],
+              [x2 - tx * inset, y2 - ty * inset],
+              [x2 - aw * nx - tx * al, y2 - aw * ny - ty * al],
+              [x2 - hw * nx - tx * al, y2 - hw * ny - ty * al],
+              [x1 - hw * nx + tx * inset, y1 - hw * ny + ty * inset]
+            ]) + "Z"
+          );
+        }
+        return el
+          .attr("d", (d) => computeArrow(d))
+          .style("fill", ([{ seriesIdx }]) => d3.schemeSet1[seriesIdx + 1])
+          .style("stroke", "black")
+          .style("stroke-width", 0.1);
+      }
+
+      function arrow(el) {
+        const data = el.data();
+        if (!data.length) return;
+        el.selectAll("path")
+          .data(data)
+          .join(
+            (enter) => enter.append("path").call(makeArrow),
+            (update) => update.call(makeArrow),
+            (remove) => remove.remove()
+          );
+      }
+      const gLabels = svg.append("g").attr("class", "labels");
+
+      function label(i) {
+        if (i === 0) return "An";
+        const script = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+        return `S${i === 1 ? "" : script[i]}(An)`;
+      }
+      gLabels
+        .selectAll("text")
+        .data(series)
+        .join((enter) => enter.append("text"))
+        .text((d) => label(d[0].seriesIdx))
+        .attr("font-size", 16)
+        .attr("font-family", "serif")
+        .attr("font-style", "italic")
+        .attr("text-anchor", "middle")
+        .attr("dy", ([{ seriesIdx }]) => (seriesIdx > 3 ? 20 : -10))
+        .attr("x", (d) =>
+          xScale.apply(
+            d[Math.max(0, Math.min(12 - d[0].seriesIdx, d.length - 1))].n
+          )
+        )
+        .attr("y", (d) =>
+          yScale.apply(
+            d[Math.max(0, Math.min(12 - d[0].seriesIdx, d.length - 1))].absError
+          )
+        );
+
+      const figure = htl.html`<figure>${svg.node()}${
+        caption ? htl.html`<figcaption>${caption}</figcaption>` : ""
+      }</figure>`;
+
+      //hover(null, { seriesIdx: series.length - 1, n: showIndex });
+
+      return figure;
+    }
+  </script>
+  <script id="1595" type="application/vnd.observable.javascript">
+    function makeTable(series) {
+      return html`<table>
+        <thead><tr>
+        <th>${tex`n`}</th>
+        ${range(0, series.length - 1).map(
+          (i) =>
+            htl.html`<th>${
+              i === 0 ? tex`A_n` : tex`S^{${i === 1 ? "" : i}}(A_n)`
+            }</th>`
+        )}<tr></thead>
+        <tbody>
+          ${series[0].map(
+            ({ n }, i) => htl.html`<tr>
+            <td>${n}</td>
+            ${series.map(
+              (_, j) => htl.html`<td>
+              ${tex`${piToTex(series[j][i - j] ? series[j][i - j].An : "")}`}
+            </td>`
+            )}
+          </tr>`
+          )}
+        </tbody>
+      </table>`;
+    }
+  </script>
+  <script id="163" type="application/vnd.observable.javascript">
+    range = (start, end) => [...Array(end - start + 1).keys()].map((n) => n + start)
+  </script>
+  <script id="962" type="application/vnd.observable.javascript">
+    function piToTex(val) {
+      if (typeof val === "undefined" || val === "") return "";
+      const exact = Math.PI.toString();
+      const obs = val.toFixed(15).padEnd(17, "0");
+      const good = [];
+      const bad = [];
+      for (let i = 0; i < obs.length; i++) {
+        const isGood = !bad.length && obs[i] === exact[i];
+        (isGood ? good : bad).push(obs[i]);
+        if (bad.length >= 2 && good.length + bad.length >= 3) break;
+      }
+      return `${good.join("")}${bad.length ? `\\color{red}{${bad.join("")}}` : ""}`;
+    }
+  </script>
+  <script id="1066" type="text/html">
+    <style>
+    table {
+      max-width: 640px;
+    }
+      figure {
+        max-width: none
+      }
+      .tick line {
+        stroke: #ddd;
+      }
+      td {
+        /*min-width: 30px;*/
+      }
+    </style>
+  </script>
+</notebook>

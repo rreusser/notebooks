@@ -4,8 +4,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="author" content="Ricky Reusser" />
   <meta property="article:author" content="Ricky Reusser" />
-  <meta name="twitter:title" content="Notebooks" />
-  <meta property="og:title" content="Notebooks" />
+  <meta name="twitter:title" content="Shanks Transformation" />
+  <meta property="og:title" content="Shanks Transformation" />
+  <meta name="twitter:description" content="Exploring a simple series acceleration method" />
+  <meta name="subject" content="Exploring a simple series acceleration method" />
+  <meta name="description" content="Exploring a simple series acceleration method" />
+  <meta property="og:description" content="Exploring a simple series acceleration method" />
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1448,8 +1452,10 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-DLwE0_Ng.js"></script>
+   <style> main { max-width: 640px; }</style> 
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Shanks Transformation</title>  <script type="module" crossorigin src="/notebooks/assets/index-PPKcjsyC.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
 </head>
 <body>
   <nav class="menu">
@@ -1460,47 +1466,164 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Shanks Transformation</h1>
     <p>
-      
-      
-      
+      <a href="https://rreusser.github.io">Ricky Reusser</a><br />
+      August 8, 2025<br />
+      <a href="https://github.com/rreusser/notebooks/tree/main/src/shanks-transformation/index.html">View source →</a>
     </p>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/index.html">Shanks Transformation</a></h2>
-            <span class="publishedAt">August 8, 2025</span>
-          </div>
-          <p>Exploring a simple series acceleration method</p>
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="fmt/index.html">fmt</a></h2>
-            <span class="publishedAt">August 8, 2025</span>
-          </div>
-          <p>A helper function for nicely formatting cell values in Observable</p>
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/index.html">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">August 7, 2025</span>
-          </div>
-          <p>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</p>
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/index.html">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          <p>Kicking the tires of Observable's new notebook tooling!</p>
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-855" class="observablehq observablehq--cell"><div><p>I’ve encountered some lovely mathematical results in my time, but the <em><a href="https://en.wikipedia.org/wiki/Shanks_transformation">Shanks Transformation</a></em> for nonlinear series acceleration is truly one of the most delightful.</p>
+</div></div><div id="cell-2442" class="observablehq observablehq--cell"><div><p>Let’s start with a very slowly converging series for  based on the Taylor series of the arctangent function,</p>
+</div></div><div id="cell-859" class="observablehq observablehq--cell"></div><div id="cell-1073" class="observablehq observablehq--cell"><div><p>We define partial sums of this series as the function</p>
+</div></div><div id="cell-2441" class="observablehq observablehq--cell"></div><div id="cell-2249" class="observablehq observablehq--cell"><div><p>I’ll define a little helper for  since we’ll use it repeatedly.</p>
+</div></div><div id="cell-1920" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">sum = (f) =&gt; (n) =&gt; {
+  let sum = 0;
+  for (let k = 0; k &lt;= n; k++) sum += f(k);
+  return sum;
+}</code></pre><div id="cell-1911" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">A = sum((k) =&gt; (4 * (k % 2 ? -1 : 1)) / (2 * k + 1))</code></pre><div id="cell-1078" class="observablehq observablehq--cell"><div><p>How slowly does this series converge? Very, very slowly!</p>
+</div></div><div id="cell-1014" class="observablehq observablehq--cell"><div><table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</div></div><div id="cell-1090" class="observablehq observablehq--cell"><div><p>Achieving error on the order of  requires about  terms. Until I learned about Shanks transformation, I simply accepted that not every series is destined to be useful.</p>
+</div></div><div id="cell-1397" class="observablehq observablehq--cell"><div><h2 id="a-first-attempt" tabindex="-1"><a href="#a-first-attempt">A first attempt</a></h2>
+</div></div><div id="cell-1151" class="observablehq observablehq--cell"><div><p>Upon closer inspection, this is a silly conclusion. Even cursory visual inspection shows that any two consecutive terms bracket the correct answer.</p>
+</div></div><div id="cell-1101" class="observablehq observablehq--cell"></div><div id="cell-1192" class="observablehq observablehq--cell"><div><p>What happens if we just average two consecutive terms?</p>
+</div></div><div id="cell-1158" class="observablehq observablehq--cell"><div><table>
+<thead>
+<tr>
+<th></th>
+<th></th>
+<th></th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+<tr>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
+</div></div><div id="cell-1419" class="observablehq observablehq--cell"><div><p>At a thousand terms, we go from three digits of accuracy to six, so it would seem we’re onto something! In general we get about twice as many digits out of the average of two consecutive terms, but it still takes a <em>lot</em> of terms to get a decent answer.</p>
+</div></div><div id="cell-1422" class="observablehq observablehq--cell"><div><h2 id="shanks-transformation" tabindex="-1"><a href="#shanks-transformation">Shanks Transformation</a></h2>
+</div></div><div id="cell-1413" class="observablehq observablehq--cell"><div><p>The essence of Shanks Transformation is to use consecutive terms to extrapolate as far as we can toward the right answer, only with a better choice than our averaging above. So instead we use three consecutive terms to fit a geometric sequence of three parameters, then solve for its limit.</p>
+</div></div><div id="cell-2440" class="observablehq observablehq--cell"><div><p>To get the ball rolling, we write our series in the form of a general geometric sequence,</p>
+</div></div><div id="cell-1428" class="observablehq observablehq--cell"></div><div id="cell-1513" class="observablehq observablehq--cell"><div><p>Solving the first two equations for  yields</p>
+</div></div><div id="cell-2439" class="observablehq observablehq--cell"></div><div id="cell-2438" class="observablehq observablehq--cell"><div><p>Performing the same operation on the second and third equations, we have</p>
+</div></div><div id="cell-1516" class="observablehq observablehq--cell"></div><div id="cell-2437" class="observablehq observablehq--cell"><div><p>Cross-multiplying and solving for  gives us</p>
+</div></div><div id="cell-1521" class="observablehq observablehq--cell"></div><div id="cell-2433" class="observablehq observablehq--cell"><div><p>We could backtrack and solve for  and , but if the sequence is convergent then  so that as , our second equation for  gives</p>
+</div></div><div id="cell-2434" class="observablehq observablehq--cell"></div><div id="cell-1532" class="observablehq observablehq--cell"><div><p>Quantity  is in fact the limit we’re looking for, so we define this as the <em>Shanks transformation</em> of series  and denote it</p>
+</div></div><div id="cell-2435" class="observablehq observablehq--cell"></div><div id="cell-1559" class="observablehq observablehq--cell"><div><p>We can implement this pretty easily as a higher order JavaScript function (although please note that this is a very, very inefficient implementation for the sake of clarity, with many repeated, unnecessary function evaluations!)</p>
+</div></div><div id="cell-51" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">//S = (A) =&gt; (n) =&gt;
+//  (A(n + 1) * A(n - 1) - A(n) ** 2) / (A(n + 1) - 2 * A(n) + A(n - 1))
+
+// An exactly equivalent and more numerically stable form:
+S = (A) =&gt; (n) =&gt;
+  A(n + 1) - (A(n + 1) - A(n)) ** 2 / (A(n + 1) - 2 * A(n) + A(n - 1))</code></pre><div id="cell-1579" class="observablehq observablehq--cell"><div><p>The plot below shows the error of  and the Shanks transformation . Hover over various points and observe in the plot and table below how much the transformation accelerates convergence. Suddenly the twentieth term yields accuracy the original series takes nearly ten thousand terms to produce!</p>
+</div></div><div id="cell-129" class="observablehq observablehq--cell"></div><div id="cell-1201" class="observablehq observablehq--cell"></div><div id="cell-1623" class="observablehq observablehq--cell"></div><div id="cell-1437" class="observablehq observablehq--cell"><div><h2 id="iterated-shanks-transformation" tabindex="-1"><a href="#iterated-shanks-transformation">Iterated Shanks Transformation</a></h2>
+</div></div><div id="cell-1562" class="observablehq observablehq--cell"><div><p>But wait, you say! The Shanks transformation  gives us a <em>new</em> series which presumably converges to the same limit. Can we apply the Shanks transformation to the Shanks transformation and achieve an even better approximation?</p>
+</div></div><div id="cell-1564" class="observablehq observablehq--cell"><div><p>Remarkably, the answer is <em>yes</em>! We can simply apply the Shanks transformation over and over, each time yielding a better and better approximation, each successive iteration requiring only two additional terms of .</p>
+</div></div><div id="cell-292" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">Shanks = (A, n = 1) =&gt; [...Array(n).keys()].reduce(S, A)</code></pre><div id="cell-1728" class="observablehq observablehq--cell"><div><p>Suddenly, we’re at a pretty remarkable state of affairs. Consider the fifth iterate,  The very first term is already , and really only depends upon the first nine terms of the original series, the most accurate of which was !</p>
+</div></div><div id="cell-2431" class="observablehq observablehq--cell"><div><p>Let’s be clear about what happened here. We took the first eleven terms of the original series. These values only contain one or two digits of accuracy. But they contain a lot of <em>information</em>. By plugging them over and over into the Shanks transformation, we extract that information and obtain <em>seven digits</em> of accuracy!</p>
+</div></div><div id="cell-1815" class="observablehq observablehq--cell"><div><p>Hover over results in the table below and observe the values in the table which follows, keeping in mind that the series itself only enters in the terms of  itself and that the Shanks transformation introduces no additional information. I’ve plotted up to , though I’ve truncated the series once they run into machine precision and yield the exactly correct answer.</p>
+</div></div><div id="cell-930" class="observablehq observablehq--cell"></div><div id="cell-1655" class="observablehq observablehq--cell"></div><div id="cell-1853" class="observablehq observablehq--cell"><div><p>Since no new information enters the picture via the Shanks transformation, the stunning aspect to me is just <em>how much information</em> is contained even in the original, slowly converging, inaccurate series .</p>
+</div></div><div id="cell-1937" class="observablehq observablehq--cell"><div><h2 id="taking-the-transformation-too-far" tabindex="-1"><a href="#taking-the-transformation-too-far">Taking the transformation too far</a></h2>
+</div></div><div id="cell-1939" class="observablehq observablehq--cell"><div><p>Now we just get reckless and greedy. How about the <a href="https://en.wikipedia.org/wiki/1_%E2%88%92_2_%2B_3_%E2%88%92_4_%2B_%E2%8B%AF">comically divergent series</a></p>
+</div></div><div id="cell-2443" class="observablehq observablehq--cell"></div><div id="cell-2209" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">B = sum((k) =&gt; k * Math.pow(-1, k - 1))</code></pre><div id="cell-2306" class="observablehq observablehq--cell"><div><p>The series diverges, as is should.</p>
+</div></div><div id="cell-2267" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">B(10000)</code></pre><div id="cell-1950" class="observablehq observablehq--cell"><div><p>However, the first term of the fourth iterate  shows that the Shanks-transformed series converges just fine to .</p>
+</div></div><div id="cell-1860" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">Shanks(B, 4)(4)</code></pre><div id="cell-2444" class="observablehq observablehq--cell"><div><p>Or perhaps the similarly divergent series</p>
+</div></div><div id="cell-2005" class="observablehq observablehq--cell"></div><div id="cell-2217" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">C = sum((k) =&gt; Math.pow(-2, k))</code></pre><div id="cell-2311" class="observablehq observablehq--cell"><div><p>The divergent series obviously diverges.</p>
+</div></div><div id="cell-2270" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">C(100)</code></pre><div id="cell-2009" class="observablehq observablehq--cell"><div><p>Again though, a single iteration of the Shanks transformation  nails it.</p>
+</div></div><div id="cell-1966" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">Shanks(C)(1)</code></pre><div id="cell-2200" class="observablehq observablehq--cell"><div><p>The Shanks transformation doesn’t magically make divergent series converge, and of course <em>divergent series don’t converge</em>! This extraneous “correctness” (by the yardstick of more sophisticated methods) happens because assumed <em>convergence</em> but didn’t actually enforce whether  was the limit to which it was <em>converging</em> or from which it was <em>diverging</em>.</p>
+<p>Analytic continuation provides more rigorous tools with which to explain these series, as explained by Mathologer in his video <a href="https://www.youtube.com/watch?v=YuIIjLr6vUA">Numberphile v. Math: the truth about 1+2+3+…=-1/12</a>. The eponymous Daniel Shanks also explores these specific issues with more precision and rigor in his 1955 paper <a href="https://onlinelibrary.wiley.com/doi/abs/10.1002/sapm19553411"><em>Non-linear Transformations of Divergent and Slowly Convergent Sequences</em></a>. It’s a moderately approachable paper for the non-mathematician, though certainly somewhat involved.</p>
+<p>I’ll leave this exploration here for now, though I’d highly recommend <a href="https://en.wikipedia.org/wiki/Sci-Hub">digging up a copy of the paper</a> and at the very least browsing through some of the more entertaining results!</p>
+</div></div><div id="cell-1957" class="observablehq observablehq--cell"><div><h2 id="helpers" tabindex="-1"><a href="#helpers">Helpers</a></h2>
+</div></div><div id="cell-427" class="observablehq observablehq--cell"></div><div id="cell-1595" class="observablehq observablehq--cell"></div><div id="cell-163" class="observablehq observablehq--cell"></div><div id="cell-962" class="observablehq observablehq--cell"></div><div id="cell-1066" class="observablehq observablehq--cell"><style>
+table {
+  max-width: 640px;
+}
+  figure {
+    max-width: none
+  }
+  .tick line {
+    stroke: #ddd;
+  }
+  td {
+    /*min-width: 30px;*/
+  }
+</style></div></main>
+  </div>
   <footer><div class="footer__attrib">© Ricky Reusser 2025</div></footer>
 
 
