@@ -751,18 +751,14 @@
   <script id="759" type="text/markdown">
     Success! I think it's kinda remarkable that after all this math, we actually manage to get a closed form solution. Let us only hope that some day the orcs and their hundred foot pole adopt the metric system. And that we find a job which doesn't involve consulting for orcs.
   </script>
-  <script id="761" type="module" pinned="">
+  <script id="761" type="module">
     import linspace from 'npm:@stdlib/array-linspace'
-  </script>
-  <script id="21" type="module">
     import ellipk from 'npm:@stdlib/math-base-special-ellipk'
-  </script>
-  <script id="773" type="module" pinned="">
     import jacobi from 'npm:@stdlib/math-base-special-ellipj'
     const {sn, cn, dn, am} = jacobi;
   </script>
-  <script id="12" type="application/vnd.observable.javascript">
-    fmt = createFmt(".3f") //createFmt(sci(".3f"))
+  <script id="12" type="module">
+    const fmt = createFmt(".3f") //createFmt(sci(".3f"))
   </script>
   <script id="7" type="application/vnd.observable.javascript">
     import { fmt as createFmt, sci } from "observable:@rreusser/fmt"
@@ -781,7 +777,7 @@
       }
     </style>
   </script>
-  <script id="676" type="application/vnd.observable.javascript">
+  <script id="676" type="module">
     function arrowhead(
       x1,
       y1,

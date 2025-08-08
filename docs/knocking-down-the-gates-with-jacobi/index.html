@@ -1455,8 +1455,9 @@ main h6 {
 }
   </style>
    <style> main { max-width: 640px; }</style> 
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Knocking Down the Gates with our Friend Jacobi</title>  <script type="module" crossorigin src="/notebooks/assets/index-CZIdPkHK.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Knocking Down the Gates with our Friend Jacobi</title>  <script type="module" crossorigin src="/notebooks/assets/index-BtymW0EO.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/comments-I77vOiCB.js">
   <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
 </head>
 <body>
@@ -1520,8 +1521,7 @@ main h6 {
 <p>This is the angle at which we reach maximum horizontal velocity. To compute the horizontal component of position, we multiply by  and take the sine, applying along the way the double angle formula .</p>
 <p>This is the horizontal distance from the pivot to the mass when the mass reaches its maximum horizontal velocity. This is also therefore the distance from the gates at which we—er, the <em>orcs</em>—should place the pivot of the pole. Substituting some numbers, we get</p>
 </div></div><div id="cell-395" class="observablehq observablehq--cell"></div><div id="cell-759" class="observablehq observablehq--cell"><div><p>Success! I think it’s kinda remarkable that after all this math, we actually manage to get a closed form solution. Let us only hope that some day the orcs and their hundred foot pole adopt the metric system. And that we find a job which doesn’t involve consulting for orcs.</p>
-</div></div><div id="cell-761" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> <span class="tok-definition">linspace</span> <span class="tok-keyword">from</span> <span class="tok-string">'npm:@stdlib/array-linspace'</span></code></pre><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-773" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> <span class="tok-definition">jacobi</span> <span class="tok-keyword">from</span> <span class="tok-string">'npm:@stdlib/math-base-special-ellipj'</span>
-<span class="tok-keyword">const</span> {<span class="tok-definition">sn</span>, <span class="tok-definition">cn</span>, <span class="tok-definition">dn</span>, <span class="tok-definition">am</span>} = <span class="tok-variable">jacobi</span>;</code></pre><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-416" class="observablehq observablehq--cell"><style>
+</div></div><div id="cell-761" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-416" class="observablehq observablehq--cell"><style>
 .observablehq blockquote {
   font-style: italic;
   border-left: 4px solid #ddd;
@@ -1533,6 +1533,13 @@ main h6 {
     overflow-y: clip;
   }
 </style></div><div id="cell-676" class="observablehq observablehq--cell"></div></main>
+      <style>
+        #comment-root {
+          margin: auto;
+          max-width: 640px;
+        }
+      </style>
+      <div id="comment-root" data-post-id="114903924918361303"></div>
   </div>
   <footer><div class="footer__attrib">© Ricky Reusser 2025</div></footer>
 
