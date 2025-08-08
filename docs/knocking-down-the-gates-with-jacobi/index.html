@@ -4,8 +4,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="author" content="Ricky Reusser" />
   <meta property="article:author" content="Ricky Reusser" />
-  <meta name="twitter:title" content="Notebooks" />
-  <meta property="og:title" content="Notebooks" />
+  <meta name="twitter:title" content="Knocking Down the Gates with our Friend Jacobi" />
+  <meta property="og:title" content="Knocking Down the Gates with our Friend Jacobi" />
+  <meta name="twitter:description" content="Using Jacobi elliptic functions to brute-force a pendulum problem" />
+  <meta name="subject" content="Using Jacobi elliptic functions to brute-force a pendulum problem" />
+  <meta name="description" content="Using Jacobi elliptic functions to brute-force a pendulum problem" />
+  <meta property="og:description" content="Using Jacobi elliptic functions to brute-force a pendulum problem" />
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1450,8 +1454,10 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-DLwE0_Ng.js"></script>
+   <style> main { max-width: 640px; }</style> 
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Knocking Down the Gates with our Friend Jacobi</title>  <script type="module" crossorigin src="/notebooks/assets/index-Cx-YclYC.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
 </head>
 <body>
   <nav class="menu">
@@ -1462,54 +1468,72 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Knocking Down the Gates with our Friend Jacobi</h1>
     <p>
-      
-      
-      
+      <a href="https://rreusser.github.io">Ricky Reusser</a><br />
+      August 8, 2025<br />
+      <a href="https://github.com/rreusser/notebooks/tree/main/src/knocking-down-the-gates-with-jacobi/index.html">View source →</a>
     </p>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/index.html">Shanks Transformation</a></h2>
-            <span class="publishedAt">August 8, 2025</span>
-          </div>
-          <p>Exploring a simple series acceleration method</p>
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/index.html">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">August 8, 2025</span>
-          </div>
-          <p>Using Jacobi elliptic functions to brute-force a pendulum problem</p>
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="fmt/index.html">fmt</a></h2>
-            <span class="publishedAt">August 8, 2025</span>
-          </div>
-          <p>A helper function for nicely formatting cell values in Observable</p>
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/index.html">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">August 7, 2025</span>
-          </div>
-          <p>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</p>
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/index.html">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          <p>Kicking the tires of Observable's new notebook tooling!</p>
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>In this notebook I’m going to walk through a really neat problem pointed out to me by <a href="https://twitter.com/DylanMadisetti">Dylan Madisetti</a> and use it as an excuse to talk at moderate length about Jacobi elliptic functions!</p>
+<p>The problem is as follows:</p>
+</div></div><div id="cell-412" class="observablehq observablehq--cell"><div><blockquote>
+<p>Question: From the fantastical land of Central Earth comes a physics riddle that will break down your doors:</p>
+<p>In an effort to break open the gates of the city Tinas Mirith, an army of orcs first tried using a battering ram, but to no avail. They next erected a 100-foot pole with a very massive weight at the top (i.e., the weight is much, much heavier than the rest of the pole). The pole is also anchored at the bottom, so that as the weight falls the entire pole rotates around its bottom without slipping.</p>
+<p>How far away should the orcs position the vertical pole from the gates so that when the weight comes crashing down on the gates, its horizontal speed is as great as possible?</p>
+</blockquote>
+<p><em>source: <a href="https://fivethirtyeight.com/features/can-you-knock-down-the-gates/">FiveThirtyEight: Can You Knock Down The Gates?</a></em></p>
+</div></div><div id="cell-713" class="observablehq observablehq--cell"><div><p>The easiest way to think of this is as a <a href="https://en.wikipedia.org/wiki/Pendulum_(mechanics)#Simple_gravity_pendulum">simple gravity pendulum</a> with a rigid, massless bar, and which starts at the unstable equilibrium directly above the pivot before being slightly disturbed and falling. Then our goal is to find the point at which it reaches the maximum horizontal velocity on its way down.</p>
+<p>This problem may be solved with a straightforward energy argument, but let’s brute force it from the equations of motion instead! This is essentially a Calculus I problem: compute the horizontal position as a function of time, then differentiate twice and compute the zeros to determine the time at which velocity is maximized. Then plug the computed time back in to determine the position.</p>
+<p>Now I just want to be clear; what you’ll find in this notebook is a <em>bad approach</em>. A basic energy argument turns this problem into a couple lines of algebra. Energy arguments often simplify problems dramatically. Use them. Love them. See, for example, Josh Silverman’s solution, <a href="https://joshmaxsilverman.github.io/2022-11-13-hammer-flop/">Speedy Hammer</a>.</p>
+<p>But let’s disregard this advice and start off our brute force solution by considering our pendulum. The force diagram below illustrates the problem setup. Parameter  parameterizes the kinetic energy of the pendulum, from rest () to a pendulum with exactly enough energy to start at the bottom and come to rest at the top ().</p>
+</div></div><div id="cell-671" class="observablehq observablehq--cell"></div><div id="cell-719" class="observablehq observablehq--cell"></div><div id="cell-264" class="observablehq observablehq--cell"><div><p>Upon working out forces in the above diagram, the governing equation of motion for a simple gravity pendulum is</p>
+<p>Although we call it a “simple” gravity pendulum, we sort of have the sense that a pendulum is only really simple in the linear regime at the bottom where  and the solution is just a sine wave. Once the swing gets large, the simplicity goes away. The pendulum may even get totally stuck at the top. At least in any class I ever took, we throw our hands up in frustration and look the other way.</p>
+<p>However we can represent the solution exactly, just not with the functions we’re probably most familiar with. The solution of the above equation can be expressed as</p>
+<p>Here,  is the <a href="https://en.wikipedia.org/wiki/Jacobi_elliptic_functions">Jacobi elliptic function</a> with . Unfortunately we have a bit too much work ahead of us to work through the derivation of this solution and subsequent discovery of elliptic functions, but that needn’t stop us from using it. (It’s actually quite an interesting story. If we throw our usual differential equation tools at it, we find that we quite accidentally solve for <em>time</em> as a function of <em>position</em> rather than position as a function of time, and it takes a bit of work to rectify the situation!)</p>
+<p>The use of Jacobi elliptic functions requires an extra word or two. There are three Jacobi elliptic functions,   and  They take argument  and parameter . They are similar in behavior to the trigonometric functions, and in fact for  reduce to them:</p>
+<p>This shouldn’t be too surprising since in the small-displacement linear regime, a pendulum oscillates as a plain old sine wave. On the other end of the spectrum for ,</p>
+<p>Recall that  So in this sense they sort of interpolate between the <a href="https://en.wikipedia.org/wiki/Trigonometric_functions">trigonometric</a> and <a href="https://en.wikipedia.org/wiki/Hyperbolic_functions">hyperbolic</a> functions. Very cool. See <a href="https://observablehq.com/@rreusser/jacobi-elliptic-functions-in-the-complex-plane">Jacobi Elliptic Functions in the Complex Plane</a> for an even lovelier view of how this generalization works.</p>
+</div></div><div id="cell-769" class="observablehq observablehq--cell"></div><div id="cell-772" class="observablehq observablehq--cell"></div><div id="cell-590" class="observablehq observablehq--cell"><div><p>So we’ve succeeded in writing down the solution, but transcendental functions aren’t inherently interesting. We can take any old problem for which we can’t express a closed form solution and, as long as we can <em>somehow</em> express its solution, assign it a name and deem it a function. I mean that’s how sine and cosine work, right? Such functions only become interesting when they solve a variety of problems and open the door to new insights. To that end, the Jacobi elliptic functions are <em>very</em> interesting.</p>
+<p>The Jacobi elliptic functions solve a wide variety of problems, from number theory to astrodynamics. They have half-angle formulas, double-angle formulas, addition formulas, and many more relationships. It’s a deep rabbit hole. In this notebook we’ll stick to what we need, starting with the trigonometry-like identities,</p>
+<p>As is customary when unambiguous, I’ve omitted the parameters, writing  in place of  and so forth.</p>
+<p>They also have nice trigonometry-like derivatives,</p>
+</div></div><div id="cell-556" class="observablehq observablehq--cell"><div><p>Returning to the equation of motion of the pendulum, for simplicity we’ll write the elliptic function term as</p>
+<p>rescaling time to write  and with the dependence on  implied. Then the trajectory of the pendulum is given by</p>
+<p>Let’s plot it!</p>
+</div></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-48" class="observablehq observablehq--cell"></div><div id="cell-41" class="observablehq observablehq--cell"></div><div id="cell-32" class="observablehq observablehq--cell"></div><div id="cell-283" class="observablehq observablehq--cell"><div><p>Note that as  approaches , the period diverges to infinity. This just reflects the fact that if the pendulum (asymptotically) makes it all the way to the top, , it takes forever to get there, equivalent to an infinitely long period.</p>
+<p>So our goal is to compute the horizontal component of the velocity, then maximize it. Using trig identities and above elliptic function identities we can simplify</p>
+<p>A promising start! Differentiating to find the horizontal velocity, we find</p>
+<p>To maximize this horizontal velocity, we differentiate once more, yielding</p>
+<p>It’s still not intractable! The plot below shows the horizontal position along with its first and second derivatives. Recall that the extrema of a function correspond to zeros of its derivative, thus the horizontal velocity extrema correspond to zeros of the third plot.</p>
+</div></div><div id="cell-80" class="observablehq observablehq--cell"></div><div id="cell-183" class="observablehq observablehq--cell"></div><div id="cell-443" class="observablehq observablehq--cell"><figcaption>The horizontal position (top) and horizontal velocity (bottom) of a pendulum with the specified amount of kinetic energy .</figcaption></div><div id="cell-186" class="observablehq observablehq--cell"><div><p>It’s not lost on me that our pendulum so far starts at the bottom of its swing with nonzero velocity, when what the orcs want is for it to start at the top of its swing with zero velocity. Fortunately, we can consider  when the pendulum starts at the bottom and has exactly enough energy to approach unstable equilibrium at the top of the swing and come to a rest. We simply consider the same motion in reverse. Mathematically speaking it then takes an infinite amount of time for the pendulum to move away from its initial unstable equilibrium at the top of its swing, though realistically it would of course only take the tiniest push to get things started. The time of maximum velocity is not requested, so we thus set  and continue our goal of finding the maximum horizontal velocity.</p>
+<p>We’ve fought this for a long time, but to make further progress, we must finally start to simplify. We substitute , therefore replacing Jacobi elliptic functions with hyperbolic functions using the above identities</p>
+<p>The second derivative is thus</p>
+<p>The situation looks grim, so we pull on the most tenuous of threads by setting this equal to zero and factoring into</p>
+<p>Seizing upon the last term (and recalling  = “”), the most likely candidate for an interesting horizontal velocity extremum looks like</p>
+<p>Using the inverse hyperbolic cosine , we have</p>
+<p>Let’s plot in terms of scaled time  to see if this looks plausible.</p>
+</div></div><div id="cell-336" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">u_max = Math.log(Math.sqrt(6) + Math.sqrt(5))</code></pre><div id="cell-299" class="observablehq observablehq--cell"></div><div id="cell-303" class="observablehq observablehq--cell"></div><div id="cell-330" class="observablehq observablehq--cell"><div><p>Success! That looks like an extremum in the horizontal velocity! And so we arrive at the endgame. At last, we plug scaled time  into the equation for  to compute the angle at which the horizontal velocity is maximized. For , the equation of motion is</p>
+<p>Then substituting</p>
+<p>This is the angle at which we reach maximum horizontal velocity. To compute the horizontal component of position, we multiply by  and take the sine, applying along the way the double angle formula .</p>
+<p>This is the horizontal distance from the pivot to the mass when the mass reaches its maximum horizontal velocity. This is also therefore the distance from the gates at which we—er, the <em>orcs</em>—should place the pivot of the pole. Substituting some numbers, we get</p>
+</div></div><div id="cell-395" class="observablehq observablehq--cell"></div><div id="cell-759" class="observablehq observablehq--cell"><div><p>Success! I think it’s kinda remarkable that after all this math, we actually manage to get a closed form solution. Let us only hope that some day the orcs and their hundred foot pole adopt the metric system. And that we find a job which doesn’t involve consulting for orcs.</p>
+</div></div><div id="cell-761" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> <span class="tok-definition">linspace</span> <span class="tok-keyword">from</span> <span class="tok-string">'npm:@stdlib/array-linspace'</span></code></pre><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-773" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> <span class="tok-definition">jacobi</span> <span class="tok-keyword">from</span> <span class="tok-string">'npm:@stdlib/math-base-special-ellipj'</span>
+<span class="tok-keyword">const</span> {<span class="tok-definition">sn</span>, <span class="tok-definition">cn</span>, <span class="tok-definition">dn</span>, <span class="tok-definition">am</span>} = <span class="tok-variable">jacobi</span>;</code></pre><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-416" class="observablehq observablehq--cell"><style>
+.observablehq blockquote {
+  font-style: italic;
+  border-left: 4px solid #ddd;
+  padding-left: 1em;
+  box-sizing: content-box;
+}
+  .katex-display {
+    overflow-x: scroll;
+    overflow-y: clip;
+  }
+</style></div><div id="cell-676" class="observablehq observablehq--cell"></div></main>
+  </div>
   <footer><div class="footer__attrib">© Ricky Reusser 2025</div></footer>
 
 

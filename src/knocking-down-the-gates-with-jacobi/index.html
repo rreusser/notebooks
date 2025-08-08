@@ -1,0 +1,812 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Knocking Down the Gates with our Friend Jacobi</title>
+  <script id="1" type="text/markdown">
+    # Knocking Down the Gates with our Friend Jacobi
+
+    In this notebook I'm going to walk through a really neat problem pointed out to me by [Dylan Madisetti](https://twitter.com/DylanMadisetti) and use it as an excuse to talk at moderate length about Jacobi elliptic functions!
+
+    The problem is as follows:
+  </script>
+  <script id="412" type="text/markdown">
+    > Question: From the fantastical land of Central Earth comes a physics riddle that will break down your doors:
+    >
+    > In an effort to break open the gates of the city Tinas Mirith, an army of orcs first tried using a battering ram, but to no avail. They next erected a 100-foot pole with a very massive weight at the top (i.e., the weight is much, much heavier than the rest of the pole). The pole is also anchored at the bottom, so that as the weight falls the entire pole rotates around its bottom without slipping.
+    >
+    > How far away should the orcs position the vertical pole from the gates so that when the weight comes crashing down on the gates, its horizontal speed is as great as possible?
+
+    *source: [FiveThirtyEight: Can You Knock Down The Gates?](https://fivethirtyeight.com/features/can-you-knock-down-the-gates/)*
+  </script>
+  <script id="713" type="text/markdown">
+    The easiest way to think of this is as a <a href="https://en.wikipedia.org/wiki/Pendulum_(mechanics)#Simple_gravity_pendulum">simple gravity pendulum</a> with a rigid, massless bar, and which starts at the unstable equilibrium directly above the pivot before being slightly disturbed and falling. Then our goal is to find the point at which it reaches the maximum horizontal velocity on its way down.
+
+    This problem may be solved with a straightforward energy argument, but let's brute force it from the equations of motion instead! This is essentially a Calculus I problem: compute the horizontal position as a function of time, then differentiate twice and compute the zeros to determine the time at which velocity is maximized. Then plug the computed time back in to determine the position.
+
+    Now I just want to be clear; what you'll find in this notebook is a _bad approach_. A basic energy argument turns this problem into a couple lines of algebra. Energy arguments often simplify problems dramatically. Use them. Love them. See, for example, Josh Silverman's solution, [Speedy Hammer](https://joshmaxsilverman.github.io/2022-11-13-hammer-flop/).
+
+    But let's disregard this advice and start off our brute force solution by considering our pendulum. The force diagram below illustrates the problem setup. Parameter ${tex`k`} parameterizes the kinetic energy of the pendulum, from rest (${tex`k = 0`}) to a pendulum with exactly enough energy to start at the bottom and come to rest at the top (${tex`k = 1`}).
+  </script>
+  <script id="671" type="application/vnd.observable.javascript">
+    {
+      const caption = html`The physical setup for a simple gravity pendulum with kinetic energy parameter ${tex`k = ${k}`}.`;
+      const showLinearized = false;
+      const period = 1000;
+      const l = 1;
+      const g = 9.98;
+      function thetaAnalytical(t) {
+        return 2 * Math.asin(k * sn(t * Math.sqrt(g / l), k * k));
+      }
+
+      const w = Math.min(width, 640);
+      const hForce = 80;
+      const gmult = g / 9.81;
+      const h = 300;
+      const svg = d3
+        .create("svg")
+        .attr("width", w)
+        .attr("height", h + hForce)
+        .attr("style", "border:1px solid #eee;cursor:move");
+      const gPendula = svg
+        .append("g")
+        .attr("transform", `translate(${w / 2},${h / 2})`);
+      gPendula
+        .append("line")
+        .attr("y2", 50)
+        .attr("stroke", "#555")
+        .attr("stroke-dasharray", "3,3");
+
+      const resolvedColor = showLinearized ? "#ccc" : "#25e";
+      const linearizedColor = showLinearized ? "#25e" : "#ccc";
+      const angle = gPendula.append("path").attr("fill", "#555");
+      const circle = gPendula
+        .append("circle")
+        .attr("r", (h / 2) * l * 0.9)
+        .style("stroke", "#aaa")
+        .style("fill", "none")
+        .style("stroke-dasharray", "4,4");
+      const thetaArrow = gPendula.append("path").attr("fill", "#555");
+      const thetaLabel = gPendula
+        .append("text")
+        .text("θ")
+        .attr("dx", 2)
+        .attr("dy", 15)
+        .style("font-family", "KaTeX_Math");
+      const pendula = [thetaAnalytical].map((theta) => {
+        const p = {
+          theta,
+          line: gPendula
+            .append("line")
+            .attr("y2", (h / 2) * l * 0.9)
+            .style("stroke", theta === thetaAnalytical ? "#444" : "#ccc")
+            .style("stroke-width", 3)
+            .style("stroke-linecap", "round"),
+          mass: gPendula
+            .append("g")
+            .attr("transform", `translate(0,${(h / 2) * l * 0.9})`)
+        };
+        p.radArrowhead = p.mass.append("path").attr("fill", resolvedColor);
+        p.radialForce = p.mass
+          .append("line")
+          .attr("x2", 0)
+          .attr("y2", hForce * gmult)
+          .attr("stroke", resolvedColor)
+          .attr("stroke-width", 2);
+        p.force = p.mass
+          .append("line")
+          .attr("x2", 0)
+          .attr("y2", hForce * gmult - 5)
+          .attr("stroke", "#e25")
+          .attr("stroke-width", 2);
+        p.gArrowhead = p.mass
+          .append("path")
+          .attr("fill", "#e25")
+          .attr("d", arrowhead(0, 0, 0, hForce * gmult));
+
+        p.tanArrowhead = p.mass.append("path").attr("fill", resolvedColor);
+        p.torqueForce = p.mass
+          .append("line")
+          .attr("x2", 0)
+          .attr("y2", hForce * gmult)
+          .attr("stroke", resolvedColor)
+          .attr("stroke-width", 2);
+
+        if (showLinearized) {
+          p.linearForce = p.mass
+            .append("line")
+            .attr("x2", 0)
+            .attr("y2", hForce * gmult)
+            .attr("stroke", linearizedColor)
+            .attr("stroke-width", 2);
+          p.linearArrowhead = p.mass.append("path").attr("fill", linearizedColor);
+        }
+
+        p.circle = p.mass
+          .append("circle")
+          .attr("r", 10)
+          .style("stroke", "white")
+          .style("stroke-width", 1)
+          .style("fill", theta === thetaAnalytical ? "#e25" : "#ccc");
+        p.text = p.mass
+          .append("text")
+          .text("-mg")
+          .style("font-family", "KaTeX_Math")
+          .attr("dy", 10)
+          .style("text-anchor", "middle")
+          .attr("y", hForce * gmult);
+        p.lText = gPendula
+          .append("text")
+          .text("l")
+          .style("font-family", "KaTeX_Math")
+          .style("visibility", "hidden");
+        p.sinText = p.mass
+          .append("text")
+          .style("font-family", "KaTeX_Math")
+          .attr("dx", 3)
+          .attr("dy", -3);
+        p.sinText.style("visibility", "hidden");
+        if (showLinearized) {
+          p.sinText.append("tspan").text("-mgθ");
+        } else {
+          p.sinText.append("tspan").text("-mg ");
+          p.sinText.append("tspan").style("font-family", "KaTeX_Main").text("sin");
+          p.sinText.append("tspan").text(" θ");
+        }
+        return p;
+      });
+
+      const gForce = svg.append("g");
+      const f = thetaAnalytical;
+      function update(t, th = null) {
+        const time = t / period;
+        pendula.forEach((p) => {
+          const theta = th === null ? f(time) : th;
+          const [c, s] = [Math.cos(theta), Math.sin(theta)];
+          const x = (h / 2) * l * 0.9 * s;
+          const y = (h / 2) * (l * 0.9 * c);
+          p.line.attr("x2", x).attr("y2", y);
+          p.mass.attr("transform", `translate(${x},${y})`);
+          const textSign = Math.sign(theta * c);
+          p.lText
+            .attr("x", x / 2)
+            .attr("y", y / 2)
+            .attr("dx", 10 * -c)
+            .attr("dy", 15 * s)
+            .attr("text-anchor", "middle")
+            .attr("alignment-baseline", "middle");
+          //.attr("text-anchor", textSign > 0 ? "start" : "end");
+          const sign = Math.sign(-s * c);
+          p.radialForce
+            .attr("x1", sign * s * s * gmult * 5)
+            .attr("y1", sign * c * s * gmult * 5 + hForce * gmult)
+            .attr("x2", -hForce * s * c * gmult)
+            .attr("y2", hForce * s * s * gmult);
+          p.torqueForce
+            .attr("x2", -(hForce - 5) * c * s * gmult)
+            .attr("y2", (hForce - 5) * s * s * gmult);
+          if (showLinearized) {
+            p.linearForce
+              .attr("x2", -(hForce * theta * gmult - 5 * Math.sign(theta)) * c)
+              .attr("y2", (hForce * theta * gmult - 5 * Math.sign(theta)) * s);
+            p.linearArrowhead.attr(
+              "d",
+              arrowhead(
+                0,
+                0,
+                -hForce * c * theta * gmult,
+                hForce * s * theta * gmult
+              )
+            );
+          }
+          p.tanArrowhead.attr(
+            "d",
+            arrowhead(0, 0, -hForce * c * s * gmult, hForce * s * s * gmult)
+          );
+          p.radArrowhead.attr(
+            "d",
+            arrowhead(
+              -hForce * c * s * gmult,
+              hForce * s * s * gmult,
+              0,
+              hForce * gmult
+            )
+          );
+          const pos = showLinearized ? theta : s;
+          p.sinText
+            .attr("x", -hForce * pos * c * gmult)
+            .attr("y", hForce * pos * s * gmult)
+            .attr("dx", sign > 0 ? 3 : -3)
+            .attr("text-anchor", sign > 0 ? "start" : "end");
+          const tc = Math.cos(Math.max(theta, 0));
+          const ts = Math.sin(Math.max(theta, 0));
+
+          thetaArrow.attr(
+            "d",
+            arrowhead(ts * 15.25 - tc, tc * 15.25 + ts, ts * 15.5, tc * 15.5, {
+              length: 8,
+              width: 7,
+              inset: 1.5
+            })
+          );
+          const textAngle = Math.max(theta, 0) * 0.5;
+          thetaLabel
+            .attr("x", Math.sin(textAngle) * 15.5)
+            .attr("y", Math.cos(textAngle) * 15.5);
+        });
+        angle.attr(
+          "d",
+          d3
+            .arc()
+            .innerRadius(15)
+            .outerRadius(16)
+            .startAngle(Math.PI)
+            .endAngle(Math.PI - (th === null ? f(time) : th))
+        );
+        if (th === null) raf = requestAnimationFrame(update);
+      }
+      function onMouseMove(event) {
+        const rect = svg.node().getBoundingClientRect();
+        const dx = event.clientX - rect.left - w / 2;
+        const dy = event.clientY - rect.top - h / 2;
+        update(null, Math.atan2(dx, dy));
+      }
+      function onMouseover() {
+        svg.node().addEventListener("mousemove", onMouseMove);
+        pendula[0].sinText.style("visibility", "visible");
+        pendula[0].lText.style("visibility", "visible");
+        //pendula[0].radArrowhead.attr("fill", "#c5cffd");
+        //pendula[0].radialForce.attr("stroke", "#c5cffd");
+        cancelAnimationFrame(raf);
+        raf = null;
+      }
+      function onMouseout() {
+        pendula[0].sinText.style("visibility", "hidden");
+        pendula[0].lText.style("visibility", "hidden");
+        //pendula[0].radArrowhead.attr("fill", "#25e");
+        //pendula[0].radialForce.attr("stroke", "#25e");
+        svg.node().removeEventListener("mousemove", onMouseMove);
+        if (raf === null) raf = requestAnimationFrame(update);
+      }
+      function onTouchstart(event) {
+        onMouseover();
+        event.preventDefault();
+        event.stopPropagation();
+        onMouseMove({
+          clientX: event.touches[0].clientX,
+          clientY: event.touches[0].clientY
+        });
+      }
+      function onTouchmove(event) {
+        event.preventDefault();
+        event.stopPropagation();
+        onMouseMove({
+          clientX: event.touches[0].clientX,
+          clientY: event.touches[0].clientY
+        });
+      }
+      function onTouchend(event) {
+        if (event.touches.length) return;
+        onMouseout();
+      }
+      svg.node().addEventListener("mouseover", onMouseover);
+      svg.node().addEventListener("mouseout", onMouseout);
+      svg.node().addEventListener("touchstart", onTouchstart);
+      svg.node().addEventListener("touchmove", onTouchmove);
+      svg.node().addEventListener("touchend", onTouchend);
+
+      let observer;
+      setTimeout(() => {
+        observer = new IntersectionObserver(function ([entry]) {
+          if (entry.isIntersecting) {
+            if (!raf) raf = requestAnimationFrame(update);
+          } else {
+            cancelAnimationFrame(raf);
+            raf = null;
+          }
+        });
+        observer.observe(svg.node());
+      }, 1);
+
+      invalidation.then(() => {
+        cancelAnimationFrame(raf);
+        observer && observer.disconnect();
+      });
+
+      let raf = requestAnimationFrame(update);
+
+      return html`<figure>
+        ${svg.node()}
+      <figcaption>${caption}</figcaption>
+      </figure>`;
+    }
+  </script>
+  <script id="719" type="application/vnd.observable.javascript">
+    viewof k = Inputs.range([1e-5, 0.999999], {
+      label: tex`k`,
+      step: 0.000001,
+      value: 0.999999
+    })
+  </script>
+  <script id="264" type="text/markdown">
+    Upon working out forces in the above diagram, the governing equation of motion for a simple gravity pendulum is
+
+    ${tex.block`
+    \frac{d^2 \theta}{dt^2} + \frac{g}{l}\sin \theta = 0.
+    `}
+
+    Although we call it a "simple" gravity pendulum, we sort of have the sense that a pendulum is only really simple in the linear regime at the bottom where ${tex`\mathrm{sin}(\theta) \approx \theta`} and the solution is just a sine wave. Once the swing gets large, the simplicity goes away. The pendulum may even get totally stuck at the top. At least in any class I ever took, we throw our hands up in frustration and look the other way.
+
+    However we can represent the solution exactly, just not with the functions we're probably most familiar with. The solution of the above equation can be expressed as
+
+    ${tex.block`\theta(t) = 2 \sin^{-1}\left(k\,\mathrm{sn}\left(t \sqrt{g\over l}  \mid  m\right)\right)`}
+    Here, ${tex`\mathrm{sn(u \mid m)}`} is the [Jacobi elliptic function](https://en.wikipedia.org/wiki/Jacobi_elliptic_functions) with ${tex`m = k^2`}. Unfortunately we have a bit too much work ahead of us to work through the derivation of this solution and subsequent discovery of elliptic functions, but that needn't stop us from using it. (It's actually quite an interesting story. If we throw our usual differential equation tools at it, we find that we quite accidentally solve for _time_ as a function of _position_ rather than position as a function of time, and it takes a bit of work to rectify the situation!)
+
+    The use of Jacobi elliptic functions requires an extra word or two. There are three Jacobi elliptic functions, ${tex`\mathrm{sn}(u \mid m),`} ${tex`\mathrm{cn}(u \mid m),`} and ${tex`\mathrm{dn}(u \mid m).`} They take argument ${tex`u`} and parameter ${tex`m`}. They are similar in behavior to the trigonometric functions, and in fact for ${tex`m = 0`} reduce to them:
+    ${tex.block`
+    \begin{aligned}
+    \mathrm{sn}(u \mid  0) &= \mathrm{sin}(u), \\
+    \mathrm{cn}(u \mid  0) &= \mathrm{cos}(u), \\
+    \mathrm{dn}(u \mid  0) &= 1.
+    \end{aligned}
+    `}
+    This shouldn't be too surprising since in the small-displacement linear regime, a pendulum oscillates as a plain old sine wave. On the other end of the spectrum for ${tex`m = 1`},
+
+    ${tex.block`
+    \begin{aligned}
+    \mathrm{sn}(u \mid  1) &= \mathrm{tanh}(u), \\
+    \mathrm{cn}(u \mid  1) &= \mathrm{sech}(u), \\
+    \mathrm{dn}(u \mid  1) &= \mathrm{sech}(u).
+    \end{aligned}
+    `}
+
+    Recall that ${tex`\mathrm{sech}(u) \equiv 1/\mathrm{cosh}(u).`} So in this sense they sort of interpolate between the [trigonometric](https://en.wikipedia.org/wiki/Trigonometric_functions) and [hyperbolic](https://en.wikipedia.org/wiki/Hyperbolic_functions) functions. Very cool. See [Jacobi Elliptic Functions in the Complex Plane](https://observablehq.com/@rreusser/jacobi-elliptic-functions-in-the-complex-plane) for an even lovelier view of how this generalization works.
+  </script>
+  <script id="769" type="module">
+    let K;
+    if (m < 1) {
+      K = ellipk(m);
+    } else if (m === 1) {
+      K = 10;
+    } else {
+      // Compute the _real_ component of K, for consistent scaling
+      K = ellipk(1 / m) / sqrt(m);
+    }
+
+    const n = 501;
+    const u = [...Array(n).keys()].map(
+      (x) => ((x / (n - 1)) * 5 - 0.5) * K
+    );
+
+    const sncndn = u.map((u) => {
+      const uK = u / K;
+      let _sn, _cn, _dn;
+      _sn = sn(u, m);
+      _cn = cn(u, m);
+      _dn = dn(u, m);
+      const ellipj_am = am(u, m);
+
+      // Must sum to zero:
+      const checksum = _cn * _cn + (1 - m) * _sn * _sn - _dn * _dn;
+
+      return {
+        am: ellipj_am,
+        uK,
+        u,
+        sn: _sn,
+        cn: _cn,
+        dn: _dn,
+        am: ellipj_am,
+        checksum
+      };
+    })
+
+    display(htl.html`<figure style="max-width:100%">${Plot.plot({
+      width: Math.min(640, width),
+      height: 300,
+      grid: true,
+      x: { label: "u / K →", ticks: 4 },
+      y: {
+        //domain: [-4, 4]
+      },
+      marks: [
+        Plot.ruleY([0]),
+        Plot.line(sncndn, { x: "uK", y: "sn", stroke: "#c39" }),
+        Plot.line(sncndn, { x: "uK", y: "cn", stroke: "#9c3" }),
+        Plot.line(sncndn, { x: "uK", y: "dn", stroke: "#39c" }),
+      ].filter((x) => x)
+    })}<figcaption>
+
+    <svg width="25" height="10" viewBox="0 0 25 10">
+      <line x1="0" x2="25" y1="5" y2="5" style="stroke-width:2;stroke:#c39"/>
+    </svg> <span style="margin-right:1em">${tex`sn(u| m)`}</span>
+
+    <svg width="25" height="10" viewBox="0 0 25 10">
+      <line x1="0" x2="25" y1="5" y2="5" style="stroke-width:2;stroke:#9c3"/>
+    </svg> <span style="margin-right:1em">${tex`cn(u| m)`}</span>
+
+    <svg width="25" height="10" viewBox="0 0 25 10">
+      <line x1="0" x2="25" y1="5" y2="5" style="stroke-width:2;stroke:#39c"/>
+    </svg> <span>${tex`dn(u| m)`}</span>
+
+    </figcaption>
+    </figure>
+    `)
+  </script>
+  <script id="772" type="module">
+    const fac = 0.999 / 0.99999999;
+    const m = view(Inputs.range([0.0, 0.99999999], {
+      label: "m",
+      value: 0.5,
+      transform: (x) => 1 - Math.log(1 - x * fac),
+      invert: (x) => (1 - Math.exp(1 - x)) / fac
+    }));
+  </script>
+  <script id="590" type="text/markdown">
+    So we've succeeded in writing down the solution, but transcendental functions aren't inherently interesting. We can take any old problem for which we can't express a closed form solution and, as long as we can _somehow_ express its solution, assign it a name and deem it a function. I mean that's how sine and cosine work, right? Such functions only become interesting when they solve a variety of problems and open the door to new insights. To that end, the Jacobi elliptic functions are _very_ interesting.
+
+    The Jacobi elliptic functions solve a wide variety of problems, from number theory to astrodynamics. They have half-angle formulas, double-angle formulas, addition formulas, and many more relationships. It's a deep rabbit hole. In this notebook we'll stick to what we need, starting with the trigonometry-like identities,
+
+    ${tex.block`
+    \begin{aligned}
+    &\mathrm{cn}^2 + \mathrm{sn}^2 = 1 \\
+    &\mathrm{dn}^2 + m\,\mathrm{sn}^2 = 1.
+    \end{aligned}
+    `}
+
+    As is customary when unambiguous, I've omitted the parameters, writing ${tex`\mathrm{sn}`} in place of ${tex`\mathrm{sn}(u|m)`} and so forth.
+
+    They also have nice trigonometry-like derivatives,
+    ${tex.block`
+    \begin{aligned}
+    \frac{d}{du}\mathrm{sn} &= \mathrm{cn}\,\mathrm{dn} \\
+    \frac{d}{du}\mathrm{cn} &= -\mathrm{sn}\,\mathrm{dn} \\
+    \frac{d}{du}\mathrm{dn} &= -m\,\mathrm{sn}\,\mathrm{cn}. \\
+    \end{aligned}
+    `}
+
+  </script>
+  <script id="556" type="text/markdown">
+    Returning to the equation of motion of the pendulum, for simplicity we'll write the elliptic function term as
+
+    ${tex.block`\mathrm{sn}\left(t \sqrt{g\over l} \mid m\right) \equiv \mathrm{sn}(u),`}
+
+    rescaling time to write ${tex`u = t\sqrt{g/l}`} and with the dependence on ${tex`m`} implied. Then the trajectory of the pendulum is given by
+
+    ${tex.block`\theta(u) = 2 \sin^{-1}\left(k\,\mathrm{sn}(u)\right)`}
+
+    Let's plot it!
+  </script>
+  <script id="5" type="application/vnd.observable.javascript">
+    viewof g = fmt`g = ${9.81} m/s²`
+  </script>
+  <script id="4" type="application/vnd.observable.javascript">
+    viewof l = fmt`l = ${100 * (12 * 0.0254)} m`
+  </script>
+  <script id="48" type="application/vnd.observable.javascript">
+    trajectory = {
+      const m = k * k;
+      const K = m === 1 ? 2 : ellipk(m);
+      const dudt = Math.sqrt(g / l);
+      return [...linspace(0, 4 * K, 401)].map((u) => ({
+        u,
+        t: u * Math.sqrt(l / g),
+        uK: u / K,
+        theta: 2 * Math.asin(k * sn(u, m)),
+        dtheta: 2 * k * cn(u, m),
+        x: 2 * k * l * sn(u, m) * dn(u, m),
+        xdot: 2 * k * l * cn(u, m) * (2 * dn(u, m) ** 2 - 1) * dudt,
+        xddot:
+          -2 *
+          k *
+          l *
+          sn(u, m) *
+          dn(u, m) *
+          (6 * dn(u, m) ** 2 + 4 * m - 5) *
+          dudt ** 2
+      }));
+    }
+  </script>
+  <script id="41" type="application/vnd.observable.javascript">
+    htl.html`<figure>${Plot.plot({
+      width: Math.min(width, 640),
+      height: 200,
+      grid: true,
+      x: {
+        label: "t →"
+      },
+      y: {
+        label: "θ(t) ↑",
+        domain: [-Math.PI, Math.PI]
+      },
+      marks: [
+        Plot.ruleY([0]),
+        Plot.ruleY([-Math.PI, Math.PI], { strokeDasharray: "4,4" }),
+        Plot.line(trajectory, { x: "t", y: "theta", stroke: "#c39" })
+      ]
+    })}<figcaption>Angle ${tex`\theta`} of a pendulum which starts at ${tex`\theta(t = 0) = 0`} with an initial velocity.</figcaption></figure>`
+  </script>
+  <script id="32" type="application/vnd.observable.javascript">
+    Inputs.bind(
+      Inputs.range([0, 0.9999999], {
+        label: tex`k \;\;(= \sqrt{m})`,
+        step: 0.0000001
+      }),
+      viewof k
+    )
+  </script>
+  <script id="283" type="text/markdown">
+    Note that as ${tex`k`} approaches ${tex`1`}, the period diverges to infinity. This just reflects the fact that if the pendulum (asymptotically) makes it all the way to the top, ${tex`\theta = \pm \pi`}, it takes forever to get there, equivalent to an infinitely long period.
+
+    So our goal is to compute the horizontal component of the velocity, then maximize it. Using trig identities and above elliptic function identities we can simplify 
+
+    ${tex.block`
+    \begin{aligned}
+    x &= l \sin(\theta) \\
+    &= l \sin(2 \sin^{-1}(k \,\mathrm{sn}(u))) \\
+    &= 2l (k\,\mathrm{sn}(u)) \sqrt{1 - k^2 \,\mathrm{sn}^2(u)} \\
+    &= 2kl \,\mathrm{sn}(u) \,\mathrm{dn}(u).
+    \end{aligned}
+    `}
+    A promising start! Differentiating to find the horizontal velocity, we find
+
+    ${tex.block`
+    \begin{aligned}
+    \frac{dx}{du} &= 2kl\left( (\mathrm{cn}(u) \,\mathrm{dn}(u))\,\mathrm{dn}(u) + \mathrm{sn}(u)(-m\,\mathrm{sn}(u)\,\mathrm{cn}(u)) \right) \\
+    &= 2kl \,\mathrm{cn}(u)(2\,\mathrm{dn}^2(u) - 1)
+    \end{aligned}
+    `}
+
+    To maximize this horizontal velocity, we differentiate once more, yielding
+
+    ${tex.block`
+    \begin{aligned}
+    \frac{d^2x}{du^2} &= -2kl \,\mathrm{sn}(u)\,\mathrm{dn}(u)(6\,\mathrm{dn}^2(u) + 4m - 5)
+    \end{aligned}
+    `}
+
+    It's still not intractable! The plot below shows the horizontal position along with its first and second derivatives. Recall that the extrema of a function correspond to zeros of its derivative, thus the horizontal velocity extrema correspond to zeros of the third plot.
+
+  </script>
+  <script id="80" type="application/vnd.observable.javascript">
+    htl.html`<figure>${Plot.plot({
+      width: Math.min(width, 640),
+      height: 150,
+      grid: true,
+      marginBottom: 5,
+      x: {
+        label: "",
+        tickFormat: null,
+        tickSize: 0
+      },
+      y: {
+        label: "x(t)"
+      },
+      marks: [
+        Plot.ruleY([0]),
+        Plot.line(trajectory, { x: "t", y: "x", stroke: "#c39" })
+      ]
+    })}
+    ${Plot.plot({
+      width: Math.min(width, 640),
+      height: 150,
+      grid: true,
+      marginBottom: 5,
+      x: {
+        label: "",
+        tickFormat: null,
+        tickSize: 0
+      },
+      y: {
+        label: "dx(t)/dt"
+      },
+      marks: [
+        Plot.ruleY([0]),
+        Plot.line(trajectory, { x: "t", y: "xdot", stroke: "#c39" })
+      ]
+    })}
+    ${Plot.plot({
+      width: Math.min(width, 640),
+      height: 150,
+      grid: true,
+      x: {
+        label: "t →"
+      },
+      y: {
+        label: "d²x(t)/dt²"
+      },
+      marks: [
+        Plot.ruleY([0]),
+        Plot.line(trajectory, { x: "t", y: "xddot", stroke: "#c39" })
+      ]
+    })}
+    <figcaption>Horizontal position along with its first and second derivatives. </figcaption></figure>`
+  </script>
+  <script id="183" type="application/vnd.observable.javascript">
+    Inputs.bind(
+      Inputs.range([1e-4, 0.999999], { label: tex`k`, step: 0.000001 }),
+      viewof k
+    )
+  </script>
+  <script id="443" type="text/html">
+    <figcaption>The horizontal position (top) and horizontal velocity (bottom) of a pendulum with the specified amount of kinetic energy ${tex`k`}.</figcaption>
+  </script>
+  <script id="186" type="text/markdown">
+    It's not lost on me that our pendulum so far starts at the bottom of its swing with nonzero velocity, when what the orcs want is for it to start at the top of its swing with zero velocity. Fortunately, we can consider ${tex`k = 1`} when the pendulum starts at the bottom and has exactly enough energy to approach unstable equilibrium at the top of the swing and come to a rest. We simply consider the same motion in reverse. Mathematically speaking it then takes an infinite amount of time for the pendulum to move away from its initial unstable equilibrium at the top of its swing, though realistically it would of course only take the tiniest push to get things started. The time of maximum velocity is not requested, so we thus set ${tex`k = 1`} and continue our goal of finding the maximum horizontal velocity.
+
+    We've fought this for a long time, but to make further progress, we must finally start to simplify. We substitute ${tex`k = 1`}, therefore replacing Jacobi elliptic functions with hyperbolic functions using the above identities
+
+    ${tex.block`
+    \begin{aligned}
+    \mathrm{sn}(u \mid 1) &= \mathrm{tanh}(u), \\
+    \mathrm{cn}(u \mid 1) &= \mathrm{sech}(u), \\
+    \mathrm{dn}(u \mid 1) &= \mathrm{sech}(u).
+    \end{aligned}
+    `}
+
+    The second derivative is thus
+
+    ${tex.block`
+    \begin{aligned}
+    \frac{d^2x}{du^2} &= -2kl \,\mathrm{sech}(u) \,\mathrm{tanh}(u)(6\,\mathrm{sech}^2(u) - 1) \\
+    \end{aligned}
+    `}
+
+    The situation looks grim, so we pull on the most tenuous of threads by setting this equal to zero and factoring into
+
+    ${tex.block`
+    0 = -2kl \,\mathrm{sech}(u) \,\mathrm{tanh}(u)(\sqrt{6}\,\mathrm{sech}(u) + 1)(\sqrt{6}\,\mathrm{sech}(u) - 1)
+    `}
+
+    Seizing upon the last term (and recalling ${tex`\operatorname{sech}(u)`} = ${tex`1 / \operatorname{cosh}(u)`}), the most likely candidate for an interesting horizontal velocity extremum looks like
+
+    ${tex.block`
+    \sqrt{6} = \mathrm{cosh}(u_{\dot{x}_{max}}).
+    `}
+
+    Using the inverse hyperbolic cosine ${tex`\mathrm{cosh}^{-1}(x) = \ln\left(x + \sqrt{x^2 - 1}\right)`}, we have
+
+    ${tex.block`
+    \begin{aligned}
+    u_{\dot{x}_{max}} &= \mathrm{cosh}^{-1}\sqrt{6} \\
+    &= \ln\left( \sqrt{6} + \sqrt{(\sqrt{6})^2 - 1} \right) \\
+    &= \ln\left( \sqrt{6} + \sqrt{5} \right)
+    \end{aligned}
+    `}
+
+    Let's plot in terms of scaled time ${tex`u`} to see if this looks plausible.
+  </script>
+  <script id="336" type="application/vnd.observable.javascript" pinned="">
+    u_max = Math.log(Math.sqrt(6) + Math.sqrt(5))
+  </script>
+  <script id="299" type="application/vnd.observable.javascript">
+    upswing = {
+      return [...linspace(0, 4, 201)].map((u) => ({
+        u,
+        t: u * Math.sqrt(l / g),
+        uK: u,
+        xdot: ((2 * k * l) / Math.cosh(u)) * (2 / Math.cosh(u) ** 2 - 1)
+      }));
+    }
+  </script>
+  <script id="303" type="application/vnd.observable.javascript">
+    {
+      const ymax =
+        ((2 * k * l) / Math.cosh(u_max)) * (2 / Math.cosh(u_max) ** 2 - 1);
+      return htl.html`<figure>${Plot.plot({
+        width: Math.min(width, 640),
+        height: 200,
+        grid: true,
+        x: {
+          label: "u →"
+        },
+        y: {
+          label: "dx(u)/dt ↑"
+        },
+        marks: [
+          Plot.ruleY([0]),
+          Plot.line(upswing, { x: "uK", y: "xdot", stroke: "#c39" }),
+          Plot.dot([{ x: u_max, y: ymax }], {
+            x: "x",
+            y: "y",
+            stroke: "#c39",
+            fill: "#c39"
+          })
+        ]
+      })}<figcaption>Horizontal velocity for an upswinging pendulum with ${tex`k = 1`}, with a dot representing the extremum at ${tex`u = \ln\left(\sqrt{6} + \sqrt{5}\right)`}.</figcaption></figure>`;
+    }
+  </script>
+  <script id="330" type="text/markdown">
+    Success! That looks like an extremum in the horizontal velocity! And so we arrive at the endgame. At last, we plug scaled time ${tex`u`} into the equation for ${tex`\theta(u)`} to compute the angle at which the horizontal velocity is maximized. For ${tex`k = 1`}, the equation of motion is
+
+    ${tex.block`
+    \theta(u) = 2 \sin^{-1}(\mathrm{sech}\,{u})
+    `}
+
+    Then substituting ${tex`u = u_{\dot{x}_{max}} = \ln\left(\sqrt{6} + \sqrt{5}\right),`}
+    ${tex.block`
+    \begin{aligned}
+    \theta\left(\ln\left(\sqrt{6} + \sqrt{5}\right)\right) &= 2 \sin^{-1}(\mathrm{sech}\,{u}) \\
+    &= 2\sin^{-1}\left(\frac{2}{\sqrt{5} + \sqrt{6} + \frac{1}{\sqrt{5} + \sqrt{6}}}\right) \\
+    &= 2\sin^{-1} \left(\frac{\sqrt{5} + \sqrt{6}}{\sqrt{5}{\sqrt{6} + 6}}\right)
+    \end{aligned}
+    `}
+
+    This is the angle at which we reach maximum horizontal velocity. To compute the horizontal component of position, we multiply by ${tex`l`} and take the sine, applying along the way the double angle formula ${tex`\sin 2\theta = 2\sin \theta \cos \theta`}.
+
+    ${tex.block`
+    \begin{aligned}
+    x_{\dot{x}_{max}} &= l\sin\left(\theta_{\dot{x}_{max}}\right) \\
+    &= l \sin\left( 2\sin^{-1} \left(\frac{\sqrt{5} + \sqrt{6}}{\sqrt{5}{\sqrt{6} + 6}}\right) \right) \\
+    &= 2l \left(\frac{\sqrt{5} + \sqrt{6}}{\sqrt{5}{\sqrt{6} + 6}}\right) \sqrt{1 - \left(\frac{\sqrt{5} + \sqrt{6}}{\sqrt{5}{\sqrt{6} + 6}}\right)^2} \\
+    &= 2l \left(\frac{\sqrt{5} + \sqrt{6}}{\sqrt{5}{\sqrt{6} + 6}}\right) \sqrt{\frac{5}{6}} \\
+    &= l\sqrt{1 - (2/3)^2} \\
+    &= \frac{\sqrt{5}}{3} l
+    \end{aligned}
+    `}
+
+    This is the horizontal distance from the pivot to the mass when the mass reaches its maximum horizontal velocity. This is also therefore the distance from the gates at which we—er, the _orcs_—should place the pivot of the pole. Substituting some numbers, we get
+  </script>
+  <script id="395" type="application/vnd.observable.javascript">
+    viewof d_initial = fmt`d_initial = ${l * Math.sqrt(1 - 4 / 9)} m`
+  </script>
+  <script id="759" type="text/markdown">
+    Success! I think it's kinda remarkable that after all this math, we actually manage to get a closed form solution. Let us only hope that some day the orcs and their hundred foot pole adopt the metric system. And that we find a job which doesn't involve consulting for orcs.
+  </script>
+  <script id="761" type="module" pinned="">
+    import linspace from 'npm:@stdlib/array-linspace'
+  </script>
+  <script id="21" type="module">
+    import ellipk from 'npm:@stdlib/math-base-special-ellipk'
+  </script>
+  <script id="773" type="module" pinned="">
+    import jacobi from 'npm:@stdlib/math-base-special-ellipj'
+    const {sn, cn, dn, am} = jacobi;
+  </script>
+  <script id="12" type="application/vnd.observable.javascript">
+    fmt = createFmt(".3f") //createFmt(sci(".3f"))
+  </script>
+  <script id="7" type="application/vnd.observable.javascript">
+    import { fmt as createFmt, sci } from "observable:@rreusser/fmt"
+  </script>
+  <script id="416" type="text/html">
+    <style>
+    .observablehq blockquote {
+      font-style: italic;
+      border-left: 4px solid #ddd;
+      padding-left: 1em;
+      box-sizing: content-box;
+    }
+      .katex-display {
+        overflow-x: scroll;
+        overflow-y: clip;
+      }
+    </style>
+  </script>
+  <script id="676" type="application/vnd.observable.javascript">
+    function arrowhead(
+      x1,
+      y1,
+      x2,
+      y2,
+      { length = 10, width = 8, shift = 0, inset = 2 } = {}
+    ) {
+      const rx = x2 - x1;
+      const ry = y2 - y1;
+      const l = Math.sqrt(rx * rx + ry * ry);
+      const ex = rx / l;
+      const ey = ry / l;
+      const nx = -ey;
+      const ny = ex;
+      const headLength = 8;
+      const headWidth = 8;
+      const startx = x2 - length * ex;
+      const starty = y2 - length * ey;
+      const sx = shift * ex;
+      const sy = shift * ey;
+      return `M${x2 + sx},${y2 + sy}L${startx + (nx * width) / 2 + sx},${
+        starty + (ny * width) / 2 + sy
+      }L${startx + inset * ex + sx},${starty + inset * ey + sy}L${
+        startx - (nx * width) / 2 + sx
+      },${starty - (ny * width) / 2 + sy}Z`;
+    }
+  </script>
+</notebook>
