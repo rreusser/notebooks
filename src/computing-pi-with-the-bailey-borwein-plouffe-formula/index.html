@@ -540,7 +540,7 @@
     A small downside is that we need to generate the code dynamically so that we don't pollute all downstream Observable cells with syntax errors in the event that \`BigInt\` is not supported.`
   </script>
   <script id="1769" type="module" pinned="">
-    function modPowBig(b, e, m) {
+    function modPowBigInt(b, e, m) {
       if (!e) return 1n;
       b = b % m;
       let y = 1n;
@@ -552,12 +552,12 @@
       }
     }
 
-    function SBig(j, n, d, mask) {
+    function SBigInt(j, n, d, mask) {
       const shift = d << 2n;
       let left = 0n;
       for (let k = 0n; k <= n; k++) {
         let r = k * 8n + j;
-        left = (left + (modPowBig(16n, n - k, r) << shift) / r) & mask;
+        left = (left + (modPowBigInt(16n, n - k, r) << shift) / r) & mask;
       }
       let right = 0n;
       for (let k = n + 1n; ; k++) {
@@ -573,10 +573,10 @@
       const d = BigInt(dd) - 1n;
       const mask = 16n ** n - 1n;
       return (
-        4n * SBig(1n, d, n, mask) -
-        2n * SBig(4n, d, n, mask) -
-        SBig(5n, d, n, mask) -
-        SBig(6n, d, n, mask)
+        4n * SBigInt(1n, d, n, mask) -
+        2n * SBigInt(4n, d, n, mask) -
+        SBigInt(5n, d, n, mask) -
+        SBigInt(6n, d, n, mask)
       ) & mask;
     }
   </script>
