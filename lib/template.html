@@ -1,74 +1,73 @@
 <!DOCTYPE html>
 <html lang="en">
-  <head>
-    </nav>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="author" content="Ricky Reusser" />
-    <meta property="article:author" content="Ricky Reusser" />
-    {{#if title}}
-    <meta name="twitter:title" content="{{title}}" />
-    <meta property="og:title" content="{{title}}" />
-    {{/if}}
-    {{#if description}}
-    <meta name="twitter:description" content="{{description}}" />
-    <meta name="subject" content="{{description}}" />
-    <meta name="description" content="{{description}}" />
-    <meta property="og:description" content="{{description}}" />
-    {{/if}}
-    <style type="text/css">
-      @import url("observable:styles/index.css");
-      @import "@fontsource/spline-sans-mono/400.css";
-      @import "@fontsource/spline-sans-mono/600.css";
-      @import "@fontsource/spline-sans-mono/700.css";
-      @import "@fontsource/spline-sans-mono/400-italic.css";
-      @import "@fontsource/spline-sans-mono/600-italic.css";
-      @import "@fontsource/spline-sans-mono/700-italic.css";
-      @import "@fontsource/source-serif-4/400.css";
-      @import "@fontsource/source-serif-4/700.css";
-      @import "@fontsource/source-serif-4/400-italic.css";
-      @import "@fontsource/source-serif-4/700-italic.css";
-      @import "@fontsource/inter/400.css";
-      @import "@fontsource/inter/500.css";
-      @import "@fontsource/inter/600.css";
-      @import "@fontsource/inter/700.css";
-      @import "@fontsource/inter/400-italic.css";
-      @import "@fontsource/inter/500-italic.css";
-      @import "@fontsource/inter/600-italic.css";
-      @import "@fontsource/inter/700-italic.css";
-      @import "../styles.css";
-    </style>
-    {{#if maxWidth}} <style> main { max-width: {{maxWidth}}; }</style> {{/if}}
-  </head>
-  <body>
-    <nav class="menu">
-      <a class="menu__item" href="/">rreusser.github.io</a>
-      <a class="menu__item" href="/sketches/">sketches</a>
-      <a class="menu__item" href="/projects/">projects</a>
-      <a class="menu__item" href="/trains-and-trails/">running</a>
-    </nav>
-    <header>
-      <h1>{{title}}</h1>
-      <p>
-        <a href="https://rreusser.github.io">Ricky Reusser</a><br>
-        {{#if publishedAt}}{{publishedAt}}<br>{{/if}}
-        {{#if sourceUrl}}<a href="{{sourceUrl}}">View source &rarr;</a>{{/if}}
-      </p>
-    </header>
-    <div class="container">
-      <main></main>
-    </div>
-  </body>
-  {{#if mastodonPostId}}
-    <script src="../comments.js" type="module"></script>
-    <style>
-      #comment-root {
-        margin: auto;
-        max-width: 640px;
-      }
-    </style>
-    <div id="comment-root" data-post-id="{{mastodonPostId}}"></div>
+<head>
+  </nav>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="author" content="Ricky Reusser" />
+  <meta property="article:author" content="Ricky Reusser" />
+  {{#if title}}
+  <meta name="twitter:title" content="{{title}}" />
+  <meta property="og:title" content="{{title}}" />
   {{/if}}
-
+  {{#if description}}
+  <meta name="twitter:description" content="{{description}}" />
+  <meta name="subject" content="{{description}}" />
+  <meta name="description" content="{{description}}" />
+  <meta property="og:description" content="{{description}}" />
+  {{/if}}
+  <style type="text/css">
+    @import url("observable:styles/index.css");
+    @import "@fontsource/spline-sans-mono/400.css";
+    @import "@fontsource/spline-sans-mono/600.css";
+    @import "@fontsource/spline-sans-mono/700.css";
+    @import "@fontsource/spline-sans-mono/400-italic.css";
+    @import "@fontsource/spline-sans-mono/600-italic.css";
+    @import "@fontsource/spline-sans-mono/700-italic.css";
+    @import "@fontsource/source-serif-4/400.css";
+    @import "@fontsource/source-serif-4/700.css";
+    @import "@fontsource/source-serif-4/400-italic.css";
+    @import "@fontsource/source-serif-4/700-italic.css";
+    @import "@fontsource/inter/400.css";
+    @import "@fontsource/inter/500.css";
+    @import "@fontsource/inter/600.css";
+    @import "@fontsource/inter/700.css";
+    @import "@fontsource/inter/400-italic.css";
+    @import "@fontsource/inter/500-italic.css";
+    @import "@fontsource/inter/600-italic.css";
+    @import "@fontsource/inter/700-italic.css";
+    @import "/styles.css";
+  </style>
+  {{#if maxWidth}} <style> main { max-width: {{maxWidth}}; }</style> {{/if}}
+</head>
+<body>
+  <nav class="menu">
+    <a class="menu__item" href="/">rreusser.github.io</a>
+    <a class="menu__item" href="/sketches/">sketches</a>
+    <a class="menu__item" href="/projects/">projects</a>
+    <a class="menu__item" href="/trains-and-trails/">running</a>
+  </nav>
+  <header>
+    <h1>{{title}}</h1>
+    <p>
+      <a href="https://rreusser.github.io">Ricky Reusser</a><br>
+      {{#if publishedAt}}{{publishedAt}}<br>{{/if}}
+      {{#if sourceUrl}}<a href="{{sourceUrl}}">View source &rarr;</a>{{/if}}
+    </p>
+  </header>
+  <div class="container">
+    <main></main>
+    {{#if mastodonPostId}}
+      <script src="../comments.js" type="module"></script>
+      <style>
+        #comment-root {
+          margin: auto;
+          max-width: 640px;
+        }
+      </style>
+      <div id="comment-root" data-post-id="{{mastodonPostId}}"></div>
+    {{/if}}
+  </div>
   <footer><div class="footer__attrib">&copy; Ricky Reusser 2025</div></footer>
+</body>
 </html>
