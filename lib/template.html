@@ -57,9 +57,15 @@
   </header>
   <div class="container">
     {{#if index}}
-      <div class="index">
+      <ul class="index">
       {{#each index}}
-        Notebook!
+        <li>
+          <div class="meta">
+            <a href="{{path}}" class="title">{{title}}</a>
+            <span class="publishedAt">{{publishedAt}}</span>
+          </div>
+          {{#if description}}<p>{{description}}</p>{{/if}}
+        </li>
       {{/each}}
       </div>
     {{/if}}

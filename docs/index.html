@@ -1397,9 +1397,28 @@ main h6 {
 
 }
     .index {
+  padding: 0;
   margin: 0 auto;
   width: 640px;
   max-width: 100%;;
+  list-style-type: none;
+}
+    .index .meta {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-between;
+}
+    .index p {
+  margin: 0;
+}
+    .index li {
+  margin-bottom: 30px;
+}
+    .index .title {
+  font-family: "Open Sans", sans-serif;
+}
+    .index .publishedAt {
+  color: #888;
 }
   </style>
   
@@ -1421,13 +1440,25 @@ main h6 {
     </p>
   </header>
   <div class="container">
-      <div class="index">
-        Notebook!
-        Notebook!
-      </div>
+      <ul class="index">
+        <li>
+          <div class="meta">
+            <a href="hello-observable-notebooks-2/index.html" class="title">Hello, Observable Notebooks 2.0!</a>
+            <span class="publishedAt">August 3, 2025</span>
+          </div>
+          <p>Kicking the tires of Observable's new notebook tooling!</p>
+        </li>
+        <li>
+          <div class="meta">
+            <a href="computing-pi-with-the-bailey-borwein-plouffe-formula/index.html" class="title">Computing π with the Bailey-Borwein-Plouffe Formula</a>
+            <span class="publishedAt">August 7, 2025</span>
+          </div>
+          <p>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</p>
+        </li>
+      </ul></div>
 
     <main></main>
-  </div>
+  
   <footer><div class="footer__attrib">© Ricky Reusser 2025</div></footer>
 
 

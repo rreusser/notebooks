@@ -1,3 +1,2 @@
 publishedAt: August 7, 2025
 description: Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.
-maxWidth: 640px

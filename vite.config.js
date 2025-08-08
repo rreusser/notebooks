@@ -33,9 +33,11 @@ async function computeIndex() {
   const notebooks = [];
   for (const path of notebookPaths) {
     const relpath = relative(NOTEBOOKS_DIR, path);
+    const notebook = deserialize(await readFile(path, "utf8"), { parser });
     if (relpath === 'index.html') continue;
     notebooks.push({
       path: relpath,
+      ...notebook,
       ...await readMetadata(path)
     });
   }
