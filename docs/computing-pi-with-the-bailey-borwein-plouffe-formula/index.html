@@ -1455,7 +1455,7 @@ main h6 {
 }
   </style>
    <style> main { max-width: 640px; }</style> 
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Computing π with the Bailey-Borwein-Plouffe Formula</title>  <script type="module" crossorigin src="/notebooks/assets/index-DSZSl43G.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Computing π with the Bailey-Borwein-Plouffe Formula</title>  <script type="module" crossorigin src="/notebooks/assets/index-CfwzRAyn.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
   <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
 </head>
@@ -1511,7 +1511,7 @@ main h6 {
   <span class="tok-keyword">return</span> <span class="tok-variable">y</span>;
 }</code></pre><div id="cell-1685" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">binaryPow</span>(<span class="tok-literal">3</span>, <span class="tok-literal">17</span>)</code></pre><div id="cell-1806" class="observablehq observablehq--cell"><div><p><em><a href="https://en.wikipedia.org/wiki/Modular_exponentiation">Modular exponentiation</a></em> computes the exponentiation ,</p>
 </div></div><div id="cell-1807" class="observablehq observablehq--cell"></div><div id="cell-1808" class="observablehq observablehq--cell"><div><p>While  may grow very large,  will always be less than . An efficient algorithm, based on binary exponentiation, makes use of <a href="https://en.wikipedia.org/wiki/Modular_exponentiation#Memory-efficient_method">the fact that</a></p>
-</div></div><div id="cell-1809" class="observablehq observablehq--cell"></div><div id="cell-1017" class="observablehq observablehq--cell"><div><p>Put simply, we just load the `binaryPow` function up with  and keep our result between  and .</p>
+</div></div><div id="cell-1809" class="observablehq observablehq--cell"></div><div id="cell-1017" class="observablehq observablehq--cell"><div><p>Put simply, we just load the <code>binaryPow</code> function up with  and keep our result between  and .</p>
 </div></div><div id="cell-832" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">function</span> <span class="tok-definition">modPow</span>(<span class="tok-definition">b</span>, <span class="tok-definition">e</span>, <span class="tok-definition">m</span>) {
   <span class="tok-variable">b</span> = <span class="tok-variable">b</span> % <span class="tok-variable">m</span>;
   <span class="tok-keyword">let</span> <span class="tok-definition">y</span> = <span class="tok-literal">1</span>;
