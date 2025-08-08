@@ -534,10 +534,8 @@
   <script id="1512" type="application/vnd.observable.javascript">
     md`## BigInt implementation`
   </script>
-  <script id="1565" type="application/vnd.observable.javascript">
-    md`With minor modifications, we can repeat the above computation with integer arithmetic. The code below repeats the above implementation, except that everything is written with [BigInt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)s rather than double precision numbers. This means we can compute an arbitrary number of digits at once.
-
-    A small downside is that we need to generate the code dynamically so that we don't pollute all downstream Observable cells with syntax errors in the event that \`BigInt\` is not supported.`
+  <script id="1565" type="text/markdown">
+    With minor modifications, we can repeat the above computation with integer arithmetic. The code below repeats the above implementation, except that everything is written with [BigInt](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt)s rather than double precision numbers. This means we can compute an arbitrary number of digits at once.
   </script>
   <script id="1769" type="module" pinned="">
     function modPowBigInt(b, e, m) {
