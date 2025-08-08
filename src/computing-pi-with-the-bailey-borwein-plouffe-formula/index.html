@@ -67,9 +67,12 @@
       step: 1
     }))
   </script>
+  <script id="1821" type="module">
+    const figureWidth = Math.min(950, window.innerWidth + 1e-8 * width);
+  </script>
   <script id="478" type="application/vnd.observable.javascript">
     table = {
-      const nDigits = Math.floor(((width - 30) / 924) * 128);
+      const nDigits = Math.floor(((figureWidth - 90) / 850) * 128);
       const ref = reference.digits.slice(startingDigit, startingDigit + nDigits);
 
       function compareStrings(a, b, offset) {
@@ -119,9 +122,10 @@
         (l) => html`<code style="font-size:inherit;">${l}</code><br>`
       );
 
-      const fontSize = 11; // Math.min(14, 1.5 * (width / 128))
+      const margin = Math.min(0, -(figureWidth - 40 - width) / 2);
+      const fontSize = 11;
       const output = html`
-        <pre style="font-size:${fontSize}px;background:white">
+        <pre style="padding:0;font-size:${fontSize}px;background:white;width:${figureWidth}px;margin-left:${margin}px">
     ${children}</pre>
       `;
 
@@ -143,6 +147,8 @@
         );
         const time = document.createElement("code");
         time.style.fontSize = "inherit";
+        time.style.color = 'rgb(32, 165, 186)';
+        time.style.fontWeight = '700';
         time.textContent = ` (${(t2 - t1).toFixed(1)}ms)`;
         line.appendChild(time);
         lines[j].replaceWith(line);
