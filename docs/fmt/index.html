@@ -1293,6 +1293,9 @@ main h6 {
     main h3 {
   margin-top: 2em;
 }
+    main .katex-display {
+  overflow-x: scroll;
+}
     .comments_meta {
   display: flex;
   flex-direction: row;
@@ -1409,20 +1412,40 @@ main h6 {
 }
     .index .meta {
   display: flex;
-  flex-direction: row;
   justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: 3px;
 }
     .index p {
   margin: 0;
 }
     .index li {
-  margin-bottom: 30px;
+  margin-bottom: 40px;
 }
     .index .title {
   font-family: "Open Sans", sans-serif;
+  font-weight: 400;
+  font-size: 18px;
+  flex: 1;
 }
     .index .publishedAt {
   color: #888;
+  text-transform: uppercase;
+  font-family: "Open Sans", sans-serif;
+  font-size: 0.8em;
+  order: 0;
+}
+    @media(max-width: 640px) {
+  .index .meta {
+    flex-wrap: wrap;
+  }
+  .index .publishedAt {
+    order:  -1;
+  }
+  .index .title {
+    flex: 1 1 100%;
+  }
 }
   </style>
    <style> main { max-width: 640px; }</style> 

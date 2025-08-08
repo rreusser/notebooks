@@ -1289,6 +1289,9 @@ main h6 {
     main h3 {
   margin-top: 2em;
 }
+    main .katex-display {
+  overflow-x: scroll;
+}
     .comments_meta {
   display: flex;
   flex-direction: row;
@@ -1405,20 +1408,40 @@ main h6 {
 }
     .index .meta {
   display: flex;
-  flex-direction: row;
   justify-content: space-between;
+  align-items: baseline;
+  flex-wrap: nowrap;
+  gap: 3px;
 }
     .index p {
   margin: 0;
 }
     .index li {
-  margin-bottom: 30px;
+  margin-bottom: 40px;
 }
     .index .title {
   font-family: "Open Sans", sans-serif;
+  font-weight: 400;
+  font-size: 18px;
+  flex: 1;
 }
     .index .publishedAt {
   color: #888;
+  text-transform: uppercase;
+  font-family: "Open Sans", sans-serif;
+  font-size: 0.8em;
+  order: 0;
+}
+    @media(max-width: 640px) {
+  .index .meta {
+    flex-wrap: wrap;
+  }
+  .index .publishedAt {
+    order:  -1;
+  }
+  .index .title {
+    flex: 1 1 100%;
+  }
 }
   </style>
   
@@ -1444,21 +1467,21 @@ main h6 {
       <ul class="index">
         <li>
           <div class="meta">
-            <a href="fmt/index.html" class="title">fmt</a>
+            <h2 class="title"><a href="fmt/index.html">fmt</a></h2>
             <span class="publishedAt">August 8, 2025</span>
           </div>
           <p>A helper function for nicely formatting cell values in Observable</p>
         </li>
         <li>
           <div class="meta">
-            <a href="computing-pi-with-the-bailey-borwein-plouffe-formula/index.html" class="title">Computing π with the Bailey-Borwein-Plouffe Formula</a>
+            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/index.html">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
             <span class="publishedAt">August 7, 2025</span>
           </div>
           <p>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</p>
         </li>
         <li>
           <div class="meta">
-            <a href="hello-observable-notebooks-2/index.html" class="title">Hello, Observable Notebooks 2.0!</a>
+            <h2 class="title"><a href="hello-observable-notebooks-2/index.html">Hello, Observable Notebooks 2.0!</a></h2>
             <span class="publishedAt">August 3, 2025</span>
           </div>
           <p>Kicking the tires of Observable's new notebook tooling!</p>

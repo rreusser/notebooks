@@ -42,7 +42,6 @@ async function computeIndex() {
     });
   }
   notebooks.sort(({publishedAt: da}, {publishedAt: db}) => Date.parse(db || 0) - Date.parse(da || 0));
-  console.log(notebooks);
   return notebooks;
 }
 
