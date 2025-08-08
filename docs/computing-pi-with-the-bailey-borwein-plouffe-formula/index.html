@@ -1453,7 +1453,7 @@ main h6 {
 }
   </style>
    <style> main { max-width: 640px; }</style> 
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Computing π with the Bailey-Borwein-Plouffe Formula</title>  <script type="module" crossorigin src="/notebooks/assets/index-CUwtZDOf.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Computing π with the Bailey-Borwein-Plouffe Formula</title>  <script type="module" crossorigin src="/notebooks/assets/index--jX2gzrz.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
   <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
 </head>
@@ -1480,7 +1480,7 @@ main h6 {
 </div></div><div id="cell-1770" class="observablehq observablehq--cell"><div><p>That such a formula could exist is a bit shocking—though the initial shock is tempered by the realization that it does, of course, take longer as you start at later digits ( as a function of the starting digit, to be precise). Additionally, the hexadecimal digits cannot be converted to decimal without first computing all of the leading digits. What it does enable though, is to compute digits deep into  with hardly any memory consumption and nothing more than a basic double precision data type.</p>
 </div></div><div id="cell-1193" class="observablehq observablehq--cell"></div><div id="cell-1242" class="observablehq observablehq--cell"></div><div id="cell-1774" class="observablehq observablehq--cell"><div><p>The table below shows hexadecimal digits of . Each line represents an independent run of the algorithm starting at a slightly different digit. Green digits are correctly computed digits, while red represents incorrect digits. Due to our termination criteria, we usually get a couple fewer digits than requested.</p>
 </div></div><div id="cell-1586" class="observablehq observablehq--cell"><div><p>Change from double precision floating point to `BigInt` and observe that, although starting at the same digit is at least a factor of ten slower (<em>update: BigInts have gotten much, much faster!</em>), it doesn’t cost too much extra to compute many more digits.</p>
-</div></div><div id="cell-805" class="observablehq observablehq--cell"></div><div id="cell-333" class="observablehq observablehq--cell"></div><div id="cell-437" class="observablehq observablehq--cell"></div><div id="cell-1821" class="observablehq observablehq--cell"></div><div id="cell-478" class="observablehq observablehq--cell"></div><div id="cell-1777" class="observablehq observablehq--cell"><div><h2 id="using-the-formula" tabindex="-1"><a href="#using-the-formula">Using the formula</a></h2>
+</div></div><div id="cell-805" class="observablehq observablehq--cell"></div><div id="cell-333" class="observablehq observablehq--cell"></div><div id="cell-437" class="observablehq observablehq--cell"></div><div id="cell-1821" class="observablehq observablehq--cell"></div><div id="cell-478" class="observablehq observablehq--cell"></div><div id="cell-1822" class="observablehq observablehq--cell"></div><div id="cell-1777" class="observablehq observablehq--cell"><div><h2 id="using-the-formula" tabindex="-1"><a href="#using-the-formula">Using the formula</a></h2>
 </div></div><div id="cell-1778" class="observablehq observablehq--cell"><div><p>I’ll be honest. I’ve seen this formula probably ten or twenty times, and apart from trivially plugging in some numbers, I’d never stopped to work through how to properly use it.</p>
 </div></div><div id="cell-1779" class="observablehq observablehq--cell"><div><p>So let’s walk through using the identity to compute  starting at an arbitrary location. I’ll largely repeat the eponymous David Bailey’s explanation from <em><a href="https://www.davidhbailey.com/dhbpapers/bbp-alg.pdf">The BBP Algorithm for Pi</a></em>, filling in some details I learned along the way. The implemenation is also heavily influenced by the version from <a href="https://literateprograms.org/pi_with_the_bbp_formula__python_.html">literateprograms.org</a>.</p>
 </div></div><div id="cell-1780" class="observablehq observablehq--cell"><div><p>Our starting point is the BBP formula,</p>
@@ -1593,7 +1593,7 @@ main h6 {
     <span class="tok-variable">SBig</span>(<span class="tok-literal">5n</span>, <span class="tok-variable">d</span>, <span class="tok-variable">n</span>, <span class="tok-variable">mask</span>) -
     <span class="tok-variable">SBig</span>(<span class="tok-literal">6n</span>, <span class="tok-variable">d</span>, <span class="tok-variable">n</span>, <span class="tok-variable">mask</span>)
   ) &amp; <span class="tok-variable">mask</span>;
-}</code></pre><div id="cell-1739" class="observablehq observablehq--cell"></div><div id="cell-1521" class="observablehq observablehq--cell"></div><div id="cell-1819" class="observablehq observablehq--cell"></div></main>
+}</code></pre><div id="cell-1739" class="observablehq observablehq--cell"></div><div id="cell-1521" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© Ricky Reusser 2025</div></footer>
 
