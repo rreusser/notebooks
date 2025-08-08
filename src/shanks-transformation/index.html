@@ -8,7 +8,7 @@
     I've encountered some lovely mathematical results in my time, but the *[Shanks Transformation](https://en.wikipedia.org/wiki/Shanks_transformation)* for nonlinear series acceleration is truly one of the most delightful.
   </script>
   <script id="2442" type="text/markdown">
-    Let's start with a very slowly converging series for ${tex`\pi`} based on the Taylor series of the arctangent function,
+    Let's start by considering a very slowly converging series for ${tex`\pi`} based on the Taylor series of the arctangent function,
   </script>
   <script id="859" type="application/x-tex">
     \begin{aligned}
@@ -25,15 +25,15 @@
   <script id="2249" type="text/markdown">
     I'll define a little helper for ${tex`\sum_{k=0}^n`} since we'll use it repeatedly.
   </script>
-  <script id="1920" type="application/vnd.observable.javascript" pinned="">
-    sum = (f) => (n) => {
+  <script id="1920" type="module" pinned="">
+    const sum = (f) => (n) => {
       let sum = 0;
       for (let k = 0; k <= n; k++) sum += f(k);
       return sum;
     }
   </script>
-  <script id="1911" type="application/vnd.observable.javascript" pinned="">
-    A = sum((k) => (4 * (k % 2 ? -1 : 1)) / (2 * k + 1))
+  <script id="1911" type="module" pinned="">
+    const A = sum((k) => (4 * (k % 2 ? -1 : 1)) / (2 * k + 1))
   </script>
   <script id="1078" type="text/markdown">
     How slowly does this series converge? Very, very slowly!
@@ -160,12 +160,12 @@
   <script id="1559" type="text/markdown">
     We can implement this pretty easily as a higher order JavaScript function (although please note that this is a very, very inefficient implementation for the sake of clarity, with many repeated, unnecessary function evaluations!)
   </script>
-  <script id="51" type="application/vnd.observable.javascript" pinned="">
-    //S = (A) => (n) =>
+  <script id="51" type="module" pinned="">
+    //const S = (A) => (n) =>
     //  (A(n + 1) * A(n - 1) - A(n) ** 2) / (A(n + 1) - 2 * A(n) + A(n - 1))
 
     // An exactly equivalent and more numerically stable form:
-    S = (A) => (n) =>
+    const S = (A) => (n) =>
       A(n + 1) - (A(n + 1) - A(n)) ** 2 / (A(n + 1) - 2 * A(n) + A(n - 1))
   </script>
   <script id="1579" type="text/markdown">
@@ -210,8 +210,8 @@
   <script id="1564" type="text/markdown">
     Remarkably, the answer is *yes*! We can simply apply the Shanks transformation over and over, each time yielding a better and better approximation, each successive iteration requiring only two additional terms of ${tex`A_n`}.
   </script>
-  <script id="292" type="application/vnd.observable.javascript" pinned="">
-    Shanks = (A, n = 1) => [...Array(n).keys()].reduce(S, A)
+  <script id="292" type="module" pinned="">
+    const Shanks = (A, n = 1) => [...Array(n).keys()].reduce(S, A)
   </script>
   <script id="1728" type="text/markdown">
     Suddenly, we're at a pretty remarkable state of affairs. Consider the fifth iterate, ${tex`S^5(A_n).`} The very first term is already ${tex`${piToTex(Shanks(A, 4)(4))}`}, and really only depends upon the first nine terms of the original series, the most accurate of which was ${tex`${piToTex(A(10))}`}!
@@ -259,19 +259,19 @@
   <script id="2443" type="application/x-tex">
     1 - 2 + 3 - 4 - \cdots = \frac{1}{4}
   </script>
-  <script id="2209" type="application/vnd.observable.javascript" pinned="">
-    B = sum((k) => k * Math.pow(-1, k - 1))
+  <script id="2209" type="module" pinned="">
+    const B = sum((k) => k * Math.pow(-1, k - 1))
   </script>
   <script id="2306" type="text/markdown">
     The series diverges, as is should.
   </script>
-  <script id="2267" type="application/vnd.observable.javascript" pinned="">
+  <script id="2267" type="module" pinned="">
     B(10000)
   </script>
   <script id="1950" type="text/markdown">
     However, the first term of the fourth iterate ${tex`S^4(A_n)`} shows that the Shanks-transformed series converges just fine to ${tex`1/4`}.
   </script>
-  <script id="1860" type="application/vnd.observable.javascript" pinned="">
+  <script id="1860" type="module" pinned="">
     Shanks(B, 4)(4)
   </script>
   <script id="2444" type="text/markdown">
@@ -280,19 +280,19 @@
   <script id="2005" type="application/x-tex">
     1 - 2 + 4 - 8 + \cdots = \frac{1}{3}
   </script>
-  <script id="2217" type="application/vnd.observable.javascript" pinned="">
-    C = sum((k) => Math.pow(-2, k))
+  <script id="2217" type="module" pinned="">
+    const C = sum((k) => Math.pow(-2, k))
   </script>
   <script id="2311" type="text/markdown">
     The divergent series obviously diverges.
   </script>
-  <script id="2270" type="application/vnd.observable.javascript" pinned="">
+  <script id="2270" type="module" pinned="">
     C(100)
   </script>
   <script id="2009" type="text/markdown">
     Again though, a single iteration of the Shanks transformation ${tex`S(A_n)`} nails it.
   </script>
-  <script id="1966" type="application/vnd.observable.javascript" pinned="">
+  <script id="1966" type="module" pinned="">
     Shanks(C)(1)
   </script>
   <script id="2200" type="text/markdown">
@@ -305,7 +305,7 @@
   <script id="1957" type="text/markdown">
     ## Helpers
   </script>
-  <script id="427" type="application/vnd.observable.javascript">
+  <script id="427" type="module">
     function makePlot(
       series,
       {
@@ -500,9 +500,9 @@
       return figure;
     }
   </script>
-  <script id="1595" type="application/vnd.observable.javascript">
+  <script id="1595" type="module">
     function makeTable(series) {
-      return html`<table>
+      return html`<div class="table-container"><table>
         <thead><tr>
         <th>${tex`n`}</th>
         ${range(0, series.length - 1).map(
@@ -523,13 +523,13 @@
           </tr>`
           )}
         </tbody>
-      </table>`;
+      </table><div>`;
     }
   </script>
-  <script id="163" type="application/vnd.observable.javascript">
-    range = (start, end) => [...Array(end - start + 1).keys()].map((n) => n + start)
+  <script id="163" type="module">
+    const range = (start, end) => [...Array(end - start + 1).keys()].map((n) => n + start)
   </script>
-  <script id="962" type="application/vnd.observable.javascript">
+  <script id="962" type="module">
     function piToTex(val) {
       if (typeof val === "undefined" || val === "") return "";
       const exact = Math.PI.toString();
@@ -546,9 +546,11 @@
   </script>
   <script id="1066" type="text/html">
     <style>
-    table {
-      max-width: 640px;
-    }
+      .table-container {
+        max-width: 100%;
+        width: 640px;
+      overflow-x: scroll;
+      }
       figure {
         max-width: none
       }
