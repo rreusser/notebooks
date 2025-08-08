@@ -45,7 +45,7 @@
     The table below shows hexadecimal digits of ${tex`\pi`}. Each line represents an independent run of the algorithm starting at a slightly different digit. Green digits are correctly computed digits, while red represents incorrect digits. Due to our termination criteria, we usually get a couple fewer digits than requested.
   </script>
   <script id="1586" type="text/markdown">
-    Change from double precision floating point to \`BigInt\` and observe that, although starting at the same digit is at least a factor of ten slower (*update: BigInts have gotten much, much faster!*), it doesn't cost too much extra to compute many more digits.
+    Change from double precision floating point to `BigInt` and observe that, although starting at the same digit is at least a factor of ten slower (*update: BigInts have gotten much, much faster!*), it doesn't cost too much extra to compute many more digits.
   </script>
   <script id="805" type="module">
     const method = view(Inputs.radio(['Floating point', 'BigInt'], {
@@ -492,7 +492,7 @@
 
   </script>
   <script id="1501" type="text/markdown">
-    The function below directly implements the above summation ${tex`S_j`} and the function \`piBBP(d, n)\` which starts at digit ${tex`d`} and computes ${tex`n`} digits of ${tex`\pi`}. It returns the result as an integer JavaScript \`Number\` so that we'll need to run \`.toString(16)\` to convert the output to hexadecimal.
+    The function below directly implements the above summation ${tex`S_j`} and the function `computePi(d, n)` which starts at digit ${tex`d`} and computes ${tex`n`} digits of ${tex`\pi`}. It returns the result as an integer JavaScript `Number` so that we'll need to run `.toString(16)` to convert the output to hexadecimal.
   </script>
   <script id="792" type="module" pinned="">
     function S(j, n) {
