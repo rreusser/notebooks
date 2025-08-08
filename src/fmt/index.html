@@ -1,0 +1,379 @@
+<!doctype html>
+<notebook theme="air">
+  <title>fmt</title>
+  <script id="1703" type="text/markdown">
+    # fmt
+
+  </script>
+  <script id="196" type="text/markdown">
+    I like variables with units. Since dimensionally typed computation isn't reasonably possible in JavaScript due—probably for the better—to [a lack of operator overloading](https://github.com/tc39/proposal-operator-overloading), I think it's nice to include units in variable names, e.g. `delay_seconds` or `delay_s`. That can get a little unwieldy. `density_kg_per_m3`? `G_m3_per_kg_s2`? Perhaps when presentation is a priority, a more modest goal is to label units where values are defined. When using Observable, I often append units in comments, e.g. `delay = 10 // seconds`, but comments get hidden with the cell input:
+  </script>
+  <script id="1489" type="application/vnd.observable.javascript">
+    delay = 10 // seconds
+  </script>
+  <script id="1597" type="application/vnd.observable.javascript">
+
+    md`This notebook implements a tiny little formatting helper. It's probably fancier than is advisable for many uses, but maybe it has its place.`
+  </script>
+  <script id="1666" type="module" pinned="">
+    fmt`delay = ${10} seconds`
+  </script>
+  <script id="1702" type="text/markdown">
+    ## Usage
+  </script>
+  <script id="1707" type="text/markdown">
+    Use on the web by importing from [@rreusser/fmt](https://observablehq.com/@rreusser/fmt):
+  </script>
+  <script id="1708" type="text/markdown">
+    ```js
+    import { fmt } from ‘@rreusser/fmt'
+    ```
+  </script>
+  <script id="1488" type="text/markdown">
+    In its simplest form, it passes a single value through a [tagged template](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates) and styles it like an Observable output.
+  </script>
+  <script id="273" type="module" pinned="">
+    fmt`c = ${299792458} m/s`
+  </script>
+  <script id="915" type="text/markdown">
+    In order to access the value, you'll need to use Observable Desktop's \`view\` keyword. Since Observable doesn't permit reflection on the cell content which would allow determining the name of the assigned variable, this means we need to duplicate the name.
+  </script>
+  <script id="921" type="module" pinned="">
+    const c = view(fmt`c = ${299792458} m/s`);
+  </script>
+  <script id="925" type="module" pinned="">
+    c
+  </script>
+  <script id="1396" type="application/vnd.observable.javascript">
+    md`For brevity, the rest of this notebook omits the \`view()\` step.`
+  </script>
+  <script id="1613" type="application/vnd.observable.javascript">
+    md`## Trailing content`
+  </script>
+  <script id="241" type="text/markdown">
+    The value is shown in the inspector theme color (purple in Observable Desktop, green on the web) and content to the right of it is colored gray.
+  </script>
+  <script id="677" type="module" pinned="">
+    fmt`ρ = ${2700} kg/m³`
+  </script>
+  <script id="455" type="application/vnd.observable.javascript">
+    md`Or if you're into ${tex`\TeX`},`
+  </script>
+  <script id="447" type="module" pinned="">
+    fmt`ρ = ${2700} ${tex`\mathrm{kg / m^3}`}`
+  </script>
+  <script id="1587" type="application/vnd.observable.javascript">
+    md`## Non-numeric values`
+  </script>
+  <script id="865" type="application/vnd.observable.javascript">
+    md`A non-numeric value passed through is displayed with the [Observable inspector](https://github.com/observablehq/inspector).`
+  </script>
+  <script id="680" type="module" pinned="">
+    fmt`object = ${{ foo: 'bar' }}`
+  </script>
+  <script id="1694" type="application/vnd.observable.javascript">
+    md`Non-numeric values other than the value being passed through are simply stringified.`
+  </script>
+  <script id="1619" type="module" pinned="">
+    fmt`boolean = ${true} ${{ foo: 'bar' }}`
+  </script>
+  <script id="1621" type="application/vnd.observable.javascript">
+    md`## HTML content`
+  </script>
+  <script id="894" type="application/vnd.observable.javascript">
+    md`It passes-through the first tagged template expression value *which is not an HTML element*, so a bit of ${tex`\TeX`} preceding or following the value is fine. Get creative! But use with care.`
+  </script>
+  <script id="716" type="module" pinned="">
+    fmt`area = ${tex`\displaystyle \int_0^\pi \sin x\,dx`} = ${2}`
+  </script>
+  <script id="1245" type="application/vnd.observable.javascript">
+    md`If all expression values are HTML elements, it forwards events and values from the first one with a \`value\` property, and finally otherwise just the first HTML element. This allows composition with inputs, for example Mike Bostock's [Tangle input](https://observablehq.com/@mbostock/tangle). Too straightforward not to implement, but the resulting UX is be a bit strange. Use with care.`
+  </script>
+  <script id="1705" type="module" pinned="">
+    import { Tangle } from 'observable:@mbostock/tangle'
+  </script>
+  <script id="1561" type="module" pinned="">
+    const n = view(fmt`n = ${Tangle({ min: 0, max: 100, value: 48 })} cookies`)
+  </script>
+  <script id="1584" type="module" pinned="">
+    n
+  </script>
+  <script id="1591" type="application/vnd.observable.javascript">
+    md`## Formatting`
+  </script>
+  <script id="246" type="application/vnd.observable.javascript">
+    md`You can pass a function or [d3-format](https://github.com/d3/d3-format) string to specify the formatting of the number.`
+  </script>
+  <script id="643" type="module" pinned="">
+    fmt(x => x.toExponential(2))`E = ${70e9} Pa`
+  </script>
+  <script id="215" type="module" pinned="">
+    fmt('.2e')`E = ${70e9} Pa`
+  </script>
+  <script id="1049" type="application/vnd.observable.javascript">
+    md`This notebook defines a scientific notation helper \`toScientific(format = '~f')\` (aliased as \`sci\` and attached to \`fmt\` as \`fmt.sci\`), which outputs in scientific notation.`
+  </script>
+  <script id="1095" type="module" pinned="">
+    fmt(sci())`E = ${70e9} Pa`
+  </script>
+  <script id="1005" type="module" pinned="">
+    fmt(sci('.3f'))`E = ${70e9} Pa`
+  </script>
+  <script id="1251" type="application/vnd.observable.javascript">
+    md`Until you actually template a string, calling the \`fmt\` function simply returns a wrapped version of itself with the formatting overridden by the new value. This allows you to construct a formatter with an overridable default.`
+  </script>
+  <script id="1253" type="module" pinned="">
+    const myFormatter = fmt(sci('.3f'));
+  </script>
+  <script id="1255" type="module" pinned="">
+    myFormatter`E = ${70e9} Pa`
+  </script>
+  <script id="1329" type="module" pinned="">
+    myFormatter('~f')`E = ${70e9} Pa`
+  </script>
+  <script id="1639" type="application/vnd.observable.javascript">
+    md`## Conclusions`
+  </script>
+  <script id="969" type="application/vnd.observable.javascript">
+    md`That's it! I think I like it. I'm not sure. I'm tempted to unpack multiple numeric values into an array. But perhaps I've already taken this too far. [Here's the example](https://observablehq.com/d/e5b3ff47c93dfd66) which motivated this. 
+
+    Ideas and improvements are welcome! Thanks to [Job van der Zwan](https://observablehq.com/@jobleonard) for suggesting scientific notation!`
+  </script>
+  <script id="302" type="application/vnd.observable.javascript">
+    md`## Implementation`
+  </script>
+  <script id="1710" type="module">
+    signature(
+      fmt,
+      md`
+    Evaluate a tagged template, displaying the result in the style of an Observable cell output and passing the first non-HTML value through as the \`viewof\` value.
+
+    **Options:**
+    - \`format\` (optional): Either a [d3-format](https://github.com/d3/d3-format) string or a function which returns a formatted value.
+
+    **Returns:** If a template string is provided, returns an HTML element with its \`value\` property (for use with Observable's \`viewof\` keyword) set identically to the first non-HTML expression value. If no non-HTML value is provided, the output is equal to the first expression value.
+
+    If no template string is provided, returns the \`fmt\` function itself with format overridden.
+    `
+    )
+  </script>
+  <script id="1704" type="module" pinned="">
+    import { Inspector }  from 'npm:@observablehq/inspector'
+  </script>
+  <script id="34" type="application/vnd.observable.javascript" pinned="">
+    fmt = {
+      // Create and extract the .observablehq--inspect element of an inspector
+      function bareInspector(value) {
+        const el = document.createElement("div");
+        new Inspector(el).fulfilled(value);
+        const inspectSpan = el.querySelector(".observablehq--inspect");
+        if (inspectSpan) {
+          inspectSpan.parentElement.removeChild(inspectSpan);
+        }
+        return inspectSpan;
+      }
+
+      function constructOutput(format, strings) {
+        const id = `inspector-${Math.floor(1e9 * Math.random())}`;
+        let assignment = "";
+        const lhs = [];
+        const rhs = [];
+
+        // Locate the first non-HTML element
+        let valueIdx = Infinity;
+        for (let i = 2; i < arguments.length; i++) {
+          if (!isElement(arguments[i])) {
+            valueIdx = i;
+            break;
+          }
+        }
+
+        // No non-HTML value was found, at least try the first component with a `value` property
+        if (valueIdx === Infinity) {
+          for (let i = 2; i < arguments.length; i++) {
+            if (arguments[i].value !== undefined) {
+              valueIdx = i;
+              break;
+            }
+          }
+        }
+
+        // Otherwise just take the first html element
+        if (valueIdx === Infinity) {
+          valueIdx = 2;
+        }
+
+        let dst, klass;
+        const value = arguments[valueIdx];
+        let isNumber = format && typeof value === "number";
+
+        for (var i = 0; i < strings.length; i++) {
+          dst = i < valueIdx - 1 ? lhs : rhs;
+          klass = i < valueIdx - 1 ? "cellname" : "number";
+
+          // Swap for alternate coloring...
+          const style = {};
+          if (klass === "number") {
+            style.color = "#767676";
+          }
+
+          // Push the string, wrapped in cellname (lhs) or number (rhs)
+          dst.push(
+            htl.html`<span class="observablehq--${klass}" style=${style}>${strings[i]}</span>`
+          );
+
+          // Process expression arguments
+          // Is this expression the value?
+          if (i === valueIdx - 2 && i < arguments.length - 2) {
+            if (isNumber) {
+              const str = format
+                ? (typeof format === "string" ? d3.format(format) : format)(value)
+                : value;
+              dst.push(htl.html`<span class="observablehq--number">${str}</span>`);
+            } else {
+              const inspector = bareInspector(value);
+              if (inspector) {
+                inspector.setAttribute("id", id);
+                inspector.style.display = "inline";
+                dst.push(inspector);
+              } else if (isElement(value)) {
+                const wrapper = document.createElement("div");
+                wrapper.className = "observablehq--number";
+                wrapper.style.display = "inline-block";
+                wrapper.appendChild(value);
+                dst.push(wrapper);
+              } else {
+                dst.push(value);
+              }
+            }
+          } else if (i < arguments.length - 2) {
+            // If it's not the value, it's just a stray rhs expression
+            dst.push(
+              htl.html`<span class="observablehq--${klass}" style=${style}>${
+                arguments[i + 2]
+              }</span>`
+            );
+          }
+        }
+
+        // Force this inspector to remain inline ?!?!
+        const css = html`<style>#${id} > .observablehq--inspect { display: inline !important }</style>`;
+
+        // Build the final output!
+        const el = html`<span class="observablehq--inspect fmt-inspector" id="${id}">${lhs}${rhs}</span>${css}`;
+
+        if (isElement(value)) {
+          value.addEventListener("input", (event) => {
+            el.value = value.value;
+            el.dispatchEvent(new CustomEvent("input"));
+          });
+          el.value = value.value;
+        } else {
+          el.value = value;
+        }
+
+        return el;
+      }
+
+      // Return a function that is either a tagged template *or* receives
+      // format and returns a tagged template.
+      const returnValue = function fmt(format = null) {
+        if (Array.isArray(arguments[0])) {
+          // In this case, strings were provided, proceed to templating
+          const args = [null];
+          for (let i = 0; i < arguments.length; i++) args.push(arguments[i]);
+          return constructOutput.apply(null, args);
+        } else {
+          // In this case, the first argument is a format
+          return function () {
+            // So that you may back up and override the formatting after the fact.
+            // This is useful for creating a helper which provides an overridable
+            // default.
+            if (!Array.isArray(arguments[0])) return fmt(arguments[0]);
+
+            // Otherwise, use the default and evaluate
+            const args = [format];
+            for (let i = 0; i < arguments.length; i++) args.push(arguments[i]);
+            return constructOutput.apply(null, args);
+          };
+        }
+      };
+
+      returnValue.sci = sci;
+
+      return returnValue;
+    }
+  </script>
+  <script id="999" type="module">
+    function toScientific(format = '~f') {
+      const fmt = d3.format(format);
+      return function(x) {
+        let el;
+        if (isNaN(x) || !isFinite(x)) {
+          el = html`<code>${x}</code>`;
+        } else {
+          const exponent = x === 0 ? 0 : Math.floor(Math.log10(Math.abs(x)));
+          const mantissa = x / Math.pow(10, exponent);
+          el = html`<code>${fmt(mantissa)} × 10<sup>${exponent}</sup></code>`;
+        }
+        el.value = x;
+        return el;
+      };
+    }
+  </script>
+  <script id="1124" type="module">
+    const sci = toScientific;
+  </script>
+  <script id="1114" type="application/vnd.observable.javascript">
+    signature(
+      sci,
+      md`
+    Return a function which constructs an HTML representation of a \`Number\` in scientific notation.
+
+    **Options:** 
+    - \`format\` (optional): [d3-format](https://github.com/d3/d3-format) string for the mantissa.
+
+    **Returns:** an HTML element representing the number. The original numerical value is assigned to its \`value\` property.
+
+    **Examples:**
+
+    \`\`\`js
+    toScientific('.5f')(Math.PI)
+    \`\`\`
+    ${toScientific('.5f')(Math.PI)}
+    `
+    )
+  </script>
+  <script id="824" type="module">
+    function signature(func, content) {
+      const sig = md`\`\`\`js
+    ${func
+      .toString()
+      .split('\n')[0]
+      .replace(/\s*{$/, '')}
+    \`\`\` `;
+      sig.style.display = 'inline';
+
+      return md`
+    <details open style="border:1px solid #eee;padding:25px 15px">
+    <summary style="cursor:pointer">${sig}</summary>
+    <hr style="margin:0.2em 0">
+    ${content}
+    </details>`;
+    }
+  </script>
+  <script id="752" type="module">
+    function isElement(obj) {
+      try {
+        return obj instanceof HTMLElement;
+      } catch (e) {
+        return (
+          typeof obj === "object" &&
+          obj.nodeType === 1 &&
+          typeof obj.style === "object" &&
+          typeof obj.ownerDocument === "object"
+        );
+      }
+    }
+  </script>
+</notebook>

@@ -4,8 +4,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="author" content="Ricky Reusser" />
   <meta property="article:author" content="Ricky Reusser" />
-  <meta name="twitter:title" content="Notebooks" />
-  <meta property="og:title" content="Notebooks" />
+  <meta name="twitter:title" content="fmt" />
+  <meta property="og:title" content="fmt" />
+  <meta name="twitter:description" content="A helper function for nicely formatting cell values in Observable" />
+  <meta name="subject" content="A helper function for nicely formatting cell values in Observable" />
+  <meta name="description" content="A helper function for nicely formatting cell values in Observable" />
+  <meta property="og:description" content="A helper function for nicely formatting cell values in Observable" />
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1421,8 +1425,10 @@ main h6 {
   color: #888;
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-DLwE0_Ng.js"></script>
+   <style> main { max-width: 640px; }</style> 
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>fmt</title>  <script type="module" crossorigin src="/notebooks/assets/index-Ce9dVA5Q.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
 </head>
 <body>
   <nav class="menu">
@@ -1432,40 +1438,166 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>fmt</h1>
     <p>
-      
-      
-      
+      <a href="https://rreusser.github.io">Ricky Reusser</a><br />
+      August 8, 2025<br />
+      <a href="https://github.com/rreusser/notebooks/tree/main/src/fmt/index.html">View source →</a>
     </p>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <a href="hello-observable-notebooks-2/index.html" class="title">Hello, Observable Notebooks 2.0!</a>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          <p>Kicking the tires of Observable's new notebook tooling!</p>
-        </li>
-        <li>
-          <div class="meta">
-            <a href="computing-pi-with-the-bailey-borwein-plouffe-formula/index.html" class="title">Computing π with the Bailey-Borwein-Plouffe Formula</a>
-            <span class="publishedAt">August 7, 2025</span>
-          </div>
-          <p>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</p>
-        </li>
-        <li>
-          <div class="meta">
-            <a href="fmt/index.html" class="title">fmt</a>
-            <span class="publishedAt">August 8, 2025</span>
-          </div>
-          <p>A helper function for nicely formatting cell values in Observable</p>
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-196" class="observablehq observablehq--cell"><div><p>I like variables with units. Since dimensionally typed computation isn’t reasonably possible in JavaScript due—probably for the better—to <a href="https://github.com/tc39/proposal-operator-overloading">a lack of operator overloading</a>, I think it’s nice to include units in variable names, e.g. <code>delay_seconds</code> or <code>delay_s</code>. That can get a little unwieldy. <code>density_kg_per_m3</code>? <code>G_m3_per_kg_s2</code>? Perhaps when presentation is a priority, a more modest goal is to label units where values are defined. When using Observable, I often append units in comments, e.g. <code>delay = 10 // seconds</code>, but comments get hidden with the cell input:</p>
+</div></div><div id="cell-1489" class="observablehq observablehq--cell"></div><div id="cell-1597" class="observablehq observablehq--cell"></div><div id="cell-1666" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`delay = </span>${<span class="tok-literal">10</span>}<span class="tok-string"> seconds`</span></code></pre><div id="cell-1702" class="observablehq observablehq--cell"><div><h2 id="usage" tabindex="-1"><a href="#usage">Usage</a></h2>
+</div></div><div id="cell-1707" class="observablehq observablehq--cell"><div><p>Use on the web by importing from <a href="https://observablehq.com/@rreusser/fmt">@rreusser/fmt</a>:</p>
+</div></div><div id="cell-1708" class="observablehq observablehq--cell"><div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">fmt</span> } <span class="tok-keyword">from</span> <span class="tok-string">‘@rreusser/fmt'</span>
+</code></pre>
+</div></div><div id="cell-1488" class="observablehq observablehq--cell"><div><p>In its simplest form, it passes a single value through a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates">tagged template</a> and styles it like an Observable output.</p>
+</div></div><div id="cell-273" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`c = </span>${<span class="tok-literal">299792458</span>}<span class="tok-string"> m/s`</span></code></pre><div id="cell-915" class="observablehq observablehq--cell"><div><p>In order to access the value, you’ll need to use Observable Desktop’s `view` keyword. Since Observable doesn’t permit reflection on the cell content which would allow determining the name of the assigned variable, this means we need to duplicate the name.</p>
+</div></div><div id="cell-921" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">c</span> = <span class="tok-variable">view</span>(<span class="tok-variable">fmt</span><span class="tok-string">`c = </span>${<span class="tok-literal">299792458</span>}<span class="tok-string"> m/s`</span>);</code></pre><div id="cell-925" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">c</span></code></pre><div id="cell-1396" class="observablehq observablehq--cell"></div><div id="cell-1613" class="observablehq observablehq--cell"></div><div id="cell-241" class="observablehq observablehq--cell"><div><p>The value is shown in the inspector theme color (purple in Observable Desktop, green on the web) and content to the right of it is colored gray.</p>
+</div></div><div id="cell-677" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`ρ = </span>${<span class="tok-literal">2700</span>}<span class="tok-string"> kg/m³`</span></code></pre><div id="cell-455" class="observablehq observablehq--cell"></div><div id="cell-447" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`ρ = </span>${<span class="tok-literal">2700</span>}<span class="tok-string"> </span>${<span class="tok-variable">tex</span><span class="tok-string">`</span><span class="tok-literal">\m</span><span class="tok-string">athrm{kg / m^3}`</span>}<span class="tok-string">`</span></code></pre><div id="cell-1587" class="observablehq observablehq--cell"></div><div id="cell-865" class="observablehq observablehq--cell"></div><div id="cell-680" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`object = </span>${{ <span class="tok-definition">foo</span>: <span class="tok-string">'bar'</span> }}<span class="tok-string">`</span></code></pre><div id="cell-1694" class="observablehq observablehq--cell"></div><div id="cell-1619" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`boolean = </span>${<span class="tok-literal">true</span>}<span class="tok-string"> </span>${{ <span class="tok-definition">foo</span>: <span class="tok-string">'bar'</span> }}<span class="tok-string">`</span></code></pre><div id="cell-1621" class="observablehq observablehq--cell"></div><div id="cell-894" class="observablehq observablehq--cell"></div><div id="cell-716" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`area = </span>${<span class="tok-variable">tex</span><span class="tok-string">`</span><span class="tok-literal">\d</span><span class="tok-string">isplaystyle </span><span class="tok-literal">\i</span><span class="tok-string">nt_0^</span><span class="tok-literal">\p</span><span class="tok-string">i </span><span class="tok-literal">\s</span><span class="tok-string">in x</span><span class="tok-literal">\,</span><span class="tok-string">dx`</span>}<span class="tok-string"> = </span>${<span class="tok-literal">2</span>}<span class="tok-string">`</span></code></pre><div id="cell-1245" class="observablehq observablehq--cell"></div><div id="cell-1705" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">Tangle</span> } <span class="tok-keyword">from</span> <span class="tok-string">'observable:@mbostock/tangle'</span></code></pre><div id="cell-1561" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">n</span> = <span class="tok-variable">view</span>(<span class="tok-variable">fmt</span><span class="tok-string">`n = </span>${<span class="tok-variable">Tangle</span>({ <span class="tok-definition">min</span>: <span class="tok-literal">0</span>, <span class="tok-definition">max</span>: <span class="tok-literal">100</span>, <span class="tok-definition">value</span>: <span class="tok-literal">48</span> })}<span class="tok-string"> cookies`</span>)</code></pre><div id="cell-1584" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">n</span></code></pre><div id="cell-1591" class="observablehq observablehq--cell"></div><div id="cell-246" class="observablehq observablehq--cell"></div><div id="cell-643" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span>(<span class="tok-definition">x</span> =&gt; <span class="tok-variable">x</span>.<span class="tok-definition">toExponential</span>(<span class="tok-literal">2</span>))<span class="tok-string">`E = </span>${<span class="tok-literal">70e9</span>}<span class="tok-string"> Pa`</span></code></pre><div id="cell-215" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span>(<span class="tok-string">'.2e'</span>)<span class="tok-string">`E = </span>${<span class="tok-literal">70e9</span>}<span class="tok-string"> Pa`</span></code></pre><div id="cell-1049" class="observablehq observablehq--cell"></div><div id="cell-1095" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span>(<span class="tok-variable">sci</span>())<span class="tok-string">`E = </span>${<span class="tok-literal">70e9</span>}<span class="tok-string"> Pa`</span></code></pre><div id="cell-1005" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span>(<span class="tok-variable">sci</span>(<span class="tok-string">'.3f'</span>))<span class="tok-string">`E = </span>${<span class="tok-literal">70e9</span>}<span class="tok-string"> Pa`</span></code></pre><div id="cell-1251" class="observablehq observablehq--cell"></div><div id="cell-1253" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">myFormatter</span> = <span class="tok-variable">fmt</span>(<span class="tok-variable">sci</span>(<span class="tok-string">'.3f'</span>));</code></pre><div id="cell-1255" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">myFormatter</span><span class="tok-string">`E = </span>${<span class="tok-literal">70e9</span>}<span class="tok-string"> Pa`</span></code></pre><div id="cell-1329" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">myFormatter</span>(<span class="tok-string">'~f'</span>)<span class="tok-string">`E = </span>${<span class="tok-literal">70e9</span>}<span class="tok-string"> Pa`</span></code></pre><div id="cell-1639" class="observablehq observablehq--cell"></div><div id="cell-969" class="observablehq observablehq--cell"></div><div id="cell-302" class="observablehq observablehq--cell"></div><div id="cell-1710" class="observablehq observablehq--cell"></div><div id="cell-1704" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">Inspector</span> }  <span class="tok-keyword">from</span> <span class="tok-string">'npm:@observablehq/inspector'</span></code></pre><div id="cell-34" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">fmt = {
+  // Create and extract the .observablehq--inspect element of an inspector
+  function bareInspector(value) {
+    const el = document.createElement("div");
+    new Inspector(el).fulfilled(value);
+    const inspectSpan = el.querySelector(".observablehq--inspect");
+    if (inspectSpan) {
+      inspectSpan.parentElement.removeChild(inspectSpan);
+    }
+    return inspectSpan;
+  }
+
+  function constructOutput(format, strings) {
+    const id = `inspector-${Math.floor(1e9 * Math.random())}`;
+    let assignment = "";
+    const lhs = [];
+    const rhs = [];
+
+    // Locate the first non-HTML element
+    let valueIdx = Infinity;
+    for (let i = 2; i &lt; arguments.length; i++) {
+      if (!isElement(arguments[i])) {
+        valueIdx = i;
+        break;
+      }
+    }
+
+    // No non-HTML value was found, at least try the first component with a `value` property
+    if (valueIdx === Infinity) {
+      for (let i = 2; i &lt; arguments.length; i++) {
+        if (arguments[i].value !== undefined) {
+          valueIdx = i;
+          break;
+        }
+      }
+    }
+
+    // Otherwise just take the first html element
+    if (valueIdx === Infinity) {
+      valueIdx = 2;
+    }
+
+    let dst, klass;
+    const value = arguments[valueIdx];
+    let isNumber = format &amp;&amp; typeof value === "number";
+
+    for (var i = 0; i &lt; strings.length; i++) {
+      dst = i &lt; valueIdx - 1 ? lhs : rhs;
+      klass = i &lt; valueIdx - 1 ? "cellname" : "number";
+
+      // Swap for alternate coloring...
+      const style = {};
+      if (klass === "number") {
+        style.color = "#767676";
+      }
+
+      // Push the string, wrapped in cellname (lhs) or number (rhs)
+      dst.push(
+        htl.html`&lt;span class="observablehq--${klass}" style=${style}&gt;${strings[i]}&lt;/span&gt;`
+      );
+
+      // Process expression arguments
+      // Is this expression the value?
+      if (i === valueIdx - 2 &amp;&amp; i &lt; arguments.length - 2) {
+        if (isNumber) {
+          const str = format
+            ? (typeof format === "string" ? d3.format(format) : format)(value)
+            : value;
+          dst.push(htl.html`&lt;span class="observablehq--number"&gt;${str}&lt;/span&gt;`);
+        } else {
+          const inspector = bareInspector(value);
+          if (inspector) {
+            inspector.setAttribute("id", id);
+            inspector.style.display = "inline";
+            dst.push(inspector);
+          } else if (isElement(value)) {
+            const wrapper = document.createElement("div");
+            wrapper.className = "observablehq--number";
+            wrapper.style.display = "inline-block";
+            wrapper.appendChild(value);
+            dst.push(wrapper);
+          } else {
+            dst.push(value);
+          }
+        }
+      } else if (i &lt; arguments.length - 2) {
+        // If it's not the value, it's just a stray rhs expression
+        dst.push(
+          htl.html`&lt;span class="observablehq--${klass}" style=${style}&gt;${
+            arguments[i + 2]
+          }&lt;/span&gt;`
+        );
+      }
+    }
+
+    // Force this inspector to remain inline ?!?!
+    const css = html`&lt;style&gt;#${id} &gt; .observablehq--inspect { display: inline !important }&lt;/style&gt;`;
+
+    // Build the final output!
+    const el = html`&lt;span class="observablehq--inspect fmt-inspector" id="${id}"&gt;${lhs}${rhs}&lt;/span&gt;${css}`;
+
+    if (isElement(value)) {
+      value.addEventListener("input", (event) =&gt; {
+        el.value = value.value;
+        el.dispatchEvent(new CustomEvent("input"));
+      });
+      el.value = value.value;
+    } else {
+      el.value = value;
+    }
+
+    return el;
+  }
+
+  // Return a function that is either a tagged template *or* receives
+  // format and returns a tagged template.
+  const returnValue = function fmt(format = null) {
+    if (Array.isArray(arguments[0])) {
+      // In this case, strings were provided, proceed to templating
+      const args = [null];
+      for (let i = 0; i &lt; arguments.length; i++) args.push(arguments[i]);
+      return constructOutput.apply(null, args);
+    } else {
+      // In this case, the first argument is a format
+      return function () {
+        // So that you may back up and override the formatting after the fact.
+        // This is useful for creating a helper which provides an overridable
+        // default.
+        if (!Array.isArray(arguments[0])) return fmt(arguments[0]);
+
+        // Otherwise, use the default and evaluate
+        const args = [format];
+        for (let i = 0; i &lt; arguments.length; i++) args.push(arguments[i]);
+        return constructOutput.apply(null, args);
+      };
+    }
+  };
+
+  returnValue.sci = sci;
+
+  return returnValue;
+}</code></pre><div id="cell-999" class="observablehq observablehq--cell"></div><div id="cell-1124" class="observablehq observablehq--cell"></div><div id="cell-1114" class="observablehq observablehq--cell"></div><div id="cell-824" class="observablehq observablehq--cell"></div><div id="cell-752" class="observablehq observablehq--cell"></div></main>
+  </div>
   <footer><div class="footer__attrib">© Ricky Reusser 2025</div></footer>
 
 
