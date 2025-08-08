@@ -71,6 +71,9 @@
   <script id="865" type="application/vnd.observable.javascript">
     md`A non-numeric value passed through is displayed with the [Observable inspector](https://github.com/observablehq/inspector).`
   </script>
+  <script id="1715" type="module" pinned="">
+    import { Inspector }  from 'npm:@observablehq/inspector'
+  </script>
   <script id="680" type="module" pinned="">
     fmt`object = ${{ foo: 'bar' }}`
   </script>
@@ -141,9 +144,6 @@
     md`That's it! I think I like it. I'm not sure. I'm tempted to unpack multiple numeric values into an array. But perhaps I've already taken this too far. [Here's the example](https://observablehq.com/d/e5b3ff47c93dfd66) which motivated this. 
 
     Ideas and improvements are welcome! Thanks to [Job van der Zwan](https://observablehq.com/@jobleonard) for suggesting scientific notation!`
-  </script>
-  <script id="1714" type="module" pinned="">
-    import { Inspector }  from 'npm:@observablehq/inspector'
   </script>
   <script id="34" type="module">
     const fmt = (function () {
