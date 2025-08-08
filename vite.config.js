@@ -41,7 +41,7 @@ async function computeIndex() {
       ...await readMetadata(path)
     });
   }
-  notebooks.sort(({publishedAt: da}, {publishedAt: db}) => Date.parse(da || 0) - Date.parse(db || 0));
+  notebooks.sort(({publishedAt: da}, {publishedAt: db}) => Date.parse(db || 0) - Date.parse(da || 0));
   console.log(notebooks);
   return notebooks;
 }
