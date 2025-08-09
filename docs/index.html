@@ -1253,17 +1253,11 @@ main h6 {
   -webkit-font-smoothing: auto;
   box-sizing: border-box;
 }
-    header:before {
-  left: 0;
-  transform: translate(-100%, 0);
-}
-    header:after {
-  right: 0;
-  transform: translate(100%, 0);
-}
     header h1,
 header p {
-  max-width: none;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
 }
     header h1,
 header p,
@@ -1438,6 +1432,19 @@ main h6 {
   font-size: 0.8em;
   order: 0;
 }
+    .resource-links {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+    .resource-link {
+  vertical-align: middle;
+}
+    .resource-link .icon {
+  position: relative;
+  top: 2px;
+  width: 15px;
+}
     @media(max-width: 640px) {
   .index .meta {
     flex-wrap: wrap;
@@ -1447,6 +1454,9 @@ main h6 {
   }
   .index .title {
     flex: 1 1 100%;
+  }
+  .resource-links {
+    justify-content: flex-start;
   }
 }
   </style>
@@ -1466,8 +1476,9 @@ main h6 {
     <p>
       
       
-      
-    </p>
+      </p><div class="resource-links">
+      </div>
+    <p></p>
   </header>
   <div class="container">
       <ul class="index">
@@ -1494,17 +1505,17 @@ main h6 {
         </li>
         <li>
           <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">August 7, 2025</span>
-          </div>
-          <p>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</p>
-        </li>
-        <li>
-          <div class="meta">
             <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
             <span class="publishedAt">August 3, 2025</span>
           </div>
           <p>Kicking the tires of Observable's new notebook tooling!</p>
+        </li>
+        <li>
+          <div class="meta">
+            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
+            <span class="publishedAt">May 24, 2021</span>
+          </div>
+          <p>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</p>
         </li>
       </ul></div>
 

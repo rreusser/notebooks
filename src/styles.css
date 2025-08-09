@@ -80,18 +80,11 @@ header {
   box-sizing: border-box;
 }
 
-header:before {
-  left: 0;
-  transform: translate(-100%, 0);
-}
-
-header:after {
-  right: 0;
-  transform: translate(100%, 0);
-}
 header h1,
 header p {
-  max-width: none;
+  max-width: 640px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 header h1,
@@ -291,6 +284,20 @@ footer {
   order: 0;
 }
 
+.resource-links {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+}
+.resource-link {
+  vertical-align: middle;
+}
+.resource-link .icon {
+  position: relative;
+  top: 2px;
+  width: 15px;
+}
+
 @media(max-width: 640px) {
   .index .meta {
     flex-wrap: wrap;
@@ -300,6 +307,9 @@ footer {
   }
   .index .title {
     flex: 1 1 100%;
+  }
+  .resource-links {
+    justify-content: flex-start;
   }
 }
 
