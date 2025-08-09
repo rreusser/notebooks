@@ -14,7 +14,7 @@ const __dirname = dirname(new URL(import.meta.url).pathname);
 
 const TEMPLATE_PATH = join(__dirname, "lib/template.html");
 const GITHUB_BASE_URL = "https://github.com/rreusser/notebooks/tree/main/src";
-const NOTEBOOKS_DIR = join(__dirname, 'src');
+const NOTEBOOKS_DIR = join(__dirname, "src");
 const notebookPaths = glob.sync(join(NOTEBOOKS_DIR, "**", "*.html"), {
   nodir: true,
   absolute: true,
@@ -26,7 +26,12 @@ async function readMetadata(filename) {
   try {
     metadataYAML = await readFile(metadataPath, "utf8");
   } catch (e) {}
-  return yaml.parse(metadataYAML);
+  const meta = yaml.parse(metadataYAML);
+  if (meta?.publishedAt) {
+    const pub = new Date(meta.publishedAt);
+    meta.publishedAtNumeric = pub.toISOString().slice(0, 10).replace(/-/g, "");
+  }
+  return meta;
 }
 
 async function computeIndex() {
@@ -34,14 +39,17 @@ async function computeIndex() {
   for (const path of notebookPaths) {
     const relpath = relative(NOTEBOOKS_DIR, path);
     const notebook = deserialize(await readFile(path, "utf8"), { parser });
-    if (relpath === 'index.html') continue;
+    if (relpath === "index.html") continue;
     notebooks.push({
-      path: relpath.replace(/index\.html$/, ''),
+      path: relpath.replace(/index\.html$/, ""),
       ...notebook,
-      ...await readMetadata(path)
+      ...(await readMetadata(path)),
     });
   }
-  notebooks.sort(({publishedAt: da}, {publishedAt: db}) => Date.parse(db || 0) - Date.parse(da || 0));
+  notebooks.sort(
+    ({ publishedAt: da }, { publishedAt: db }) =>
+      Date.parse(db || 0) - Date.parse(da || 0)
+  );
   return notebooks;
 }
 
@@ -51,13 +59,15 @@ export default defineConfig({
     observable({
       template: TEMPLATE_PATH,
       transformTemplate: async function (template, { filename, path }) {
-        const notebook = deserialize(await readFile(filename, "utf8"), { parser });
+        const notebook = deserialize(await readFile(filename, "utf8"), {
+          parser,
+        });
         const metadata = await readMetadata(filename);
-        const isIndex = path === '/index.html';
+        const isIndex = path === "/index.html";
         const data = {
-          sourceUrl: `${GITHUB_BASE_URL}/${path.replace(/^\//, '')}`,
-          author: 'Ricky Reusser',
-          authorUrl: 'https://rreusser.github.io',
+          sourceUrl: `${GITHUB_BASE_URL}/${path.replace(/^\//, "")}`,
+          author: "Ricky Reusser",
+          authorUrl: "https://rreusser.github.io",
           ...notebook,
           ...metadata,
         };
@@ -89,7 +99,7 @@ export default defineConfig({
     outDir: join(__dirname, "docs"),
     emptyOutDir: true,
     rollupOptions: {
-      input: notebookPaths
+      input: notebookPaths,
     },
   },
   root: "src",

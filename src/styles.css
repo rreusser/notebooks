@@ -69,33 +69,46 @@ main h6 {
 }
 
 header {
+  color: white;
+  font-weight: 200;
   width: 100%;
   margin: 0 auto;
   background-color: var(--rrtheme-color);
   text-align: center;
-  padding: 100px 20px;
+  padding: 80px 20px;
   position: relative;
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
   box-sizing: border-box;
 }
 
-header h1,
-header p {
+header h1 {
   max-width: 640px;
   margin-left: auto;
   margin-right: auto;
+}
+
+header .author,
+header time {
+  color: inherit;
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
 }
 
 header h1,
 header p,
 header a[href] {
   color: white;
-  font-weight: 200;
+}
+header .byline {
+  margin-top: 20px;
+  margin-bottom: 20px;
 }
 
 header h1 {
   font-size: 34px;
+  font-weight: 200;
 }
 
 @media (max-width: 640px) {

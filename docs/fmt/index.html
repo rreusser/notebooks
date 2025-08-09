@@ -1,5 +1,4 @@
 <!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
-  
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="author" content="Ricky Reusser" />
@@ -1247,30 +1246,42 @@ main h6 {
   -webkit-font-smoothing: auto;
 }
     header {
+  color: white;
+  font-weight: 200;
   width: 100%;
   margin: 0 auto;
   background-color: var(--rrtheme-color);
   text-align: center;
-  padding: 100px 20px;
+  padding: 80px 20px;
   position: relative;
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
   box-sizing: border-box;
 }
-    header h1,
-header p {
+    header h1 {
   max-width: 640px;
   margin-left: auto;
   margin-right: auto;
+}
+    header .author,
+header time {
+  color: inherit;
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
 }
     header h1,
 header p,
 header a[href] {
   color: white;
-  font-weight: 200;
+}
+    header .byline {
+  margin-top: 20px;
+  margin-bottom: 20px;
 }
     header h1 {
   font-size: 34px;
+  font-weight: 200;
 }
     @media (max-width: 640px) {
   header {
@@ -1464,7 +1475,7 @@ main h6 {
   }
 }
   </style>
-   <style> main { max-width: 640px; }</style> 
+  <style> main { max-width: 640px; }</style>
 <meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>fmt</title>  <script type="module" crossorigin src="/notebooks/assets/index-HPXdh3rK.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
   <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
@@ -1479,33 +1490,32 @@ main h6 {
   </nav>
   <header>
     <h1>fmt</h1>
-    <p>
-      <a href="https://rreusser.github.io">Ricky Reusser</a><br />
-      March 7, 2021<br />
-      </p><div class="resource-links">
-          <a href="https://observablehq.com/@rreusser/fmt" class="resource-link">
-            <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="currentColor">
-              <circle cx="12" cy="12" r="10" fill="white"/>
-              <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"/>
-            </svg>
-            Live notebook
-          </a>
-          <a href="https://github.com/rreusser/notebooks/tree/main/src/fmt/index.html" class="resource-link">
-            <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
-            </svg>
-            View source
-          </a>
-      </div>
-    <p></p>
+    <div class="byline">
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20210307">March 7, 2021</time>
+    </div>
+    <div class="resource-links">
+        <a href="https://observablehq.com/@rreusser/fmt" class="resource-link">
+          <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="white"/>
+            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"/>
+          </svg>
+          Live notebook
+        </a>
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/fmt/index.html" class="resource-link">
+          <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
+          </svg>
+          View source
+        </a>
+    </div>
   </header>
   <div class="container">
 
-    <main><div id="cell-1711" class="observablehq observablehq--cell"><div><p><a href="https://observablehq.com/@rreusser/fmt">View this notebook live on observablehq.com →</a></p>
-</div></div><div id="cell-196" class="observablehq observablehq--cell"><div><p>I like variables with units. Since dimensionally typed computation isn’t reasonably possible in JavaScript due—probably for the better—to <a href="https://github.com/tc39/proposal-operator-overloading">a lack of operator overloading</a>, I think it’s nice to include units in variable names, e.g. <code>delay_seconds</code> or <code>delay_s</code>. That can get a little unwieldy. <code>density_kg_per_m3</code>? <code>G_m3_per_kg_s2</code>? Perhaps when presentation is a priority, a more modest goal is to label units where values are defined. When using Observable, I often append units in comments, e.g. <code>delay = 10 // seconds</code>, but comments get hidden with the cell input:</p>
+    <main><div id="cell-196" class="observablehq observablehq--cell"><div><p>I like variables with units. Since dimensionally typed computation isn’t reasonably possible in JavaScript due—probably for the better—to <a href="https://github.com/tc39/proposal-operator-overloading">a lack of operator overloading</a>, I think it’s nice to include units in variable names, e.g. <code>delay_seconds</code> or <code>delay_s</code>. That can get a little unwieldy. <code>density_kg_per_m3</code>? <code>G_m3_per_kg_s2</code>? Perhaps when presentation is a priority, a more modest goal is to label units where values are defined. When using Observable, I often append units in comments, e.g. <code>delay = 10 // seconds</code>, but comments get hidden with the cell input:</p>
 </div></div><div id="cell-1489" class="observablehq observablehq--cell"></div><div id="cell-1597" class="observablehq observablehq--cell"></div><div id="cell-1666" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`delay = </span>${<span class="tok-literal">10</span>}<span class="tok-string"> seconds`</span></code></pre><div id="cell-1702" class="observablehq observablehq--cell"><div><h2 id="usage" tabindex="-1"><a href="#usage">Usage</a></h2>
 </div></div><div id="cell-1707" class="observablehq observablehq--cell"><div><p>Use on the <a href="http://observablehq.com">observablehq.com</a> by importing from <a href="https://observablehq.com/@rreusser/fmt">@rreusser/fmt</a>:</p>
-</div></div><div id="cell-1708" class="observablehq observablehq--cell"><div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">fmt</span> } <span class="tok-keyword">from</span> <span class="tok-string">‘@rreusser/fmt'</span>
+</div></div><div id="cell-1708" class="observablehq observablehq--cell"><div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">fmt</span> } <span class="tok-keyword">from</span> <span class="tok-string">'@rreusser/fmt'</span>
 </code></pre>
 </div></div><div id="cell-1488" class="observablehq observablehq--cell"><div><p>In its simplest form, it passes a single value through a <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Template_literals#tagged_templates">tagged template</a> and styles it like an Observable output.</p>
 </div></div><div id="cell-273" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">fmt</span><span class="tok-string">`c = </span>${<span class="tok-literal">299792458</span>}<span class="tok-string"> m/s`</span></code></pre><div id="cell-915" class="observablehq observablehq--cell"><div><p>In order to access the value, you’ll need to use Observable Desktop’s `view` keyword. Since Observable doesn’t permit reflection on the cell content which would allow determining the name of the assigned variable, this means we need to duplicate the name.</p>

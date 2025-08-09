@@ -1,5 +1,4 @@
 <!DOCTYPE html><html xmlns="http://www.w3.org/1999/xhtml" lang="en"><head>
-  
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="author" content="Ricky Reusser" />
@@ -1243,30 +1242,42 @@ main h6 {
   -webkit-font-smoothing: auto;
 }
     header {
+  color: white;
+  font-weight: 200;
   width: 100%;
   margin: 0 auto;
   background-color: var(--rrtheme-color);
   text-align: center;
-  padding: 100px 20px;
+  padding: 80px 20px;
   position: relative;
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
   box-sizing: border-box;
 }
-    header h1,
-header p {
+    header h1 {
   max-width: 640px;
   margin-left: auto;
   margin-right: auto;
+}
+    header .author,
+header time {
+  color: inherit;
+  font-family: inherit;
+  font-style: normal;
+  font-weight: inherit;
 }
     header h1,
 header p,
 header a[href] {
   color: white;
-  font-weight: 200;
+}
+    header .byline {
+  margin-top: 20px;
+  margin-bottom: 20px;
 }
     header h1 {
   font-size: 34px;
+  font-weight: 200;
 }
     @media (max-width: 640px) {
   header {
@@ -1473,12 +1484,12 @@ main h6 {
   </nav>
   <header>
     <h1>Notebooks</h1>
-    <p>
+    <div class="byline">
       
       
-      </p><div class="resource-links">
-      </div>
-    <p></p>
+    </div>
+    <div class="resource-links">
+    </div>
   </header>
   <div class="container">
       <ul class="index">
