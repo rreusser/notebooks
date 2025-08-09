@@ -1476,7 +1476,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Shanks Transformation</title>  <script type="module" crossorigin src="/notebooks/assets/index-oC36rVeg.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Shanks Transformation</title>  <script type="module" crossorigin src="/notebooks/assets/index-DT9ul8G6.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
   <link rel="modulepreload" crossorigin href="/notebooks/assets/comments-I77vOiCB.js">
   <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
@@ -1568,7 +1568,7 @@ main h6 {
 </tr>
 </tbody>
 </table>
-</div></div><div id="cell-1090" class="observablehq observablehq--cell"><div><p>Achieving error on the order of  requires about  terms. Until I learned about Shanks transformation, I simply accepted that not every series is destined to be useful.</p>
+</div></div><div id="cell-1090" class="observablehq observablehq--cell"><div><p>Achieving error on the order of  requires about  terms. Until I learned about Shanks transformation, I simply accepted that a series can be correct without being useful.</p>
 </div></div><div id="cell-1397" class="observablehq observablehq--cell"><div><h2 id="a-first-attempt" tabindex="-1"><a href="#a-first-attempt">A first attempt</a></h2>
 </div></div><div id="cell-1151" class="observablehq observablehq--cell"><div><p>Upon closer inspection, this is a silly conclusion. Even cursory visual inspection shows that any two consecutive terms bracket the correct answer.</p>
 </div></div><div id="cell-1101" class="observablehq observablehq--cell"></div><div id="cell-1192" class="observablehq observablehq--cell"><div><p>What happens if we just average two consecutive terms?</p>
@@ -1617,17 +1617,13 @@ main h6 {
 </div></div><div id="cell-1422" class="observablehq observablehq--cell"><div><h2 id="shanks-transformation" tabindex="-1"><a href="#shanks-transformation">Shanks Transformation</a></h2>
 </div></div><div id="cell-1413" class="observablehq observablehq--cell"><div><p>The essence of Shanks Transformation is to use consecutive terms to extrapolate as far as we can toward the right answer, only with a better choice than our averaging above. So instead we use three consecutive terms to fit a geometric sequence of three parameters, then solve for its limit.</p>
 </div></div><div id="cell-2440" class="observablehq observablehq--cell"><div><p>To get the ball rolling, we write our series in the form of a general geometric sequence,</p>
-</div></div><div id="cell-1428" class="observablehq observablehq--cell"></div><div id="cell-1513" class="observablehq observablehq--cell"><div><p>Solving the first two equations for  yields</p>
+</div></div><div id="cell-1428" class="observablehq observablehq--cell"></div><div id="cell-1513" class="observablehq observablehq--cell"><div><p>Each term adds one additional multiplicative factor of . The choice of ,  and  are arbitrary, and it just gets absorbed into  if we added more or fewer factors of . Solving the first two equations for  yields</p>
 </div></div><div id="cell-2439" class="observablehq observablehq--cell"></div><div id="cell-2438" class="observablehq observablehq--cell"><div><p>Performing the same operation on the second and third equations, we have</p>
 </div></div><div id="cell-1516" class="observablehq observablehq--cell"></div><div id="cell-2437" class="observablehq observablehq--cell"><div><p>Cross-multiplying and solving for  gives us</p>
-</div></div><div id="cell-1521" class="observablehq observablehq--cell"></div><div id="cell-2433" class="observablehq observablehq--cell"><div><p>We could backtrack and solve for  and , but if the sequence is convergent then  so that as , our second equation for  gives</p>
-</div></div><div id="cell-2434" class="observablehq observablehq--cell"></div><div id="cell-1532" class="observablehq observablehq--cell"><div><p>Quantity  is in fact the limit we’re looking for, so we define this as the <em>Shanks transformation</em> of series  and denote it</p>
+</div></div><div id="cell-1521" class="observablehq observablehq--cell"></div><div id="cell-2433" class="observablehq observablehq--cell"><div><p>We could backtrack and solve for  and , but if the sequence is convergent, then  so that as , our second equation for  gives</p>
+</div></div><div id="cell-2434" class="observablehq observablehq--cell"></div><div id="cell-1532" class="observablehq observablehq--cell"><div><p>In other words, we only care about  and not about  or  We define quantity  the <em>Shanks transformation</em> of series  and denote it</p>
 </div></div><div id="cell-2435" class="observablehq observablehq--cell"></div><div id="cell-1559" class="observablehq observablehq--cell"><div><p>We can implement this pretty easily as a higher order JavaScript function (although please note that this is a very, very inefficient implementation for the sake of clarity, with many repeated, unnecessary function evaluations!)</p>
-</div></div><div id="cell-51" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-comment">//const S = (A) =&gt; (n) =&gt;</span>
-<span class="tok-comment">//  (A(n + 1) * A(n - 1) - A(n) ** 2) / (A(n + 1) - 2 * A(n) + A(n - 1))</span>
-
-<span class="tok-comment">// An exactly equivalent and more numerically stable form:</span>
-<span class="tok-keyword">const</span> <span class="tok-definition">S</span> = (<span class="tok-definition">A</span>) =&gt; (<span class="tok-definition">n</span>) =&gt;
+</div></div><div id="cell-51" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">const</span> <span class="tok-definition">S</span> = (<span class="tok-definition">A</span>) =&gt; (<span class="tok-definition">n</span>) =&gt;
   <span class="tok-variable">A</span>(<span class="tok-variable">n</span> + <span class="tok-literal">1</span>) - (<span class="tok-variable">A</span>(<span class="tok-variable">n</span> + <span class="tok-literal">1</span>) - <span class="tok-variable">A</span>(<span class="tok-variable">n</span>)) ** <span class="tok-literal">2</span> / (<span class="tok-variable">A</span>(<span class="tok-variable">n</span> + <span class="tok-literal">1</span>) - <span class="tok-literal">2</span> * <span class="tok-variable">A</span>(<span class="tok-variable">n</span>) + <span class="tok-variable">A</span>(<span class="tok-variable">n</span> - <span class="tok-literal">1</span>))</code></pre><div id="cell-1579" class="observablehq observablehq--cell"><div><p>The plot below shows the error of  and the Shanks transformation . Hover over various points and observe in the plot and table below how much the transformation accelerates convergence. Suddenly the twentieth term yields accuracy the original series takes nearly ten thousand terms to produce!</p>
 </div></div><div id="cell-129" class="observablehq observablehq--cell"></div><div id="cell-1201" class="observablehq observablehq--cell"></div><div id="cell-1623" class="observablehq observablehq--cell"></div><div id="cell-1437" class="observablehq observablehq--cell"><div><h2 id="iterated-shanks-transformation" tabindex="-1"><a href="#iterated-shanks-transformation">Iterated Shanks Transformation</a></h2>
 </div></div><div id="cell-1562" class="observablehq observablehq--cell"><div><p>But wait, you say! The Shanks transformation  gives us a <em>new</em> series which presumably converges to the same limit. Can we apply the Shanks transformation to the Shanks transformation and achieve an even better approximation?</p>

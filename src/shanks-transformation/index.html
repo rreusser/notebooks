@@ -52,7 +52,7 @@
     | ${tex`{1000000}`} | ${tex`${piToTex(A(1000000))}`} |
   </script>
   <script id="1090" type="text/markdown">
-    Achieving error on the order of ${tex`10^{-6}`} requires about ${tex`10^6`} terms. Until I learned about Shanks transformation, I simply accepted that not every series is destined to be useful.
+    Achieving error on the order of ${tex`10^{-6}`} requires about ${tex`10^6`} terms. Until I learned about Shanks transformation, I simply accepted that a series can be correct without being useful.
   </script>
   <script id="1397" type="text/markdown">
     ## A first attempt
@@ -127,7 +127,7 @@
     \end{aligned}
   </script>
   <script id="1513" type="text/markdown">
-    Solving the first two equations for ${tex`q`} yields
+    Each term adds one additional multiplicative factor of ${tex`q`}. The choice of ${tex`n - 1,`}, ${tex`n,`} and ${tex`n+1`} are arbitrary, and it just gets absorbed into ${tex`\alpha`} if we added more or fewer factors of ${tex`q`}. Solving the first two equations for ${tex`q`} yields
   </script>
   <script id="2439" type="application/x-tex">
     q = \frac{A_n - A}{A_{n - 1} - A}
@@ -146,13 +146,13 @@
     A = \frac{A_{n+1}A_{n-1} - A_n^2}{A_{n+1} - 2A_n + A_{n - 1}}.
   </script>
   <script id="2433" type="text/markdown">
-    We could backtrack and solve for ${tex`\alpha`} and ${tex`q`}, but if the sequence is convergent then ${tex`|q| < 1,`} so that as ${tex`n \rarr \infty`}, our second equation for ${tex`A_n`} gives
+    We could backtrack and solve for ${tex`\alpha`} and ${tex`q`}, but if the sequence is convergent, then ${tex`|q| < 1,`} so that as ${tex`n \rarr \infty`}, our second equation for ${tex`A_n`} gives
   </script>
   <script id="2434" type="application/x-tex">
     \lim_{n \rarr \infty} A_n = A.
   </script>
   <script id="1532" type="text/markdown">
-    Quantity ${tex`A`} is in fact the limit we're looking for, so we define this as the *Shanks transformation* of series ${tex`A_n`} and denote it
+    In other words, we only care about ${tex`A`} and not about ${tex`q`} or ${tex`\alpha.`} We define quantity ${tex`A`} the *Shanks transformation* of series ${tex`A_n`} and denote it
   </script>
   <script id="2435" type="application/x-tex">
     S(A_n) = \frac{A_{n+1}A_{n-1} - A_n^2}{A_{n+1} - 2A_n + A_{n - 1}}
@@ -161,10 +161,6 @@
     We can implement this pretty easily as a higher order JavaScript function (although please note that this is a very, very inefficient implementation for the sake of clarity, with many repeated, unnecessary function evaluations!)
   </script>
   <script id="51" type="module" pinned="">
-    //const S = (A) => (n) =>
-    //  (A(n + 1) * A(n - 1) - A(n) ** 2) / (A(n + 1) - 2 * A(n) + A(n - 1))
-
-    // An exactly equivalent and more numerically stable form:
     const S = (A) => (n) =>
       A(n + 1) - (A(n + 1) - A(n)) ** 2 / (A(n + 1) - 2 * A(n) + A(n - 1))
   </script>
