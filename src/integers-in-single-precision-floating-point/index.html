@@ -1,0 +1,132 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Untitled</title>
+  <script id="242" type="text/markdown">
+    # Integers in Single-Precision Floating-Point
+  </script>
+  <script id="245" type="text/markdown">
+    Floating-point numbers are quite good at representing integers. In particular, each integer up to some finite limit has a unique, exact floating point representation (except for `-0`, of course). I know this isn't an interesting observation, but when you actaully step through the math, it just doesn’t seem like really had to be the case.
+  </script>
+  <script id="252" type="text/markdown">
+    One nice consequence is that JavaScript handles loops alright even though it only has a double-precision `Number` type for integers and non-integers alike. (Given a choice though, please don't take this to mean you should start using `float` or `double` for all of your loop indices.)
+  </script>
+  <script id="114" type="text/markdown">
+    For fun, the diagram below shows the bits of integers represented in 32-bit IEEE-754 floating-point, starting at zero. Integers from ${tex`-2^{24}\;(${(-Math.pow(
+      2,
+      24
+    )).toLocaleString()})`} to ${tex`2^{24}\;(${Math.pow(
+      2,
+      24
+    ).toLocaleString()})`} can be represented exactly. Colors represent the <span style="background-color:rgba(0, 0, 210, 0.25)">sign</span>, <span style="background-color:rgba(0, 210, 0, 0.25)">exponent</span>, and <span style="background-color:rgba(210, 0, 0, 0.25)">significand</span>.
+  </script>
+  <script id="246" type="text/markdown">
+    Scroll to browse, mouse-over to inspect. It doesn’t currently work well on mobile, sorry.
+  </script>
+  <script id="132" type="module">
+    view(binaryInput({
+      value: value,
+      type: 'float32',
+      displayParts: true,
+      fractionalSignificand: true
+    }))
+  </script>
+  <script id="133" type="module">
+    const value = view((function () {
+      var canvas = document.createElement('canvas');
+      var w = 32;
+      var h = height / verticalScale;
+      canvas.width = w;
+      canvas.height = h;
+      canvas.style.width = `${w * 16}px`;
+      canvas.style.height = `${h * verticalScale}px`;
+      canvas.style.imageRendering = 'crisp-edges';
+      canvas.style.imageRendering = 'pixelated';
+      const ctx = canvas.getContext('2d');
+      let offset = 0;
+
+      // The bottom:
+      // offset = Math.pow(2, 24) - h;
+
+      // The top:
+      // offset = -Math.pow(2, 24);
+
+      const imageData = ctx.createImageData(w, h);
+
+      var highlight = NaN;
+      var mouseOffset = NaN;
+
+      function update() {
+        var value = new Float32Array(1);
+        var bytes = new Uint8Array(value.buffer);
+        for (var i = 0; i < h; i++) {
+          var scaledOffset = Math.floor(offset / verticalScale);
+          value[0] = scaledOffset + i;
+          for (var byte = bytes.length - 1; byte >= 0; byte--) {
+            for (var bit = 7; bit >= 0; bit--) {
+              var pixel = (bytes[byte] & (0x1 << bit)) >> bit ? 255 : 0;
+              var bytenum = (bytes.length - 1 - byte) * 8 + (7 - bit);
+              var index = (i * w + bytenum) * 4;
+
+              if (scaledOffset + i === highlight) {
+                // Why is this yellow???
+                imageData.data[index + 0] = imageData.data[index + 1] = imageData[
+                  index + 2
+                ] = 255;
+              } else {
+                if (bytenum === 0) {
+                  imageData.data[index + 0] = (pixel * 3) / 4;
+                  imageData.data[index + 1] = (pixel * 3) / 4;
+                  imageData.data[index + 2] = 127 + pixel / 2;
+                } else if (bytenum < 9) {
+                  imageData.data[index + 0] = (pixel * 3) / 4;
+                  imageData.data[index + 1] = 127 + pixel / 2;
+                  imageData.data[index + 2] = (pixel * 3) / 4;
+                } else {
+                  imageData.data[index + 0] = 127 + pixel / 2;
+                  imageData.data[index + 1] = (pixel * 3) / 4;
+                  imageData.data[index + 2] = (pixel * 3) / 4;
+                }
+              }
+              imageData.data[index + 3] = 255;
+            }
+          }
+        }
+        ctx.putImageData(imageData, 0, 0);
+      }
+
+      canvas.addEventListener('wheel', function(event) {
+        event.preventDefault();
+        // Let's not clamp it. You can scroll right off the end of what's nicely representable :)
+        offset = offset + event.deltaY;
+        canvas.value = highlight =
+          Math.floor(offset / verticalScale) +
+          Math.floor(mouseOffset / verticalScale);
+        update();
+        canvas.dispatchEvent(new CustomEvent('input'));
+      });
+
+      canvas.addEventListener('mousemove', function(event) {
+        mouseOffset = event.offsetY;
+        canvas.value = highlight =
+          Math.floor(offset / verticalScale) +
+          Math.floor(mouseOffset / verticalScale);
+        update();
+        canvas.dispatchEvent(new CustomEvent('input'));
+      });
+
+      update();
+
+      canvas.value = 0;
+      return canvas;
+    })())
+  </script>
+  <script id="241" type="module">
+    const height = 600
+  </script>
+  <script id="240" type="module">
+    const verticalScale = 2
+  </script>
+  <script id="97" type="module">
+    import { binaryInput } from 'observable:@rreusser/binary-input'
+  </script>
+</notebook>
