@@ -1,0 +1,333 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Spring Training</title>
+  <script id="1" type="text/markdown">
+    # Spring Training
+  </script>
+  <script id="433" type="text/markdown">
+    This notebook contains a log of intervals I ran on the treadmill during the summer of 2024. Each dot represents one continuous effort. Some workouts comprise multiple dots; others are just a single dot. If I’m being honest, I think the treadmill was 20-30 seconds *slower* per mile than reported, so that you could add a bit of time to all of these splits. However, the paces were perfectly *consistent*, so that from workout to workout, picking a point on the [Pareto front](https://en.wikipedia.org/wiki/Pareto_front) meant I would always be able to finish the workout, but only just barely.
+  </script>
+  <script id="472" type="text/markdown">
+    How did this turn out? I got progressively more comfortable at the pace and pushed the frontier into territory that didn’t previously feel accessible. It felt like the most effective training tool I’d used in years. I tried to exercise caution, never engaging in a workout without at least one to two days rest between workouts. But I ultimately gameified it too hard and got injured after a few months. So take this as a training idea with a warning attached. No regrets.
+  </script>
+  <script id="373" type="text/markdown">
+    ## Logged intervals
+  </script>
+  <script id="20" type="module">
+    const log = [
+      {
+        date: new Date("April 29, 2024"),
+        legs: [
+          [1, "5:00"],
+          [1, "4:50"],
+          [1 / 2, "4:36"],
+          [1 / 4, "4:32"]
+        ]
+      },
+      {
+        date: new Date("May 1, 2024"),
+        legs: [
+          [1, "5:00"],
+          [1, "5:00"],
+          [1, "5:00"],
+          [1, "5:00"],
+          [1, "5:00"],
+          [1, "4:45"]
+        ]
+      },
+      {
+        date: new Date("May 4, 2024"),
+        legs: [
+          [4, "5:00"],
+          [1, "4:45"]
+        ]
+      },
+      {
+        date: new Date("May 6, 2024"),
+        legs: [[10, "5:16"]]
+      },
+      {
+        date: new Date("May 12, 2024"),
+        legs: [[6, "5:12"]]
+      },
+      {
+        date: new Date("May 14, 2024"),
+        legs: [
+          [3, "5:00"],
+          [1, "4:45"],
+          [1 / 2, "4:30"],
+          [1 / 2, "4:30"]
+        ]
+      },
+      {
+        date: new Date("May 17, 2024"),
+        legs: [[6, "5:07"]]
+      },
+      {
+        date: new Date("May 22, 2024"),
+        legs: [[11, "5:15"]]
+      },
+      {
+        date: new Date("May 24, 2024"),
+        legs: [
+          [1, "5:00"],
+          [1, "4:58"],
+          [1, "4:55"],
+          [1, "4:52"],
+          [1, "4:50"],
+          [1 / 2, "4:30"]
+        ]
+      },
+      {
+        date: new Date("May 26, 2024"),
+        legs: [[6, "5:05"]]
+      },
+      {
+        date: new Date("May 29, 2024"),
+        legs: [[11, "5:13"]]
+      },
+      {
+        date: new Date("May 31, 2024"),
+        legs: [
+          [4, "5:02"],
+          [1 / 2, "4:44"],
+          [1 / 2, "4:40"],
+          [1 / 4, "4:28"],
+          [1 / 4, "4:20"]
+        ]
+      },
+      {
+        date: new Date("June 2, 2024"),
+        legs: [[17, "5:21"]]
+      },
+      {
+        date: new Date("June 2, 2024"),
+        legs: [
+          [1, "5:00"],
+          [1, "4:55"],
+          [1, "4:50"],
+          [1, "4:45"],
+          [1 / 2, "4:36"],
+          [1 / 2, "4:28"],
+          [1 / 4, "4:17"],
+          [1 / 4, "4:17"]
+        ]
+      },
+      {
+        date: new Date("June 8, 2024"),
+        legs: [[4, "4:55"]]
+      },
+      {
+        date: new Date("June 9, 2024"),
+        legs: [[8, "5:13"]]
+      },
+      {
+        date: new Date("June 11, 2024"),
+        legs: [
+          [6, "5:02"],
+          [1, "4:39"]
+        ]
+      },
+      {
+        date: new Date("June 12, 2024"),
+        legs: [[10, "5:10"]]
+      },
+      {
+        date: new Date("June 14, 2024"),
+        legs: [[2, "4:45"]]
+      },
+      {
+        date: new Date("June 18, 2024"),
+        legs: [[15, "5:18"]]
+      },
+      /*{
+        date: new Date("June 25, 2024"),
+        legs: [[6, "5:00"]]
+      },
+      {
+        date: new Date("April 1, 2025"),
+        legs: [
+          [3, "5:09"],
+          [1 / 2, "4:45"],
+          [1 / 2, "4:45"]
+        ]
+      }*/
+    ];
+  </script>
+  <script id="53" type="module">
+    const yrange = flatEntries.reduce(
+      (a, b) => [Math.min(a[0], b.pace), Math.max(a[1], b.pace)],
+      [Infinity, -Infinity]
+    );
+
+    display(Plot.plot({
+      grid: true,
+      width: width,
+      height: Math.max(width * 0.6, 300),
+      color: {
+        scheme: "Viridis",
+        legend: true,
+        width: Math.min(width, 320)
+      },
+      x: {
+        type: "log",
+        domain: [0.2, 20],
+        tickFormat: ",",
+        label: "Distance, miles"
+      },
+      y: {
+        tickFormat: timeToStr,
+        domain: [yrange[0], yrange[1]],
+        label: "Pace, min/mile"
+      },
+      marks: [
+        Plot.lineY(paretoFrontier, {
+          x: "distance",
+          y: "pace",
+          strokeDasharray: "4 4",
+          stroke: "#888"
+        }),
+        Plot.dot(
+          flatEntries.map(({ distance, pace, date }) => ({
+            distance: Math.exp(Math.log(distance) + (Math.random() - 0.5) * 0.0),
+            pace: pace + (Math.random() - 0.5) * 0.0,
+            date
+          })),
+          {
+            x: "distance",
+            y: "pace",
+            fill: "date",
+            stroke: "black",
+            strokeWidth: 1,
+            strokeOpacity: 0.5 /*"rgb(30 50 255 / 70%)"*/
+          }
+        ),
+        Plot.dot([{ distance: targetDistance, pace: targetPace }], {
+          x: "distance",
+          y: "pace",
+          fill: "red",
+          stroke: "white",
+          strokeWidth: 1,
+          r: 3
+        }),
+      ]
+    }))
+  </script>
+  <script id="370" type="text/markdown">
+    ## Workout Calculator
+  </script>
+  <script id="329" type="module">
+    const targetDistance = view(Inputs.range([0.25, 30], {
+      label: "Target distance (miles)",
+      value: 5,
+      step: 0.05,
+      transform: Math.log
+    }))
+  </script>
+  <script id="308" type="module">
+    const targetPace = display(fmtTime`targetPace = ${computePace(targetDistance)} min/mi`)
+  </script>
+  <script id="466" type="module">
+    const targetDuration = view(fmtTime`targetDuration = ${
+      computePace(targetDistance) * targetDistance
+    }`)
+  </script>
+  <script id="427" type="text/markdown">
+    ## Stats
+  </script>
+  <script id="405" type="module">
+    const timeElapsed = view(fmt`elapsed = ${
+      (log[log.length - 1].date - log[0].date) / (1000 * 3600 * 24)
+    } days`)
+  </script>
+  <script id="105" type="module">
+    const totalTempo = view(fmt`totalTempo = ${log
+      .map(({ legs }) => legs.map(([distance, pace]) => distance))
+      .flat()
+      .reduce((a, b) => a + b, 0)} miles`)
+  </script>
+  <script id="413" type="module">
+    const tempoPerWeek = view(fmt`tempoPerWeek = ${
+      Math.round((totalTempo / timeElapsed) * 7 * 10) / 10
+    } miles`)
+  </script>
+  <script id="119" type="module">
+    const flatEntries = log
+      .map(({ date, legs }) =>
+        legs.map(([distance, minPerMi]) => ({
+          distance: Math.exp(Math.log(distance) + (Math.random() - 0.5) * 0.0),
+          pace: strToTime(minPerMi) + (Math.random() - 0.5) * 0.0,
+          //speed: mph(strToPace(minPerMi)),
+          date
+        }))
+      )
+      .flat()
+      .toSorted(({ distance: d1 }, { distance: d2 }) => d1 - d2)
+  </script>
+  <script id="307" type="module">
+    function computePace(distance) {
+      let i;
+      for (i = 0; i < paretoFrontier.length - 2; i++) {
+        if (distance < paretoFrontier[i + 1].distance) break;
+      }
+      const d0 = paretoFrontier[i].distance;
+      const d1 = paretoFrontier[i + 1].distance;
+      const p0 = paretoFrontier[i].pace;
+      const p1 = paretoFrontier[i + 1].pace;
+      return (
+        p0 +
+        ((p1 - p0) * (Math.log(distance) - Math.log(d0))) /
+          (Math.log(d1) - Math.log(d0))
+      );
+    }
+  </script>
+  <script id="135" type="module">
+    const paretoFrontier = (function () {
+      const frontier = [{ distance: 0, pace: 0 }];
+      for (let i = 0; i < flatEntries.length; i++) {
+        let entry = flatEntries[i];
+        let min = entry.pace;
+        const d0 = entry.distance;
+        while (
+          i + 1 < flatEntries.length &&
+          d0 >= flatEntries[i + 1].distance - 1e-8
+        ) {
+          i++;
+          entry = flatEntries[i];
+          if (entry.pace < min) min = entry.pace;
+        }
+        while (frontier.length && min <= frontier[frontier.length - 1].pace) {
+          frontier.pop();
+        }
+        frontier.push({ distance: entry.distance, pace: min });
+      }
+      return frontier.slice(1);
+    })();
+  </script>
+  <script id="3" type="module">
+    function strToTime(str) {
+      const [minutes, seconds] = str.split(":").map((part) => parseInt(part, 10));
+      return minutes + seconds / 60;
+    }
+  </script>
+  <script id="74" type="module">
+    function timeToStr(pace) {
+      pace = Math.round(pace * 60) / 60;
+      const minutes = Math.floor(pace);
+      const seconds = Math.floor((pace - minutes) * 60).toString();
+      if (minutes >= 60) {
+        return `${Math.floor(minutes / 60)}:${(minutes % 60)
+          .toString()
+          .padStart(2, "0")}:${seconds.padStart(2, "0")}`;
+      } else {
+        return `${minutes}:${seconds.padStart(2, "0")}`;
+      }
+    }
+  </script>
+  <script id="340" type="module">
+    import { fmt } from "observable:@rreusser/fmt"
+  </script>
+  <script id="471" type="module">
+    const fmtTime = fmt(timeToStr)
+  </script>
+</notebook>
