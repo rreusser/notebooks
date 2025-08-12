@@ -1,0 +1,280 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Speed Climbing World Record Progression</title>
+  <script id="1" type="text/markdown">
+    # Speed Climbing World Record Progression
+  </script>
+  <script id="349" type="text/markdown">
+    Speed climbing is a newly-christened Olympic sport, with its debut in 2021 and its own standalone event as of Paris 2024. Competitors race up a standardized ${tex`15`}-meter, ${tex`5^\circ`} overhanging wall, on a route that's remained unchanged since its standardization in 2007. Is it real climbing? Is it boring? Has the sport stagnated and it's time to change the route?
+  </script>
+  <script id="229" type="text/markdown">
+    A cursory glance at the numbers suggests progress has not stagnated. Since the world record was first tracked in 2011, continuing innovation—including moves like the [*Tomoa skip*](https://www.youtube.com/watch?v=wTcZWdzGYD4) (perform a powerful and intricate *step-up dyno* past one of the first holds) and the [*Chinese top*](https://headrushtech.com/blog/pro-tips-for-climbing-ridiculously-fast) (replace a left-right hand sequence near the top with *two* hands on *one* hold)—has allowed climbers to cut 23% off the women's record and 26% off of the men's record. Unless everyone has suddenly exhausted the possibilities, it seems likely that there's surprising progress yet to be unlocked.
+  </script>
+  <script id="360" type="text/markdown">
+    Just yesterday at the [IFSC World Cup Event in Bali, Indonesia](https://www.ifsc-climbing.org/events/ifsc-world-cup-bali-2025), Sam Watson of the United States beat his own world record twice in one night, shaving 2.1% off of his own record from last year. It was an electric moment. Facing off in the semi-final against Raharjati Nursamsa of Indonesia, Sam cut his world record from 4.74 seconds down to 4.67 seconds, taking what seemed to me like more risk than I'd expect in a semi-final, where either a false start or a fall—painfully common outcomes—would immediately forfeit any chance at a gold or silver medal. Then, hardly ten minutes later in the final, Ray Omasa of Japan did indeed false start, leaving Sam a guaranteed gold medal and a consequence-free run up the wall. Sam overwhelmingly delivered, cutting three more hundredths off of his record in a time of 4.64 seconds. [Watch his record-breaking run here!](https://youtu.be/ry55p76pKVE?si=VQtA30qjhZY-T-mx&t=600)
+  </script>
+  <script id="372" type="text/markdown">
+    Progress does not seem to have stagnated, and you have to wonder just how much faster climbers can get. Popularity of the sport has increased, Sam Watson doesn't seem finished, and a new generation of women is [adopting techniques used by the fastest men](https://www.instagram.com/professorok/reel/C7Ah4s_urmq/). The ship has long since sailed on any athletic career of my own, but if I could roll back two or three decades of possibility, it seems like a pretty intense and intellectual sport to obsess over these tiny changes in movement that unlock critical tenths and hundredths of a second.
+  </script>
+  <script id="176" type="application/vnd.observable.javascript">
+    viewof startYear = Inputs.range([2011, 2023], {
+      label: "Filter analysis to records after",
+      step: 1,
+      value: 2011
+    })
+  </script>
+  <script id="104" type="application/vnd.observable.javascript">
+    {
+      const epoch = new Date("January 1, 2025");
+      const { slope: womensRate } = linearRegression(
+        womens.map(({ date, time }) => [
+          (date - epoch) / (1000 * 3600 * 24 * 365.25),
+          Math.log(time)
+        ])
+      );
+      const { slope: mensRate } = linearRegression(
+        mens.map(({ date, time }) => [
+          (date - epoch) / (1000 * 3600 * 24 * 365.25),
+          Math.log(time)
+        ])
+      );
+      return html`<p>The plot below runs some log-linear regression on the record times. Since <span class="observablehq--number"><code>${startYear}</code></span>, men have improved at an average rate of <span class="observablehq--number"><code>${d3.format(
+        ".1f"
+      )(
+        -(Math.exp(mensRate) - 1) * 100
+      )}%</code></span> per year, and women have improved at a rate of <span class="observablehq--number"><code>${d3.format(
+        ".1f"
+      )(
+        -(Math.exp(womensRate) - 1) * 100
+      )}%</code></span> per year. Of course it's an unfair comparison given the sheer number of runners and that human(oid)s have been running for millions of years, but compare this with the 100 meter dash where progress over the last century has averaged roughly 0.1% per year!</p>`;
+    }
+  </script>
+  <script id="551" type="text/markdown">
+    Exciting moments lie ahead!
+  </script>
+  <script id="6" type="module">
+    const marks = [];
+    if (genderFilter.includes("Men")) {
+      marks.push(
+        Plot.dot(
+          mens,
+          Plot.pointer({
+            x: "date",
+            y: "time",
+            fill: d3.schemeTableau10[0],
+            r: 8,
+            opacity: 0.5
+          })
+        ),
+        Plot.dot(mens, {
+          x: "date",
+          y: "time",
+          fill: d3.schemeTableau10[0]
+          //tip: "xy"
+        }),
+        Plot.text(
+          mens,
+          Plot.pointer({
+            px: "date",
+            py: "time",
+            dy: -17,
+            frameAnchor: "top-right",
+            fontVariant: "tabular-nums",
+            fontSize: 12,
+            text: (d) =>
+              [
+                `${d.time.toFixed(2)}s`,
+                d.person,
+                d.competition,
+                d.date.toLocaleDateString()
+              ].join("   ")
+          })
+        ),
+        Plot.linearRegressionY(mens, {
+          x: "date",
+          y: "time",
+          fill: d3.schemeTableau10[0],
+          stroke: d3.schemeTableau10[0]
+        })
+      );
+    }
+    if (genderFilter.includes("Women")) {
+      marks.push(
+        Plot.dot(womens, {
+          x: "date",
+          y: "time",
+          fill: d3.schemeTableau10[2]
+          //tip: "xy"
+        }),
+        Plot.text(
+          womens,
+          Plot.pointer({
+            px: "date",
+            py: "time",
+            dy: -17,
+            frameAnchor: "top-right",
+            fontVariant: "tabular-nums",
+            fontSize: 12,
+            text: (d) =>
+              [
+                `${d.time.toFixed(2)}s`,
+                d.person,
+                d.competition,
+                d.date.toLocaleDateString()
+              ].join("   ")
+          })
+        ),
+        Plot.dot(
+          womens,
+          Plot.pointer({
+            x: "date",
+            y: "time",
+            fill: d3.schemeTableau10[2],
+            r: 8,
+            opacity: 0.5
+          })
+        ),
+        Plot.linearRegressionY(womens, {
+          x: "date",
+          y: "time",
+          fill: d3.schemeTableau10[2],
+          stroke: d3.schemeTableau10[2]
+        })
+      );
+    }
+    display(html`<figure>
+    ${Plot.plot({
+    width: Math.min(640, width),
+    inset: 20,
+    grid: true,
+    y: {
+      //domain: [4.6, 5.3],
+      type: "log",
+      label: "time (s)"
+    },
+    x: {
+      label: "year"
+    },
+    marks
+    })}
+    <figcaption>Women's (top, red) and men's (bottom, blue) speed climbing world record progression. Hover to inspect records.<br><em><small>Source: <a href="https://en.wikipedia.org/wiki/Speed_climbing">https://en.wikipedia.org/wiki/Speed_climbing</a></small></em></figcaption>
+    </figure>`);
+  </script>
+  <script id="402" type="module">
+    const genderFilter = view(Inputs.checkbox(["Men", "Women"], {
+      value: ["Men", "Women"]
+    }))
+  </script>
+  <script id="4" type="module">
+    const mens = view(await (async function () {
+      const data = (
+        await FileAttachment("speed-record-progression@1.csv").csv({
+          typed: true
+        })
+      ).map(({ date, time, person, location, competition }) => ({
+        date: new Date(date),
+        time: time,
+        person: person.trim(),
+        location,
+        competition
+      }));
+
+      return Inputs.table(data, {
+        value: data.filter(
+          ({ date }) =>
+            genderFilter.includes("Men") &&
+            startYear > 2011 &&
+            date >
+              +new Date("January 1, 2000") +
+                (startYear - 2000) * (1000 * 3600 * 24 * 365.25)
+        ),
+        format: {
+          time: sparkbar(d3.max(data, (d) => d.time)),
+          date: (x) => x.toLocaleDateString()
+        },
+        align: {
+          time: "left"
+        },
+        rows: data.length + 1
+      });
+    })());
+  </script>
+  <script id="85" type="module">
+    const womens = view(await (async function () {
+      const data = (
+        await FileAttachment("womens-speed-record-progression@1.csv").csv({
+          typed: true
+        })
+      ).map(({ date, time, person, location, competition }) => ({
+        date: new Date(date),
+        time,
+        person: person.trim(),
+        location,
+        competition
+      }));
+
+      return Inputs.table(data, {
+        value: data.filter(
+          ({ date }) =>
+            genderFilter.includes("Women") &&
+            startYear > 2011 &&
+            date >
+              +new Date("January 1, 2000") +
+                (startYear - 2000) * (1000 * 3600 * 24 * 365.25)
+        ),
+        format: {
+          date: (x) => x.toLocaleDateString()
+        },
+        format: {
+          time: sparkbar(d3.max(data, (d) => d.time)),
+          date: (x) => x.toLocaleDateString()
+        },
+        align: {
+          time: "left"
+        },
+        rows: data.length + 1
+      });
+    })());
+  </script>
+  <script id="146" type="module">
+    function linearRegression(data) {
+      const n = data.length;
+      if (n === 0) {
+        throw new Error("No data points provided");
+      }
+
+      let sumX = 0,
+        sumY = 0,
+        sumXY = 0,
+        sumXX = 0;
+
+      for (const [x, y] of data) {
+        sumX += x;
+        sumY += y;
+        sumXY += x * y;
+        sumXX += x * x;
+      }
+
+      const meanX = sumX / n;
+      const meanY = sumY / n;
+
+      const slope = (sumXY - n * meanX * meanY) / (sumXX - n * meanX * meanX);
+      const intercept = meanY - slope * meanX;
+
+      return { slope, intercept };
+    }
+  </script>
+  <script id="520" type="module">
+    function sparkbar(max) {
+      return (x) => htl.html`<div style="
+        background: lightblue;
+        width: ${(100 * x) / max}%;
+        float: left;
+        padding-right: 3px;
+        box-sizing: border-box;
+        overflow: visible;
+        display: flex;
+        justify-content: end;">${x.toLocaleString("en")}`;
+    }
+  </script>
+</notebook>
