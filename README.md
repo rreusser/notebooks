@@ -7,7 +7,7 @@ npm start
 npm run build
 ```
 
-Beware, this library uses a non-standard modification to `@observablehq/notebook-kit` which I've linked locally. You can find it at [@rreusser/notebook-kit](https://github.com/observablehq/notebook-kit/compare/main...rreusser:notebook-kit:transform-template?expand=1). The short of it is that I wanted to be able to pull notebook content like the title out into the surrounding template, and to pull surrounding content like the date into the notebook. I don't know that I've chosen a good solution, but it does work. 
+This repository contains notebooks designed for publishing on the web and editing with [Observable Desktop](https://observablehq.com/notebook-kit/desktop). Beware that the build script uses a couple modifications to Notebook Kit [@observablehq/notebook-kit#30](https://github.com/observablehq/notebook-kit/pull/30) and [@observablehq/notebook-kit#39](https://github.com/observablehq/notebook-kit/pull/39) which, at the time of writing, have been merged but not publishd to NPM.
 
 ## License
 
