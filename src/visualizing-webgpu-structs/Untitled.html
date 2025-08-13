@@ -1,0 +1,234 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Visualizing WebGPU Structs</title>
+  <script id="1" type="text/markdown">
+    # Visualizing WebGPU Structs
+  </script>
+  <script id="6" type="module" pinned="">
+    visualizeStruct(`
+    struct PointLight {
+      position: vec3f,
+      color: vec4f,
+    }
+
+    struct Uniforms {
+      xyz: vec3u,
+      tileSize: u32,
+      toXY: vec3f,
+      terrainBuffer: u32,
+      terrainSize: vec2u,
+      globalDimension: u32,
+      pixelSize: f32,
+      lights: array<PointLight, 2>,
+    }`)
+  </script>
+  <script id="11" type="module">
+    import {WgslReflect}  from 'npm:wgsl_reflect'
+  </script>
+  <script id="4" type="module">
+    function visualizeStruct(
+      code,
+      { width: wid = Math.min(640, width), indent = 35, spacing = 40 } = {}
+    ) {
+      const structs = new WgslReflect(code).structs;
+      const byteHeight = 32;
+      const colors = d3.schemeTableau10;
+      const svg = d3.create("svg");
+      let yOffset = 0;
+      let colorIndex = 0;
+
+      const topLevelColor = {};
+
+      function getColor(topLevelName) {
+        if (!topLevelColor[topLevelName]) {
+          topLevelColor[topLevelName] = colors[colorIndex++ % colors.length];
+        }
+        return topLevelColor[topLevelName];
+      }
+
+      function flattenMembers(members, baseOffset = 0, path = [], topLevel = null) {
+        const flat = [];
+        for (const member of members) {
+          const offset = baseOffset + (member.offset || 0);
+          const name = [...path, member.name].join(".");
+
+          // Remember top-level owner
+          const owner = member.name; //topLevel ?? member.name;
+
+          if (member.type?.name === "array" && member.type.format?.members) {
+            const count = member.type.count || 1;
+            const stride = member.type.stride || member.type.format.size || 0;
+            for (let i = 0; i < count; i++) {
+              const label = `${member.name}[${i}]`;
+              const elOffset = offset + i * stride;
+              flat.push(
+                ...flattenMembers(
+                  member.type.format.members,
+                  elOffset,
+                  [...path, `${member.name}[${i}]`],
+                  member.name
+                )
+              );
+            }
+          } else if (member.type?.members) {
+            flat.push(
+              ...flattenMembers(
+                member.type.members,
+                offset,
+                [...path, member.name],
+                member.name
+              )
+            );
+          } else {
+            flat.push({
+              name,
+              type: member.type?.name || "?",
+              offset,
+              size: member.size,
+              topLevel: owner
+            });
+          }
+        }
+        return flat;
+      }
+
+      function drawStruct(struct, yOffset) {
+        const align = 16; //struct.align ?? 16;
+        const size = struct.size ?? align;
+        const byteWidth = (wid - indent - 1) / align;
+
+        const flatMembers = flattenMembers(struct.members || []);
+        const group = svg.append("g").attr("transform", `translate(0,${yOffset})`);
+        const labelsToDraw = [];
+
+        flatMembers.forEach((member) => {
+          const color = getColor(member.topLevel);
+          const end = member.offset + member.size;
+          let offset = member.offset;
+
+          while (offset < end) {
+            const r = Math.floor(offset / align);
+            const c = offset % align;
+            const span = Math.min(align - c, end - offset);
+
+            group
+              .append("rect")
+              .attr("x", c * byteWidth + indent)
+              .attr("y", r * byteHeight + 20)
+              .attr("width", span * byteWidth)
+              .attr("height", byteHeight)
+              .attr("fill", color)
+              .attr("stroke", "black")
+              .attr("stroke-width", 1)
+              .attr("opacity", 0.8);
+
+            labelsToDraw.push({
+              name: member.name,
+              type: member.type,
+              x: (c + span / 2) * byteWidth + indent,
+              y: r * byteHeight + 20 + byteHeight / 2
+            });
+
+            offset += span;
+          }
+        });
+
+        const rowCount = Math.ceil(size / align);
+
+        // grid
+        for (let r = 0; r <= rowCount; r++) {
+          group
+            .append("line")
+            .attr("x1", indent)
+            .attr("y1", r * byteHeight + 20)
+            .attr("x2", align * byteWidth + indent)
+            .attr("y2", r * byteHeight + 20)
+            .style(
+              "stroke",
+              r === 0 || r === rowCount ? "black" : "rgb(0 0 0 / 30%)"
+            );
+        }
+
+        for (let r = 0; r < rowCount; r++) {
+          for (let c = 0; c <= align; c++) {
+            group
+              .append("line")
+              .attr("x1", c * byteWidth + indent)
+              .attr("y1", r * byteHeight + 20)
+              .attr("x2", c * byteWidth + indent)
+              .attr("y2", (r + 1) * byteHeight + 20)
+              .style(
+                "stroke",
+                c === 0 || c === align ? "black" : "rgb(0 0 0 / 8%)"
+              );
+          }
+        }
+
+        // field labels
+        labelsToDraw.forEach((label) => {
+          group
+            .append("text")
+            .attr("x", label.x)
+            .attr("y", label.y - 6)
+            .text(label.name)
+            .style("fill", "black")
+            .style("font-size", 12)
+            .style("font-weight", "bold")
+            .style("text-anchor", "middle")
+            .style("font-family", "monospace")
+            .style("dominant-baseline", "middle")
+            .style("pointer-events", "none");
+
+          group
+            .append("text")
+            .attr("x", label.x)
+            .attr("y", label.y + 10)
+            .text(label.type)
+            .style("fill", "#222")
+            .style("font-size", 10)
+            .style("font-style", "italic")
+            .style("text-anchor", "middle")
+            .style("font-family", "monospace")
+            .style("dominant-baseline", "middle")
+            .style("pointer-events", "none");
+        });
+
+        // byte offset labels
+        for (let i = 0; i < size; i += align) {
+          const row = i / align;
+          group
+            .append("text")
+            .attr("x", 10)
+            .attr("y", row * byteHeight + 20 + byteHeight / 2)
+            .attr("dominant-baseline", "middle")
+            .style("font-family", "monospace")
+            .style("font-size", 12)
+            .text(i);
+        }
+
+        // struct name label
+        group
+          .append("text")
+          .attr("x", indent)
+          .attr("y", 14)
+          .text(struct.name)
+          .style("font-family", "monospace")
+          .style("font-size", 14)
+          .style("font-weight", "bold");
+
+        return rowCount * byteHeight + spacing;
+      }
+
+      for (const struct of structs) {
+        yOffset += drawStruct(struct, yOffset);
+      }
+
+      svg.attr("height", yOffset);
+      svg.attr("width", wid);
+
+      const returnValue = svg.node();
+      returnValue.value = code;
+      return returnValue;
+    }
+  </script>
+</notebook>

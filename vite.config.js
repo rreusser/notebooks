@@ -40,10 +40,12 @@ async function computeIndex() {
     const relpath = relative(NOTEBOOKS_DIR, path);
     const notebook = deserialize(await readFile(path, "utf8"), { parser });
     if (relpath === "index.html") continue;
+    const meta = await readMetadata(path);
+    if (meta.hidden === true) continue;
     notebooks.push({
       path: relpath.replace(/index\.html$/, ""),
       ...notebook,
-      ...(await readMetadata(path)),
+      ...meta,
     });
   }
   notebooks.sort(
