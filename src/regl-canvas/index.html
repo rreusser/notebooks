@@ -43,6 +43,9 @@
   <script id="34" type="text/markdown">
     Is it really worth this trouble to avoid creating extra WebGL contexts? Well, *yes*. Without this, and especially if you have more than one context, you can expect lost contexts and blank diagrams as the number of window resize events exceeds the maximum number of WebGL contexts, typically sixteen.
   </script>
+  <script id="44" type="text/markdown">
+    One other small thing I learned along the way is that, for somewhat obvious security reasons, Observable Desktop cannot import files from parent directories. This limits the ability to have notebooks categorized within directories import library functions. A simple workaround? Symbolic links. In particular, I added a symbolic link called `lib` within the notebook directory which trivially points to `../lib`.
+  </script>
   <script id="32" type="text/markdown">
     ## Implementation
   </script>
