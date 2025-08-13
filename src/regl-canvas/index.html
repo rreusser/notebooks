@@ -4,6 +4,20 @@
   <script id="1" type="text/markdown">
     # REGL Canvas
   </script>
+  <script id="11" type="text/markdown">
+    This notebook is a test of three things (and will probably disappear soon):
+  </script>
+  <script id="9" type="text/markdown">
+    1. Importing helper files from disk
+    2. Importing node modules
+    3. Instantiating and managing state of a WebGL canvas
+  </script>
+  <script id="10" type="text/markdown">
+    The first is resolved with some symbolic links, the second is partially handled by importing from jsdelivr.net, and the third isn’t quite there yet but mainly will (presumably) require just a few minor changes.
+  </script>
+  <script id="8" type="text/markdown">
+    In particular, WebGL canvas instantiation *must not* depend on the page width, lest you be prepared for a lot of lost WebGL contexts as the page resizes. I used to manage this with some non-ideal use of `this` to get the previous cell value and avoid re-instantiating the context when the cell is re-evaluated, but Notebook Kit’s preference for Vanilla JavaScript over Observable JavaScript makes this less straightforward. Instead, I think the appropriate solution is to instantiate a canvas of indeterminate size in one cell, and then manage its size in a separate cell. This is very slightly unpleasant but not disastrous.
+  </script>
   <script id="2" type="module" pinned="">
     import reglCanvas from './lib/regl-canvas.js'
   </script>
