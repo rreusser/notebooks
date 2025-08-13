@@ -1,4 +1,4 @@
-// lib/regl.js
+// lib/regl-canvas.js
 export function reglCanvas(createREGL, props={}) {
   const dpi = props.pixelRatio ?? window.devicePixelRatio;
   const canvas = document.createElement('canvas');
