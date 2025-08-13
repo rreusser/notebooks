@@ -1,0 +1,1 @@
+function l(c,n={}){const a=n.pixelRatio??window.devicePixelRatio,e=document.createElement("canvas"),t=c({...n,canvas:e});return t.attachResize=(i,o)=>(t.poll(),e.width=Math.round(i*a),e.height=Math.round(o*a),e.style.width=`${i}px`,e.style.height=`${o}px`,t),e.value=t,e}export{l as reglCanvas};

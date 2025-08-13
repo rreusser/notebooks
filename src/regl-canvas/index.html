@@ -5,29 +5,70 @@
     # REGL Canvas
   </script>
   <script id="11" type="text/markdown">
-    This notebook is a test of three things (and will probably disappear soon):
+    This notebook wires up a simple library function for managing a [regl](https://github.com/regl-project/regl) canvas in Observable Notebooks 2.0. It works in Observable Desktop as well as with Notebook Kit.
   </script>
-  <script id="9" type="text/markdown">
-    1. Importing helper files from disk
-    2. Importing node modules
-    3. Instantiating and managing state of a WebGL canvas
+  <script id="28" type="text/markdown">
+    The main points are:
+
+    1. Dependency injection using `regl` from jsdelivr.net
+    2. Two-phased construction: first create a canvas, then inject size dependencies
   </script>
-  <script id="10" type="text/markdown">
-    The first is resolved with some symbolic links, the second is partially handled by importing from jsdelivr.net, and the third isn’t quite there yet but mainly will (presumably) require just a few minor changes.
+  <script id="30" type="text/markdown">
+    To avoid recreating WebGL contexts, I previously used the `this` variable of Observable JavaScript to access the previous cell return value, but this leans heavily into statefullness within Observable’s stateless evaluation model, and more critically, I don’t actually know how to accomplish this in Notebook 2.0’s Vanilla JavaScript model. This is probably for the best.
   </script>
-  <script id="8" type="text/markdown">
-    In particular, WebGL canvas instantiation *must not* depend on the page width, lest you be prepared for a lot of lost WebGL contexts as the page resizes. I used to manage this with some non-ideal use of `this` to get the previous cell value and avoid re-instantiating the context when the cell is re-evaluated, but Notebook Kit’s preference for Vanilla JavaScript over Observable JavaScript makes this less straightforward. Instead, I think the appropriate solution is to instantiate a canvas of indeterminate size in one cell, and then manage its size in a separate cell. This is very slightly unpleasant but not disastrous.
+  <script id="31" type="text/markdown">
+    So, we’re left with a simple workaround. First, create a canvas with no size, then obtain the final `regl` instance as we inject the canvas dimension dependencies via `.attachResize()`. Note that this is a two-step process like the following, so that the final `regl` instance is used *after* the size is applied.
   </script>
-  <script id="2" type="module" pinned="">
-    import reglCanvas from './lib/regl-canvas.js'
+  <script id="42" type="module">
+    html`<span style="color:green">Good 👍:</span>`
   </script>
-  <script id="4" type="module" pinned="">
-    import createREGL from 'npm:regl'
+  <script id="37" type="module">
+    dot`digraph {
+      "reglCanvas()" -> "_regl"
+      "_regl" -> "regl"[label=" .attachResize()"]
+    }`
   </script>
-  <script id="3" type="module" pinned="">
-    const regl = view(reglCanvas(null, {width, createREGL}))
+  <script id="43" type="text/markdown">
+    If we did the following, we would fine that the execution order is indeterminate and we don’t always operate on a properly resized canvas.
   </script>
-  <script id="6" type="module" pinned="">
+  <script id="39" type="module">
+    html`<span style="color:red">Bad 👎:</span>`
+  </script>
+  <script id="38" type="module">
+    dot`digraph {
+      "reglCanvas()" -> "_regl"
+      "reglCanvas()" -> "regl"[label=" .attachResize()"]
+    }`
+  </script>
+  <script id="34" type="text/markdown">
+    Is it really worth this trouble to avoid creating extra WebGL contexts? Well, *yes*. Without this, and especially if you have more than one context, you can expect lost contexts and blank diagrams as the number of window resize events exceeds the maximum number of WebGL contexts, typically sixteen.
+  </script>
+  <script id="32" type="text/markdown">
+    ## Implementation
+  </script>
+  <script id="23" type="text/markdown">
+    ```js
+    ${await FileAttachment('./lib/regl-canvas.js').text()}```
+  </script>
+  <script id="35" type="text/markdown">
+    ## Example
+  </script>
+  <script id="14" type="module" pinned="">
+    import { reglCanvas } from './lib/regl-canvas.js'
+  </script>
+  <script id="26" type="module" pinned="">
+    import createREGL from 'npm:regl@2.1.1'
+  </script>
+  <script id="15" type="module" pinned="">
+    // Instantiate the context without a size
+    const _regl = view(reglCanvas(createREGL, {pixelRatio: 1}))
+  </script>
+  <script id="22" type="module" pinned="">
+    // Pass the context through the resize function
+    const regl = _regl.attachResize(width, width * 0.3)
+  </script>
+  <script id="19" type="module" pinned="">
+    // Start using the context
     regl.poll();
     regl.clear({color: [0.8, 0.9, 1, 1]});
   </script>
