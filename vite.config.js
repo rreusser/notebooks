@@ -31,7 +31,7 @@ async function readMetadata(filename) {
     const pub = new Date(meta.publishedAt);
     meta.publishedAtNumeric = pub.toISOString().slice(0, 10).replace(/-/g, "");
   }
-  return meta;
+  return meta || {};
 }
 
 async function computeIndex() {
@@ -41,7 +41,7 @@ async function computeIndex() {
     const notebook = deserialize(await readFile(path, "utf8"), { parser });
     if (relpath === "index.html") continue;
     const meta = await readMetadata(path);
-    if (meta.hidden === true) continue;
+    if (meta?.hidden === true) continue;
     notebooks.push({
       path: relpath.replace(/index\.html$/, ""),
       ...notebook,

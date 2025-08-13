@@ -1,0 +1,536 @@
+<!doctype html>
+<notebook theme="air">
+  <title>The Double Pendulum Map</title>
+  <script id="895" type="text/markdown">
+    # The Double Pendulum Map
+  </script>
+  <script id="896" type="text/markdown">
+    (*Edit: Previous title was *The Double Pendulum Fractal.* [Jacob Rus](https://observablehq.com/@jrus) has, I think correctly, questioned the extent to which this meets the formal definition of a fractal. I'm not certain, so I'll call it a map.*)
+  </script>
+  <script id="539" type="text/markdown">
+    A [double pendulum](https://en.wikipedia.org/wiki/Double_pendulum) consists of two connected pendulums, rotating under the force of gravity. A compound double pendulum has the weight distributed along the length of the arms rather than as point masses at the ends of strings.
+  </script>
+  <script id="530" type="application/vnd.observable.javascript">
+    html`<figure>
+    <img width="300" src="${await FileAttachment(
+      "1920px-Double-compound-pendulum-dimensioned.svg.png"
+    ).url()}">
+    <figcaption>Source: <a href="https://commons.wikimedia.org/wiki/File:Double-compound-pendulum-dimensioned.svg">Wikimedia commons</a>
+    </figure>`
+  </script>
+  <script id="363" type="text/markdown">
+    [Sam Maksimovich](https://twitter.com/MaksimovichSam) recently created a lovely video in which he simultaneously plots all possible double pendulums starting with zero velocity, using color to illustrate their trajectories. The explanation is far better than anything you'll find here. You should watch it!
+  </script>
+  <script id="526" type="module">
+    tweet('1392357775666159618')
+  </script>
+  <script id="547" type="text/markdown">
+    At the end he mentions it took six hours to render the video. I'm confident I would not be able to create a lovelier or more effective explanation video, but the visualization is exactly the sort of thing GPUs do very well, so it seemed like it would be fun to plug this into WebGL and make a quick, interactive visualization of the pendulum. A major shortcoming is that WebGL only does single precision, and chaotic simulations definitely benefit from at least double precision, but maybe we'll see what we can get away with.
+  </script>
+  <script id="897" type="text/markdown">
+    The visualization below uses the [regl](https://github.com/regl-project/regl) WebGL library to compute and visualize the angle of the of the first (x-axis) and second (y-axis) arms of all compound double pendulums starting with the specified velocities. This amounts to a two-dimensional slice (just the angular positions) of the four-dimensional phase space (two positions and two velocities).
+  </script>
+  <script id="898" type="text/markdown">
+    Adjust the initial velocities and zoom in on regions below and observe…… pretty colors! 🌈
+  </script>
+  <script id="610" type="module">
+    if (colorType === 'half float') {
+      display(html`<p style="color:#a00">Warning! This simulation is using half-float precision and as a result won't be accurate. Try a device which supports the floating point WebGL textures for better results.</p>`);
+    }
+  </script>
+  <script id="573" type="module">
+    const omega0_0 = view(Inputs.range([-2, 2], {
+      label: 'Initial angular velocity of arm 1',
+      value: 0
+    }));
+  </script>
+  <script id="576" type="module">
+    const omega0_1 = view(Inputs.range([-2, 2], {
+      label: 'Initial angular velocity of arm 2',
+      value: 0
+    }));
+  </script>
+  <script id="313" type="module">
+    const dt = view(Inputs.range([0.001, 0.1], {
+      label: 'Time step',
+      value: 0.03,
+      transform: Math.log
+    }));
+  </script>
+  <script id="281" type="module">
+    const simulate = view(Inputs.checkbox(['Simulate', 'Show pendulum at point under mouse'], {
+      value: ['Simulate', 'Show pendulum at point under mouse']
+    }));
+  </script>
+  <script id="300" type="module">
+    const restart = view(Inputs.button('Restart'));
+  </script>
+  <script id="289" type="application/vnd.observable.javascript">
+    viz = html`<figure>
+    <div style="position:relative;">
+    ${regl._gl.canvas}
+    <div id="zoombox" style="display:none"></div>
+    </div>
+    <figcaption>Hover to view pendulum at current point. Click and drag to zoom. Double click to return to initial view</figcaption>
+    </figure>`
+  </script>
+  <script id="814" type="application/vnd.observable.javascript">
+    md`${tex`\theta_1 \in [${(zoomBox.center[0] - zoomBox.scale[0] / 2).toFixed(
+      8
+    )}, ${(zoomBox.center[0] + zoomBox.scale[0] / 2).toFixed(
+      8
+    )}]`}<br>${tex`\theta_2 \in [${(
+      zoomBox.center[1] -
+      zoomBox.scale[1] / 2
+    ).toFixed(8)}, ${(zoomBox.center[1] + zoomBox.scale[1] / 2).toFixed(8)}]`}`
+  </script>
+  <script id="5" type="module">
+    const regl = (function () {
+      var canvas = document.createElement('canvas');
+      let regl = createREGL({
+        optionalExtensions: [
+          'OES_texture_half_float',
+          'OES_texture_float',
+          'ANGLE_instanced_arrays'
+        ],
+        canvas,
+        pixelRatio: pixelRatio,
+        attributes: {
+          antialias: true,
+          alpha: false,
+          depthStencil: false,
+          preserveDrawingBuffer: false
+        }
+      });
+      return regl;
+    })();
+  </script>
+  <script id="47" type="module">
+    const resizeContext = (function () {
+      // Depend on page width here to avoid recreating regl context when the page
+      // width changes
+      const canvas = regl._gl.canvas;
+      var w = radius;
+      var h = radius;
+      canvas.style.width = `${Math.floor(w / pixelRatio)}px`;
+      canvas.style.height = `${Math.floor(h / pixelRatio)}px`;
+      canvas.width = w;
+      canvas.height = h;
+    })();
+  </script>
+  <script id="158" type="module">
+    // The main simulation and initialization setup.
+    zoomBox;
+
+    // Trigger reinitialization when 'restart' clicked
+    restart;
+
+    // Must call this when calling regl outside of frame loop
+    regl.poll();
+
+    // Call initialize in blit context, writing to y[0] framebuffer
+    y[0].use(() =>
+      blit(() => {
+        initialize({ omega0_0, omega0_1, zoomBox });
+      })
+    );
+  </script>
+  <script id="54" type="module">
+    // Trigger redraw on restart or zoombox change
+    restart;
+    zoomBox;
+
+    const run = ~simulate.indexOf('Simulate');
+    const showPen = ~simulate.indexOf('Show pendulum at point under mouse');
+
+    let needsDraw = true;
+    const frame = regl.frame(() => {
+      // Configure a full-viewport shader
+      blit(() => {
+        // Step the simulation if running
+        if (run) {
+          // Run two steps from one data framebuffer to the other,
+          // i.e. from y1=f(y0) and then back to y0=f(y1)
+          update([{ dt, src: y[0], dst: y[1] }, { dt, src: y[1], dst: y[0] }]);
+        }
+
+        // Draw the simulation if something has happened
+        if (needsDraw) {
+          drawMap({ y: y[0] });
+          if (showPen && mouseHover.active && !mouseHover.boxActive) {
+            drawPendulum([
+              { y, w1: [0, 0, 0], w2: [0, 1, 0] },
+              { y, w1: [0, 1, 0], w2: [0, 0, 1] }
+            ]);
+          }
+        }
+
+        // Trigger update
+        needsDraw = run ? true : false;
+      });
+    });
+    invalidation.then(() => frame.cancel());
+  </script>
+  <script id="78" type="module">
+    // Configure two 2D textures to store (theta1, theta2, velocity1, velocity2) in the four channels of an (r, g, b, a) texture.
+    const colorType = canWriteToFBOOfType(regl, 'float')
+      ? 'float'
+      : canWriteToFBOOfType(regl, 'half float')
+      ? 'half float'
+      : 'uint8'
+  </script>
+  <script id="58" type="module">
+    const y = (function () {
+      const fbos = [0, 1].map(() =>
+        regl.framebuffer({
+          colorType,
+          radius,
+          depth: false,
+          stencil: false
+        })
+      );
+      invalidation.then(() => fbos.forEach(fbo => fbo.destroy()));
+      return fbos;
+    })();
+  </script>
+  <script id="113" type="module">
+    const blit = regl({
+      // Configure a full-viewport vertex shader:
+      vert: `
+        precision mediump float;
+        attribute vec2 xy;
+        void main () {
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      attributes: { xy: [-4, -4, 4, -4, 0, 4] },
+      uniforms: {
+        resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight]
+      },
+      count: 3,
+      depth: { enable: false }
+    })
+  </script>
+  <script id="151" type="module">
+    const initialize = regl({
+      frag: `
+        precision highp float;
+        uniform sampler2D colorscale;
+        uniform vec2 resolution, omega0, center, scale;
+        #define PI ${Math.PI}
+        void main () {
+          // Really just the full spectrum of angles for the two parts of the pendulum,
+          // [0, 2pi] x [0, 2pi], with zero velocity, but we center it about 0.5 to
+          // slightly improve how well it works with half float precision
+          vec2 theta0 = center + (0.5 + scale * ((vec2(0, 1) + vec2(1, -1) * gl_FragCoord.xy / resolution) - 0.5));
+          gl_FragColor = (vec4(theta0 * (2.0 * PI) - PI, omega0) + PI) / (2.0 * PI);
+        }`,
+      uniforms: {
+        omega0: (ctx, props) => [props.omega0_0, props.omega0_1],
+        center: (ctx, props) => props.zoomBox.center.map(x => (x * 0.5) / Math.PI),
+        scale: (ctx, props) => [
+          props.zoomBox.scale[0] / (Math.PI * 2),
+          props.zoomBox.scale[1] / (Math.PI * 2)
+        ]
+      }
+    })
+  </script>
+  <script id="176" type="module">
+    const update = regl({
+      frag: `
+        precision highp float;
+        uniform sampler2D y;
+        uniform vec2 resolution;
+        uniform float dt;
+        #define PI ${Math.PI}
+
+        // From: https://en.wikipedia.org/wiki/Double_pendulum#Lagrangian
+        vec4 derivative (vec4 state) {
+          vec2 theta = state.xy;
+          vec2 pTheta = state.zw;
+          float threeCosTheta12 = 3.0 * cos(theta.x - theta.y);
+          vec2 thetaDot = 6.0 * (
+            vec2(
+              2.0 * pTheta.x - threeCosTheta12 * pTheta.y,
+              8.0 * pTheta.y - threeCosTheta12 * pTheta.x
+            ) / (16.0 - threeCosTheta12 * threeCosTheta12)
+          );
+          float thetaDot12sinTheta12 = thetaDot.x * thetaDot.y * sin(theta.x - theta.y);
+          vec2 pThetaDot = -0.5 * vec2(
+             thetaDot12sinTheta12 + 3.0 * sin(theta.x),
+            -thetaDot12sinTheta12 + sin(theta.y)
+          );
+          return vec4(thetaDot, pThetaDot);
+        }
+
+        void main () {
+          // Read the state (theta1, theta2, velocity1, velocity2) from the rgba texture
+          vec4 yn = texture2D(y, gl_FragCoord.xy / resolution);
+
+          // Convert from [0, 1] to [-PI, PI]:
+          yn = yn * (2.0 * PI) - PI;
+
+          // RK4 integration
+          vec4 k1 = dt * derivative(yn);
+          vec4 k2 = dt * derivative(yn + 0.5 * k1);
+          vec4 k3 = dt * derivative(yn + 0.5 * k2);
+          vec4 k4 = dt * derivative(yn + k3);
+          yn += (k1 + k4 + 2.0 * (k2 + k3)) / 6.0;
+
+          // Convert back from [-PI, PI] to [0, 1]:
+          yn = (yn + PI) / (2.0 * PI);
+
+          // Loop angles if they exceed the range
+          yn.xy = fract(yn.xy);
+
+          // Output the state to the four color channels
+          gl_FragColor = yn;
+        }`,
+      framebuffer: regl.prop('dst'),
+      uniforms: { y: regl.prop('src'), dt: regl.prop('dt') }
+    })
+  </script>
+  <script id="95" type="module">
+    const drawMap = regl({
+      frag: `
+        precision highp float;
+        uniform sampler2D colorscale, y;
+        uniform vec2 resolution;
+        #define TWOPI ${2 * Math.PI}
+
+        vec3 colormap(vec2 uv) {
+          uv *= TWOPI;
+          return pow(0.5 + 0.5 * vec3(sin(uv.x) * vec2(-cos(uv.y), sin(uv.y)), -cos(uv.x)), vec3(0.75));
+        }
+
+        void main () {
+          // Sample the state at this pixel
+          vec4 state = texture2D(y, gl_FragCoord.xy / resolution);
+
+          // Color it by the projection of the 4D state to 2D (theta1, theta2):
+          gl_FragColor = vec4(colormap(state.xy), 1);
+        }`,
+      uniforms: {
+        y: regl.prop('y')
+      }
+    })
+  </script>
+  <script id="886" type="module">
+    const drawPendulum = regl({
+      vert: `
+    precision mediump float;
+    attribute vec2 line;
+    uniform vec2 resolution;
+    uniform vec3 w1, w2;
+    uniform vec2 hover;
+    uniform float lineWidth;
+    uniform sampler2D y;
+    #define PI ${Math.PI}
+    void main () {
+      // Sample the state directly from the texture by passing the hovered
+      // point as a uniform, so that the data never leaves the GPU.
+      vec2 state = texture2D(y, hover).xy * (2.0 * PI) - PI;
+
+      // Vectors representing the directions of the arms of the pendulum
+      vec2 v1 = vec2(sin(state.x), -cos(state.x));
+      vec2 v2 = vec2(sin(state.y), -cos(state.y));
+
+      // Points representing the joints of the pendulum (and the end)
+      vec2 p0 = vec2(0);
+      vec2 p1 = v1;
+      vec2 p2 = p1 + v2;
+
+      // Select two of the three above (arm1 or arm2) as endpoints of
+      // the line to be rendered
+      vec2 a = w1.x * p0 + w1.y * p1 + w1.z * p2;
+      vec2 b = w2.x * p0 + w2.y * p1 + w2.z * p2;
+
+      // Normal and tangential vectors
+      vec2 t = normalize(b - a);
+      vec2 n = vec2(-t.y, t.x);
+
+      // Select which end of line we're at
+      vec2 p = mix(a, b, line.y) * 0.5;
+
+      // Offset normal to the line by the line width
+      p += n * line.x * lineWidth;
+
+      gl_Position = vec4(p, 0, 1);
+    }`,
+      frag: `
+        precision lowp float;
+        void main () {
+          gl_FragColor = vec4(0, 0, 0, 1);
+        }`,
+      attributes: {
+        line: [0.5, 0, 0.5, 1, -0.5, 0, -0.5, 1]
+      },
+      uniforms: {
+        y: regl.prop('y[0]'),
+        w1: regl.prop('w1'),
+        w2: regl.prop('w2'),
+        hover: () => mouseHover.pt,
+        lineWidth: ctx => (4.0 * ctx.pixelRatio) / ctx.framebufferWidth,
+        resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight]
+      },
+      depth: { enable: false },
+      primitive: 'triangle strip',
+      count: 4
+    })
+  </script>
+  <script id="889" type="module">
+    const mouseHover = ({ pt: [0, 0], active: false, boxActive: false });
+  </script>
+  <script id="619" type="module">
+    const zoomBox = view((function () {
+      viz;
+      const dummy = html`<span></span>`;
+
+      const zoomBox = {
+        center: [0, 0],
+        scale: [Math.PI * 2, Math.PI * 2]
+      };
+
+      const canvas = regl._gl.canvas;
+      let start = { x: NaN, y: NaN };
+      let end = { x: NaN, y: NaN };
+      let captured = false;
+      function emitUpdate() {
+        dummy.dispatchEvent(new CustomEvent('input'));
+      }
+
+      function onDoubleClick() {
+        zoomBox.center[0] = 0;
+        zoomBox.center[1] = 0;
+        zoomBox.scale[0] = Math.PI * 2;
+        zoomBox.scale[1] = Math.PI * 2;
+        emitUpdate();
+      }
+      canvas.addEventListener('dblclick', onDoubleClick, false);
+      const box = document.getElementById('zoombox');
+      box.style.position = 'absolute';
+      box.style.border = '1px solid rgba(0,0,0,0.6)';
+      box.style.backgroundColor = 'rgba(255,255,255,0.2)';
+      box.style.pointerEvents = 'none';
+
+      function updateBox() {
+        box.style.left = `${Math.min(start.x, end.x)}px`;
+        box.style.top = `${Math.min(start.y, end.y)}px`;
+        box.style.width = `${Math.abs(end.x - start.x)}px`;
+        box.style.height = `${Math.abs(end.y - start.y)}px`;
+      }
+
+      function onPointerDown(event) {
+        captured = true;
+        start.x = event.offsetX;
+        start.y = event.offsetY;
+        end.x = event.offsetX;
+        end.y = event.offsetY;
+        canvas.setPointerCapture(event.pointerId);
+        box.style.display = 'block';
+        updateBox();
+        mouseHover.boxActive = true;
+      }
+      function onPointerMove(event) {
+        mouseHover.pt[0] = event.offsetX / dimension;
+        mouseHover.pt[1] = 1 - event.offsetY / dimension;
+        mouseHover.boxActive = false;
+        if (!captured) return;
+        end.x = event.offsetX;
+        end.y = event.offsetY;
+        updateBox();
+        mouseHover.boxActive = true;
+      }
+      function onPointerUp(event) {
+        box.style.display = 'none';
+        captured = false;
+        end.x = event.offsetX;
+        end.y = event.offsetY;
+        if (end.x === start.x || end.y === start.y) return;
+        let curX0 = zoomBox.center[0] - zoomBox.scale[0] * 0.5;
+        let curX1 = zoomBox.center[0] + zoomBox.scale[0] * 0.5;
+        let curY0 = zoomBox.center[1] - zoomBox.scale[1] * 0.5;
+        let curY1 = zoomBox.center[1] + zoomBox.scale[1] * 0.5;
+
+        let xcen = (0.5 * (start.x + end.x)) / dimension;
+        let ycen = (0.5 * (start.y + end.y)) / dimension;
+        let xscale = Math.abs(end.x - start.x) / dimension;
+        let yscale = Math.abs(end.y - start.y) / dimension;
+
+        zoomBox.center[0] = lerp(curX0, curX1, xcen);
+        zoomBox.center[1] = lerp(curY0, curY1, ycen);
+        zoomBox.scale[0] *= xscale;
+        zoomBox.scale[1] *= yscale;
+
+        canvas.releasePointerCapture(event.pointerId);
+        updateBox();
+        emitUpdate();
+        mouseHover.boxActive = false;
+      }
+
+      function onPointerEnter() {
+        mouseHover.active = true;
+      }
+      function onPointerLeave() {
+        mouseHover.active = false;
+      }
+      canvas.addEventListener('pointerdown', onPointerDown, false);
+      canvas.addEventListener('pointermove', onPointerMove, false);
+      canvas.addEventListener('pointerup', onPointerUp, false);
+
+      canvas.addEventListener('pointerenter', onPointerEnter, false);
+      canvas.addEventListener('pointerleave', onPointerLeave, false);
+
+      invalidation.then(() => {
+        canvas.addEventListener('dblclick', onDoubleClick, false);
+        canvas.removeEventListener('pointerdown', onPointerDown);
+        canvas.removeEventListener('pointermove', onPointerMove);
+        canvas.removeEventListener('pointerup', onPointerUp);
+        canvas.removeEventListener('pointerenter', onPointerEnter);
+        canvas.removeEventListener('pointerleave', onPointerLeave);
+      });
+      dummy.value = zoomBox;
+      return dummy;
+    })());
+  </script>
+  <script id="901" type="module" pinned="">
+    await import('./lib/twttr.js')
+    const twttr = window.twttr
+  </script>
+  <script id="903" type="module" pinned="">
+    function tweet(id, options) {
+      const div = document.createElement("DIV");
+      Promise.resolve().then(() => twttr.widgets.createTweet(id, div, options));
+      return div;
+    }
+  </script>
+  <script id="766" type="module">
+    const dimension = width;
+  </script>
+  <script id="82" type="module">
+    const radius = Math.floor(dimension * pixelRatio); // (height/width in regl-speak)
+  </script>
+  <script id="49" type="module">
+    const pixelRatio = window.devicePixelRatio;
+  </script>
+  <script id="890" type="module">
+    import createREGL from 'npm:regl@2.1.1'
+  </script>
+  <script id="485" type="module">
+    import { canWriteToFBOOfType } from 'observable:@rreusser/regl-tools'
+  </script>
+  <script id="635" type="module">
+    import { rangeSlider } from 'observable:@mootari/range-slider'
+  </script>
+  <script id="791" type="module">
+    function lerp(a, b, t) {
+      return a + t * (b - a);
+    }
+  </script>
+  <script id="651" type="text/html">
+    <style>
+    input[type=range] {
+      width: 500px;
+    }
+    </style>
+  </script>
+</notebook>
