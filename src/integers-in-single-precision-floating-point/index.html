@@ -37,7 +37,7 @@
       var h = height / verticalScale;
       canvas.width = w;
       canvas.height = h;
-      canvas.style.width = `${w * 16}px`;
+      canvas.style.width = `${Math.min(width, w * 16)}px`;
       canvas.style.height = `${h * verticalScale}px`;
       canvas.style.imageRendering = 'crisp-edges';
       canvas.style.imageRendering = 'pixelated';
