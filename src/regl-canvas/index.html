@@ -1,0 +1,20 @@
+<!doctype html>
+<notebook theme="air">
+  <title>REGL Canvas</title>
+  <script id="1" type="text/markdown">
+    # REGL Canvas
+  </script>
+  <script id="2" type="module" pinned="">
+    import reglCanvas from './lib/regl-canvas.js'
+  </script>
+  <script id="4" type="module" pinned="">
+    import createREGL from 'npm:regl'
+  </script>
+  <script id="3" type="module" pinned="">
+    const regl = view(reglCanvas(null, {width, createREGL}))
+  </script>
+  <script id="6" type="module" pinned="">
+    regl.poll();
+    regl.clear({color: [0.8, 0.9, 1, 1]});
+  </script>
+</notebook>

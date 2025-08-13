@@ -285,15 +285,16 @@ footer {
 .index .title {
   font-family: "Open Sans", sans-serif;
   font-weight: 400;
-  font-size: 18px;
+  font-size: 16px;
   flex: 1;
+  line-height: 1.4;
 }
 
 .index .publishedAt {
   color: #888;
   text-transform: uppercase;
   font-family: "Open Sans", sans-serif;
-  font-size: 0.8em;
+  font-size: 13px;
   order: 0;
 }
 
@@ -320,6 +321,9 @@ footer {
   }
   .index .title {
     flex: 1 1 100%;
+  }
+  .index li {
+    margin-bottom: 20px;
   }
   .resource-links {
     justify-content: flex-start;

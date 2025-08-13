@@ -1433,14 +1433,15 @@ main h6 {
     .index .title {
   font-family: "Open Sans", sans-serif;
   font-weight: 400;
-  font-size: 18px;
+  font-size: 16px;
   flex: 1;
+  line-height: 1.4;
 }
     .index .publishedAt {
   color: #888;
   text-transform: uppercase;
   font-family: "Open Sans", sans-serif;
-  font-size: 0.8em;
+  font-size: 13px;
   order: 0;
 }
     .resource-links {
@@ -1465,6 +1466,9 @@ main h6 {
   }
   .index .title {
     flex: 1 1 100%;
+  }
+  .index li {
+    margin-bottom: 20px;
   }
   .resource-links {
     justify-content: flex-start;
@@ -1493,6 +1497,13 @@ main h6 {
   </header>
   <div class="container">
       <ul class="index">
+        <li>
+          <div class="meta">
+            <h2 class="title"><a href="regl-canvas/">REGL Canvas</a></h2>
+            <span class="publishedAt">August 12, 2025</span>
+          </div>
+          
+        </li>
         <li>
           <div class="meta">
             <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
