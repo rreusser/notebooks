@@ -492,11 +492,11 @@
       return dummy;
     })());
   </script>
-  <script id="901" type="module" pinned="">
+  <script id="901" type="module">
     await import('./lib/twttr.js')
     const twttr = window.twttr
   </script>
-  <script id="903" type="module" pinned="">
+  <script id="903" type="module">
     function tweet(id, options) {
       const div = document.createElement("DIV");
       Promise.resolve().then(() => twttr.widgets.createTweet(id, div, options));
