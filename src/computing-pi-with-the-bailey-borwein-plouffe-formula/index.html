@@ -10,9 +10,6 @@
   <script id="1820" type="application/x-tex">
     \pi =\sum _{k=0}^{\infty }\left[{\frac {1}{16^{k}}}\left({\frac {4}{8k+1}}-{\frac {2}{8k+4}}-{\frac {1}{8k+5}}-{\frac {1}{8k+6}}\right)\right].
   </script>
-  <script id="1224" type="text/markdown">
-    Such algorithms are called *spigot algorithms*. The formula was discovered experimentally in 1995 via the [PSLQ algorithm](https://www.davidhbailey.com/dhbpapers/pslq-comp-alg.pdf), which itself was named one of the [Top Ten Algorithms of the Century](https://archive.siam.org/pdf/news/637.pdf).
-  </script>
   <script id="1770" type="text/markdown">
     That such a formula could exist is a bit shocking—though the initial shock is tempered by the realization that it does, of course, take longer as you start at later digits (${tex`O(n \log n)`} as a function of the starting digit, to be precise). Additionally, the hexadecimal digits cannot be converted to decimal without first computing all of the leading digits. What it does enable though, is to compute digits deep into ${tex`\pi`} with hardly any memory consumption and nothing more than a basic double precision data type.
   </script>

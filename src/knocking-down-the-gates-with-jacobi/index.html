@@ -677,15 +677,13 @@
   <script id="336" type="module" pinned="">
     const u_max = Math.log(Math.sqrt(6) + Math.sqrt(5))
   </script>
-  <script id="299" type="application/vnd.observable.javascript">
-    upswing = {
-      return [...linspace(0, 4, 201)].map((u) => ({
-        u,
-        t: u * Math.sqrt(l / g),
-        uK: u,
-        xdot: ((2 * k * l) / Math.cosh(u)) * (2 / Math.cosh(u) ** 2 - 1)
-      }));
-    }
+  <script id="299" type="module">
+    const upswing = [...linspace(0, 4, 201)].map((u) => ({
+      u,
+      t: u * Math.sqrt(l / g),
+      uK: u,
+      xdot: ((2 * k * l) / Math.cosh(u)) * (2 / Math.cosh(u) ** 2 - 1)
+    }));
   </script>
   <script id="303" type="module">
     const ymax =
