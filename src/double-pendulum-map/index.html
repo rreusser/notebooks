@@ -33,41 +33,6 @@
   <script id="898" type="text/markdown">
     Adjust the initial velocities and zoom in on regions below and observe…… pretty colors! 🌈
   </script>
-  <script id="910" type="module" pinned="">
-    function computeMomentum (m1, m2, l1, l2) {
-      return function (theta1, theta2, dtheta1, dtheta2) {
-        const c = l1 * l2 / 2 * Math.cos(theta1 - theta2);
-        return [
-          (m1/3) * l1**2 * dtheta1 + m2 * l1**2 * dtheta1 + m1 * dtheta2 * c,
-          (m2/3) * l2**2 * dtheta2 + m2 * dtheta1 * c
-        ]
-      }
-    }
-  </script>
-  <script id="911" type="module" pinned="">
-    function derivative (m1, m2, l1, l2, g=1) {
-      return function ([ theta1, theta2, p1, p2 ]) {
-        const c = Math.cos(theta1 - theta2);
-        const s = Math.sin(theta1 - theta2);
-        const den = 1 / (4.0 * (m1 + 3 * m2) - 9 * m2 * c**2);
-        const dtheta1 = (6 / l1**2) * (2 * p1 - 3 * l1/l2 * c * p1) * den;
-        const dtheta2 = (6 / (m2 * l2**2)) * (2 * p2 * (m1 + 3 * m2) - 3 * m2 * l2/l1 * c * p1) * den;
-        const dp1 = -m2 / 2 * l1 * l2 * dtheta1 * dtheta2 * s - (m1 / 2 + m2) * g * l1 * Math.sin(theta1);
-        const dp2 = m2 / 2 * l1 * l2 * dtheta1 * dtheta2 * s - m2 / 2 * g * l2 * Math.sin(theta2);
-        return [ dtheta1, dtheta2, dp1, dp2 ];
-      }
-    }
-  </script>
-  <script id="912" type="module" pinned="">
-    const svg = d3.create('svg')
-      .attr('width', 640)
-      .attr('height', 480);
-
-    display(svg.node());
-  </script>
-  <script id="907" type="text/markdown">
-    ## Derivation
-  </script>
   <script id="610" type="module">
     if (colorType === 'half float') {
       display(html`<p style="color:#a00">Warning! This simulation is using half-float precision and as a result won't be accurate. Try a device which supports the floating point WebGL textures for better results.</p>`);
