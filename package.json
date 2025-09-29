@@ -20,7 +20,7 @@
     "yaml": "^2.8.0"
   },
   "dependencies": {
-    "@observablehq/notebook-kit": "^1.0.1",
+    "@observablehq/notebook-kit": "^1.4.1",
     "jsdom": "^26.1.0",
     "next-pow-2": "^1.0.0",
     "regl": "^2.1.1"
