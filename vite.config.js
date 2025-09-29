@@ -41,7 +41,7 @@ async function computeIndex() {
     const notebook = deserialize(await readFile(path, "utf8"), { parser });
     if (relpath === "index.html") continue;
     const meta = await readMetadata(path);
-    if (meta?.hidden === true) continue;
+    if (meta?.hidden || meta?.silent) continue;
     notebooks.push({
       path: relpath.replace(/index\.html$/, ""),
       ...notebook,

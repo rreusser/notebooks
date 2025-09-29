@@ -3,12 +3,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="author" content="Ricky Reusser" />
   <meta property="article:author" content="Ricky Reusser" />
-  <meta name="twitter:title" content="Computing π with the Bailey-Borwein-Plouffe Formula" />
-  <meta property="og:title" content="Computing π with the Bailey-Borwein-Plouffe Formula" />
-  <meta name="twitter:description" content="Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit." />
-  <meta name="subject" content="Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit." />
-  <meta name="description" content="Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit." />
-  <meta property="og:description" content="Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit." />
+  <meta name="twitter:title" content="Of Noise and Neighbors" />
+  <meta property="og:title" content="Of Noise and Neighbors" />
+  <meta name="twitter:description" content="On Restraint" />
+  <meta name="subject" content="On Restraint" />
+  <meta name="description" content="On Restraint" />
+  <meta property="og:description" content="On Restraint" />
+  <meta name="robots" content="noindex" />
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1483,9 +1484,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Computing π with the Bailey-Borwein-Plouffe Formula</title>  <script type="module" crossorigin src="/notebooks/assets/index-r-JfQTiX.js"></script>
-  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-DLwE0_Ng.js">
-  <link rel="modulepreload" crossorigin href="/notebooks/assets/define-D1bHXsD4.js">
+<meta name="generator" content="Observable Notebook Kit v1.0.1" /><title>Of Noise and Neighbors</title>  <script type="module" crossorigin src="/notebooks/assets/index-DLwE0_Ng.js"></script>
 </head>
 <body>
   <nav class="menu">
@@ -1496,20 +1495,13 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Computing π with the Bailey-Borwein-Plouffe Formula</h1>
+    <h1>Of Noise and Neighbors</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20210524">May 24, 2021</time>
+      <time pubdate="" datetime="20250921">September 21, 2025</time>
     </div>
     <div class="resource-links">
-        <a href="https://observablehq.com/@rreusser/computing-with-the-bailey-borwein-plouffe-formula" class="resource-link">
-          <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="12" r="10" fill="white"/>
-            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"/>
-          </svg>
-          Live notebook
-        </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/computing-pi-with-the-bailey-borwein-plouffe-formula/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/of-nose-and-neighbors/index.html" class="resource-link">
           <svg xmlns="http://www.w3.org/2000/svg" class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/>
           </svg>
@@ -1519,125 +1511,56 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1771" class="observablehq observablehq--cell"><div><p>The <a href="https://en.wikipedia.org/wiki/Bailey%E2%80%93Borwein%E2%80%93Plouffe_formula">Baily-Borwein-Plouffe</a> (BBP) formula is a remarkable formula for computing the hexadecimal digits of , starting at the  digit, <em>without first computing preceeding digits</em>!</p>
-</div></div><div id="cell-1820" class="observablehq observablehq--cell"></div><div id="cell-1770" class="observablehq observablehq--cell"><div><p>That such a formula could exist is a bit shocking—though the initial shock is tempered by the realization that it does, of course, take longer as you start at later digits ( as a function of the starting digit, to be precise). Additionally, the hexadecimal digits cannot be converted to decimal without first computing all of the leading digits. What it does enable though, is to compute digits deep into  with hardly any memory consumption and nothing more than a basic double precision data type.</p>
-</div></div><div id="cell-1193" class="observablehq observablehq--cell"></div><div id="cell-1242" class="observablehq observablehq--cell"></div><div id="cell-1774" class="observablehq observablehq--cell"><div><p>The table below shows hexadecimal digits of . Each line represents an independent run of the algorithm starting at a slightly different digit. Green digits are correctly computed digits, while red represents incorrect digits. Due to our termination criteria, we usually get a couple fewer digits than requested.</p>
-</div></div><div id="cell-1586" class="observablehq observablehq--cell"><div><p>Change from double precision floating point to <code>BigInt</code> and observe that, although starting at the same digit is at least a factor of ten slower (<em>update: BigInts have gotten much, much faster!</em>), it doesn’t cost too much extra to compute many more digits.</p>
-</div></div><div id="cell-805" class="observablehq observablehq--cell"></div><div id="cell-333" class="observablehq observablehq--cell"></div><div id="cell-437" class="observablehq observablehq--cell"></div><div id="cell-1821" class="observablehq observablehq--cell"></div><div id="cell-478" class="observablehq observablehq--cell"></div><div id="cell-1822" class="observablehq observablehq--cell"></div><div id="cell-1777" class="observablehq observablehq--cell"><div><h2 id="using-the-formula" tabindex="-1"><a href="#using-the-formula">Using the formula</a></h2>
-</div></div><div id="cell-1778" class="observablehq observablehq--cell"><div><p>I’ll be honest. I’ve seen this formula probably ten or twenty times, and apart from trivially plugging in some numbers, I’d never stopped to work through how to properly use it.</p>
-</div></div><div id="cell-1779" class="observablehq observablehq--cell"><div><p>So let’s walk through using the identity to compute  starting at an arbitrary location. I’ll largely repeat the eponymous David Bailey’s explanation from <em><a href="https://www.davidhbailey.com/dhbpapers/bbp-alg.pdf">The BBP Algorithm for Pi</a></em>, filling in some details I learned along the way. The implemenation is also heavily influenced by the version from <a href="https://literateprograms.org/pi_with_the_bbp_formula__python_.html">literateprograms.org</a>.</p>
-</div></div><div id="cell-1780" class="observablehq observablehq--cell"><div><p>Our starting point is the BBP formula,</p>
-</div></div><div id="cell-1781" class="observablehq observablehq--cell"></div><div id="cell-1782" class="observablehq observablehq--cell"><div><p>We first multiply through by , then take the fractional part (modulo 1, if you prefer) which we denote by</p>
-</div></div><div id="cell-1783" class="observablehq observablehq--cell"></div><div id="cell-1784" class="observablehq observablehq--cell"><div><p>Consider  (starting at the fourth digit):</p>
-</div></div><div id="cell-1785" class="observablehq observablehq--cell"></div><div id="cell-1786" class="observablehq observablehq--cell"><div><p>In hexadecimal,  shifts the value  places to the left (analogous to multiplication by ten in base ten), while the fractional part operation chops off any leading digits to the left of the <a href="https://en.wikipedia.org/wiki/Radix_point">radix point</a>. Thus, it pretty directly gives us the hexadecimal representation of  starting at the  digit.</p>
-</div></div><div id="cell-1787" class="observablehq observablehq--cell"><div><p>If we then multiply by  and take the integer part, we obtain  digits of , starting at digit . Consider :</p>
-</div></div><div id="cell-1788" class="observablehq observablehq--cell"></div><div id="cell-1789" class="observablehq observablehq--cell"><div><p>We could evaluate the formula and compute this result directly, but we’d pretty quickly find ourselves dealing with a very large number of digits, only to throw almost all of them away with the final modulo 1.</p>
-</div></div><div id="cell-1790" class="observablehq observablehq--cell"><div><p>Our key observation is that, in order to keep numbers small, the fractional part operation can be distributed into each term of the summation. This works since, for example, , and yields</p>
-</div></div><div id="cell-1791" class="observablehq observablehq--cell"></div><div id="cell-1792" class="observablehq observablehq--cell"><div><p>To simplify—and realizing that we can move factors like  and  around as well—we break this up and write</p>
-</div></div><div id="cell-1793" class="observablehq observablehq--cell"></div><div id="cell-1794" class="observablehq observablehq--cell"><div><p>where</p>
-</div></div><div id="cell-1795" class="observablehq observablehq--cell"></div><div id="cell-1796" class="observablehq observablehq--cell"><div><p>To separate the positive (growing) and negative (quickly shrinking) powers of , we can split each summation into two parts, from  to  and from  to .</p>
-</div></div><div id="cell-1797" class="observablehq observablehq--cell"></div><div id="cell-1798" class="observablehq observablehq--cell"><div><p>Finally, to reduce the size of the numerator in the first term, we insert a modulo, which we’re able to do since it leaves the fractional part we care about unchanged.</p>
-</div></div><div id="cell-1799" class="observablehq observablehq--cell"></div><div id="cell-1460" class="observablehq observablehq--cell"><div><p>The second term gets small quickly as  increases. As for the first term, expressions of the form  are called <a href="https://en.wikipedia.org/wiki/Modular_exponentiation"><em>modular exponentiation</em></a>.</p>
-</div></div><div id="cell-1800" class="observablehq observablehq--cell"><div><h2 id="modular-exponentiation" tabindex="-1"><a href="#modular-exponentiation">Modular exponentiation</a></h2>
-</div></div><div id="cell-1802" class="observablehq observablehq--cell"><div><p>Working out an implementation requires a small digression into modular exponentiation. For a start, let’s consider <em>binary exponentiation</em>. Consider evaluating</p>
-</div></div><div id="cell-1803" class="observablehq observablehq--cell"><div></div></div><div id="cell-1804" class="observablehq observablehq--cell"><div><p>We can multiply all the 's, but it’s rather wasteful. Instead, observe that</p>
-</div></div><div id="cell-1805" class="observablehq observablehq--cell"></div><div id="cell-1480" class="observablehq observablehq--cell"><div><p>By repeatedly squaring, we can immediately reduce the number of multiplications from sixteen to five. As an algorithm, we repeatedly square the base as we step through the bits of the exponent. Here, the binary representation of  is . If the  bit is a 1, we multiply by the -times squared base.</p>
-</div></div><div id="cell-1498" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">function</span> <span class="tok-definition">binaryPow</span>(<span class="tok-definition">b</span>, <span class="tok-definition">e</span>) {
-  <span class="tok-keyword">let</span> <span class="tok-definition">y</span> = <span class="tok-literal">1</span>;
-  <span class="tok-keyword">while</span> (<span class="tok-variable">e</span> &gt; <span class="tok-literal">0</span>) {
-    <span class="tok-keyword">if</span> (<span class="tok-variable">e</span> &amp; <span class="tok-literal">1</span>) <span class="tok-variable">y</span> *= <span class="tok-variable">b</span>;
-    <span class="tok-variable">b</span> *= <span class="tok-variable">b</span>;
-    <span class="tok-variable">e</span> &gt;&gt;= <span class="tok-literal">1</span>;
-  }
-  <span class="tok-keyword">return</span> <span class="tok-variable">y</span>;
-}</code></pre><div id="cell-1685" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">binaryPow</span>(<span class="tok-literal">3</span>, <span class="tok-literal">17</span>)</code></pre><div id="cell-1806" class="observablehq observablehq--cell"><div><p><em><a href="https://en.wikipedia.org/wiki/Modular_exponentiation">Modular exponentiation</a></em> computes the exponentiation ,</p>
-</div></div><div id="cell-1807" class="observablehq observablehq--cell"></div><div id="cell-1808" class="observablehq observablehq--cell"><div><p>While  may grow very large,  will always be less than . An efficient algorithm, based on binary exponentiation, makes use of <a href="https://en.wikipedia.org/wiki/Modular_exponentiation#Memory-efficient_method">the fact that</a></p>
-</div></div><div id="cell-1809" class="observablehq observablehq--cell"></div><div id="cell-1017" class="observablehq observablehq--cell"><div><p>Put simply, we just load the <code>binaryPow</code> function up with  and keep our result between  and .</p>
-</div></div><div id="cell-832" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">function</span> <span class="tok-definition">modPow</span>(<span class="tok-definition">b</span>, <span class="tok-definition">e</span>, <span class="tok-definition">m</span>) {
-  <span class="tok-variable">b</span> = <span class="tok-variable">b</span> % <span class="tok-variable">m</span>;
-  <span class="tok-keyword">let</span> <span class="tok-definition">y</span> = <span class="tok-literal">1</span>;
-  <span class="tok-keyword">while</span> (<span class="tok-variable">e</span> &gt; <span class="tok-literal">0</span>) {
-    <span class="tok-keyword">if</span> (<span class="tok-variable">e</span> &amp; <span class="tok-literal">1</span>) <span class="tok-variable">y</span> = (<span class="tok-variable">y</span> * <span class="tok-variable">b</span>) % <span class="tok-variable">m</span>;
-    <span class="tok-variable">b</span> = (<span class="tok-variable">b</span> * <span class="tok-variable">b</span>) % <span class="tok-variable">m</span>;
-    <span class="tok-variable">e</span> &gt;&gt;= <span class="tok-literal">1</span>;
-  }
-  <span class="tok-keyword">return</span> <span class="tok-variable">y</span>;
-}</code></pre><div id="cell-1700" class="observablehq observablehq--cell"></div><div id="cell-1695" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">modPow</span>(<span class="tok-literal">3</span>, <span class="tok-literal">17</span>, <span class="tok-literal">50</span>)</code></pre><div id="cell-1706" class="observablehq observablehq--cell"></div><div id="cell-1697" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-literal">3</span> ** <span class="tok-literal">17</span> % <span class="tok-literal">50</span></code></pre><div id="cell-1487" class="observablehq observablehq--cell"></div><div id="cell-829" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">function</span> <span class="tok-definition">mod</span>(<span class="tok-definition">x</span>, <span class="tok-definition">n</span>) {
-  <span class="tok-variable">x</span> %= <span class="tok-variable">n</span>;
-  <span class="tok-keyword">return</span> <span class="tok-variable">x</span> &lt; <span class="tok-literal">0</span> ? <span class="tok-variable">x</span> + <span class="tok-variable">n</span> : <span class="tok-variable">x</span>;
-}</code></pre><div id="cell-1815" class="observablehq observablehq--cell"><div><h2 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h2>
-</div></div><div id="cell-1501" class="observablehq observablehq--cell"><div><p>The function below directly implements the above summation  and the function <code>computePi(d, n)</code> which starts at digit  and computes  digits of . It returns the result as an integer JavaScript <code>Number</code> so that we’ll need to run <code>.toString(16)</code> to convert the output to hexadecimal.</p>
-</div></div><div id="cell-792" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">function</span> <span class="tok-definition">S</span>(<span class="tok-definition">j</span>, <span class="tok-definition">n</span>) {
-  <span class="tok-comment">// Lefthand summation. Add a number of terms equal</span>
-  <span class="tok-comment">// to the starting digit. Most of the time is spent</span>
-  <span class="tok-comment">// in this loop.</span>
-  <span class="tok-keyword">let</span> <span class="tok-definition">left</span> = <span class="tok-literal">0</span>;
-  <span class="tok-keyword">for</span> (<span class="tok-keyword">let</span> <span class="tok-definition">k</span> = <span class="tok-literal">0</span>; <span class="tok-variable">k</span> &lt;= <span class="tok-variable">n</span>; <span class="tok-variable">k</span>++) {
-    <span class="tok-keyword">let</span> <span class="tok-definition">r</span> = <span class="tok-literal">8</span> * <span class="tok-variable">k</span> + <span class="tok-variable">j</span>;
-    <span class="tok-variable">left</span> = <span class="tok-variable">mod</span>(<span class="tok-variable">left</span> + <span class="tok-variable">modPow</span>(<span class="tok-literal">16</span>, <span class="tok-variable">n</span> - <span class="tok-variable">k</span>, <span class="tok-variable">r</span>) / <span class="tok-variable">r</span>, <span class="tok-literal">1</span>);
-  }
-
-  <span class="tok-comment">// Righthand summation. Add a small number of terms</span>
-  <span class="tok-comment">// until the result stops changing.</span>
-  <span class="tok-keyword">let</span> <span class="tok-definition">right</span> = <span class="tok-literal">0</span>;
-  <span class="tok-keyword">for</span> (<span class="tok-keyword">let</span> <span class="tok-definition">k</span> = <span class="tok-variable">n</span> + <span class="tok-literal">1</span>; ; <span class="tok-variable">k</span>++) {
-    <span class="tok-keyword">let</span> <span class="tok-definition">rnew</span> = <span class="tok-variable">right</span> + <span class="tok-literal">16</span> ** (<span class="tok-variable">n</span> - <span class="tok-variable">k</span>) / (<span class="tok-literal">8</span> * <span class="tok-variable">k</span> + <span class="tok-variable">j</span>);
-    <span class="tok-keyword">if</span> (<span class="tok-variable">right</span> === <span class="tok-variable">rnew</span>) <span class="tok-keyword">break</span>;
-    <span class="tok-variable">right</span> = <span class="tok-variable">rnew</span>;
-  }
-
-  <span class="tok-keyword">return</span> <span class="tok-variable">left</span> + <span class="tok-variable">right</span>;
-}
-
-<span class="tok-comment">// Start at digit d and compute n digits</span>
-<span class="tok-keyword">function</span> <span class="tok-definition">computePi</span>(<span class="tok-definition">d</span>, <span class="tok-definition">n</span>) {
-  <span class="tok-comment">// Seems to be the convention for including the leading 3</span>
-  <span class="tok-variable">d</span> -= <span class="tok-literal">1</span>;
-  <span class="tok-comment">// Shift n digits to the left of the radix point to obtain our final</span>
-  <span class="tok-comment">// result as a integer</span>
-  <span class="tok-keyword">return</span> <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(
-    <span class="tok-literal">16</span> ** <span class="tok-variable">n</span> * <span class="tok-variable">mod</span>(<span class="tok-literal">4</span> * <span class="tok-variable">S</span>(<span class="tok-literal">1</span>, <span class="tok-variable">d</span>) - <span class="tok-literal">2</span> * <span class="tok-variable">S</span>(<span class="tok-literal">4</span>, <span class="tok-variable">d</span>) - <span class="tok-variable">S</span>(<span class="tok-literal">5</span>, <span class="tok-variable">d</span>) - <span class="tok-variable">S</span>(<span class="tok-literal">6</span>, <span class="tok-variable">d</span>), <span class="tok-literal">1</span>)
-  );
-}</code></pre><div id="cell-1768" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">computePi</span>(<span class="tok-literal">0</span>, <span class="tok-literal">10</span>).<span class="tok-definition">toString</span>(<span class="tok-literal">16</span>)</code></pre><div id="cell-1512" class="observablehq observablehq--cell"></div><div id="cell-1565" class="observablehq observablehq--cell"><div><p>With minor modifications, we can repeat the above computation with integer arithmetic. The code below repeats the above implementation, except that everything is written with <a href="https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/BigInt">BigInt</a>s rather than double precision numbers. This means we can compute an arbitrary number of digits at once.</p>
-</div></div><div id="cell-1769" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">function</span> <span class="tok-definition">modPowBigInt</span>(<span class="tok-definition">b</span>, <span class="tok-definition">e</span>, <span class="tok-definition">m</span>) {
-  <span class="tok-keyword">if</span> (!<span class="tok-variable">e</span>) <span class="tok-keyword">return</span> <span class="tok-literal">1n</span>;
-  <span class="tok-variable">b</span> = <span class="tok-variable">b</span> % <span class="tok-variable">m</span>;
-  <span class="tok-keyword">let</span> <span class="tok-definition">y</span> = <span class="tok-literal">1n</span>;
-  <span class="tok-keyword">while</span> (<span class="tok-literal">true</span>) {
-    <span class="tok-keyword">if</span> (<span class="tok-variable">e</span> &amp; <span class="tok-literal">1n</span>) <span class="tok-variable">y</span> = (<span class="tok-variable">y</span> * <span class="tok-variable">b</span>) % <span class="tok-variable">m</span>;
-    <span class="tok-variable">e</span> &gt;&gt;= <span class="tok-literal">1n</span>;
-    <span class="tok-keyword">if</span> (!<span class="tok-variable">e</span>) <span class="tok-keyword">return</span> <span class="tok-variable">y</span>;
-    <span class="tok-variable">b</span> = (<span class="tok-variable">b</span> * <span class="tok-variable">b</span>) % <span class="tok-variable">m</span>;
-  }
-}
-
-<span class="tok-keyword">function</span> <span class="tok-definition">SBigInt</span>(<span class="tok-definition">j</span>, <span class="tok-definition">n</span>, <span class="tok-definition">d</span>, <span class="tok-definition">mask</span>) {
-  <span class="tok-keyword">const</span> <span class="tok-definition">shift</span> = <span class="tok-variable">d</span> &lt;&lt; <span class="tok-literal">2n</span>;
-  <span class="tok-keyword">let</span> <span class="tok-definition">left</span> = <span class="tok-literal">0n</span>;
-  <span class="tok-keyword">for</span> (<span class="tok-keyword">let</span> <span class="tok-definition">k</span> = <span class="tok-literal">0n</span>; <span class="tok-variable">k</span> &lt;= <span class="tok-variable">n</span>; <span class="tok-variable">k</span>++) {
-    <span class="tok-keyword">let</span> <span class="tok-definition">r</span> = <span class="tok-variable">k</span> * <span class="tok-literal">8n</span> + <span class="tok-variable">j</span>;
-    <span class="tok-variable">left</span> = (<span class="tok-variable">left</span> + (<span class="tok-variable">modPowBigInt</span>(<span class="tok-literal">16n</span>, <span class="tok-variable">n</span> - <span class="tok-variable">k</span>, <span class="tok-variable">r</span>) &lt;&lt; <span class="tok-variable">shift</span>) / <span class="tok-variable">r</span>) &amp; <span class="tok-variable">mask</span>;
-  }
-  <span class="tok-keyword">let</span> <span class="tok-definition">right</span> = <span class="tok-literal">0n</span>;
-  <span class="tok-keyword">for</span> (<span class="tok-keyword">let</span> <span class="tok-definition">k</span> = <span class="tok-variable">n</span> + <span class="tok-literal">1n</span>; ; <span class="tok-variable">k</span>++) {
-    <span class="tok-keyword">let</span> <span class="tok-definition">rnew</span> = <span class="tok-variable">right</span> + <span class="tok-literal">16n</span> ** (<span class="tok-variable">d</span> + <span class="tok-variable">n</span> - <span class="tok-variable">k</span>) / (<span class="tok-variable">k</span> * <span class="tok-literal">8n</span> + <span class="tok-variable">j</span>);
-    <span class="tok-keyword">if</span> (<span class="tok-variable">right</span> === <span class="tok-variable">rnew</span>) <span class="tok-keyword">break</span>;
-    <span class="tok-variable">right</span> = <span class="tok-variable">rnew</span>;
-  }
-  <span class="tok-keyword">return</span> <span class="tok-variable">left</span> + <span class="tok-variable">right</span>;
-}
-
-<span class="tok-keyword">function</span> <span class="tok-definition">computePiBigInt</span>(<span class="tok-definition">dd</span>, <span class="tok-definition">nn</span>) {
-  <span class="tok-keyword">const</span> <span class="tok-definition">n</span> = <span class="tok-variable">BigInt</span>(<span class="tok-variable">nn</span>);
-  <span class="tok-keyword">const</span> <span class="tok-definition">d</span> = <span class="tok-variable">BigInt</span>(<span class="tok-variable">dd</span>) - <span class="tok-literal">1n</span>;
-  <span class="tok-keyword">const</span> <span class="tok-definition">mask</span> = <span class="tok-literal">16n</span> ** <span class="tok-variable">n</span> - <span class="tok-literal">1n</span>;
-  <span class="tok-keyword">return</span> (
-    <span class="tok-literal">4n</span> * <span class="tok-variable">SBigInt</span>(<span class="tok-literal">1n</span>, <span class="tok-variable">d</span>, <span class="tok-variable">n</span>, <span class="tok-variable">mask</span>) -
-    <span class="tok-literal">2n</span> * <span class="tok-variable">SBigInt</span>(<span class="tok-literal">4n</span>, <span class="tok-variable">d</span>, <span class="tok-variable">n</span>, <span class="tok-variable">mask</span>) -
-    <span class="tok-variable">SBigInt</span>(<span class="tok-literal">5n</span>, <span class="tok-variable">d</span>, <span class="tok-variable">n</span>, <span class="tok-variable">mask</span>) -
-    <span class="tok-variable">SBigInt</span>(<span class="tok-literal">6n</span>, <span class="tok-variable">d</span>, <span class="tok-variable">n</span>, <span class="tok-variable">mask</span>)
-  ) &amp; <span class="tok-variable">mask</span>;
-}</code></pre><div id="cell-1739" class="observablehq observablehq--cell"></div><div id="cell-1521" class="observablehq observablehq--cell"></div></main>
+    <main><div id="cell-3" class="observablehq observablehq--cell"><div><p><em>Knock knock knock knock knock.</em></p>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"><div><p>It’s early September 2023. I absentmindedly open the door, and standing in the hallway is a man I don’t recognize.</p>
+</div></div><div id="cell-5" class="observablehq observablehq--cell"><div><p>“<em>What are you doing up here?</em>” He looks at me intently. “<em>I’m downstairs and you’ve been stomping on the floor all night.</em>”</p>
+</div></div><div id="cell-6" class="observablehq observablehq--cell"><div><p>I realize the man lives directly below us. “I’m sorry,” I respond, though I’m not. “I had no idea I was making any noise. Can you describe what you’re hearing?”</p>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"><div><p>“<em>You know what you’re doing up here. You’re stomping on the floor or having a party or something. If you don’t stop, I’ll call the police.</em>”</p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"><div><p>I feel my face flush. I did retrieve a backpack from the closet a few minutes ago, but I haven’t even been home most of the night. I know he’s mistaken, but he strikes me as legitimately upset. We continue, but the more he insists I know what I’ve done, the more I pull back. The conversation stalls.</p>
+</div></div><div id="cell-9" class="observablehq observablehq--cell"><div><p>“I’m sorry, but I don’t know what you’re talking about,” my voice wavers as I move to retreat into our home. He stops the door with his hand. I push hard; he pushes harder. The struggle lasts only a few seconds. The door latches and I lunge for the deadbolt. The man leaves.</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"><div><p>The next morning I leave home for two weeks. The encounter fades. Mistakes happen.</p>
+</div></div><div id="cell-11" class="observablehq observablehq--cell"><div><p>But two days after returning home, he corners in the hallway late at night as I return from walking our dog. We repeat the entire script. The first encounter felt like a misunderstanding, but this time his intransigence feels menacing.</p>
+</div></div><div id="cell-12" class="observablehq observablehq--cell"><div><p>I maneuver past him and overpower him a second time to shut our door.</p>
+</div></div><div id="cell-13" class="observablehq observablehq--cell"><div><p>“STOP IT AND GO HOME,” I boom, my hands trembling.</p>
+</div></div><div id="cell-43" class="observablehq observablehq--cell"><div><hr />
+</div></div><div id="cell-14" class="observablehq observablehq--cell"><div><p><em>KNOCK KNOCK KNOCK KNOCK KNOCK.</em></p>
+</div></div><div id="cell-15" class="observablehq observablehq--cell"><div><p>As I emerge from sleep, the police identify themselves at our front door. It’s 12:40 AM, late September, four days after the second encounter. My wife and I squint as our eyes adjust to the overhead kitchen light. A disturbance has been reported coming from our unit, an officer informs us, though I detect hesitation as they size us up. We explain the recent encounters; they explain that whatever is going on between us and our neighbor, it’s a civil matter.</p>
+</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>My wife falls back asleep, but I lie awake, rolling the matter over and over in my head. <em>How can we defend ourselves against nothing at all? Why do we need to? Is there no one with the authority to see through this and put a stop to it?</em></p>
+</div></div><div id="cell-17" class="observablehq observablehq--cell"><div><p>The next morning I visit property management and explain the situation. They’ve been receiving complaints about us all month. A few minutes in, the man from the hallway enters the office. He appears unassuming. If I’ve seen him prior to these encounters, I don’t recognize him. Hopeful we can reset the situation, I extend my hand to properly introduce myself.</p>
+</div></div><div id="cell-18" class="observablehq observablehq--cell"><div><p>We speak for about thirty minutes. I speculate about alternate sources of the noise, but the man accepts no explanation that doesn’t involve malice on my part, even volunteering that he observes me and my wife from the rooftop balcony to figure out what exactly we do inside our home. My legs grow unsteady.</p>
+</div></div><div id="cell-19" class="observablehq observablehq--cell"><div><p>As the conversation spirals, a second property manager intervenes, suggesting we reconvene the next day for an impromptu noise investigation. I consent, hoping he can still be persuaded that no harm has been done to him.</p>
+</div></div><div id="cell-20" class="observablehq observablehq--cell"><div><p>The investigation demonstrates only that jumping as hard as possible on our bedroom floor fails to reproduce the noise he claims we generate constantly. As vindicating as I believe this to be, the investigation yields no formal outcome. But something in me shifts. I can no longer see any room for misunderstanding. My thoughts turn darker, though I’m unable to piece together any coherent explanation for his actions. My wife, a better person than I, doesn’t seek an explanation.</p>
+</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><hr />
+</div></div><div id="cell-21" class="observablehq observablehq--cell"><div><p><em>POUND… POUND… POUND…</em></p>
+</div></div><div id="cell-22" class="observablehq observablehq--cell"><div><p>Shortly after the noise investigation, we notice an unusual pattern of noise. Three to five heavy pounds, intermittent, sometimes at 7 PM, sometimes at 3 AM. Noise in a shared living space is perfectly ordinary, but this feels heavy, angry. Once, dishes fall over in the kitchen. Sometimes I’m certain that the pounding is a direct response to our walking across the floor, but most of the time there is no discernible cause. I frequently wake up at night with a pounding in my head, my heart racing. Each time, I hold my breath, waiting for subsequent pounding to confirm I’ve not merely dreamt it.</p>
+</div></div><div id="cell-23" class="observablehq observablehq--cell"><div><p>I begin to dread walking across the floor, understanding that a single misplaced step is sufficient to provoke another night of sleepless retaliation. My wife reminds me that we’ll experience the disturbances regardless, but I’ve collected enough evidence to demonstrate otherwise. When she drops a box of pasta on the floor, I feel a flash of anger at the consequences of her carelessness before quickly, silently reining in my emotions. Visiting friends in their homes, I’m surprised to discover that a heavy footstep or slammed cabinet sends my heart racing. Left with nowhere to escape, I sometimes retire to bed at 7 PM. My work suffers.</p>
+</div></div><div id="cell-24" class="observablehq observablehq--cell"><div><p>I become angry—not at the man downstairs, but at myself, because I can’t simply ignore it all, because to fight against the world he’s constructed means letting myself be pulled further into it. I look with suspicion around every corner and seek out the source of each unexpected noise. I fixate on his presence. I wonder if this is how he experiences the world. <em>Folie à deux</em>?</p>
+</div></div><div id="cell-25" class="observablehq observablehq--cell"><div><p>Left with few options, we fill out paperwork for a restraining order. Eventually, continued pounding and another late-night visit from the police cement our determination.</p>
+</div></div><div id="cell-26" class="observablehq observablehq--cell"><div><p>The moment the temporary restraining order is served, the disturbances stop.</p>
+</div></div><div id="cell-27" class="observablehq observablehq--cell"><div><p>The court hearing at the end of November is neither pleasant nor quick. For two hours, the judge sifts through claim and counterclaim. She corners the man, pressing him, “So you confronted him as he returned from walking his dog? How could he have been making noise <em>inside</em> his apartment if he was <em>outside</em> it?"</p>
+</div></div><div id="cell-49" class="observablehq observablehq--cell"><div><p>When the judge finally announces her decision, the release is overwhelming. I accept inclusion of our animals in the protective order and stand my ground in yielding no contact information to the man. We exit the courtroom without looking at him. And yet, even with everything laid bare, we still understand nothing about why he has pursued us for three relentless months.</p>
+</div></div><div id="cell-46" class="observablehq observablehq--cell"><div><hr />
+</div></div><div id="cell-28" class="observablehq observablehq--cell"><div><p><em>Knock knock knock knock.</em></p>
+</div></div><div id="cell-29" class="observablehq observablehq--cell"><div><p>My heart races, but still I’m unprepared for the sheriff who now stands in the hallway three weeks after the hearing. “I’m here to serve you a restraining order,” she informs me. I inspect the papers. Indeed, the man has immediately turned around and sought a restraining order against me. The sheriff sympathizes but can offer no help.</p>
+</div></div><div id="cell-30" class="observablehq observablehq--cell"><div><p>I’m stunned that—out of an abundance of caution which I suppose I can’t argue against—this temporary order has been rubber-stamped without more skepticism. Has <em>our</em> restraining accomplished nothing? Will this tit-for-tat continue forever? I contact potential attorneys.</p>
+</div></div><div id="cell-31" class="observablehq observablehq--cell"><div><p>The court hearing two weeks before Christmas is anti-climactic. My wife and I arrive half an hour early, dressed in our best suits. After an hour, the judge calls our case—which she then summarily dismisses without prejudice since the man has failed to appear. Incredulous, we’re still discussing the matter with our attorney when the man finally arrives. We nod and silently exit the courthouse as he walks past us into the courtroom.</p>
+</div></div><div id="cell-47" class="observablehq observablehq--cell"><div><hr />
+</div></div><div id="cell-32" class="observablehq observablehq--cell"><div><p><em>POUND… POUND… POUND…</em></p>
+</div></div><div id="cell-33" class="observablehq observablehq--cell"><div><p>My wife and I look at each other. “Is that… <em>him</em>?”</p>
+</div></div><div id="cell-80" class="observablehq observablehq--cell"><div><p>It’s June, and we’ve enjoyed six months of tenuous silence since the last hearing. I still see him now and then, once or twice per month in and around the building. Each time I think I catch the flicker of a knowing grin and feel his stare lingering on me as I walk away without acknowledgement.</p>
+</div></div><div id="cell-79" class="observablehq observablehq--cell"><div><p>Yet the pounding continues, and with each new disturbance, a familiar pattern emerges. My nerves fray as the late-night pounding once again becomes regular.</p>
+</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><p>By October, the disturbances are relentless and disruptive enough that we call the police. As they leave with little more than a shrug, one officer asks where I’m from.</p>
+</div></div><div id="cell-36" class="observablehq observablehq--cell"><div><p>“Wisconsin,” I say, failing to realize this isn’t small talk.</p>
+</div></div><div id="cell-37" class="observablehq observablehq--cell"><div><p>“Well, this is Oakland.”</p>
+</div></div><div id="cell-38" class="observablehq observablehq--cell"><div><p>I reach out to our attorney, but his answer is no better. Pursuing contempt charges will cost us many times any potential fine. Fearing additional fees, I neglect to follow up.</p>
+</div></div><div id="cell-39" class="observablehq observablehq--cell"><div><p>Our neighbors ask if the pounding which keeps them up at night is the same as we hear. We confirm it is and suggest they bring their concerns to the HOA. Despite having kept the HOA up to date on the matter for over a year now, this—at long last—appears to be the secret ingredient. One household complaining about a neighbor is a dispute, but two households complaining is a liability.</p>
+</div></div><div id="cell-40" class="observablehq observablehq--cell"><div><p>In April, after property management posts the second of two notices on the man’s door, the disturbances suddenly stop. With no explanation, we sleep more easily but brace ourselves for the disturbances to return.</p>
+</div></div><div id="cell-48" class="observablehq observablehq--cell"><div><hr />
+</div></div><div id="cell-41" class="observablehq observablehq--cell"><div><p>At last, we find ourselves in the present. It’s September 2025 now, and the man still lives below us; I imagine him ten feet beneath me as I write these words. But even six months after the last disturbance, I haven’t escaped his world. Each time I walk across the room or slide a chair out from the table, it’s a deliberate, considered act of normalcy, always weighed against the chance of renewed conflict.</p>
+</div></div><div id="cell-72" class="observablehq observablehq--cell"><div><p>I want to know the reason he’s pursued us like this, but I doubt one exists. I want a clean ending to this narrative, but I have none to offer.</p>
+</div></div><div id="cell-64" class="observablehq observablehq--cell"><div><p>I want to imagine this ordeal has refined my instincts, stripped away what was unproductive, left me sharper and stronger and better prepared to face such matters, but I’m not sure. I helped a man with a walker up a flight of stairs yesterday—he was late to a meeting and couldn’t spare the long detour to the ramp. Outwardly, it was ordinary kindness. But inwardly, and with bitterness, I offered the act to our neighbor. For every ounce of conflict he’s given me, I mete out only small tokens of goodness. I’m not sure if that’s strength or survival.</p>
+</div></div><div id="cell-60" class="observablehq observablehq--cell"><div><p>Maybe the disturbances will resume, maybe they won’t. I wish him only the peace he seeks.</p>
+</div></div></main>
   </div>
   <footer><div class="footer__attrib">© 2025 Ricky Reusser</div></footer>
 

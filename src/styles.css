@@ -68,6 +68,10 @@ main h6 {
   -webkit-font-smoothing: auto;
 }
 
+hr {
+  margin: 3em 0;
+}
+
 header {
   color: white;
   font-weight: 200;
