@@ -18,7 +18,7 @@
   </script>
   <script id="499" type="text/x-typescript">
     display(html`
-    <figure>
+    <figure style="padding-top:3em;padding-bottom:3em;">
     ${Calendar(events24, {
       fy: { reverse: false },
       width,
@@ -81,7 +81,8 @@
     });
     //cal.style.transformOrigin = 'center left';
     //cal.style.transform = `scale(${respScale},${respScale})`;
-    display(html`<figure>
+    display(html`
+    <figure style="padding-top:3em;padding-bottom:3em;">
     ${cal}
     <figcaption>Clases throughout 2025. Hover over dates to inspect.</figcaption>
     </figure>`);
@@ -131,7 +132,7 @@
     })}`)
   </script>
   <script id="496" type="text/x-typescript">
-    display(html`
+    display(html`<div style="margin-bottom:4em;">
     ${Plot.plot({
       color: {
         type: "categorical",
@@ -164,7 +165,7 @@
         Plot.ruleY([0])
       ]
     })}
-    ${color}`);
+    ${color}</div>`);
   </script>
   <script id="520" type="text/markdown">
     So I guess the obvious question is whether it’s had any effect, whether I’m flexible or good at yoga now or something.

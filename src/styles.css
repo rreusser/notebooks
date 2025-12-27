@@ -143,6 +143,15 @@ main .katex-display {
   padding-bottom: 8px;
 }
 
+main figure {
+  margin-top: 1em;
+  margin-bottom: 1em;
+}
+
+main figcaption {
+  margin-top: 1em;
+}
+
 .comments_meta {
   display: flex;
   flex-direction: row;
