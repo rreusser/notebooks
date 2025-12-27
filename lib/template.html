@@ -15,6 +15,11 @@
   <meta name="description" content="{{description}}" />
   <meta property="og:description" content="{{description}}" />
   {{/if}}
+  {{#if image}}
+  <meta name="twitter:image" content="{{image}}">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="{{image}}">
+  {{/if}}
   {{#if silent}}
   <meta name="robots" content="noindex" />
   {{/if}}

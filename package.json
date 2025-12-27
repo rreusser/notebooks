@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "start": "vite -c vite.config.js",
-    "build": "vite build -c vite.config.js"
+    "build": "vite build -c vite.config.js && node copy-meta-images.js"
   },
   "keywords": [],
   "author": "",
