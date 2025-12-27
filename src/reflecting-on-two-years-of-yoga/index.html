@@ -1,0 +1,230 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Reflecting on Two Years of Yoga</title>
+  <script id="1" type="text/markdown">
+    # Reflecting on Two Years of Yoga
+  </script>
+  <script id="502" type="text/markdown">
+    ## 2024
+  </script>
+  <script id="504" type="text/markdown">
+    Sometime before 2024, I intermittently started attending a Mindful Flow yoga class at the climbing gym. It was fine; dim lights, deep breathing, sort of a stretching hour—as futile as that feels for someone with tight hips from a lifetime of running. I hoped some stretching might help control the injuries that prevent me from running like I used to and that improved hip mobility might help my climbing. It felt like a tiny step in the evolution of staying active as I get older.
+  </script>
+  <script id="509" type="text/markdown">
+    Throughout 2024, as I started attending more regularly, I remember struggling to sit cross-legged for more than a few seconds without tipping backwards. Downward dog was a stress position. Some of the _namaste_ stuff was a little off-putting.
+  </script>
+  <script id="511" type="text/markdown">
+    I’ve reconstructed my class history in the timeline below. I didn’t start tracking any of this until much later when I figured out the climbing gym exposes a [GraphQL](https://graphql.org/) endpoint for historical bookings. Looking back, I’m surprised at my consistency because I remember cancelling on multiple nights when I simply couldn’t stomach sitting there quietly for an hour. I’m not sure my flexibility improved much.
+  </script>
+  <script id="499" type="text/x-typescript">
+    display(Calendar(events24, {
+      fy: { reverse: false },
+      width,
+      title: ({ foreground, activity }) => {
+        if (!foreground) return;
+        return activity[0].map(({ activity }) => activity).join(",\n");
+      },
+      reduce: (v) => {
+        const a = new Set();
+        for (const { activity } of v) a.add(v);
+        return { date: v.date, activity: [...a.values()] };
+      },
+      fill: ({ activity: list }) => {
+        if (!list) return "transparent";
+        if (!Array.isArray(list)) throw new Error("Invalid data");
+        return scheme[
+          list[0].reduce((sum, a) => sum + allActivities.indexOf(a.activity), 0) %
+            scheme.length
+        ];
+      },
+      color: { scheme: "Viridis", domain: [1, 3], reverse: false }
+    }))
+  </script>
+  <script id="503" type="text/markdown">
+    ## 2025
+  </script>
+  <script id="513" type="text/markdown">
+    Mindful Flow Mondays continued into 2025. The moment things changed was in April, when my partner left on travel for three months. I started attending Monday-Wednesday-Friday yoga, met some regular climbing partners at the gym, and after ten years of almost exclusive solo running, started attending the [Bay Bandits](https://linktr.ee/baybandits) trail running club.
+  </script>
+  <script id="530" type="text/markdown">
+    That decision was not just about filling time. I’ve learned, slowly and after repeated failures, that isolation causes me to spiral inward. Being around other people in a structured way disrupted that pattern. Yoga put me in the same room with the same people, repeatedly, without requiring much social performance.
+  </script>
+  <script id="516" type="text/markdown">
+    This continued for the next three months until July, when my partner returned home. My partner was more surprised than I was when, after living in our home for nearly a decade, I actually began to encounter acquaintances on the street! The return to normalcy was a fork in the road, so in July, having re-aggravated my plantar from running too consistently, I opted to start attending daily yoga.
+  </script>
+  <script id="510" type="text/x-typescript">
+    display(Calendar(events25, {
+      fy: { reverse: false },
+      width,
+      title: ({ foreground, activity }) => {
+        if (!foreground) return;
+        return activity[0].map(({ activity }) => activity).join(",\n");
+      },
+      reduce: (v) => {
+        const a = new Set();
+        for (const { activity } of v) a.add(v);
+        return { date: v.date, activity: [...a.values()] };
+      },
+      fill: ({ activity: list }) => {
+        if (!list) return "transparent";
+        if (!Array.isArray(list)) throw new Error("Invalid data");
+        return scheme[
+          list[0].reduce((sum, a) => sum + allActivities.indexOf(a.activity), 0) %
+            scheme.length
+        ];
+      },
+      color: { scheme: "Viridis", domain: [1, 3], reverse: false }
+    }))
+  </script>
+  <script id="527" type="text/markdown">
+    There was also something about the environment that mattered. Most of my adult life has been spent in places where I am the default: white, male, working in software or engineering, surrounded by people who look and think similarly. I’ve never found that especially comfortable. In yoga classes, I’m often unsure of myself, sometimes literally out of place, and aware that my presence is not assumed. The uncertainty keeps me engaged. It asks more of my attention. I think that friction is part of why I've kept showing up.
+  </script>
+  <script id="517" type="text/markdown">
+    Certainly one thing that has contributed to my attendance record is when I started attending [Jody Hahn](https://jodyhahnyoga.com/)’s classes. The wrong instructor uses your limitations against you<sup><a id="footnote-1-src" href="#footnote-1">[1]</a></sup>. The right instructor focuses your energy on what’s accessible to you. In the unlikely event Jody is reading this, hey Jody 👋. Gosh, she’s been outstanding. She said she'd received at least one bad Yelp review for providing too much assistance, but her attention to detail is precisely the thing that finally tipped the scales and helped me feel at home rather than out of my element in the yoga studio.
+  </script>
+  <script id="523" type="text/markdown">
+    In aggregate, and apart from some traveling, I’ve transitioned from attending about once per week to about five times per week.
+  </script>
+  <script id="508" type="text/x-typescript">
+    display(html`
+    ${Plot.plot({
+      color: {
+        type: "categorical",
+        range: scheme,
+        domain: allActivities
+      },
+      width: plotWidth,
+      height: 300,
+      title: '2024',
+      x: {
+        label: 'Month',
+        round: true,
+        domain: [0, 12],
+        ticks: Array.from({ length: 12 }, (_, i) => i + 0.5),
+        tickFormat: (d) => MONTHS[Math.floor(d)]
+      },
+      y: { grid: true, domain: [0, 25] },
+      marks: [
+        Plot.rectY(
+          events24,
+          Plot.binX(
+            { y: "count" },
+            {
+              fill: "activity",
+              x: "month",
+              thresholds: Array.from({ length: 13 }, (_, i) => i)
+            }
+          )
+        ),
+        Plot.ruleY([0])
+      ]
+    })}`)
+  </script>
+  <script id="496" type="text/x-typescript">
+    display(html`
+    ${Plot.plot({
+      color: {
+        type: "categorical",
+        range: scheme,
+        domain: allActivities
+      },
+      title: '2025',
+      width: plotWidth,
+      height: 300,
+      x: {
+        label: 'Month',
+        round: true,
+        domain: [0, 12],
+        ticks: Array.from({ length: 12 }, (_, i) => i + 0.5),
+        tickFormat: (d) => MONTHS[Math.floor(d)]
+      },
+      y: { grid: true, domain: [0, 25] },
+      marks: [
+        Plot.rectY(
+          events25,
+          Plot.binX(
+            { y: "count" },
+            {
+              fill: "activity",
+              x: "month",
+              thresholds: Array.from({ length: 13 }, (_, i) => i)
+            }
+          )
+        ),
+        Plot.ruleY([0])
+      ]
+    })}
+    ${color}`);
+  </script>
+  <script id="520" type="text/markdown">
+    So I guess the obvious question is whether it’s had any effect, whether I’m flexible or good at yoga now or something.
+  </script>
+  <script id="521" type="text/markdown">
+    I feel stronger. I can sit cross-legged for an extended period of time, though not entirely comfortably. Downward dog is alright while [malasana](https://www.yogajournal.com/poses/garland-pose/?scope=initial) is my new stress position. I started attending a handstands class, and on a good day, I can manage about 8-10 seconds free-standing. There are still a number of basic hamstring– and hip-intensive poses that are completely inaccessible to me. If it ever helps my climbing, I think it’ll take a solid 5+ more years of this.
+  </script>
+  <script id="522" type="text/markdown">
+    My favorite thing though is that _I don’t particularly care about my ability_. The part that keeps me coming back day to day is the _process_, seeing slow measures of _progress_ even if my ability in some absolute sense is still quite basic. I’ve always been particularly susceptible to analyzing meaning to the point of paralysis. Running was historically the place where I could pour all of my energy without worrying for a moment about the meaning. Yoga is that place for me at the moment. I don’t know if it will remain so, but at the moment, I have tomorrow’s class scheduled and I plan to keep it up.
+  </script>
+  <script id="531" type="text/markdown">
+    ---
+    <small><a href="#footnote-1-src" id="footnote-1">[1]</a>: or worse, is not-even-subtly dickish, but whatever, water under the bridge pose, I won’t get into that.</small>
+  </script>
+  <script id="489" type="text/x-typescript">
+    import {Calendar} from "observable:@observablehq/calendar-component"
+  </script>
+  <script id="495" type="text/x-typescript">
+    const plotWidth = Math.min(640, width);
+  </script>
+  <script id="490" type="text/x-typescript">
+    const bookings = JSON.parse(
+        `[{"activity":"Vinyasa","date":"2025-07-17"},{"activity":"Strength Training for Climbing","date":"2025-07-16"},{"activity":"Vinyasa","date":"2025-07-16"},{"activity":"Vinyasa","date":"2025-07-15"},{"activity":"Vinyasa","date":"2025-07-14"},{"activity":"Vinyasa","date":"2025-07-11"},{"activity":"Strength Training for Climbing","date":"2025-07-09"},{"activity":"Vinyasa","date":"2025-07-09"},{"activity":"Vinyasa","date":"2025-07-08"},{"activity":"Mindful Flow","date":"2025-07-07"},{"activity":"Vinyasa","date":"2025-07-07"},{"activity":"Bikram","date":"2025-07-04"},{"activity":"Vinyasa","date":"2025-07-02"},{"activity":"Vinyasa","date":"2025-06-30"},{"activity":"Vinyasa","date":"2025-06-25"},{"activity":"Vinyasa","date":"2025-06-23"},{"activity":"Vinyasa","date":"2025-06-20"},{"activity":"Vinyasa","date":"2025-06-18"},{"activity":"Vinyasa","date":"2025-06-16"},{"activity":"Bikram","date":"2025-06-14"},{"activity":"Vinyasa","date":"2025-06-13"},{"activity":"Vinyasa","date":"2025-06-11"},{"activity":"Vinyasa","date":"2025-06-09"},{"activity":"Vinyasa","date":"2025-06-06"},{"activity":"Vinyasa","date":"2025-06-04"},{"activity":"Vinyasa","date":"2025-06-02"},{"activity":"Vinyasa","date":"2025-05-30"},{"activity":"Strength Training for Climbing","date":"2025-05-28"},{"activity":"Vinyasa","date":"2025-05-28"},{"activity":"Vinyasa","date":"2025-05-26"},{"activity":"Vinyasa","date":"2025-05-23"},{"activity":"Strength Training for Climbing","date":"2025-05-21"},{"activity":"Vinyasa","date":"2025-05-21"},{"activity":"Vinyasa","date":"2025-05-19"},{"activity":"Vinyasa","date":"2025-05-16"},{"activity":"Strength Training for Climbing","date":"2025-05-14"},{"activity":"Vinyasa","date":"2025-05-14"},{"activity":"Vinyasa","date":"2025-05-12"},{"activity":"Vinyasa","date":"2025-05-08"},{"activity":"Vinyasa","date":"2025-05-05"},{"activity":"Strength Training for Climbing","date":"2025-04-30"},{"activity":"Slow Flow","date":"2025-04-23"},{"activity":"Strength Training for Climbing","date":"2025-04-23"},{"activity":"Vinyasa","date":"2025-04-21"},{"activity":"Vinyasa","date":"2025-04-18"},{"activity":"Strength Training for Climbing","date":"2025-04-16"},{"activity":"Vinyasa","date":"2025-04-16"},{"activity":"Vinyasa","date":"2025-04-14"},{"activity":"Vinyasa","date":"2025-04-11"},{"activity":"Strength Training for Climbing","date":"2025-04-09"},{"activity":"Vinyasa","date":"2025-04-09"},{"activity":"Vinyasa","date":"2025-04-07"},{"activity":"Vinyasa","date":"2025-04-04"},{"activity":"Strength Training for Climbing","date":"2025-04-02"},{"activity":"Vinyasa","date":"2025-04-02"},{"activity":"Vinyasa","date":"2025-03-31"},{"activity":"Strength Training for Climbing","date":"2025-03-12"},{"activity":"Mindful Flow","date":"2025-03-10"},{"activity":"Vinyasa","date":"2025-03-06"},{"activity":"Mindful Flow","date":"2025-03-03"},{"activity":"Mindful Flow","date":"2025-02-17"},{"activity":"Mindful Flow","date":"2025-02-10"},{"activity":"Slow Flow","date":"2025-02-05"},{"activity":"Mindful Flow","date":"2025-01-27"},{"activity":"Mindful Flow","date":"2025-01-20"},{"activity":"Mindful Flow","date":"2024-12-16"},{"activity":"Mindful Flow","date":"2024-11-25"},{"activity":"Slow Flow","date":"2024-11-20"},{"activity":"Mindful Flow","date":"2024-11-18"},{"activity":"Slow Flow","date":"2024-11-13"},{"activity":"Mindful Flow","date":"2024-11-11"},{"activity":"Mindful Flow","date":"2024-10-21"},{"activity":"Mindful Flow","date":"2024-10-16"},{"activity":"Mindful Flow","date":"2024-10-14"},{"activity":"Mindful Flow","date":"2024-10-09"},{"activity":"Mindful Flow","date":"2024-09-30"},{"activity":"Mindful Flow","date":"2024-09-23"},{"activity":"Mindful Flow","date":"2024-08-26"},{"activity":"Mindful Flow","date":"2024-08-19"},{"activity":"Mindful Flow","date":"2024-08-05"},{"activity":"Mindful Flow","date":"2024-07-29"},{"activity":"Mindful Flow","date":"2024-07-22"},{"activity":"Mindful Flow","date":"2024-07-15"},{"activity":"Mindful Flow","date":"2024-07-08"},{"activity":"Mindful Flow","date":"2024-06-24"},{"activity":"Mindful Flow","date":"2024-06-17"},{"activity":"Mindful Flow","date":"2024-06-10"},{"activity":"Mindful Flow","date":"2024-05-20"},{"activity":"Mindful Flow","date":"2024-05-06"},{"activity":"Mindful Flow","date":"2024-04-29"},{"activity":"Mindful Flow","date":"2024-04-22"},{"activity":"Mindful Flow","date":"2024-04-15"},{"activity":"Mindful Flow","date":"2024-04-08"},{"activity":"Mindful Flow","date":"2024-04-01"},{"activity":"Vinyasa","date":"2024-04-01"},{"activity":"Mindful Flow","date":"2024-03-25"},{"activity":"Vinyasa","date":"2024-03-25"},{"activity":"Mindful Flow","date":"2024-03-18"},{"activity":"Vinyasa","date":"2024-03-18"},{"activity":"Mindful Flow","date":"2024-03-11"},{"activity":"Mindful Flow","date":"2024-03-04"},{"activity":"Mindful Flow","date":"2024-02-26"},{"activity":"Mindful Flow","date":"2024-02-19"},{"activity":"Mindful Flow","date":"2024-02-12"},{"activity":"Mindful Flow","date":"2024-01-29"},{"activity":"Mindful Flow","date":"2024-01-22"},{"activity":"Mindful Flow","date":"2024-01-15"},{"activity":"Vinyasa","date":"2025-09-09"},{"activity":"Handstands","date":"2025-09-07"},{"activity":"Vinyasa","date":"2025-09-05"},{"activity":"Vinyasa","date":"2025-09-04"},{"activity":"Vinyasa","date":"2025-09-03"},{"activity":"Vinyasa","date":"2025-08-20"},{"activity":"Vinyasa","date":"2025-08-19"},{"activity":"Vinyasa","date":"2025-08-15"},{"activity":"Vinyasa","date":"2025-08-14"},{"activity":"Strength Training for Climbing","date":"2025-08-13"},{"activity":"Vinyasa","date":"2025-08-12"},{"activity":"Handstands","date":"2025-08-10"},{"activity":"Vinyasa","date":"2025-08-09"},{"activity":"Vinyasa","date":"2025-08-08"},{"activity":"Vinyasa","date":"2025-08-07"},{"activity":"Strength Training for Climbing","date":"2025-08-06"},{"activity":"Vinyasa","date":"2025-08-06"},{"activity":"Handstands","date":"2025-08-03"},{"activity":"Strength Training for Climbing","date":"2025-07-30"},{"activity":"Vinyasa","date":"2025-07-30"},{"activity":"Mindful Flow","date":"2025-07-28"},{"activity":"Vinyasa","date":"2025-07-26"},{"activity":"Vinyasa","date":"2025-07-25"},{"activity":"Vinyasa","date":"2025-07-24"},{"activity":"Strength Training for Climbing","date":"2025-07-23"},{"activity":"Vinyasa","date":"2025-07-23"},{"activity":"Vinyasa","date":"2025-07-22"},{"activity":"Vinyasa","date":"2025-07-21"},{"activity":"Handstands","date":"2025-07-20"},{"activity":"Vinyasa","date":"2025-07-19"},{"activity":"Vinyasa","date":"2025-07-18"},{"activity":"Vinyasa","date":"2025-07-17"},{"activity":"Vinyasa","date":"2025-09-19"},{"activity":"Vinyasa","date":"2025-09-18"},{"activity":"Vinyasa","date":"2025-09-17"},{"activity":"Vinyasa","date":"2025-09-16"},{"activity":"Vinyasa","date":"2025-09-15"},{"activity":"Handstands","date":"2025-09-14"},{"activity":"Vinyasa","date":"2025-09-12"},{"activity":"Vinyasa","date":"2025-09-11"},{"activity":"Vinyasa","date":"2025-09-10"},{"activity":"Vinyasa","date":"2025-09-25"},{"activity":"Vinyasa","date":"2025-09-24"},{"activity":"Rocket Yoga","date":"2025-09-23"},{"activity":"Vinyasa","date":"2025-09-22"},{"activity":"Handstands","date":"2025-09-21"},{"activity":"Bikram","date":"2025-09-25"},{"activity":"Vinyasa","date":"2025-10-03"},{"activity":"Vinyasa","date":"2025-10-02"},{"activity":"Strength Training for Climbing","date":"2025-10-01"},{"activity":"Vinyasa","date":"2025-10-01"},{"activity":"Yoga for Climbers","date":"2025-09-30"},{"activity":"Bikram","date":"2025-12-26"},{"activity":"Vinyasa","date":"2025-12-27"},{"activity":"Vinyasa","date":"2025-12-23"},{"activity":"Mindful Flow","date":"2025-12-22"},{"activity":"Vinyasa","date":"2025-12-22"},{"activity":"Handstands","date":"2025-12-21"},{"activity":"Vinyasa","date":"2025-12-19"},{"activity":"Vinyasa","date":"2025-12-18"},{"activity":"Strength Training for Climbing","date":"2025-12-17"},{"activity":"Vinyasa","date":"2025-12-17"},{"activity":"Vinyasa","date":"2025-12-16"},{"activity":"Power Vinyasa","date":"2025-12-15"},{"activity":"Vinyasa","date":"2025-12-14"},{"activity":"Handstands","date":"2025-12-14"},{"activity":"Vinyasa","date":"2025-12-12"},{"activity":"Vinyasa","date":"2025-12-11"},{"activity":"Strength Training for Climbing","date":"2025-12-10"},{"activity":"Vinyasa","date":"2025-12-10"},{"activity":"Vinyasa","date":"2025-12-09"},{"activity":"Power Vinyasa","date":"2025-12-08"},{"activity":"Vinyasa","date":"2025-12-05"},{"activity":"Vinyasa","date":"2025-12-04"},{"activity":"Strength Training for Climbing","date":"2025-12-03"},{"activity":"Vinyasa","date":"2025-12-03"},{"activity":"Vinyasa","date":"2025-12-02"},{"activity":"Power Vinyasa","date":"2025-12-01"},{"activity":"Handstands","date":"2025-11-30"},{"activity":"Vinyasa","date":"2025-11-29"},{"activity":"Vinyasa","date":"2025-11-28"},{"activity":"Vinyasa","date":"2025-11-26"},{"activity":"Vinyasa","date":"2025-11-25"},{"activity":"Power Vinyasa","date":"2025-11-24"},{"activity":"Vinyasa","date":"2025-11-21"},{"activity":"Vinyasa","date":"2025-11-20"},{"activity":"Strength Training for Climbing","date":"2025-11-19"},{"activity":"Vinyasa","date":"2025-11-19"},{"activity":"Vinyasa","date":"2025-11-18"},{"activity":"Vinyasa","date":"2025-10-31"},{"activity":"Vinyasa","date":"2025-10-30"},{"activity":"Vinyasa","date":"2025-10-29"},{"activity":"Vinyasa","date":"2025-10-28"},{"activity":"Power Vinyasa","date":"2025-10-27"},{"activity":"Handstands","date":"2025-10-26"},{"activity":"Vinyasa","date":"2025-10-24"},{"activity":"Vinyasa","date":"2025-10-23"},{"activity":"Strength Training for Climbing","date":"2025-10-22"},{"activity":"Vinyasa","date":"2025-10-22"},{"activity":"Vinyasa","date":"2025-10-21"},{"activity":"Power Vinyasa","date":"2025-10-20"},{"activity":"Vinyasa","date":"2025-10-17"},{"activity":"Vinyasa","date":"2025-10-16"},{"activity":"Strength Training for Climbing","date":"2025-10-15"},{"activity":"Vinyasa","date":"2025-10-15"},{"activity":"Vinyasa","date":"2025-10-14"},{"activity":"Vinyasa","date":"2025-10-13"},{"activity":"Handstands","date":"2025-10-12"},{"activity":"Vinyasa","date":"2025-10-10"},{"activity":"Vinyasa","date":"2025-10-09"},{"activity":"Strength Training for Climbing","date":"2025-10-08"},{"activity":"Vinyasa","date":"2025-10-08"},{"activity":"Vinyasa","date":"2025-10-07"}]`
+      );
+
+    const allBookings = bookings.map(({ date, activity }) => ({
+      date: new Date(date),
+      activity,
+      month: new Date(date).getUTCMonth()
+    })).filter(({activity}) => activity !== 'Strength Training for Climbing');
+
+    const allActivities = [
+      'Vinyasa',
+      'Slow Flow',
+      'Mindful Flow',
+      //'Strength Training for Climbing',
+      'Bikram',
+      'Handstands',
+      'Rocket Yoga',
+      'Yoga for Climbers',
+      'Power Vinyasa',
+    ];
+    const MONTHS = [
+      "Jan",
+      "Feb",
+      "Mar",
+      "Apr",
+      "May",
+      "Jun",
+      "Jul",
+      "Aug",
+      "Sep",
+      "Oct",
+      "Nov",
+      "Dec"
+    ];
+
+    const events25 = allBookings.filter(({ date }) => date.getFullYear() === 2025);
+    const events24 = allBookings.filter(({ date }) => date.getFullYear() === 2024);
+
+    const color = Plot.legend({
+      color: {
+        type: "categorical",
+        range: scheme,
+        domain: allActivities
+      },
+      width: plotWidth
+    });
+  </script>
+  <script id="501" type="text/x-typescript">
+    const scheme = d3.schemeTableau10;
+  </script>
+</notebook>

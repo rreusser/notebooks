@@ -3,12 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="REGL in Observable Notebooks 2.0">
-  <meta property="og:title" content="REGL in Observable Notebooks 2.0">
-  <meta name="twitter:description" content="Tips and tricks for instantiating and managing a REGL WebGL Canvas in Observable Notebooks 2.0.">
-  <meta name="subject" content="Tips and tricks for instantiating and managing a REGL WebGL Canvas in Observable Notebooks 2.0.">
-  <meta name="description" content="Tips and tricks for instantiating and managing a REGL WebGL Canvas in Observable Notebooks 2.0.">
-  <meta property="og:description" content="Tips and tricks for instantiating and managing a REGL WebGL Canvas in Observable Notebooks 2.0.">
+  <meta name="twitter:title" content="Reflecting on Two Years of Yoga">
+  <meta property="og:title" content="Reflecting on Two Years of Yoga">
+  <meta name="twitter:description" content="Two Years of Yoga">
+  <meta name="subject" content="Two Years of Yoga">
+  <meta name="description" content="Two Years of Yoga">
+  <meta property="og:description" content="Two Years of Yoga">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1491,7 +1491,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>REGL in Observable Notebooks 2.0</title>  <script type="module" crossorigin src="/notebooks/assets/index-WZBwzlib.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Reflecting on Two Years of Yoga</title>  <script type="module" crossorigin src="/notebooks/assets/index-C-q4wR2h.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1503,20 +1503,20 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>REGL in Observable Notebooks 2.0</h1>
+    <h1>Reflecting on Two Years of Yoga</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20250812">August 12, 2025</time>
+      <time pubdate="" datetime="20251231">December 31, 2025</time>
     </div>
     <div class="resource-links">
-        <a href="https://observablehq.com/@rreusser/regl-canvas" class="resource-link">
+        <a href="https://observablehq.com/@rreusser/exercise-class-log" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" fill="white"></circle>
             <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
           </svg>
           Live notebook
         </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/regl-canvas/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/reflecting-on-two-years-of-yoga/index.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1526,25 +1526,23 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-11" class="observablehq observablehq--cell"><div><p>This notebook wires up a simple library function for managing a <a href="https://github.com/regl-project/regl">regl</a> canvas in Observable Notebooks 2.0. It works in Observable Desktop as well as with Notebook Kit.</p>
-</div></div><div id="cell-28" class="observablehq observablehq--cell"><div><p>The main points are:</p>
-<ol>
-<li>Dependency injection using <code>regl</code> from <a href="http://jsdelivr.net">jsdelivr.net</a></li>
-<li>Two-phased construction: first create a canvas, then inject size dependencies</li>
-</ol>
-</div></div><div id="cell-30" class="observablehq observablehq--cell"><div><p>To avoid recreating WebGL contexts, I previously used the <code>this</code> variable of Observable JavaScript to access the previous cell return value, but this leans heavily into statefullness within Observable’s stateless evaluation model, and more critically, I don’t actually know how to accomplish this in Notebook 2.0’s Vanilla JavaScript model. This is probably for the best.</p>
-</div></div><div id="cell-31" class="observablehq observablehq--cell"><div><p>So, we’re left with a simple workaround. First, create a canvas with no size, then obtain the final <code>regl</code> instance as we inject the canvas dimension dependencies via <code>.attachResize()</code>. Note that this is a two-step process like the following, so that the final <code>regl</code> instance is used <em>after</em> the size is applied.</p>
-</div></div><div id="cell-42" class="observablehq observablehq--cell"></div><div id="cell-37" class="observablehq observablehq--cell"></div><div id="cell-43" class="observablehq observablehq--cell"><div><p>If we did the following, we would fine that the execution order is indeterminate and we don’t always operate on a properly resized canvas.</p>
-</div></div><div id="cell-39" class="observablehq observablehq--cell"></div><div id="cell-38" class="observablehq observablehq--cell"></div><div id="cell-34" class="observablehq observablehq--cell"><div><p>Is it really worth this trouble to avoid creating extra WebGL contexts? Well, <em>yes</em>. Without this, and especially if you have more than one context, you can expect lost contexts and blank diagrams as the number of window resize events exceeds the maximum number of WebGL contexts, typically sixteen.</p>
-</div></div><div id="cell-44" class="observablehq observablehq--cell"><div><p>One other small thing I learned along the way is that, for somewhat obvious security reasons, Observable Desktop cannot import files from parent directories. This limits the ability to have notebooks categorized within directories import library functions. A simple workaround? Symbolic links. In particular, I added a symbolic link called <code>lib</code> within the notebook directory which trivially points to <code>../lib</code>. This allows both Observable Desktop as well as the Vite-based preview and build scripts to correctly resolve the import.</p>
-</div></div><div id="cell-32" class="observablehq observablehq--cell"><div><h2 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h2>
-</div></div><div id="cell-23" class="observablehq observablehq--cell"><div><pre data-language="js"><code class="language-js"></code></pre>
-</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><h2 id="example" tabindex="-1"><a href="#example">Example</a></h2>
-</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">reglCanvas</span> } <span class="tok-keyword">from</span> <span class="tok-string">'./lib/regl-canvas.js'</span></code></pre><div id="cell-26" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> <span class="tok-definition">createREGL</span> <span class="tok-keyword">from</span> <span class="tok-string">'npm:regl@2.1.1'</span></code></pre><div id="cell-15" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-comment">// Instantiate the context without a size</span>
-<span class="tok-keyword">const</span> <span class="tok-definition">_regl</span> = <span class="tok-variable">view</span>(<span class="tok-variable">reglCanvas</span>(<span class="tok-variable">createREGL</span>, {<span class="tok-definition">pixelRatio</span>: <span class="tok-literal">1</span>}))</code></pre><div id="cell-22" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-comment">// Pass the context through the resize function</span>
-<span class="tok-keyword">const</span> <span class="tok-definition">regl</span> = <span class="tok-variable">_regl</span>.<span class="tok-definition">attachResize</span>(<span class="tok-variable">width</span>, <span class="tok-variable">width</span> * <span class="tok-literal">0.3</span>)</code></pre><div id="cell-19" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-comment">// Start using the context</span>
-<span class="tok-variable">regl</span>.<span class="tok-definition">poll</span>();
-<span class="tok-variable">regl</span>.<span class="tok-definition">clear</span>({<span class="tok-definition">color</span>: [<span class="tok-literal">0.8</span>, <span class="tok-literal">0.9</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1</span>]});</code></pre></main>
+    <main><div id="cell-502" class="observablehq observablehq--cell"><div><h2 id="2024" tabindex="-1"><a href="#2024">2024</a></h2>
+</div></div><div id="cell-504" class="observablehq observablehq--cell"><div><p>Sometime before 2024, I intermittently started attending a Mindful Flow yoga class at the climbing gym. It was fine; dim lights, deep breathing, sort of a stretching hour—as futile as that feels for someone with tight hips from a lifetime of running. I hoped some stretching might help control the injuries that prevent me from running like I used to and that improved hip mobility might help my climbing. It felt like a tiny step in the evolution of staying active as I get older.</p>
+</div></div><div id="cell-509" class="observablehq observablehq--cell"><div><p>Throughout 2024, as I started attending more regularly, I remember struggling to sit cross-legged for more than a few seconds without tipping backwards. Downward dog was a stress position. Some of the <em>namaste</em> stuff was a little off-putting.</p>
+</div></div><div id="cell-511" class="observablehq observablehq--cell"><div><p>I’ve reconstructed my class history in the timeline below. I didn’t start tracking any of this until much later when I figured out the climbing gym exposes a <a href="https://graphql.org/">GraphQL</a> endpoint for historical bookings. Looking back, I’m surprised at my consistency because I remember cancelling on multiple nights when I simply couldn’t stomach sitting there quietly for an hour. I’m not sure my flexibility improved much.</p>
+</div></div><div id="cell-499" class="observablehq observablehq--cell"></div><div id="cell-503" class="observablehq observablehq--cell"><div><h2 id="2025" tabindex="-1"><a href="#2025">2025</a></h2>
+</div></div><div id="cell-513" class="observablehq observablehq--cell"><div><p>Mindful Flow Mondays continued into 2025. The moment things changed was in April, when my partner left on travel for three months. I started attending Monday-Wednesday-Friday yoga, met some regular climbing partners at the gym, and after ten years of almost exclusive solo running, started attending the <a href="https://linktr.ee/baybandits">Bay Bandits</a> trail running club.</p>
+</div></div><div id="cell-530" class="observablehq observablehq--cell"><div><p>That decision was not just about filling time. I’ve learned, slowly and after repeated failures, that isolation causes me to spiral inward. Being around other people in a structured way disrupted that pattern. Yoga put me in the same room with the same people, repeatedly, without requiring much social performance.</p>
+</div></div><div id="cell-516" class="observablehq observablehq--cell"><div><p>This continued for the next three months until July, when my partner returned home. My partner was more surprised than I was when, after living in our home for nearly a decade, I actually began to encounter acquaintances on the street! The return to normalcy was a fork in the road, so in July, having re-aggravated my plantar from running too consistently, I opted to start attending daily yoga.</p>
+</div></div><div id="cell-510" class="observablehq observablehq--cell"></div><div id="cell-527" class="observablehq observablehq--cell"><div><p>There was also something about the environment that mattered. Most of my adult life has been spent in places where I am the default: white, male, working in software or engineering, surrounded by people who look and think similarly. I’ve never found that especially comfortable. In yoga classes, I’m often unsure of myself, sometimes literally out of place, and aware that my presence is not assumed. The uncertainty keeps me engaged. It asks more of my attention. I think that friction is part of why I’ve kept showing up.</p>
+</div></div><div id="cell-517" class="observablehq observablehq--cell"><div><p>Certainly one thing that has contributed to my attendance record is when I started attending <a href="https://jodyhahnyoga.com/">Jody Hahn</a>’s classes. The wrong instructor uses your limitations against you<sup><a id="footnote-1-src" href="#footnote-1">[1]</a></sup>. The right instructor focuses your energy on what’s accessible to you. In the unlikely event Jody is reading this, hey Jody 👋. Gosh, she’s been outstanding. She said she’d received at least one bad Yelp review for providing too much assistance, but her attention to detail is precisely the thing that finally tipped the scales and helped me feel at home rather than out of my element in the yoga studio.</p>
+</div></div><div id="cell-523" class="observablehq observablehq--cell"><div><p>In aggregate, and apart from some traveling, I’ve transitioned from attending about once per week to about five times per week.</p>
+</div></div><div id="cell-508" class="observablehq observablehq--cell"></div><div id="cell-496" class="observablehq observablehq--cell"></div><div id="cell-520" class="observablehq observablehq--cell"><div><p>So I guess the obvious question is whether it’s had any effect, whether I’m flexible or good at yoga now or something.</p>
+</div></div><div id="cell-521" class="observablehq observablehq--cell"><div><p>I feel stronger. I can sit cross-legged for an extended period of time, though not entirely comfortably. Downward dog is alright while <a href="https://www.yogajournal.com/poses/garland-pose/?scope=initial">malasana</a> is my new stress position. I started attending a handstands class, and on a good day, I can manage about 8-10 seconds free-standing. There are still a number of basic hamstring– and hip-intensive poses that are completely inaccessible to me. If it ever helps my climbing, I think it’ll take a solid 5+ more years of this.</p>
+</div></div><div id="cell-522" class="observablehq observablehq--cell"><div><p>My favorite thing though is that <em>I don’t particularly care about my ability</em>. The part that keeps me coming back day to day is the <em>process</em>, seeing slow measures of <em>progress</em> even if my ability in some absolute sense is still quite basic. I’ve always been particularly susceptible to analyzing meaning to the point of paralysis. Running was historically the place where I could pour all of my energy without worrying for a moment about the meaning. Yoga is that place for me at the moment. I don’t know if it will remain so, but at the moment, I have tomorrow’s class scheduled and I plan to keep it up.</p>
+</div></div><div id="cell-531" class="observablehq observablehq--cell"><div><hr>
+<p><small><a href="#footnote-1-src" id="footnote-1">[1]</a>: or worse, is not-even-subtly dickish, but whatever, water under the bridge pose, I won’t get into that.</small></p>
+</div></div><div id="cell-489" class="observablehq observablehq--cell"></div><div id="cell-495" class="observablehq observablehq--cell"></div><div id="cell-490" class="observablehq observablehq--cell"></div><div id="cell-501" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
