@@ -17,7 +17,9 @@
     I’ve reconstructed my class history in the timeline below. I didn’t start tracking any of this until much later when I figured out the climbing gym exposes a [GraphQL](https://graphql.org/) endpoint for historical bookings. Looking back, I’m surprised at my consistency because I remember cancelling on multiple nights when I simply couldn’t stomach sitting there quietly for an hour. I’m not sure my flexibility improved much.
   </script>
   <script id="499" type="text/x-typescript">
-    display(Calendar(events24, {
+    display(html`
+    <figure>
+    ${Calendar(events24, {
       fy: { reverse: false },
       width,
       title: ({ foreground, activity }) => {
@@ -33,12 +35,13 @@
         if (!list) return "transparent";
         if (!Array.isArray(list)) throw new Error("Invalid data");
         return scheme[
-          list[0].reduce((sum, a) => sum + allActivities.indexOf(a.activity), 0) %
-            scheme.length
+          list[0].reduce((sum, a) => sum + allActivities.indexOf(a.activity) + 1, 0) %
+            scheme.length - 1
         ];
       },
-      color: { scheme: "Viridis", domain: [1, 3], reverse: false }
-    }))
+    })}
+    <figcaption>Clases throughout 2024. Hover over dates to inspect.</figcaption>
+    </figure>`)
   </script>
   <script id="503" type="text/markdown">
     ## 2025
@@ -70,15 +73,18 @@
         if (!list) return "transparent";
         if (!Array.isArray(list)) throw new Error("Invalid data");
         return scheme[
-          list[0].reduce((sum, a) => sum + allActivities.indexOf(a.activity), 0) %
-            scheme.length
+          list[0].reduce((sum, a) => sum + allActivities.indexOf(a.activity) + 1, 0) %
+            scheme.length - 1
         ];
       },
       color: { scheme: "Viridis", domain: [1, 3], reverse: false }
     });
     //cal.style.transformOrigin = 'center left';
     //cal.style.transform = `scale(${respScale},${respScale})`;
-    display(cal);
+    display(html`<figure>
+    ${cal}
+    <figcaption>Clases throughout 2025. Hover over dates to inspect.</figcaption>
+    </figure>`);
   </script>
   <script id="527" type="text/markdown">
     There was also something about the environment that mattered. Most of my adult life has been spent in places where I am the default: white, male, working in software or engineering, surrounded—sometimes without exception—by people who look and think similarly. In yoga classes, I’m often unsure of myself, sometimes literally out of place, and aware that my presence is not assumed. The uncertainty keeps me on my toes. I think that friction is part of why I've kept showing up.
