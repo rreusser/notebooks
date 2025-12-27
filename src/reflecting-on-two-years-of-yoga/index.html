@@ -53,9 +53,10 @@
     This continued for the next three months until July, when my partner returned home. My partner was more surprised than I was when, after living in our home for nearly a decade, I actually began to encounter acquaintances on the street! The return to normalcy was a fork in the road, so in July, having re-aggravated my plantar from running too consistently, I opted to start attending daily yoga.
   </script>
   <script id="510" type="text/x-typescript">
-    display(Calendar(events25, {
+    const respScale = width < 400 ? 0.8 : 1.0;
+    const cal = Calendar(events25, {
       fy: { reverse: false },
-      width,
+      width: width / respScale,
       title: ({ foreground, activity }) => {
         if (!foreground) return;
         return activity[0].map(({ activity }) => activity).join(",\n");
@@ -74,7 +75,10 @@
         ];
       },
       color: { scheme: "Viridis", domain: [1, 3], reverse: false }
-    }))
+    });
+    //cal.style.transformOrigin = 'center left';
+    //cal.style.transform = `scale(${respScale},${respScale})`;
+    display(cal);
   </script>
   <script id="527" type="text/markdown">
     There was also something about the environment that mattered. Most of my adult life has been spent in places where I am the default: white, male, working in software or engineering, surrounded—sometimes without exception—by people who look and think similarly. In yoga classes, I’m often unsure of myself, sometimes literally out of place, and aware that my presence is not assumed. The uncertainty keeps me on my toes. I think that friction is part of why I've kept showing up.
