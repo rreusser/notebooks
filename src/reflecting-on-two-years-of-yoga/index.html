@@ -21,7 +21,7 @@
     <figure style="padding-top:3em;padding-bottom:3em;">
     ${Calendar(events24, {
       fy: { reverse: false },
-      width,
+      width: width / respScale,
       title: ({ foreground, activity }) => {
         if (!foreground) return;
         return activity[0].map(({ activity }) => activity).join(",\n");
