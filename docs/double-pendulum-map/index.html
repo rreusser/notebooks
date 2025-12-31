@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>The Double Pendulum Map</title>  <script type="module" crossorigin src="/notebooks/assets/index-CeimX6U1.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>The Double Pendulum Map</title>  <script type="module" crossorigin src="/notebooks/assets/index-ZWYaCFvc.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1529,17 +1529,49 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-539" class="observablehq observablehq--cell"><div><p>A <a href="https://en.wikipedia.org/wiki/Double_pendulum">double pendulum</a> consists of two connected pendulums, rotating under the force of gravity. The pendulum below is a <em>compound</em> double pendulumn, meaning the mass is distributed along the length of the arms (here uniformly) rather than concentrated at a single point.</p>
-</div></div><div id="cell-530" class="observablehq observablehq--cell"></div><div id="cell-904" class="observablehq observablehq--cell"><div><p>Iterating a compound double pendulum is a simple matter of stepping the governing ordinary differential equation (ODE) in time. Wikipedia <a href="https://en.wikipedia.org/wiki/Double_pendulum#Lagrangian">has a nice summary</a>.</p>
+    <main><div id="cell-539" class="observablehq observablehq--cell"><div><p>A <a href="https://en.wikipedia.org/wiki/Double_pendulum">double pendulum</a> consists of two connected pendulums, rotating under the force of gravity. This notebook allows you to simulate both <em>simple</em> double pendulums (with point masses at the ends) and <em>compound</em> double pendulums (with mass distributed uniformly along the length of the arms).</p>
+</div></div><div id="cell-530" class="observablehq observablehq--cell"></div><div id="cell-904" class="observablehq observablehq--cell"><div><p>Iterating a double pendulum is a simple matter of stepping the governing ordinary differential equation (ODE) in time. See the <a href="#appendix">appendix</a> for detailed derivations of the equations of motion for both point-mass and compound double pendulums.</p>
 </div></div><div id="cell-363" class="observablehq observablehq--cell"><div><p><a href="https://twitter.com/MaksimovichSam">Sam Maksimovich</a> recently created a lovely video in which he simultaneously plots all possible double pendulums starting with zero velocity, using color to illustrate their trajectories. The explanation is far better than anything you’ll find here. You should watch it!</p>
 </div></div><div id="cell-526" class="observablehq observablehq--cell"></div><div id="cell-547" class="observablehq observablehq--cell"><div><p>At the end he mentions it took six hours to render the video. I’m confident I would not be able to create a lovelier or more effective explanation video, but the visualization is exactly the sort of thing GPUs do very well, so it seemed like it would be fun to plug this into WebGL and make a quick, interactive visualization of the pendulum. A major shortcoming is that WebGL only does single precision, and chaotic simulations definitely benefit from at least double precision, but maybe we’ll see what we can get away with.</p>
-</div></div><div id="cell-897" class="observablehq observablehq--cell"><div><p>The visualization below uses the <a href="https://github.com/regl-project/regl">regl</a> WebGL library to compute and visualize the angle of the of the first (x-axis) and second (y-axis) arms of all compound double pendulums starting with the specified velocities. This amounts to a two-dimensional slice (just the angular positions) of the four-dimensional phase space (two positions and two velocities).</p>
-</div></div><div id="cell-898" class="observablehq observablehq--cell"><div><p>Adjust the initial velocities and zoom in on regions below and observe…… pretty colors! 🌈</p>
-</div></div><div id="cell-610" class="observablehq observablehq--cell"></div><div id="cell-573" class="observablehq observablehq--cell"></div><div id="cell-576" class="observablehq observablehq--cell"></div><div id="cell-313" class="observablehq observablehq--cell"></div><div id="cell-281" class="observablehq observablehq--cell"></div><div id="cell-300" class="observablehq observablehq--cell"></div><div id="cell-289" class="observablehq observablehq--cell"></div><div id="cell-814" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-47" class="observablehq observablehq--cell"></div><div id="cell-158" class="observablehq observablehq--cell"></div><div id="cell-54" class="observablehq observablehq--cell"></div><div id="cell-78" class="observablehq observablehq--cell"></div><div id="cell-58" class="observablehq observablehq--cell"></div><div id="cell-113" class="observablehq observablehq--cell"></div><div id="cell-151" class="observablehq observablehq--cell"></div><div id="cell-176" class="observablehq observablehq--cell"></div><div id="cell-95" class="observablehq observablehq--cell"></div><div id="cell-886" class="observablehq observablehq--cell"></div><div id="cell-889" class="observablehq observablehq--cell"></div><div id="cell-619" class="observablehq observablehq--cell"></div><div id="cell-901" class="observablehq observablehq--cell"></div><div id="cell-903" class="observablehq observablehq--cell"></div><div id="cell-766" class="observablehq observablehq--cell"></div><div id="cell-82" class="observablehq observablehq--cell"></div><div id="cell-49" class="observablehq observablehq--cell"></div><div id="cell-890" class="observablehq observablehq--cell"></div><div id="cell-485" class="observablehq observablehq--cell"></div><div id="cell-635" class="observablehq observablehq--cell"></div><div id="cell-791" class="observablehq observablehq--cell"></div><div id="cell-651" class="observablehq observablehq--cell"><style>
+</div></div><div id="cell-897" class="observablehq observablehq--cell"><div><p>The visualization below uses the <a href="https://github.com/regl-project/regl">regl</a> WebGL library to compute and visualize the angle of the of the first (x-axis) and second (y-axis) arms of all double pendulums starting with the specified velocities. This amounts to a two-dimensional slice (just the angular positions) of the four-dimensional phase space (two positions and two velocities).</p>
+</div></div><div id="cell-898" class="observablehq observablehq--cell"><div><p>Toggle between simple (point masses) and compound (distributed mass) pendulums, adjust the initial velocities, and zoom in on regions below to observe the beautiful fractal structure! 🌈</p>
+</div></div><div id="cell-610" class="observablehq observablehq--cell"></div><div id="cell-571" class="observablehq observablehq--cell"></div><div id="cell-573" class="observablehq observablehq--cell"></div><div id="cell-576" class="observablehq observablehq--cell"></div><div id="cell-313" class="observablehq observablehq--cell"></div><div id="cell-281" class="observablehq observablehq--cell"></div><div id="cell-300" class="observablehq observablehq--cell"></div><div id="cell-289" class="observablehq observablehq--cell"></div><div id="cell-814" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-47" class="observablehq observablehq--cell"></div><div id="cell-158" class="observablehq observablehq--cell"></div><div id="cell-54" class="observablehq observablehq--cell"></div><div id="cell-78" class="observablehq observablehq--cell"></div><div id="cell-58" class="observablehq observablehq--cell"></div><div id="cell-113" class="observablehq observablehq--cell"></div><div id="cell-151" class="observablehq observablehq--cell"></div><div id="cell-176" class="observablehq observablehq--cell"></div><div id="cell-95" class="observablehq observablehq--cell"></div><div id="cell-886" class="observablehq observablehq--cell"></div><div id="cell-889" class="observablehq observablehq--cell"></div><div id="cell-619" class="observablehq observablehq--cell"></div><div id="cell-901" class="observablehq observablehq--cell"></div><div id="cell-903" class="observablehq observablehq--cell"></div><div id="cell-766" class="observablehq observablehq--cell"></div><div id="cell-82" class="observablehq observablehq--cell"></div><div id="cell-49" class="observablehq observablehq--cell"></div><div id="cell-890" class="observablehq observablehq--cell"></div><div id="cell-485" class="observablehq observablehq--cell"></div><div id="cell-635" class="observablehq observablehq--cell"></div><div id="cell-791" class="observablehq observablehq--cell"></div><div id="cell-651" class="observablehq observablehq--cell"><style>
 input[type=range] {
   width: 500px;
 }
-</style></div></main>
+</style></div><div id="cell-905" class="observablehq observablehq--cell"><div><h2 id="appendix">Appendix: Derivations of Equations of Motion</h2></div></div><div id="cell-906" class="observablehq observablehq--cell"><div><h3 id="derivation-1-simple-double-pendulum-point-masses" tabindex="-1"><a href="#derivation-1-simple-double-pendulum-point-masses">Derivation 1: Simple Double Pendulum (Point Masses)</a></h3>
+</div></div><div id="cell-907" class="observablehq observablehq--cell"></div><div id="cell-908" class="observablehq observablehq--cell"><div><p>Consider a double pendulum with point masses  and  at distances  and  from their respective pivots, with angles  and  measured from vertical (downward).</p>
+<h4>Coordinates</h4>
+<p>The position of mass 1:</p>
+<p>The position of mass 2:</p>
+<h4>Kinetic Energy</h4>
+<p>Taking time derivatives:</p>
+<p>The kinetic energy is:</p>
+<h4>Potential Energy</h4>
+<h4>Lagrangian</h4>
+<h4>Euler-Lagrange Equations</h4>
+<p>The Euler-Lagrange equations  yield (after simplification):</p>
+<h4>ODEs for Numerical Integration</h4>
+<p>Solving for  and :</p>
+<p>As a first-order system with state  where :</p>
+</div></div><div id="cell-909" class="observablehq observablehq--cell"><div><h3 id="derivation-2-compound-double-pendulum-distributed-mass" tabindex="-1"><a href="#derivation-2-compound-double-pendulum-distributed-mass">Derivation 2: Compound Double Pendulum (Distributed Mass)</a></h3>
+</div></div><div id="cell-910" class="observablehq observablehq--cell"></div><div id="cell-911" class="observablehq observablehq--cell"><div><p>For a compound pendulum, the mass is distributed along each arm. Consider uniform rods of lengths  and  with masses  and , and moments of inertia  and  about their pivot points.</p>
+<h4>Center of Mass Positions</h4>
+<p>The centers of mass are located at the midpoints:</p>
+<h4>Kinetic Energy</h4>
+<p>The kinetic energy includes both translational and rotational components:</p>
+<p>For a uniform rod rotating about its end,  and . The translational kinetic energies are:</p>
+<p>Thus:</p>
+<h4>Potential Energy</h4>
+<h4>Euler-Lagrange Equations</h4>
+<p>Applying the Euler-Lagrange equations and simplifying (for equal masses  and equal lengths ):</p>
+<h4>ODEs for Numerical Integration</h4>
+<p>Introducing generalized momenta  and  and normalizing by :</p>
+<p>Inverting to solve for  and  (with ):</p>
+<p>The time derivatives of the momenta are:</p>
+<p>As a first-order system with state :</p>
+<p>This is the formulation used in the simulation above, with normalized units ().</p>
+</div></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
