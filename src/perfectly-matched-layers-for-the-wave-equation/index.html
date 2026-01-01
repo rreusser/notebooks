@@ -68,17 +68,20 @@
     // Mutable params object to avoid reactive flickering
     const params_1d = {
       pmlWidth: 20,
-      pmlStrength: 2.0
+      pmlStrength: 2.0,
+      frequency: 0.1
     };
   </script>
   <script id="6" type="module">
     const pmlWidth1d = view(Inputs.range([1, 40], {label: "PML width (grid points)", step: 1, value: 10}));
     const pmlStrength1d = view(Inputs.range([0.1, 5.0], {label: "PML strength", step: 0.1, value: 2.0}));
+    const frequency1d = view(Inputs.range([0.025, 0.2], {label: "Oscillator frequency", step: 0.005, value: 0.1}));
   </script>
   <script id="7" type="module">
     // Update params object when controls change (doesn't restart visualization)
     params_1d.pmlWidth = pmlWidth1d;
     params_1d.pmlStrength = pmlStrength1d;
+    params_1d.frequency = frequency1d;
   </script>
   <script id="8" type="module">
     import * as Plot from "npm:@observablehq/plot";
@@ -98,10 +101,10 @@
 
     let t = 0;  // Simulation time
 
-    // Compute sigma(x) - absorption coefficient (uses params_1d object)
-    function sigma(i) {
-      const leftDist = i;
-      const rightDist = N - 1 - i;
+    // Compute sigma at any position x (for staggered grid)
+    function sigma_at_position(x) {
+      const leftDist = x;
+      const rightDist = (N - 1) - x;
 
       let s = 0;
       if (leftDist < params_1d.pmlWidth) {
@@ -113,12 +116,26 @@
       return s;
     }
 
+    // Sigma for u at integer positions
+    function sigma(i) {
+      return sigma_at_position(i);
+    }
+
+    // Sigma for v at half-integer positions
+    function sigma_v(i) {
+      return sigma_at_position(i + 0.5);
+    }
+
     // Compute forcing term at position i and time t
     function forcing(i, t) {
       const pulseInterval = 300.0;
       const pulse = Math.exp(-Math.pow(Math.abs((t % pulseInterval - pulseInterval * 0.5) / 40.0), 4.0));
       const COUNT = 5;
-      const omega = C * Math.PI / OSCILLATOR_WAVELENGTH;
+      const omega = C * Math.PI * params_1d.frequency;
+
+      // Scale amplitude inversely with frequency to maintain constant wave amplitude
+      // Lower frequencies get proportionally stronger forcing
+      const amplitudeScale = 0.1 / params_1d.frequency;
 
       let f = 0;
       for (let j = 0; j < COUNT; j++) {
@@ -131,25 +148,85 @@
         const mask = Math.exp(-Math.pow(dist / width, 2));
 
         const f0 = Math.sin(omega * t / (j + 1));
-        f += f0 * mask * OSCILLATOR_STRENGTH * pulse;
+        f += f0 * mask * OSCILLATOR_STRENGTH * amplitudeScale * pulse;
       }
       return f;
     }
 
-    // Single time step
-    function step() {
-      // Update v: ∂v/∂t = c ∂u/∂x - σ v + f(x,t)
-      // Adding forcing to v equation (velocity source) for smoother excitation
+    // Right-hand side functions for RK4 with staggered grid
+    // u is at integer points i
+    // v is at half-integer points i+0.5 (stored as v[i])
+    function dudt(u_arr, v_arr, t_val) {
+      const result = new Float64Array(N);
+
+      // Interior points
       for (let i = 1; i < N - 1; i++) {
-        const dudx = (u[i + 1] - u[i - 1]) / (2 * DX);
-        const f = forcing(i, t + DT / 2);  // Evaluate at half time step for leap-frog
-        v[i] += DT * (C * dudx - sigma(i) * v[i] + f);
+        // ∂v/∂x at point i using staggered grid: (v[i] - v[i-1]) / DX
+        // v[i] is at position i+0.5, v[i-1] is at position i-0.5
+        const dvdx = (v_arr[i] - v_arr[i - 1]) / DX;
+        result[i] = C * dvdx - sigma(i) * u_arr[i];
       }
 
-      // Update u: ∂u/∂t = c ∂v/∂x - σ u
+      // Left boundary (i=0): use forward difference from interior v points
+      const dvdx_left = (v_arr[1] - v_arr[0]) / DX;
+      result[0] = C * dvdx_left - sigma(0) * u_arr[0];
+
+      // Right boundary (i=N-1): use backward difference from interior v points
+      const dvdx_right = (v_arr[N - 2] - v_arr[N - 3]) / DX;
+      result[N - 1] = C * dvdx_right - sigma(N - 1) * u_arr[N - 1];
+
+      return result;
+    }
+
+    function dvdt(u_arr, v_arr, t_val) {
+      const result = new Float64Array(N);
+      for (let i = 0; i < N - 1; i++) {
+        // ∂u/∂x at point i+0.5 using staggered grid: (u[i+1] - u[i]) / DX
+        const dudx = (u_arr[i + 1] - u_arr[i]) / DX;
+        const f = forcing(i + 0.5, t_val);  // Forcing at half-integer position
+        result[i] = C * dudx - sigma_v(i) * v_arr[i] + f;
+      }
+      return result;
+    }
+
+    // RK4 time step
+    function step() {
+      // Create temporary arrays
+      const u_temp = new Float64Array(N);
+      const v_temp = new Float64Array(N);
+
+      // k1
+      const ku1 = dudt(u, v, t);
+      const kv1 = dvdt(u, v, t);
+
+      // k2
+      for (let i = 0; i < N; i++) {
+        u_temp[i] = u[i] + 0.5 * DT * ku1[i];
+        v_temp[i] = v[i] + 0.5 * DT * kv1[i];
+      }
+      const ku2 = dudt(u_temp, v_temp, t + 0.5 * DT);
+      const kv2 = dvdt(u_temp, v_temp, t + 0.5 * DT);
+
+      // k3
+      for (let i = 0; i < N; i++) {
+        u_temp[i] = u[i] + 0.5 * DT * ku2[i];
+        v_temp[i] = v[i] + 0.5 * DT * kv2[i];
+      }
+      const ku3 = dudt(u_temp, v_temp, t + 0.5 * DT);
+      const kv3 = dvdt(u_temp, v_temp, t + 0.5 * DT);
+
+      // k4
+      for (let i = 0; i < N; i++) {
+        u_temp[i] = u[i] + DT * ku3[i];
+        v_temp[i] = v[i] + DT * kv3[i];
+      }
+      const ku4 = dudt(u_temp, v_temp, t + DT);
+      const kv4 = dvdt(u_temp, v_temp, t + DT);
+
+      // Final update
       for (let i = 1; i < N - 1; i++) {
-        const dvdx = (v[i + 1] - v[i - 1]) / (2 * DX);
-        u[i] += DT * (C * dvdx - sigma(i) * u[i]);
+        u[i] += (DT / 6) * (ku1[i] + 2 * ku2[i] + 2 * ku3[i] + ku4[i]);
+        v[i] += (DT / 6) * (kv1[i] + 2 * kv2[i] + 2 * kv3[i] + kv4[i]);
       }
 
       t += DT;
@@ -226,8 +303,15 @@
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         isVisible = entry.isIntersecting;
-        if (isVisible && !animationId) {
-          animate();
+        if (isVisible) {
+          if (!animationId) {
+            animate();
+          }
+        } else {
+          if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+          }
         }
       });
     });
@@ -536,8 +620,8 @@
 
           if (u_showSigma > 0.5) {
             vec2 s = sqrt(sigmaDisplay(gl_FragCoord.xy, u_resolution, u_pmlWidth));  // sqrt for better low-value contrast
-            fragColor = mix(fragColor, vec4(1.0, 0.7, 0.7, 1.0), s.x * 0.5);  // Pink for x-direction
-            fragColor = mix(fragColor, vec4(0.7, 1.0, 0.7, 1.0), s.y * 0.5);  // Green for y-direction
+            fragColor = mix(fragColor, vec4(1.0, 0.0, 0.0, 1.0), s.x * 0.7);  // Pink for x-direction
+            fragColor = mix(fragColor, vec4(0.0, 1.0, 0.0, 1.0), s.y * 0.7);  // Green for y-direction
           }
         }
       `;
@@ -681,53 +765,59 @@
           return;
         }
 
-        const current = currentBuffer;
-        const next = 1 - currentBuffer;
+        // Run two time steps per frame for better visual speed
+        for (let step = 0; step < 2; step++) {
+          const current = currentBuffer;
+          const next = 1 - currentBuffer;
 
-        // Update buffer A (u, psi)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, bufferA[next].fbo);
-        gl.viewport(0, 0, width, height);
-        gl.useProgram(bufferAProgram);
+          // Update buffer A (u, psi)
+          gl.bindFramebuffer(gl.FRAMEBUFFER, bufferA[next].fbo);
+          gl.viewport(0, 0, width, height);
+          gl.useProgram(bufferAProgram);
 
-        const aPositionA = gl.getAttribLocation(bufferAProgram, 'a_position');
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
-        gl.enableVertexAttribArray(aPositionA);
-        gl.vertexAttribPointer(aPositionA, 2, gl.FLOAT, false, 0, 0);
+          const aPositionA = gl.getAttribLocation(bufferAProgram, 'a_position');
+          gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+          gl.enableVertexAttribArray(aPositionA);
+          gl.vertexAttribPointer(aPositionA, 2, gl.FLOAT, false, 0, 0);
 
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, bufferA[current].texture);
-        gl.uniform1i(gl.getUniformLocation(bufferAProgram, 'u_bufferA'), 0);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, bufferA[current].texture);
+          gl.uniform1i(gl.getUniformLocation(bufferAProgram, 'u_bufferA'), 0);
 
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
-        gl.uniform1i(gl.getUniformLocation(bufferAProgram, 'u_bufferB'), 1);
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
+          gl.uniform1i(gl.getUniformLocation(bufferAProgram, 'u_bufferB'), 1);
 
-        gl.uniform2f(gl.getUniformLocation(bufferAProgram, 'u_resolution'), width, height);
-        gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_pmlWidth'), uniforms.pmlWidth);
+          gl.uniform2f(gl.getUniformLocation(bufferAProgram, 'u_resolution'), width, height);
+          gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_pmlWidth'), uniforms.pmlWidth);
 
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-        // Update buffer B (v)
-        gl.bindFramebuffer(gl.FRAMEBUFFER, bufferB[next].fbo);
-        gl.useProgram(bufferBProgram);
+          // Update buffer B (v)
+          gl.bindFramebuffer(gl.FRAMEBUFFER, bufferB[next].fbo);
+          gl.useProgram(bufferBProgram);
 
-        const aPositionB = gl.getAttribLocation(bufferBProgram, 'a_position');
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
-        gl.enableVertexAttribArray(aPositionB);
-        gl.vertexAttribPointer(aPositionB, 2, gl.FLOAT, false, 0, 0);
+          const aPositionB = gl.getAttribLocation(bufferBProgram, 'a_position');
+          gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+          gl.enableVertexAttribArray(aPositionB);
+          gl.vertexAttribPointer(aPositionB, 2, gl.FLOAT, false, 0, 0);
 
-        gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, bufferA[next].texture);
-        gl.uniform1i(gl.getUniformLocation(bufferBProgram, 'u_bufferA'), 0);
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, bufferA[next].texture);
+          gl.uniform1i(gl.getUniformLocation(bufferBProgram, 'u_bufferA'), 0);
 
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
-        gl.uniform1i(gl.getUniformLocation(bufferBProgram, 'u_bufferB'), 1);
+          gl.activeTexture(gl.TEXTURE1);
+          gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
+          gl.uniform1i(gl.getUniformLocation(bufferBProgram, 'u_bufferB'), 1);
 
-        gl.uniform2f(gl.getUniformLocation(bufferBProgram, 'u_resolution'), width, height);
-        gl.uniform1f(gl.getUniformLocation(bufferBProgram, 'u_pmlWidth'), uniforms.pmlWidth);
+          gl.uniform2f(gl.getUniformLocation(bufferBProgram, 'u_resolution'), width, height);
+          gl.uniform1f(gl.getUniformLocation(bufferBProgram, 'u_pmlWidth'), uniforms.pmlWidth);
 
-        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+          // Swap buffers for next iteration
+          currentBuffer = next;
+        }
 
         // Display
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
@@ -740,7 +830,7 @@
         gl.vertexAttribPointer(aPositionD, 2, gl.FLOAT, false, 0, 0);
 
         gl.activeTexture(gl.TEXTURE0);
-        gl.bindTexture(gl.TEXTURE_2D, bufferA[next].texture);
+        gl.bindTexture(gl.TEXTURE_2D, bufferA[currentBuffer].texture);
         gl.uniform1i(gl.getUniformLocation(displayProgram, 'u_bufferA'), 0);
 
         gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_resolution'), width, height);
@@ -750,7 +840,6 @@
 
         gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
-        currentBuffer = next;
         animationId = requestAnimationFrame(render);
       }
 
@@ -758,8 +847,15 @@
     const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
         isVisible = entry.isIntersecting;
-        if (isVisible && !animationId) {
-          animationId = requestAnimationFrame(render);
+        if (isVisible) {
+          if (!animationId) {
+            animationId = requestAnimationFrame(render);
+          }
+        } else {
+          if (animationId) {
+            cancelAnimationFrame(animationId);
+            animationId = null;
+          }
         }
       });
     });
