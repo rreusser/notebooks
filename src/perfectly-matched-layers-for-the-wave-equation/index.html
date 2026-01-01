@@ -458,7 +458,7 @@
     The following WebGL implementation simulates these equations on the GPU using fragment shaders. Use the controls below to pause/resume the simulation, adjust contrast, and visualize the PML absorption regions (red for ${tex`\sigma_x`}, green for ${tex`\sigma_y`}).
   </script>
   <script id="17" type="module">
-    const canvas = html`<canvas width="640" height="640" style="width: 100%; height: auto; display: block; image-rendering: pixelated;"></canvas>`;
+    const canvas = html`<canvas width="640" height="640" style="width: 100%; height: auto; display: block; image-rendering: pixelated; touch-action: none;"></canvas>`;
     const gl = canvas.getContext("webgl2");
 
     if (!gl) {
