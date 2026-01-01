@@ -67,13 +67,13 @@
   <script id="5" type="module">
     // Mutable params object to avoid reactive flickering
     const params_1d = {
-      pmlWidth: 20,
+      pmlWidth: 6,
       pmlStrength: 2.0,
       frequency: 0.1
     };
   </script>
   <script id="6" type="module">
-    const pmlWidth1d = view(Inputs.range([1, 40], {label: "PML width (grid points)", step: 1, value: 10}));
+    const pmlWidth1d = view(Inputs.range([1, 40], {label: "PML width (grid points)", step: 1, value: 6}));
     const pmlStrength1d = view(Inputs.range([0.1, 5.0], {label: "PML strength", step: 0.1, value: 2.0}));
     const frequency1d = view(Inputs.range([0.025, 0.2], {label: "Oscillator frequency", step: 0.005, value: 0.1}));
   </script>
@@ -498,6 +498,11 @@
         uniform sampler2D u_bufferB;
         uniform vec2 u_resolution;
         uniform float u_pmlWidth;
+        uniform float u_usePsi;
+        uniform float u_mouseX;
+        uniform float u_mouseY;
+        uniform float u_mouseMoving;
+        uniform float u_mouseActive;
         out vec4 fragColor;
 
         vec2 sigmaCompute(vec2 coord, vec2 res, float pmlWidth) {
@@ -525,23 +530,39 @@
 
           vec2 s = sigmaCompute(gl_FragCoord.xy, u_resolution, u_pmlWidth);
 
+          // When usePsi is disabled, use naive 2D extension (which won't work well)
+          float psiContribution = u_usePsi > 0.5 ? psi : 0.0;
+          float psiUpdate = u_usePsi > 0.5 ? (s.x * dvydy + s.y * dvxdx - u * s.x * s.y) : 0.0;
+
           fragColor.xyz = state.xyz + DT * vec3(
-            C * (dvxdx + dvydy) - u * (s.x + s.y) + psi,
-            C * (s.x * dvydy + s.y * dvxdx - u * s.x * s.y),
+            C * (dvxdx + dvydy) - u * (s.x + s.y) + psiContribution,
+            C * psiUpdate,
             1.0
           );
 
-          // Apply forcing term at center
-          float pulseInterval = 600.0;
-          float pulse = exp(-pow(abs((mod(t - pulseInterval, pulseInterval * 0.7) - pulseInterval * 0.5) / 40.0), 4.0));
-          int COUNT = 5;
-          for (int i = 0; i < COUNT; i++) {
-            vec2 r = (float(i) - float(COUNT) * 0.5) / float(COUNT) * vec2(80.0, 0.0);
+          // Apply forcing term: mouse if moving, automatic if not active, none otherwise
+          if (u_mouseMoving > 0.5) {
+            // Mouse-based forcing with Gaussian profile (only when actually moving)
+            float mouseForceWidth = 8.0;
+            float mouseDist = length(gl_FragCoord.xy - vec2(u_mouseX, u_mouseY));
+            float mouseMask = exp(-pow(mouseDist / mouseForceWidth, 2.0));
             float omega = C * PI / OSCILLATOR_WAVELENGTH;
-            float oscillatorMask = smoothstep(3.0, 2.0, length(gl_FragCoord.xy - u_resolution * 0.5 + r));
-            float u0 = sin(omega * t / float(i + 1));
-            fragColor.x += u0 * oscillatorMask * OSCILLATOR_STRENGTH * pulse;
+            float mouseForce = sin(omega * t) * mouseMask * OSCILLATOR_STRENGTH * 0.4;
+            fragColor.x += mouseForce;
+          } else if (u_mouseActive < 0.5) {
+            // Automatic periodic oscillators (only when mouse not active)
+            float pulseInterval = 600.0;
+            float pulse = exp(-pow(abs((mod(t - pulseInterval, pulseInterval * 0.7) - pulseInterval * 0.5) / 40.0), 4.0));
+            int COUNT = 5;
+            for (int i = 0; i < COUNT; i++) {
+              vec2 r = (float(i) - float(COUNT) * 0.5) / float(COUNT) * vec2(80.0, 0.0);
+              float omega = C * PI / OSCILLATOR_WAVELENGTH;
+              float oscillatorMask = smoothstep(3.0, 2.0, length(gl_FragCoord.xy - u_resolution * 0.5 + r));
+              float u0 = sin(omega * t / float(i + 1));
+              fragColor.x += u0 * oscillatorMask * OSCILLATOR_STRENGTH * pulse;
+            }
           }
+          // When mouse is active but not moving: no forcing, just let waves propagate
         }
       `;
 
@@ -691,21 +712,48 @@
 
       let currentBuffer = 0;
 
-      const mouseState = { pressed: false, x: 0, y: 0 };
+      // Pointer event queue and state
+      const pointerQueue = [];
+      const mouseState = {
+        x: -1000,
+        y: -1000,
+        lastMoveTime: -10000,  // Initialize to far in the past so automatic forcing starts immediately
+        isMoving: false,
+        isActive: false
+      };
 
-    canvas.addEventListener('mousedown', (e) => { mouseState.pressed = true; });
-    canvas.addEventListener('mouseup', (e) => { mouseState.pressed = false; });
-    canvas.addEventListener('mousemove', (e) => {
-      const rect = canvas.getBoundingClientRect();
-      mouseState.x = (e.clientX - rect.left) * width / rect.width;
-      mouseState.y = height - (e.clientY - rect.top) * height / rect.height;
-    });
+      canvas.addEventListener('pointerenter', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * width / rect.width;
+        const y = height - (e.clientY - rect.top) * height / rect.height;
+        pointerQueue.push({ x, y, time: performance.now() });
+      });
+
+      canvas.addEventListener('pointermove', (e) => {
+        const rect = canvas.getBoundingClientRect();
+        const x = (e.clientX - rect.left) * width / rect.width;
+        const y = height - (e.clientY - rect.top) * height / rect.height;
+        pointerQueue.push({ x, y, time: performance.now() });
+      });
+
+      canvas.addEventListener('pointerleave', (e) => {
+        mouseState.x = -1000;
+        mouseState.y = -1000;
+        mouseState.lastMoveTime = -10000;  // Reset to far past so automatic forcing restarts immediately
+        mouseState.isMoving = false;
+        mouseState.isActive = false;
+      });
 
     // Uniform values that can be updated without re-running the animation
     const uniforms = {
+      usePsi: 1.0,
       showSigma: 0.0,
       contrast: 0.454,
-      pmlWidth: 12.0
+      pmlWidth: 12.0,
+      mouseX: -1000,
+      mouseY: -1000,
+      mouseMoving: 0.0,
+      mouseActive: 0.0
     };
 
     const webgl_setup = {
@@ -725,6 +773,7 @@
   </script>
   <script id="18" type="module">
     // Update uniforms object when controls change (doesn't restart animation)
+    webgl_setup.uniforms.usePsi = usePsi ? 1.0 : 0.0;
     webgl_setup.uniforms.showSigma = showSigma ? 1.0 : 0.0;
     webgl_setup.uniforms.contrast = Math.max(100**contrast, 0.1);
     webgl_setup.uniforms.pmlWidth = pmlWidth;
@@ -739,6 +788,26 @@
     function render() {
       // Only render if visible
       if (!isVisible) return;
+
+      // Process pointer queue and update mouse state
+      const now = performance.now();
+      while (pointerQueue.length > 0) {
+        const event = pointerQueue.shift();
+        mouseState.x = event.x;
+        mouseState.y = event.y;
+        mouseState.lastMoveTime = event.time;
+      }
+
+      // Check if mouse is actively moving (within 100ms) and active (within 2s)
+      const timeSinceMove = now - mouseState.lastMoveTime;
+      mouseState.isMoving = timeSinceMove < 100;
+      mouseState.isActive = timeSinceMove < 6000;
+
+      // Update uniforms
+      uniforms.mouseX = mouseState.x;
+      uniforms.mouseY = mouseState.y;
+      uniforms.mouseMoving = mouseState.isMoving ? 1.0 : 0.0;
+      uniforms.mouseActive = mouseState.isActive ? 1.0 : 0.0;
 
       if (!simulate) {
           // Still render the display, just don't update the simulation
@@ -790,6 +859,11 @@
 
           gl.uniform2f(gl.getUniformLocation(bufferAProgram, 'u_resolution'), width, height);
           gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_pmlWidth'), uniforms.pmlWidth);
+          gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_usePsi'), uniforms.usePsi);
+          gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_mouseX'), uniforms.mouseX);
+          gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_mouseY'), uniforms.mouseY);
+          gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_mouseMoving'), uniforms.mouseMoving);
+          gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_mouseActive'), uniforms.mouseActive);
 
           gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 
@@ -872,6 +946,7 @@
   </script>
   <script id="20" type="module">
     const simulate = view(Inputs.toggle({label: "Simulate", value: true}));
+    const usePsi = view(Inputs.toggle({label: "Use auxiliary ψ equation", value: true}));
     const showSigma = view(Inputs.toggle({label: "Show absorption regions", value: false}));
     const contrast = view(Inputs.range([0, 1], {label: "Contrast", step: 0.01, value: 0}));
     const pmlWidth = view(Inputs.range([4, 40], {label: "PML width (pixels)", step: 1, value: 12}));
