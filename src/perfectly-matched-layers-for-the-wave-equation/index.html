@@ -4,14 +4,18 @@
   <script id="32" type="text/markdown">
     # Perfectly Matched Layers for the Wave Equation
   </script>
+  <script id="60" type="text/markdown">
+    I used to study Computational Fluid Dynamics (CFD), and one of my favorite techniques was Perfectly Matched Layers (PML) for absorbing boundaries because it just doesn’t seem like such a good solution should exist.
+
+  </script>
   <script id="33" type="text/markdown">
-    When simulating wave propagation on a computational grid, a common problem is how to prevent waves from reflecting back into the domain. In physical systems, waves often propagate through unbounded space, but our simulations must work within finite memory. Simply truncating the domain causes waves to reflect artificially from the boundaries, contaminating the solution.
+    The basic problem setup is that we seek to simulate a wave equation and avoid waves reflecting off the boundaries and back into the simulation domain. Simply truncating the domain causes waves to reflect artificially, contaminating the solution.
+  </script>
+  <script id="61" type="text/markdown">
+    **Perfectly Matched Layers (PML)** solve this problem by adding absorbing regions at the domain boundaries that eliminate reflections. You can imagine this like some sort of foam or tacky, viscous rubber damping sound waves. However, rubber behaves very differently from air and, so although it will dampen sound waves, it also causes its own spurious reflections.
   </script>
   <script id="1" type="text/markdown">
-    **Perfectly Matched Layers (PML)** solve this problem by adding absorbing regions at the domain boundaries that eliminate reflections for all angles and frequencies. The technique is based on an analytic continuation of the wave equation into the complex domain. This allows waves to be attenuated independent of frequency, which is not something we can achieve with a simple damping term like for a damped spring. Even better, waves end up decaying both as the propagate toward the layer and as any residual reflections propagate back into the domain.
-  </script>
-  <script id="34" type="text/markdown">
-    For comparison, this complex variable trick causes the absorbing layer to behave differently from physical absorbers such as sound-dampening foam, where high frequencies attenuate much more quickly relative to the width of the absorbing material, allowing low frequencies to pass through. Additionally, spurious reflections result when waves travling in the interior medium suddenly encounter the impedance of the absorbing layer.
+    The PML technique avoids these spurious reflections by “perfectly” matching the impedance of the absorbing layer to the impedance of the medium. In very hand-wavy terms, it accomplishes this by extending the solution into the complex domain and then applying damping to the imaginary component. The result is that the waves decay exponentially as they move. Moreover, this decay is frequency-independent and occurs both in the outgoing and incoming directions, so that any waves that aren’t fully damped and reflect off the boundaries are futher damped as they move back into the domain.
   </script>
   <script id="35" type="text/markdown">
     This notebook demonstrates PML for the scalar wave equation, starting with a 1D example before extending to 2D.
@@ -20,7 +24,7 @@
     ## The 1D Wave Equation
   </script>
   <script id="23" type="text/markdown">
-    The [scalar wave equation](https://en.wikipedia.org/wiki/Wave_equation) for any number of dimensions is given by
+    The [scalar wave equation](https://en.wikipedia.org/wiki/Wave_equation) in general is given by
 
     ${tex.block`\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u.`}
   </script>
@@ -30,7 +34,7 @@
     ${tex.block`\frac{\partial^2 u}{\partial t^2} = c^2 \frac{\partial^2 u}{\partial x^2}.`}
   </script>
   <script id="2" type="text/markdown">
-    We could apply PML to this equation, but it will turn out to be easier and require about the same amount of computational work to apply it to what’s probably a less familiar but strictly equivalent form which contains only first-order derivatives,
+    We could apply PML to this equation, but it works better to start out with what’s probably a less familiar but strictly equivalent form containing only first-order derivatives,
 
     ${tex.block`\begin{aligned}
     \frac{\partial u}{\partial t} &= c \frac{\partial v}{\partial x} \\[10pt]
@@ -423,7 +427,7 @@
     \end{aligned}`}
   </script>
   <script id="45" type="text/markdown">
-    The term in parentheses contains factors of ${tex`\frac{i}{\omega}`}, which corresponds to time integration. In other words, in additon to integrating the other state variables in time, we need to integrate one more. We define the term in parentheses as the auxiliary quantity ${tex`\psi,`}
+    Except for the last term, we can transform this back into the time domain to obtain an equation analogous to the 1D case. However, the term in parentheses contains factors of ${tex`\frac{i}{\omega}`} which correspond to time integration. In other words, the equation mostly translates back into the time domain just fine, but we end up with one additional quantity we need to track and integrate along with the other state variables. We define the term in parentheses as the auxiliary quantity ${tex`\psi,`}
   </script>
   <script id="46" type="text/markdown">
     ${tex.block`\psi = \frac{ic\sigma_x}{\omega} \frac{\partial v_y}{\partial y} + \frac{ic\sigma_y}{\omega} \frac{\partial v_x}{\partial x} - \frac{i}{\omega} \sigma_x \sigma_y u`}
@@ -470,6 +474,10 @@
     if (!ext) {
       throw new Error('EXT_color_buffer_float extension is not supported');
     }
+
+    // Check for linear filtering support on float textures
+    const linearExt = gl.getExtension('OES_texture_float_linear');
+    const useLinearFiltering = linearExt !== null;
 
     // Constants
     const PML_WIDTH = 12.0;
@@ -634,7 +642,8 @@
         precision highp float;
         ${commonSource}
         uniform sampler2D u_bufferA;
-        uniform vec2 u_resolution;
+        uniform vec2 u_canvasResolution;
+        uniform vec2 u_simResolution;
         uniform float u_showSigma;
         uniform float u_contrast;
         uniform float u_pmlWidth;
@@ -651,7 +660,7 @@
         }
 
         void main() {
-          vec2 uv = gl_FragCoord.xy / u_resolution;
+          vec2 uv = gl_FragCoord.xy / u_canvasResolution;
           vec4 state = texture(u_bufferA, uv);
           float u = state.x * u_contrast;  // Apply contrast amplification
 
@@ -666,7 +675,9 @@
           fragColor = vec4(mix(white, targetColor, intensity), 1.0);
 
           if (u_showSigma > 0.5) {
-            vec2 s = sqrt(sigmaDisplay(gl_FragCoord.xy, u_resolution, u_pmlWidth));  // sqrt for better low-value contrast
+            // Map canvas coords to sim coords for PML visualization
+            vec2 simCoord = gl_FragCoord.xy * u_simResolution / u_canvasResolution;
+            vec2 s = sqrt(sigmaDisplay(simCoord, u_simResolution, u_pmlWidth));  // sqrt for better low-value contrast
             fragColor = mix(fragColor, vec4(1.0, 0.0, 0.0, 1.0), s.x * 0.7);  // Pink for x-direction
             fragColor = mix(fragColor, vec4(0.0, 1.0, 0.0, 1.0), s.y * 0.7);  // Green for y-direction
           }
@@ -718,8 +729,9 @@
         const texture = gl.createTexture();
         gl.bindTexture(gl.TEXTURE_2D, texture);
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, null);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        const filterMode = useLinearFiltering ? gl.LINEAR : gl.NEAREST;
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, filterMode);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, filterMode);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
 
@@ -730,11 +742,19 @@
         return { fbo, texture };
       }
 
-      const width = canvas.width;
-      const height = canvas.height;
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
 
-      const bufferA = [createFramebuffer(width, height), createFramebuffer(width, height)];
-      const bufferB = [createFramebuffer(width, height), createFramebuffer(width, height)];
+      // Simulation resolution (will be scaled by pixel ratio)
+      const params = {
+        pixelRatio: 0.5  // Start at 1.0 for full resolution
+      };
+
+      const getSimWidth = () => Math.floor(canvasWidth * params.pixelRatio);
+      const getSimHeight = () => Math.floor(canvasHeight * params.pixelRatio);
+
+      const bufferA = [createFramebuffer(getSimWidth(), getSimHeight()), createFramebuffer(getSimWidth(), getSimHeight())];
+      const bufferB = [createFramebuffer(getSimWidth(), getSimHeight()), createFramebuffer(getSimWidth(), getSimHeight())];
 
       let currentBuffer = 0;
 
@@ -750,15 +770,15 @@
 
       canvas.addEventListener('pointerenter', (e) => {
         const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) * width / rect.width;
-        const y = height - (e.clientY - rect.top) * height / rect.height;
+        const x = (e.clientX - rect.left) * getSimWidth() / rect.width;
+        const y = getSimHeight() - (e.clientY - rect.top) * getSimHeight() / rect.height;
         pointerQueue.push({ x, y, time: performance.now() });
       });
 
       canvas.addEventListener('pointermove', (e) => {
         const rect = canvas.getBoundingClientRect();
-        const x = (e.clientX - rect.left) * width / rect.width;
-        const y = height - (e.clientY - rect.top) * height / rect.height;
+        const x = (e.clientX - rect.left) * getSimWidth() / rect.width;
+        const y = getSimHeight() - (e.clientY - rect.top) * getSimHeight() / rect.height;
         pointerQueue.push({ x, y, time: performance.now() });
       });
 
@@ -785,8 +805,11 @@
     const webgl_setup = {
       canvas,
       gl,
-      width,
-      height,
+      canvasWidth,
+      canvasHeight,
+      params,
+      getSimWidth,
+      getSimHeight,
       bufferAProgram,
       bufferBProgram,
       displayProgram,
@@ -794,7 +817,8 @@
       bufferA,
       bufferB,
       mouseState,
-      uniforms
+      uniforms,
+      pointerQueue
     };
   </script>
   <script id="18" type="module">
@@ -805,7 +829,7 @@
     webgl_setup.uniforms.pmlWidth = pmlWidth;
   </script>
   <script id="19" type="module">
-    const { canvas, gl, width, height, bufferAProgram, bufferBProgram, displayProgram, quadBuffer, bufferA, bufferB, uniforms } = webgl_setup;
+    const { canvas, gl, canvasWidth, canvasHeight, getSimWidth, getSimHeight, bufferAProgram, bufferBProgram, displayProgram, quadBuffer, bufferA, bufferB, mouseState, pointerQueue, uniforms } = webgl_setup;
 
     let currentBuffer = 0;
     let animationId;
@@ -814,6 +838,10 @@
     function render() {
       // Only render if visible
       if (!isVisible) return;
+
+      // Get current simulation dimensions
+      const simWidth = getSimWidth();
+      const simHeight = getSimHeight();
 
       // Process pointer queue and update mouse state
       const now = performance.now();
@@ -838,7 +866,7 @@
       if (!simulate) {
           // Still render the display, just don't update the simulation
           gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-          gl.viewport(0, 0, width, height);
+          gl.viewport(0, 0, canvasWidth, canvasHeight);
           gl.useProgram(displayProgram);
 
           const aPositionD = gl.getAttribLocation(displayProgram, 'a_position');
@@ -850,7 +878,8 @@
           gl.bindTexture(gl.TEXTURE_2D, bufferA[currentBuffer].texture);
           gl.uniform1i(gl.getUniformLocation(displayProgram, 'u_bufferA'), 0);
 
-          gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_resolution'), width, height);
+          gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_canvasResolution'), canvasWidth, canvasHeight);
+          gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_simResolution'), simWidth, simHeight);
           gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_showSigma'), uniforms.showSigma);
           gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_contrast'), uniforms.contrast);
           gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_pmlWidth'), uniforms.pmlWidth);
@@ -867,7 +896,7 @@
 
           // Update buffer A (u, psi)
           gl.bindFramebuffer(gl.FRAMEBUFFER, bufferA[next].fbo);
-          gl.viewport(0, 0, width, height);
+          gl.viewport(0, 0, simWidth, simHeight);
           gl.useProgram(bufferAProgram);
 
           const aPositionA = gl.getAttribLocation(bufferAProgram, 'a_position');
@@ -883,7 +912,7 @@
           gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
           gl.uniform1i(gl.getUniformLocation(bufferAProgram, 'u_bufferB'), 1);
 
-          gl.uniform2f(gl.getUniformLocation(bufferAProgram, 'u_resolution'), width, height);
+          gl.uniform2f(gl.getUniformLocation(bufferAProgram, 'u_resolution'), simWidth, simHeight);
           gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_pmlWidth'), uniforms.pmlWidth);
           gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_usePsi'), uniforms.usePsi);
           gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_mouseX'), uniforms.mouseX);
@@ -910,7 +939,7 @@
           gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
           gl.uniform1i(gl.getUniformLocation(bufferBProgram, 'u_bufferB'), 1);
 
-          gl.uniform2f(gl.getUniformLocation(bufferBProgram, 'u_resolution'), width, height);
+          gl.uniform2f(gl.getUniformLocation(bufferBProgram, 'u_resolution'), simWidth, simHeight);
           gl.uniform1f(gl.getUniformLocation(bufferBProgram, 'u_pmlWidth'), uniforms.pmlWidth);
 
           gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -921,7 +950,7 @@
 
         // Display
         gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-        gl.viewport(0, 0, width, height);
+        gl.viewport(0, 0, canvasWidth, canvasHeight);
         gl.useProgram(displayProgram);
 
         const aPositionD = gl.getAttribLocation(displayProgram, 'a_position');
@@ -933,7 +962,8 @@
         gl.bindTexture(gl.TEXTURE_2D, bufferA[currentBuffer].texture);
         gl.uniform1i(gl.getUniformLocation(displayProgram, 'u_bufferA'), 0);
 
-        gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_resolution'), width, height);
+        gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_canvasResolution'), canvasWidth, canvasHeight);
+        gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_simResolution'), simWidth, simHeight);
         gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_showSigma'), uniforms.showSigma);
         gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_contrast'), uniforms.contrast);
         gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_pmlWidth'), uniforms.pmlWidth);
@@ -967,6 +997,7 @@
       if (animationId) cancelAnimationFrame(animationId);
       observer.disconnect();
     });
+    canvas.style.border = '1px solid #eee';
 
     display(canvas);
   </script>
