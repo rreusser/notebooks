@@ -8,15 +8,13 @@
     A [double pendulum](https://en.wikipedia.org/wiki/Double_pendulum) consists of two connected pendulums, rotating under the force of gravity. This notebook allows you to simulate both *simple* double pendulums (with point masses at the ends) and *compound* double pendulums (with mass distributed uniformly along the length of the arms).
   </script>
   <script id="530" type="application/vnd.observable.javascript">
-    html`<figure>
-    <img width="300" src="${await FileAttachment(
-      "1920px-Double-compound-pendulum-dimensioned.svg.png"
-    ).url()}">
-    <figcaption>Source: <a href="https://commons.wikimedia.org/wiki/File:Double-compound-pendulum-dimensioned.svg">Wikimedia commons</a>
+    html`<figure style="text-align: center;">
+    <img width="350" src="${await FileAttachment("compound-pendulum-diagram.svg").url()}" alt="Compound double pendulum diagram">
+    <figcaption>A compound double pendulum with mass distributed along the length of each arm.</figcaption>
     </figure>`
   </script>
   <script id="904" type="text/markdown">
-    Iterating a double pendulum is a simple matter of stepping the governing ordinary differential equation (ODE) in time. See the [appendix](#appendix) for detailed derivations of the equations of motion for both point-mass and compound double pendulums.
+    Iterating a double pendulum is a matter of stepping four coupled ordinary differential equations (ODE) in time, one for the angular position of each arm and one for the angular velocity. See the [appendix](#appendix) for detailed derivations of the equations of motion for both point-mass and compound double pendulums.
   </script>
   <script id="363" type="text/markdown">
     [Sam Maksimovich](https://twitter.com/MaksimovichSam) recently created a lovely video in which he simultaneously plots all possible double pendulums starting with zero velocity, using color to illustrate their trajectories. The explanation is far better than anything you'll find here. You should watch it!
@@ -49,12 +47,10 @@
       label: 'Initial angular velocity of arm 1',
       value: 0
     }));
-  </script>
-  <script id="576" type="module">
     const omega0_1 = view(Inputs.range([-2, 2], {
       label: 'Initial angular velocity of arm 2',
       value: 0
-    }));
+      }));
   </script>
   <script id="313" type="module">
     const dt = view(Inputs.range([0.001, 0.1], {
@@ -89,6 +85,32 @@
       zoomBox.center[1] -
       zoomBox.scale[1] / 2
     ).toFixed(8)}, ${(zoomBox.center[1] + zoomBox.scale[1] / 2).toFixed(8)}]`}`
+  </script>
+  <script id="914" type="text/x-typescript">
+    const m1 = view(Inputs.range([0.1, 1], {
+      label: 'Mass 1 (m₁)',
+      value: 1,
+      step: 0.01,
+      transform: Math.log
+    }));
+    const m2 = view(Inputs.range([0.1, 1], {
+      label: 'Mass 2 (m₂)',
+      value: 1,
+      step: 0.01,
+      transform: Math.log
+    }));
+    const l1 = view(Inputs.range([0.1, 1], {
+      label: 'Length 1 (l₁)',
+      value: 1,
+      step: 0.01,
+      transform: Math.log
+    }));
+    const l2 = view(Inputs.range([0.1, 1], {
+      label: 'Length 2 (l₂)',
+      value: 1,
+      step: 0.01,
+      transform: Math.log
+    }));
   </script>
   <script id="5" type="module">
     const regl = (function () {
@@ -138,7 +160,7 @@
     // Call initialize in blit context, writing to y[0] framebuffer
     y[0].use(() =>
       blit(() => {
-        initialize({ omega0_0, omega0_1, zoomBox, pendulumType });
+        initialize({ omega0_0, omega0_1, zoomBox, pendulumType, m1, m2, l1, l2 });
       })
     );
   </script>
@@ -146,6 +168,7 @@
     // Trigger redraw on restart or zoombox change
     restart;
     zoomBox;
+    m1; m2; l1; l2;
 
     const run = ~simulate.indexOf('Simulate');
     const showPen = ~simulate.indexOf('Show pendulum at point under mouse');
@@ -160,8 +183,8 @@
           // Run two steps from one data framebuffer to the other,
           // i.e. from y1=f(y0) and then back to y0=f(y1)
           update([
-            { dt, src: y[0], dst: y[1], isCompound },
-            { dt, src: y[1], dst: y[0], isCompound }
+            { dt, src: y[0], dst: y[1], isCompound, m1, m2, l1, l2 },
+            { dt, src: y[1], dst: y[0], isCompound, m1, m2, l1, l2 }
           ]);
         }
 
@@ -170,8 +193,8 @@
           drawMap({ y: y[0] });
           if (showPen && mouseHover.active && !mouseHover.boxActive) {
             drawPendulum([
-              { y, w1: [0, 0, 0], w2: [0, 1, 0] },
-              { y, w1: [0, 1, 0], w2: [0, 0, 1] }
+              { y, w1: [0, 0, 0], w2: [0, 1, 0], l1, l2 },
+              { y, w1: [0, 1, 0], w2: [0, 0, 1], l1, l2 }
             ]);
           }
         }
@@ -228,6 +251,7 @@
         uniform sampler2D colorscale;
         uniform vec2 resolution, omega0, center, scale;
         uniform bool isCompound;
+        uniform float m1, m2, l1, l2;
         #define PI ${Math.PI}
         void main () {
           // Really just the full spectrum of angles for the two parts of the pendulum,
@@ -239,12 +263,14 @@
 
           if (isCompound) {
             // Convert angular velocities to generalized momenta for compound pendulum
-            // p_θ₁ = (2/3)ω₁ + (1/2)ω₂cos(θ₁-θ₂)
-            // p_θ₂ = (1/3)ω₂ + (1/2)ω₁cos(θ₁-θ₂)
+            // Mass matrix from Lagrangian: p = M*theta_dot
             float cosTheta12 = cos(theta.x - theta.y);
+            float m11 = ((m1 / 3.0) + m2) * l1 * l1;
+            float m22 = (m2 / 3.0) * l2 * l2;
+            float m12 = 0.5 * m2 * l1 * l2 * cosTheta12;
             velocity = vec2(
-              (2.0/3.0) * omega0.x + 0.5 * omega0.y * cosTheta12,
-              (1.0/3.0) * omega0.y + 0.5 * omega0.x * cosTheta12
+              m11 * omega0.x + m12 * omega0.y,
+              m12 * omega0.x + m22 * omega0.y
             );
           } else {
             // For simple pendulum, use angular velocities directly
@@ -260,7 +286,11 @@
           props.zoomBox.scale[0] / (Math.PI * 2),
           props.zoomBox.scale[1] / (Math.PI * 2)
         ],
-        isCompound: (ctx, props) => props.pendulumType === 'Compound'
+        isCompound: (ctx, props) => props.pendulumType === 'Compound',
+        m1: regl.prop('m1'),
+        m2: regl.prop('m2'),
+        l1: regl.prop('l1'),
+        l2: regl.prop('l2')
       }
     })
   </script>
@@ -272,56 +302,64 @@
         uniform vec2 resolution;
         uniform float dt;
         uniform bool isCompound;
+        uniform float m1, m2, l1, l2;
         #define PI ${Math.PI}
+        #define g 1.0
 
         // Compound double pendulum (distributed mass)
         // State: (θ₁, θ₂, p_θ₁, p_θ₂) where p_θ are generalized momenta
         vec4 derivativeCompound (vec4 state) {
           vec2 theta = state.xy;
           vec2 pTheta = state.zw;
-          float threeCosTheta12 = 3.0 * cos(theta.x - theta.y);
-          vec2 thetaDot = 6.0 * (
-            vec2(
-              2.0 * pTheta.x - threeCosTheta12 * pTheta.y,
-              8.0 * pTheta.y - threeCosTheta12 * pTheta.x
-            ) / (16.0 - threeCosTheta12 * threeCosTheta12)
+          float cosTheta12 = cos(theta.x - theta.y);
+
+          // Mass matrix from Lagrangian formulation
+          float m11 = ((m1 / 3.0) + m2) * l1 * l1;
+          float m22 = (m2 / 3.0) * l2 * l2;
+          float m12 = 0.5 * m2 * l1 * l2 * cosTheta12;
+
+          // Invert mass matrix to get θ̇ from p (where p = M*θ̇)
+          float det = m11 * m22 - m12 * m12;
+          vec2 thetaDot = vec2(
+            (m22 * pTheta.x - m12 * pTheta.y) / det,
+            (m11 * pTheta.y - m12 * pTheta.x) / det
           );
+
           float thetaDot12sinTheta12 = thetaDot.x * thetaDot.y * sin(theta.x - theta.y);
-          vec2 pThetaDot = -0.5 * vec2(
-             thetaDot12sinTheta12 + 3.0 * sin(theta.x),
-            -thetaDot12sinTheta12 + sin(theta.y)
+          vec2 pThetaDot = vec2(
+            -0.5 * m2 * l1 * l2 * thetaDot12sinTheta12 - 0.5 * (m1 + 2.0 * m2) * g * l1 * sin(theta.x),
+             0.5 * m2 * l1 * l2 * thetaDot12sinTheta12 - 0.5 * m2 * g * l2 * sin(theta.y)
           );
           return vec4(thetaDot, pThetaDot);
         }
 
         // Simple double pendulum (point masses)
         // State: (θ₁, θ₂, ω₁, ω₂) where ω are angular velocities
-        // Using equal masses m₁=m₂=1 and equal lengths l₁=l₂=1, g=1
         vec4 derivativeSimple (vec4 state) {
           vec2 theta = state.xy;
           vec2 omega = state.zw;
           float delta = theta.x - theta.y;
           float sinDelta = sin(delta);
           float cosDelta = cos(delta);
-          float denom = 3.0 - cos(2.0 * delta);
+          float cos2Delta = cos(2.0 * delta);
 
           // θ̈₁ = (-g(2m₁+m₂)sinθ₁ - m₂g·sin(θ₁-2θ₂) - 2sin(θ₁-θ₂)m₂(ω₂²l₂ + ω₁²l₁cos(θ₁-θ₂))) / (l₁(2m₁+m₂-m₂cos(2θ₁-2θ₂)))
-          // With m₁=m₂=1, l₁=l₂=1, g=1:
+          float denom1 = l1 * (2.0 * m1 + m2 - m2 * cos2Delta);
           float thetaDDot1 = (
-            -3.0 * sin(theta.x)
-            - sin(theta.x - 2.0 * theta.y)
-            - 2.0 * sinDelta * (omega.y * omega.y + omega.x * omega.x * cosDelta)
-          ) / denom;
+            -g * (2.0 * m1 + m2) * sin(theta.x)
+            - m2 * g * sin(theta.x - 2.0 * theta.y)
+            - 2.0 * sinDelta * m2 * (omega.y * omega.y * l2 + omega.x * omega.x * l1 * cosDelta)
+          ) / denom1;
 
           // θ̈₂ = 2sin(θ₁-θ₂)(ω₁²l₁(m₁+m₂) + g(m₁+m₂)cosθ₁ + ω₂²l₂m₂cos(θ₁-θ₂)) / (l₂(2m₁+m₂-m₂cos(2θ₁-2θ₂)))
-          // With m₁=m₂=1, l₁=l₂=1, g=1:
+          float denom2 = l2 * (2.0 * m1 + m2 - m2 * cos2Delta);
           float thetaDDot2 = (
             2.0 * sinDelta * (
-              2.0 * omega.x * omega.x
-              + 2.0 * cos(theta.x)
-              + omega.y * omega.y * cosDelta
+              omega.x * omega.x * l1 * (m1 + m2)
+              + g * (m1 + m2) * cos(theta.x)
+              + omega.y * omega.y * l2 * m2 * cosDelta
             )
-          ) / denom;
+          ) / denom2;
 
           return vec4(omega.x, omega.y, thetaDDot1, thetaDDot2);
         }
@@ -361,7 +399,11 @@
       uniforms: {
         y: regl.prop('src'),
         dt: regl.prop('dt'),
-        isCompound: regl.prop('isCompound')
+        isCompound: regl.prop('isCompound'),
+        m1: regl.prop('m1'),
+        m2: regl.prop('m2'),
+        l1: regl.prop('l1'),
+        l2: regl.prop('l2')
       }
     })
   </script>
@@ -400,15 +442,16 @@
     uniform vec2 hover;
     uniform float lineWidth;
     uniform sampler2D y;
+    uniform float l1, l2;
     #define PI ${Math.PI}
     void main () {
       // Sample the state directly from the texture by passing the hovered
       // point as a uniform, so that the data never leaves the GPU.
       vec2 state = texture2D(y, hover).xy * (2.0 * PI) - PI;
 
-      // Vectors representing the directions of the arms of the pendulum
-      vec2 v1 = vec2(sin(state.x), -cos(state.x));
-      vec2 v2 = vec2(sin(state.y), -cos(state.y));
+      // Vectors representing the directions of the arms of the pendulum (scaled by lengths)
+      vec2 v1 = l1 * vec2(sin(state.x), -cos(state.x));
+      vec2 v2 = l2 * vec2(sin(state.y), -cos(state.y));
 
       // Points representing the joints of the pendulum (and the end)
       vec2 p0 = vec2(0);
@@ -446,7 +489,9 @@
         w2: regl.prop('w2'),
         hover: () => mouseHover.pt,
         lineWidth: ctx => (4.0 * ctx.pixelRatio) / ctx.framebufferWidth,
-        resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight]
+        resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight],
+        l1: regl.prop('l1'),
+        l2: regl.prop('l2')
       },
       depth: { enable: false },
       primitive: 'triangle strip',
@@ -609,18 +654,18 @@
     }
     </style>
   </script>
-  <script id="905" type="text/markdown">
+  <script id="906" type="text/markdown">
     <h2 id="appendix">Appendix: Derivations of Equations of Motion</h2>
   </script>
-  <script id="906" type="text/markdown">
-    ### Derivation 1: Simple Double Pendulum (Point Masses)
+  <script id="907" type="text/markdown">
+    ### Simple Double Pendulum (Point Masses)
   </script>
-  <script id="907" type="application/vnd.observable.javascript">
+  <script id="908" type="application/vnd.observable.javascript">
     html`<figure style="text-align: center;">
     <img width="350" src="${await FileAttachment("simple-pendulum-diagram.svg").url()}" alt="Simple double pendulum diagram">
     </figure>`
   </script>
-  <script id="908" type="text/markdown">
+  <script id="909" type="text/markdown">
     Consider a double pendulum with point masses ${tex`m_1`} and ${tex`m_2`} at distances ${tex`l_1`} and ${tex`l_2`} from their respective pivots, with angles ${tex`\theta_1`} and ${tex`\theta_2`} measured from vertical (downward).
 
     #### Coordinates
@@ -687,15 +732,15 @@
 
     ${tex.block`\frac{d\mathbf{y}}{dt} = \begin{pmatrix} \omega_1 \\ \omega_2 \\ \ddot{\theta}_1(\theta_1, \theta_2, \omega_1, \omega_2) \\ \ddot{\theta}_2(\theta_1, \theta_2, \omega_1, \omega_2) \end{pmatrix}`}
   </script>
-  <script id="909" type="text/markdown">
-    ### Derivation 2: Compound Double Pendulum (Distributed Mass)
+  <script id="910" type="text/markdown">
+    ### Compound Double Pendulum (Distributed Mass)
   </script>
-  <script id="910" type="application/vnd.observable.javascript">
+  <script id="911" type="application/vnd.observable.javascript">
     html`<figure style="text-align: center;">
     <img width="350" src="${await FileAttachment("compound-pendulum-diagram.svg").url()}" alt="Compound double pendulum diagram">
     </figure>`
   </script>
-  <script id="911" type="text/markdown">
+  <script id="912" type="text/markdown">
     For a compound pendulum, the mass is distributed along each arm. Consider uniform rods of lengths ${tex`l_1`} and ${tex`l_2`} with masses ${tex`m_1`} and ${tex`m_2`}, and moments of inertia ${tex`I_1 = \frac{1}{3}m_1 l_1^2`} and ${tex`I_2 = \frac{1}{3}m_2 l_2^2`} about their pivot points.
 
     #### Center of Mass Positions
