@@ -269,8 +269,16 @@
               m12 * omega0.x + m22 * omega0.y
             );
           } else {
-            // For simple pendulum, use angular velocities directly
-            velocity = omega0;
+            // For simple pendulum, also use generalized momenta
+            // Mass matrix: p = M*theta_dot
+            float cosTheta12 = cos(theta.x - theta.y);
+            float m11 = (m1 + m2) * l1 * l1;
+            float m22 = m2 * l2 * l2;
+            float m12 = m2 * l1 * l2 * cosTheta12;
+            velocity = vec2(
+              m11 * omega0.x + m12 * omega0.y,
+              m12 * omega0.x + m22 * omega0.y
+            );
           }
 
           gl_FragColor = (vec4(theta, velocity) + PI) / (2.0 * PI);
@@ -330,34 +338,32 @@
         }
 
         // Simple double pendulum (point masses)
-        // State: (θ₁, θ₂, ω₁, ω₂) where ω are angular velocities
+        // State: (θ₁, θ₂, p_θ₁, p_θ₂) where p_θ are generalized momenta
         vec4 derivativeSimple (vec4 state) {
           vec2 theta = state.xy;
-          vec2 omega = state.zw;
-          float delta = theta.x - theta.y;
-          float sinDelta = sin(delta);
-          float cosDelta = cos(delta);
-          float cos2Delta = cos(2.0 * delta);
+          vec2 pTheta = state.zw;
+          float cosTheta12 = cos(theta.x - theta.y);
 
-          // θ̈₁ = (-g(2m₁+m₂)sinθ₁ - m₂g·sin(θ₁-2θ₂) - 2sin(θ₁-θ₂)m₂(ω₂²l₂ + ω₁²l₁cos(θ₁-θ₂))) / (l₁(2m₁+m₂-m₂cos(2θ₁-2θ₂)))
-          float denom1 = l1 * (2.0 * m1 + m2 - m2 * cos2Delta);
-          float thetaDDot1 = (
-            -g * (2.0 * m1 + m2) * sin(theta.x)
-            - m2 * g * sin(theta.x - 2.0 * theta.y)
-            - 2.0 * sinDelta * m2 * (omega.y * omega.y * l2 + omega.x * omega.x * l1 * cosDelta)
-          ) / denom1;
+          // Mass matrix for simple pendulum
+          float m11 = (m1 + m2) * l1 * l1;
+          float m22 = m2 * l2 * l2;
+          float m12 = m2 * l1 * l2 * cosTheta12;
 
-          // θ̈₂ = 2sin(θ₁-θ₂)(ω₁²l₁(m₁+m₂) + g(m₁+m₂)cosθ₁ + ω₂²l₂m₂cos(θ₁-θ₂)) / (l₂(2m₁+m₂-m₂cos(2θ₁-2θ₂)))
-          float denom2 = l2 * (2.0 * m1 + m2 - m2 * cos2Delta);
-          float thetaDDot2 = (
-            2.0 * sinDelta * (
-              omega.x * omega.x * l1 * (m1 + m2)
-              + g * (m1 + m2) * cos(theta.x)
-              + omega.y * omega.y * l2 * m2 * cosDelta
-            )
-          ) / denom2;
+          // Invert mass matrix to get θ̇ from p
+          float det = m11 * m22 - m12 * m12;
+          vec2 thetaDot = vec2(
+            (m22 * pTheta.x - m12 * pTheta.y) / det,
+            (m11 * pTheta.y - m12 * pTheta.x) / det
+          );
 
-          return vec4(omega.x, omega.y, thetaDDot1, thetaDDot2);
+          // Momentum time derivatives
+          float thetaDot12sinTheta12 = thetaDot.x * thetaDot.y * sin(theta.x - theta.y);
+          vec2 pThetaDot = vec2(
+            -m2 * l1 * l2 * thetaDot12sinTheta12 - (m1 + m2) * g * l1 * sin(theta.x),
+             m2 * l1 * l2 * thetaDot12sinTheta12 - m2 * g * l2 * sin(theta.y)
+          );
+
+          return vec4(thetaDot, pThetaDot);
         }
 
         vec4 derivative (vec4 state) {
@@ -715,18 +721,37 @@
     m_2 l_2^2 \ddot{\theta}_2 + m_2 l_1 l_2 \ddot{\theta}_1 \cos(\theta_1 - \theta_2) &= m_2 l_1 l_2 \dot{\theta}_1^2 \sin(\theta_1 - \theta_2) - m_2 g l_2 \sin \theta_2
     \end{aligned}`}
 
-    #### ODEs for Numerical Integration
+    #### Generalized Momenta
 
-    Solving for ${tex`\ddot{\theta}_1`} and ${tex`\ddot{\theta}_2`}:
+    The generalized momenta are:
 
     ${tex.block`\begin{aligned}
-    \ddot{\theta}_1 &= \frac{-g(2m_1 + m_2)\sin\theta_1 - m_2 g \sin(\theta_1 - 2\theta_2) - 2\sin(\theta_1-\theta_2)m_2(\dot{\theta}_2^2 l_2 + \dot{\theta}_1^2 l_1 \cos(\theta_1-\theta_2))}{l_1(2m_1 + m_2 - m_2\cos(2\theta_1 - 2\theta_2))} \\
-    \ddot{\theta}_2 &= \frac{2\sin(\theta_1-\theta_2)(\dot{\theta}_1^2 l_1 (m_1+m_2) + g(m_1+m_2)\cos\theta_1 + \dot{\theta}_2^2 l_2 m_2 \cos(\theta_1-\theta_2))}{l_2(2m_1 + m_2 - m_2\cos(2\theta_1-2\theta_2))}
+    p_{\theta_1} &= \frac{\partial L}{\partial \dot{\theta}_1} = (m_1 + m_2) l_1^2 \dot{\theta}_1 + m_2 l_1 l_2 \dot{\theta}_2 \cos(\theta_1 - \theta_2) \\
+    p_{\theta_2} &= \frac{\partial L}{\partial \dot{\theta}_2} = m_2 l_2^2 \dot{\theta}_2 + m_2 l_1 l_2 \dot{\theta}_1 \cos(\theta_1 - \theta_2)
     \end{aligned}`}
 
-    As a first-order system with state ${tex`\mathbf{y} = (\theta_1, \theta_2, \omega_1, \omega_2)^T`} where ${tex`\omega_i = \dot{\theta}_i`}:
+    In matrix form ${tex`\mathbf{p} = M(\theta) \dot{\boldsymbol{\theta}}`} where:
 
-    ${tex.block`\frac{d\mathbf{y}}{dt} = \begin{pmatrix} \omega_1 \\ \omega_2 \\ \ddot{\theta}_1(\theta_1, \theta_2, \omega_1, \omega_2) \\ \ddot{\theta}_2(\theta_1, \theta_2, \omega_1, \omega_2) \end{pmatrix}`}
+    ${tex.block`M = \begin{pmatrix}
+    (m_1 + m_2) l_1^2 & m_2 l_1 l_2 \cos(\theta_1 - \theta_2) \\
+    m_2 l_1 l_2 \cos(\theta_1 - \theta_2) & m_2 l_2^2
+    \end{pmatrix}`}
+
+    Inverting to get ${tex`\dot{\boldsymbol{\theta}} = M^{-1} \mathbf{p}`} and computing ${tex`\dot{\mathbf{p}} = \frac{\partial L}{\partial \boldsymbol{\theta}}`}:
+
+    ${tex.block`\begin{aligned}
+    \dot{p}_{\theta_1} &= -m_2 l_1 l_2 \dot{\theta}_1 \dot{\theta}_2 \sin(\theta_1 - \theta_2) - (m_1 + m_2) g l_1 \sin\theta_1 \\
+    \dot{p}_{\theta_2} &= m_2 l_1 l_2 \dot{\theta}_1 \dot{\theta}_2 \sin(\theta_1 - \theta_2) - m_2 g l_2 \sin\theta_2
+    \end{aligned}`}
+
+    As a first-order system with state ${tex`\mathbf{y} = (\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2})^T`}:
+
+    ${tex.block`\frac{d\mathbf{y}}{dt} = \begin{pmatrix}
+    \dot{\theta}_1(\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2}) \\
+    \dot{\theta}_2(\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2}) \\
+    \dot{p}_{\theta_1}(\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2}) \\
+    \dot{p}_{\theta_2}(\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2})
+    \end{pmatrix}`}
   </script>
   <script id="910" type="text/markdown">
     ### Compound Double Pendulum (Distributed Mass)
@@ -769,36 +794,27 @@
 
     ${tex.block`V = -m_1 g \frac{l_1}{2} \cos \theta_1 - m_2 g \left( l_1 \cos \theta_1 + \frac{l_2}{2} \cos \theta_2 \right)`}
 
-    #### Euler-Lagrange Equations
+    #### Generalized Momenta
 
-    Applying the Euler-Lagrange equations and simplifying (for equal masses ${tex`m_1 = m_2 = m`} and equal lengths ${tex`l_1 = l_2 = l`}):
+    The generalized momenta are:
 
     ${tex.block`\begin{aligned}
-    \frac{2ml^2}{3} \ddot{\theta}_1 + \frac{ml^2}{2} \ddot{\theta}_2 \cos(\theta_1 - \theta_2) &= -\frac{ml^2}{2} \dot{\theta}_2^2 \sin(\theta_1 - \theta_2) - \frac{3mgl}{2} \sin \theta_1 \\
-    \frac{ml^2}{3} \ddot{\theta}_2 + \frac{ml^2}{2} \ddot{\theta}_1 \cos(\theta_1 - \theta_2) &= \frac{ml^2}{2} \dot{\theta}_1^2 \sin(\theta_1 - \theta_2) - \frac{mgl}{2} \sin \theta_2
+    p_{\theta_1} &= \frac{\partial L}{\partial \dot{\theta}_1} = \left(\frac{m_1}{3} + m_2\right) l_1^2 \dot{\theta}_1 + \frac{m_2}{2} l_1 l_2 \dot{\theta}_2 \cos(\theta_1 - \theta_2) \\
+    p_{\theta_2} &= \frac{\partial L}{\partial \dot{\theta}_2} = \frac{m_2}{3} l_2^2 \dot{\theta}_2 + \frac{m_2}{2} l_1 l_2 \dot{\theta}_1 \cos(\theta_1 - \theta_2)
     \end{aligned}`}
 
-    #### ODEs for Numerical Integration
+    In matrix form ${tex`\mathbf{p} = M(\theta) \dot{\boldsymbol{\theta}}`} where:
 
-    Introducing generalized momenta ${tex`p_{\theta_1} = \frac{\partial L}{\partial \dot{\theta}_1}`} and ${tex`p_{\theta_2} = \frac{\partial L}{\partial \dot{\theta}_2}`} and normalizing by ${tex`ml^2`}:
+    ${tex.block`M = \begin{pmatrix}
+    \left(\frac{m_1}{3} + m_2\right) l_1^2 & \frac{m_2}{2} l_1 l_2 \cos(\theta_1 - \theta_2) \\
+    \frac{m_2}{2} l_1 l_2 \cos(\theta_1 - \theta_2) & \frac{m_2}{3} l_2^2
+    \end{pmatrix}`}
 
-    ${tex.block`\begin{aligned}
-    p_{\theta_1} &= \frac{2}{3} \dot{\theta}_1 + \frac{1}{2} \dot{\theta}_2 \cos(\theta_1 - \theta_2) \\
-    p_{\theta_2} &= \frac{1}{3} \dot{\theta}_2 + \frac{1}{2} \dot{\theta}_1 \cos(\theta_1 - \theta_2)
-    \end{aligned}`}
-
-    Inverting to solve for ${tex`\dot{\theta}_1`} and ${tex`\dot{\theta}_2`} (with ${tex`\Delta = \theta_1 - \theta_2`}):
+    Inverting to get ${tex`\dot{\boldsymbol{\theta}} = M^{-1} \mathbf{p}`} and computing ${tex`\dot{\mathbf{p}} = \frac{\partial L}{\partial \boldsymbol{\theta}}`}:
 
     ${tex.block`\begin{aligned}
-    \dot{\theta}_1 &= \frac{6}{ml^2} \frac{2 p_{\theta_1} - 3\cos\Delta \cdot p_{\theta_2}}{16 - 9\cos^2\Delta} \\
-    \dot{\theta}_2 &= \frac{6}{ml^2} \frac{8 p_{\theta_2} - 3\cos\Delta \cdot p_{\theta_1}}{16 - 9\cos^2\Delta}
-    \end{aligned}`}
-
-    The time derivatives of the momenta are:
-
-    ${tex.block`\begin{aligned}
-    \dot{p}_{\theta_1} &= -\frac{ml^2}{2} \dot{\theta}_1 \dot{\theta}_2 \sin\Delta - \frac{3mgl}{2} \sin\theta_1 \\
-    \dot{p}_{\theta_2} &= \frac{ml^2}{2} \dot{\theta}_1 \dot{\theta}_2 \sin\Delta - \frac{mgl}{2} \sin\theta_2
+    \dot{p}_{\theta_1} &= -\frac{m_2}{2} l_1 l_2 \dot{\theta}_1 \dot{\theta}_2 \sin(\theta_1 - \theta_2) - \left(\frac{m_1}{2} + m_2\right) g l_1 \sin\theta_1 \\
+    \dot{p}_{\theta_2} &= \frac{m_2}{2} l_1 l_2 \dot{\theta}_1 \dot{\theta}_2 \sin(\theta_1 - \theta_2) - \frac{m_2}{2} g l_2 \sin\theta_2
     \end{aligned}`}
 
     As a first-order system with state ${tex`\mathbf{y} = (\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2})^T`}:
@@ -809,7 +825,5 @@
     \dot{p}_{\theta_1}(\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2}) \\
     \dot{p}_{\theta_2}(\theta_1, \theta_2, p_{\theta_1}, p_{\theta_2})
     \end{pmatrix}`}
-
-    This is the formulation used in the simulation above, with normalized units (${tex`m = l = g = 1`}).
   </script>
 </notebook>

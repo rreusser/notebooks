@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>The Double Pendulum Map</title>  <script type="module" crossorigin src="/notebooks/assets/index-DBmtPqCB.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>The Double Pendulum Map</title>  <script type="module" crossorigin src="/notebooks/assets/index-5rCSM7R9.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1551,9 +1551,11 @@ input[type=range] {
 <h4>Lagrangian</h4>
 <h4>Euler-Lagrange Equations</h4>
 <p>The Euler-Lagrange equations  yield (after simplification):</p>
-<h4>ODEs for Numerical Integration</h4>
-<p>Solving for  and :</p>
-<p>As a first-order system with state  where :</p>
+<h4>Generalized Momenta</h4>
+<p>The generalized momenta are:</p>
+<p>In matrix form  where:</p>
+<p>Inverting to get  and computing :</p>
+<p>As a first-order system with state :</p>
 </div></div><div id="cell-910" class="observablehq observablehq--cell"><div><h3 id="compound-double-pendulum-distributed-mass" tabindex="-1"><a href="#compound-double-pendulum-distributed-mass">Compound Double Pendulum (Distributed Mass)</a></h3>
 </div></div><div id="cell-911" class="observablehq observablehq--cell"></div><div id="cell-912" class="observablehq observablehq--cell"><div><p>For a compound pendulum, the mass is distributed along each arm. Consider uniform rods of lengths  and  with masses  and , and moments of inertia  and  about their pivot points.</p>
 <h4>Center of Mass Positions</h4>
@@ -1563,14 +1565,11 @@ input[type=range] {
 <p>For a uniform rod rotating about its end,  and . The translational kinetic energies are:</p>
 <p>Thus:</p>
 <h4>Potential Energy</h4>
-<h4>Euler-Lagrange Equations</h4>
-<p>Applying the Euler-Lagrange equations and simplifying (for equal masses  and equal lengths ):</p>
-<h4>ODEs for Numerical Integration</h4>
-<p>Introducing generalized momenta  and  and normalizing by :</p>
-<p>Inverting to solve for  and  (with ):</p>
-<p>The time derivatives of the momenta are:</p>
+<h4>Generalized Momenta</h4>
+<p>The generalized momenta are:</p>
+<p>In matrix form  where:</p>
+<p>Inverting to get  and computing :</p>
 <p>As a first-order system with state :</p>
-<p>This is the formulation used in the simulation above, with normalized units ().</p>
 </div></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
