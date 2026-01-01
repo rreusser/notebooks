@@ -42,30 +42,15 @@
       value: 'Compound'
     }));
   </script>
-  <script id="573" type="module">
-    const omega0_0 = view(Inputs.range([-2, 2], {
-      label: 'Initial angular velocity of arm 1',
-      value: 0
-    }));
-    const omega0_1 = view(Inputs.range([-2, 2], {
-      label: 'Initial angular velocity of arm 2',
-      value: 0
-      }));
-  </script>
-  <script id="313" type="module">
-    const dt = view(Inputs.range([0.001, 0.1], {
-      label: 'Time step',
-      value: 0.03,
-      transform: Math.log
-    }));
-  </script>
-  <script id="281" type="module">
-    const simulate = view(Inputs.checkbox(['Simulate', 'Show pendulum at point under mouse'], {
-      value: ['Simulate', 'Show pendulum at point under mouse']
-    }));
-  </script>
-  <script id="300" type="module">
-    const restart = view(Inputs.button('Restart'));
+  <script id="915" type="text/x-typescript">
+    md`${tex`\theta_1 \in [${(zoomBox.center[0] - zoomBox.scale[0] / 2).toFixed(
+      8
+    )}, ${(zoomBox.center[0] + zoomBox.scale[0] / 2).toFixed(
+      8
+    )}]`}<br>${tex`\theta_2 \in [${(
+      zoomBox.center[1] -
+      zoomBox.scale[1] / 2
+    ).toFixed(8)}, ${(zoomBox.center[1] + zoomBox.scale[1] / 2).toFixed(8)}]`}`
   </script>
   <script id="289" type="application/vnd.observable.javascript">
     viz = html`<figure>
@@ -76,15 +61,13 @@
     <figcaption>Hover to view pendulum at current point. Click and drag to zoom. Double click to return to initial view</figcaption>
     </figure>`
   </script>
-  <script id="814" type="application/vnd.observable.javascript">
-    md`${tex`\theta_1 \in [${(zoomBox.center[0] - zoomBox.scale[0] / 2).toFixed(
-      8
-    )}, ${(zoomBox.center[0] + zoomBox.scale[0] / 2).toFixed(
-      8
-    )}]`}<br>${tex`\theta_2 \in [${(
-      zoomBox.center[1] -
-      zoomBox.scale[1] / 2
-    ).toFixed(8)}, ${(zoomBox.center[1] + zoomBox.scale[1] / 2).toFixed(8)}]`}`
+  <script id="917" type="text/x-typescript">
+    const simulate = view(Inputs.checkbox(['Simulate', 'Show pendulum at point under mouse'], {
+      value: ['Simulate', 'Show pendulum at point under mouse']
+    }));
+  </script>
+  <script id="916" type="text/x-typescript">
+    const restart = view(Inputs.button('Restart'));
   </script>
   <script id="914" type="text/x-typescript">
     const m1 = view(Inputs.range([0.1, 1], {
@@ -109,6 +92,19 @@
       label: 'Length 2 (l₂)',
       value: 1,
       step: 0.01,
+      transform: Math.log
+    }));
+    const omega0_0 = view(Inputs.range([-2, 2], {
+      label: 'Initial angular velocity of arm 1',
+      value: 0
+    }));
+    const omega0_1 = view(Inputs.range([-2, 2], {
+      label: 'Initial angular velocity of arm 2',
+      value: 0
+    }));
+    const dt = view(Inputs.range([0.001, 0.1], {
+      label: 'Time step',
+      value: 0.03,
       transform: Math.log
     }));
   </script>
