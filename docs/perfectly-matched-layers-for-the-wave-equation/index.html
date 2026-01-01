@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Perfectly Matched Layers for the Wave Equation</title>  <script type="module" crossorigin src="/notebooks/assets/index-NofYq5VQ.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Perfectly Matched Layers for the Wave Equation</title>  <script type="module" crossorigin src="/notebooks/assets/index-D864-7DV.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1560,11 +1560,11 @@ main h6 {
 </div></div><div id="cell-42" class="observablehq observablehq--cell"><div><p>Transforming back to the time domain immediately gives</p>
 </div></div><div id="cell-43" class="observablehq observablehq--cell"><div><p>The equation for  is more involved. Applying the PML mapping gives</p>
 </div></div><div id="cell-44" class="observablehq observablehq--cell"><div><p>Expanding and collecting terms yields</p>
-</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><p>The term in parentheses contains factors of , which corresponds to time integration. We define this as the auxiliary quantity</p>
+</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><p>The term in parentheses contains factors of , which corresponds to time integration. In other words, in additon to integrating the other state variables in time, we need to integrate one more. We define the term in parentheses as the auxiliary quantity</p>
 </div></div><div id="cell-46" class="observablehq observablehq--cell"><div></div></div><div id="cell-47" class="observablehq observablehq--cell"><div><p>Multiplying through by  and transforming back to the time domain gives</p>
-</div></div><div id="cell-48" class="observablehq observablehq--cell"><div><p>The update equation for  becomes</p>
+</div></div><div id="cell-48" class="observablehq observablehq--cell"><div><p>The update equation for  then becomes</p>
 </div></div><div id="cell-11" class="observablehq observablehq--cell"><div><p>Together with the velocity equations, we have the complete 2D PML system</p>
-</div></div><div id="cell-49" class="observablehq observablehq--cell"><div><p>These equations require tracking three fields: the scalar field , the auxiliary field , and the vector field . In practice, this naturally lends itself to a two-buffer implementation: one storing  and the other storing .</p>
+</div></div><div id="cell-49" class="observablehq observablehq--cell"><div><p>These equations require tracking three fields: the scalar field , the auxiliary field , and the vector field . In practice, this naturally lends itself to a two-buffer implementation: one storing  and the other storing . The two buffers are offset by half a timestep to avoid some of the common instabilities encountered when simulating wave equations.</p>
 </div></div><div id="cell-56" class="observablehq observablehq--cell"><div><h2 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h2>
 </div></div><div id="cell-50" class="observablehq observablehq--cell"><div><p>The following WebGL implementation simulates these equations on the GPU using fragment shaders. Use the controls below to pause/resume the simulation, adjust contrast, and visualize the PML absorption regions (red for , green for ).</p>
 </div></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-57" class="observablehq observablehq--cell"><div><h2 id="conclusion" tabindex="-1"><a href="#conclusion">Conclusion</a></h2>

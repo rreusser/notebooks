@@ -423,7 +423,7 @@
     \end{aligned}`}
   </script>
   <script id="45" type="text/markdown">
-    The term in parentheses contains factors of ${tex`\frac{i}{\omega}`}, which corresponds to time integration. We define this as the auxiliary quantity ${tex`\psi`}
+    The term in parentheses contains factors of ${tex`\frac{i}{\omega}`}, which corresponds to time integration. In other words, in additon to integrating the other state variables in time, we need to integrate one more. We define the term in parentheses as the auxiliary quantity ${tex`\psi,`}
   </script>
   <script id="46" type="text/markdown">
     ${tex.block`\psi = \frac{ic\sigma_x}{\omega} \frac{\partial v_y}{\partial y} + \frac{ic\sigma_y}{\omega} \frac{\partial v_x}{\partial x} - \frac{i}{\omega} \sigma_x \sigma_y u`}
@@ -434,9 +434,9 @@
     ${tex.block`\frac{d\psi}{dt} = c \sigma_x \frac{\partial v_y}{\partial y} + c \sigma_y \frac{\partial v_x}{\partial x} - \sigma_x \sigma_y u`}
   </script>
   <script id="48" type="text/markdown">
-    The update equation for ${tex`u`} becomes
+    The update equation for ${tex`u`} then becomes
 
-    ${tex.block`\frac{du}{dt} = c (\nabla \cdot \mathbf{v}) - (\sigma_x + \sigma_y) u + \psi`}
+    ${tex.block`\frac{du}{dt} = c (\nabla \cdot \mathbf{v}) - (\sigma_x + \sigma_y) u + \psi.`}
   </script>
   <script id="11" type="text/markdown">
     Together with the velocity equations, we have the complete 2D PML system
@@ -449,7 +449,7 @@
     \end{aligned}`}
   </script>
   <script id="49" type="text/markdown">
-    These equations require tracking three fields: the scalar field ${tex`u`}, the auxiliary field ${tex`\psi`}, and the vector field ${tex`\mathbf{v} = (v_x, v_y)`}. In practice, this naturally lends itself to a two-buffer implementation: one storing ${tex`(u, \psi)`} and the other storing ${tex`(v_x, v_y)`}.
+    These equations require tracking three fields: the scalar field ${tex`u`}, the auxiliary field ${tex`\psi`}, and the vector field ${tex`\mathbf{v} = (v_x, v_y)`}. In practice, this naturally lends itself to a two-buffer implementation: one storing ${tex`(u, \psi)`} and the other storing ${tex`(v_x, v_y)`}. The two buffers are offset by half a timestep to avoid some of the common instabilities encountered when simulating wave equations.
   </script>
   <script id="56" type="text/markdown">
     ## Implementation
