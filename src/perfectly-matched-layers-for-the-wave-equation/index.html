@@ -16,9 +16,10 @@
   <script id="35" type="text/markdown">
     This notebook demonstrates PML for the scalar wave equation, starting with a 1D example before extending to 2D.
   </script>
-  <script id="23" type="text/markdown">
+  <script id="59" type="text/markdown">
     ## The 1D Wave Equation
-
+  </script>
+  <script id="23" type="text/markdown">
     The [scalar wave equation](https://en.wikipedia.org/wiki/Wave_equation) for any number of dimensions is given by
 
     ${tex.block`\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u.`}
@@ -38,13 +39,14 @@
 
     Here, ${tex`u`} is the state variable (e.g. pressure) while ${tex`v`} functions like a velocity.
   </script>
-  <script id="25" type="text/markdown">
+  <script id="51" type="text/markdown">
     ## 1D PML Derivation
-
+  </script>
+  <script id="25" type="text/markdown">
     The key insight of PML is to work in the Fourier time domain and apply a complex coordinate stretching to the spatial derivatives. In practical terms, this means replacing spatial derivatives with a modified operator.
   </script>
   <script id="26" type="text/markdown">
-    We begin by transforming to the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega,`} yielding
+    We begin by transforming to the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega,`}
 
     ${tex.block`\begin{aligned}
     -i\omega u &= c \frac{\partial v}{\partial x} \\[10pt]
@@ -89,9 +91,10 @@
   <script id="3" type="text/markdown">
     In the interior where ${tex`\sigma = 0`}, these reduce to the original wave equation. In the PML regions, ${tex`\sigma > 0`} causes exponential absorption.
   </script>
-  <script id="4" type="text/markdown">
+  <script id="52" type="text/markdown">
     ## 1D Visualization
-
+  </script>
+  <script id="4" type="text/markdown">
     The plot below shows a 1D wave propagating with PML absorbing boundaries on both ends. The shaded regions indicate where ${tex`\sigma > 0`}. Notice how waves exit the domain smoothly without reflecting.
   </script>
   <script id="5" type="module">
@@ -355,11 +358,13 @@
 
     display(container);
   </script>
-  <script id="9" type="text/markdown">
+  <script id="53" type="text/markdown">
     ## Extension to 2D
-
+  </script>
+  <script id="9" type="text/markdown">
     The 2D case follows the same principles but with a key difference: we need separate absorption coefficients ${tex`\sigma_x`} and ${tex`\sigma_y`} for each spatial direction. When we apply the complex coordinate mapping independently to both ${tex`x`} and ${tex`y`} derivatives, cross-terms emerge that don't appear in 1D. These cross-terms require an auxiliary field ${tex`\psi`} to handle the coupling between the two spatial directions within the PML regions.
-
+  </script>
+  <script id="54" type="text/markdown">
     The derivation below shows how these auxiliary variables arise naturally from the Fourier domain analysis. In regions where only one direction has absorption (e.g., ${tex`\sigma_x > 0`} but ${tex`\sigma_y = 0`}), the equations simplify. The full complexity only appears in corner regions where both directions have non-zero absorption.
   </script>
   <script id="37" type="text/markdown">
@@ -401,7 +406,7 @@
 
     ${tex.block`\begin{aligned}
     \frac{\partial v_x}{\partial t} &= c \frac{\partial u}{\partial x} - \sigma_x v_x \\[10pt]
-    \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y} - \sigma_y v_y
+    \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y} - \sigma_y v_y.
     \end{aligned}`}
   </script>
   <script id="43" type="text/markdown">
@@ -446,13 +451,14 @@
   <script id="49" type="text/markdown">
     These equations require tracking three fields: the scalar field ${tex`u`}, the auxiliary field ${tex`\psi`}, and the vector field ${tex`\mathbf{v} = (v_x, v_y)`}. In practice, this naturally lends itself to a two-buffer implementation: one storing ${tex`(u, \psi)`} and the other storing ${tex`(v_x, v_y)`}.
   </script>
-  <script id="50" type="text/markdown">
+  <script id="56" type="text/markdown">
     ## Implementation
-
+  </script>
+  <script id="50" type="text/markdown">
     The following WebGL implementation simulates these equations on the GPU using fragment shaders. Use the controls below to pause/resume the simulation, adjust contrast, and visualize the PML absorption regions (red for ${tex`\sigma_x`}, green for ${tex`\sigma_y`}).
   </script>
   <script id="17" type="module">
-    const canvas = html`<canvas width="800" height="800" style="width: 100%; max-width: 800px; height: auto; display: block; image-rendering: pixelated;"></canvas>`;
+    const canvas = html`<canvas width="640" height="640" style="width: 100%; height: auto; display: block; image-rendering: pixelated;"></canvas>`;
     const gl = canvas.getContext("webgl2");
 
     if (!gl) {
@@ -971,14 +977,16 @@
     const contrast = view(Inputs.range([0, 1], {label: "Contrast", step: 0.01, value: 0}));
     const pmlWidth = view(Inputs.range([4, 40], {label: "PML width (pixels)", step: 1, value: 12}));
   </script>
-  <script id="21" type="text/markdown">
+  <script id="57" type="text/markdown">
     ## Conclusion
-
+  </script>
+  <script id="21" type="text/markdown">
     While the resulting equations are somewhat involved, PML provides a remarkably effective solution to the absorbing boundary problem. I’m a little uncertain how to deal with irregular domains with more complicated boundaries, but that’s an exercise for the future!
   </script>
-  <script id="22" type="text/markdown">
+  <script id="58" type="text/markdown">
     ## References
-
+  </script>
+  <script id="22" type="text/markdown">
     This derivation extends the technique from [Steven G. Johnson's PML notes](https://math.mit.edu/~stevenj/18.369/spring14/pml.pdf) by applying the PML mapping to both x and y boundaries simultaneously.
   </script>
 </notebook>
