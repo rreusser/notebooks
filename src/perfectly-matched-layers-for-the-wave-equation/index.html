@@ -1,0 +1,795 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Perfectly Matched Layers for the Wave Equation</title>
+  <script id="1" type="text/markdown">
+    # Perfectly Matched Layers for the Wave Equation
+
+    When simulating wave propagation on a finite computational grid, a fundamental problem arises: what happens when waves reach the boundary? In physical systems, waves often propagate through unbounded space, but our simulations must work within finite memory. Simply truncating the domain causes waves to reflect artificially from the boundaries, contaminating the solution.
+
+    **Perfectly Matched Layers (PML)** solve this problem by adding absorbing regions at the domain boundaries that eliminate reflections for all angles and frequencies. This notebook demonstrates PML for the scalar wave equation, starting with a 1D example before extending to 2D.
+  </script>
+  <script id="2" type="text/markdown">
+    ## The 1D Wave Equation
+
+    We'll start with the scalar wave equation in 1D, written in first-order form:
+
+    ${tex.block`\begin{aligned}
+    \frac{\partial u}{\partial t} &= c \frac{\partial v}{\partial x} \\[10pt]
+    \frac{\partial v}{\partial t} &= c \frac{\partial u}{\partial x}
+    \end{aligned}`}
+
+    Here ${tex`u`} is the scalar field (e.g., pressure or displacement), ${tex`v`} is the velocity field, and ${tex`c`} is the wave speed. This first-order form is equivalent to the standard second-order wave equation ${tex`\frac{\partial^2 u}{\partial t^2} = c^2 \frac{\partial^2 u}{\partial x^2}`} but makes the PML derivation clearer.
+  </script>
+  <script id="3" type="text/markdown">
+    ## 1D PML Derivation
+
+    To derive the PML equations, we work in the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega`}:
+
+    ${tex.block`\begin{aligned}
+    -i\omega u &= c \frac{\partial v}{\partial x} \\[10pt]
+    -i\omega v &= c \frac{\partial u}{\partial x}
+    \end{aligned}`}
+
+    The PML technique replaces spatial derivatives with a complex coordinate mapping:
+
+    ${tex.block`\frac{\partial}{\partial x} \rightarrow \frac{1}{1 + i\frac{\sigma}{\omega}} \frac{\partial}{\partial x}`}
+
+    where ${tex`\sigma(x) \geq 0`} is the absorption strength. This stretching causes waves to decay exponentially in regions where ${tex`\sigma > 0`}.
+
+    Applying this mapping:
+
+    ${tex.block`\begin{aligned}
+    -i\omega u &= c \frac{1}{1 + i\frac{\sigma}{\omega}} \frac{\partial v}{\partial x} \\[10pt]
+    -i\omega v &= c \frac{1}{1 + i\frac{\sigma}{\omega}} \frac{\partial u}{\partial x}
+    \end{aligned}`}
+
+    Multiplying both sides by ${tex`1 + i\frac{\sigma}{\omega}`}:
+
+    ${tex.block`\begin{aligned}
+    -i\omega u - \sigma u &= c \frac{\partial v}{\partial x} \\[10pt]
+    -i\omega v - \sigma v &= c \frac{\partial u}{\partial x}
+    \end{aligned}`}
+
+    Transforming back to the time domain gives the final 1D PML equations:
+
+    ${tex.block`\begin{aligned}
+    \frac{\partial u}{\partial t} &= c \frac{\partial v}{\partial x} - \sigma u \\[10pt]
+    \frac{\partial v}{\partial t} &= c \frac{\partial u}{\partial x} - \sigma v
+    \end{aligned}`}
+
+    In the interior where ${tex`\sigma = 0`}, these reduce to the original wave equation. In the PML regions, ${tex`\sigma > 0`} causes exponential absorption. Note that unlike the 2D case, no auxiliary field is needed in 1D since there are no cross-terms between different directions.
+  </script>
+  <script id="4" type="text/markdown">
+    ## 1D Visualization
+
+    The plot below shows a 1D wave propagating with PML absorbing boundaries on both ends. The shaded regions indicate where ${tex`\sigma > 0`}. Notice how waves exit the domain smoothly without reflecting.
+  </script>
+  <script id="5" type="module">
+    // Mutable params object to avoid reactive flickering
+    const params_1d = {
+      pmlWidth: 20,
+      pmlStrength: 2.0
+    };
+  </script>
+  <script id="6" type="module">
+    const pmlWidth1d = view(Inputs.range([1, 40], {label: "PML width (grid points)", step: 1, value: 10}));
+    const pmlStrength1d = view(Inputs.range([0.1, 5.0], {label: "PML strength", step: 0.1, value: 2.0}));
+  </script>
+  <script id="7" type="module">
+    // Update params object when controls change (doesn't restart visualization)
+    params_1d.pmlWidth = pmlWidth1d;
+    params_1d.pmlStrength = pmlStrength1d;
+  </script>
+  <script id="8" type="module">
+    import * as Plot from "npm:@observablehq/plot";
+
+    // Simulation parameters
+    const N = 200;                    // Grid points
+    const PML_EXPONENT = 2.0;         // PML power law exponent
+    const C = 1.0;                    // Wave speed
+    const DX = 1.0;                   // Grid spacing
+    const DT = 0.1 * DX / C;          // Time step (CFL condition)
+    const OSCILLATOR_STRENGTH = 4.0;  // Disturbance strength
+    const OSCILLATOR_WAVELENGTH = 10.0; // Wavelength of oscillators
+
+    // State arrays
+    const u = new Float64Array(N);      // Scalar field
+    const v = new Float64Array(N);      // Velocity field
+
+    let t = 0;  // Simulation time
+
+    // Compute sigma(x) - absorption coefficient (uses params_1d object)
+    function sigma(i) {
+      const leftDist = i;
+      const rightDist = N - 1 - i;
+
+      let s = 0;
+      if (leftDist < params_1d.pmlWidth) {
+        s = Math.max(s, Math.pow((params_1d.pmlWidth - leftDist) / params_1d.pmlWidth, PML_EXPONENT) * params_1d.pmlStrength);
+      }
+      if (rightDist < params_1d.pmlWidth) {
+        s = Math.max(s, Math.pow((params_1d.pmlWidth - rightDist) / params_1d.pmlWidth, PML_EXPONENT) * params_1d.pmlStrength);
+      }
+      return s;
+    }
+
+    // Compute forcing term at position i and time t
+    function forcing(i, t) {
+      const pulseInterval = 300.0;
+      const pulse = Math.exp(-Math.pow(Math.abs((t % pulseInterval - pulseInterval * 0.5) / 40.0), 4.0));
+      const COUNT = 5;
+      const omega = C * Math.PI / OSCILLATOR_WAVELENGTH;
+
+      let f = 0;
+      for (let j = 0; j < COUNT; j++) {
+        const offset = (j - COUNT * 0.5) / COUNT * 20.0;
+        const center = N / 2 + offset;
+        const dist = Math.abs(i - center);
+
+        // Wider, smoother spatial mask (10 grid points)
+        const width = 3.0;
+        const mask = Math.exp(-Math.pow(dist / width, 2));
+
+        const f0 = Math.sin(omega * t / (j + 1));
+        f += f0 * mask * OSCILLATOR_STRENGTH * pulse;
+      }
+      return f;
+    }
+
+    // Single time step
+    function step() {
+      // Update v: ∂v/∂t = c ∂u/∂x - σ v + f(x,t)
+      // Adding forcing to v equation (velocity source) for smoother excitation
+      for (let i = 1; i < N - 1; i++) {
+        const dudx = (u[i + 1] - u[i - 1]) / (2 * DX);
+        const f = forcing(i, t + DT / 2);  // Evaluate at half time step for leap-frog
+        v[i] += DT * (C * dudx - sigma(i) * v[i] + f);
+      }
+
+      // Update u: ∂u/∂t = c ∂v/∂x - σ u
+      for (let i = 1; i < N - 1; i++) {
+        const dvdx = (v[i + 1] - v[i - 1]) / (2 * DX);
+        u[i] += DT * (C * dvdx - sigma(i) * u[i]);
+      }
+
+      t += DT;
+    }
+
+    // Create container for the plot
+    const container = html`<div></div>`;
+
+    // Animation loop
+    let frameCount = 0;
+    let animationId;
+    let isVisible = false;
+
+    function animate() {
+      // Only animate if visible
+      if (!isVisible) return;
+
+      // Run multiple steps per frame for speed
+      for (let s = 0; s < 5; s++) {
+        step();
+      }
+
+      frameCount++;
+
+      // Update plot every few frames
+      if (frameCount % 2 === 0) {
+        const data = Array.from({ length: N }, (_, i) => ({
+          x: i,
+          u: u[i],
+          sigma: sigma(i)
+        }));
+        const yrange = 50;
+
+        const chart = Plot.plot({
+          width: 640,
+          height: 300,
+          marginLeft: 50,
+          x: {
+            label: "Position",
+            domain: [0, N]
+          },
+          y: {
+            label: "u(x,t)",
+            domain: [-yrange, yrange]
+          },
+          marks: [
+            // PML regions background
+            Plot.ruleX(data, {
+              x: "x",
+              y1: -yrange,
+              y2: yrange,
+              stroke: "#DDA0DD",  // Plum color
+              strokeWidth: 3,
+              strokeOpacity: d => d.sigma > 0 ? 0.3 : 0
+            }),
+
+            // Wave field as dots
+            Plot.dot(data, {
+              x: "x",
+              y: "u",
+              fill: "steelblue",
+              r: 2
+            })
+          ]
+        });
+
+        container.replaceChildren(chart);
+      }
+
+      animationId = requestAnimationFrame(animate);
+    }
+
+    // Intersection Observer to only animate when visible
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        isVisible = entry.isIntersecting;
+        if (isVisible && !animationId) {
+          animate();
+        }
+      });
+    });
+
+    observer.observe(container);
+
+    invalidation.then(() => {
+      if (animationId) cancelAnimationFrame(animationId);
+      observer.disconnect();
+    });
+
+    display(container);
+  </script>
+  <script id="9" type="text/markdown">
+    ## Extension to 2D
+
+    The 2D case follows the same principles but requires separate absorption coefficients ${tex`\sigma_x`} and ${tex`\sigma_y`} for each spatial direction.
+  </script>
+  <script id="10" type="text/markdown">
+    ## The 2D Update Equations
+
+    The simulation uses two sets of quantities. The scalar field ${tex`u`} and auxiliary field ${tex`\psi`} are defined at integer time steps and integrated according to:
+
+    ${tex.block`\begin{aligned}
+    \frac{du}{dt} &= c (\nabla \cdot \mathbf{v}) - (\sigma_x + \sigma_y) u + \psi \\[10pt]
+    \frac{d\psi}{dt} &= c \sigma_x \frac{\partial v_y}{\partial y} + c \sigma_y \frac{\partial v_x}{\partial x} - \sigma_x \sigma_y u
+    \end{aligned}`}
+
+    Here, ${tex`\sigma_x`} and ${tex`\sigma_y`} are the PML layer strengths in the x- and y-directions, ${tex`c`} is the wave speed, and ${tex`\psi`} is an auxiliary quantity whose derivation is described below.
+
+    The vector field ${tex`\mathbf{v} = (v_x, v_y)`} is defined at half-integer timesteps and integrated in a leap-frog manner:
+
+    ${tex.block`\begin{aligned}
+    \frac{\partial v_x}{\partial t} &= c \frac{\partial u}{\partial x} - \sigma_x v_x \\[10pt]
+    \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y} - \sigma_y v_y
+    \end{aligned}`}
+
+    This naturally lends itself to two buffers: one storing ${tex`u`} and ${tex`\psi`}, the other storing ${tex`v_x`} and ${tex`v_y`}.
+  </script>
+  <script id="11" type="text/markdown">
+    ## Derivation
+
+    We start with the scalar wave equation in first-order form:
+
+    ${tex.block`\begin{aligned}
+    \frac{\partial u}{\partial t} &= c (\nabla \cdot \mathbf{v}) \\[10pt]
+    \frac{\partial v_x}{\partial t} &= c \frac{\partial u}{\partial x} \\[10pt]
+    \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y}
+    \end{aligned}`}
+
+    This form restricts spatial derivatives to first derivatives, which makes application of PML easier. You can verify by direct substitution that this is equivalent to the standard second-order form ${tex`\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u`}.
+  </script>
+  <script id="12" type="text/markdown">
+    ## Fourier Time Domain
+
+    We operate in the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega`}:
+
+    ${tex.block`\begin{aligned}
+    -i\omega u &= c \frac{\partial v_x}{\partial x} + c \frac{\partial v_y}{\partial y} \\[10pt]
+    -i\omega v_x &= c \frac{\partial u}{\partial x} \\[10pt]
+    -i\omega v_y &= c \frac{\partial u}{\partial y}
+    \end{aligned}`}
+  </script>
+  <script id="13" type="text/markdown">
+    ## PML Coordinate Mapping
+
+    We replace the spatial derivatives with the PML mapping:
+
+    ${tex.block`\frac{\partial}{\partial x} = \frac{1}{1 + i\frac{\sigma_x}{\omega}} \frac{\partial}{\partial x}`}
+
+    and correspondingly for ${tex`\frac{\partial}{\partial y}`}. This complex coordinate stretching causes waves to decay exponentially in the PML region.
+  </script>
+  <script id="14" type="text/markdown">
+    ## Velocity Update Equations
+
+    Applying the PML mapping to the velocity equations and reorganizing terms:
+
+    ${tex.block`-i\omega v_x = c \frac{1}{1 + i\frac{\sigma_x}{\omega}} \frac{\partial u}{\partial x}`}
+
+    Multiplying both sides by ${tex`1 + i\frac{\sigma_x}{\omega}`}:
+
+    ${tex.block`-i\omega v_x - \sigma_x v_x = c \frac{\partial u}{\partial x}`}
+
+    Transforming back to the time domain immediately yields:
+
+    ${tex.block`\frac{\partial v_x}{\partial t} = c \frac{\partial u}{\partial x} - \sigma_x v_x`}
+
+    The equation for ${tex`v_y`} follows identically.
+  </script>
+  <script id="15" type="text/markdown">
+    ## Scalar Field Update Equation
+
+    The equation for ${tex`u`} is more involved. Applying the PML mapping:
+
+    ${tex.block`-i\omega u = c \left(\frac{1}{1 + i\frac{\sigma_x}{\omega}} \frac{\partial v_x}{\partial x} + \frac{1}{1 + i\frac{\sigma_y}{\omega}} \frac{\partial v_y}{\partial y}\right)`}
+
+    Expanding and collecting terms:
+
+    ${tex.block`-i\omega u = c \left(\frac{\partial v_x}{\partial x} + \frac{\partial v_y}{\partial y}\right) - (\sigma_x + \sigma_y) u + \left(\frac{ic\sigma_x}{\omega} \frac{\partial v_y}{\partial y} + \frac{ic\sigma_y}{\omega} \frac{\partial v_x}{\partial x} - \frac{i}{\omega} \sigma_x \sigma_y u\right)`}
+
+    The term in parentheses contains factors of ${tex`\frac{i}{\omega}`}, which corresponds to time integration. We define this as the auxiliary quantity ${tex`\psi`}:
+
+    ${tex.block`\psi = \frac{ic\sigma_x}{\omega} \frac{\partial v_y}{\partial y} + \frac{ic\sigma_y}{\omega} \frac{\partial v_x}{\partial x} - \frac{i}{\omega} \sigma_x \sigma_y u`}
+
+    Multiplying through by ${tex`-i\omega`} and transforming back to the time domain:
+
+    ${tex.block`\frac{d\psi}{dt} = c \sigma_x \frac{\partial v_y}{\partial y} + c \sigma_y \frac{\partial v_x}{\partial x} - \sigma_x \sigma_y u`}
+
+    The update equation for ${tex`u`} becomes:
+
+    ${tex.block`\frac{du}{dt} = c (\nabla \cdot \mathbf{v}) - (\sigma_x + \sigma_y) u + \psi`}
+
+    These are the equations we implement in the simulation below.
+  </script>
+  <script id="16" type="text/markdown">
+    ## Implementation
+
+    The following WebGL implementation simulates these equations on the GPU using fragment shaders. Use the controls below to pause/resume the simulation, adjust contrast, and visualize the PML absorption regions (red for ${tex`\sigma_x`}, green for ${tex`\sigma_y`}).
+  </script>
+  <script id="17" type="module">
+    const canvas = html`<canvas width="800" height="800" style="width: 100%; max-width: 800px; height: auto; display: block; image-rendering: pixelated;"></canvas>`;
+    const gl = canvas.getContext("webgl2");
+
+    if (!gl) {
+      throw new Error('WebGL 2 is not supported');
+    }
+
+    // Enable floating-point textures as render targets
+    const ext = gl.getExtension('EXT_color_buffer_float');
+    if (!ext) {
+      throw new Error('EXT_color_buffer_float extension is not supported');
+    }
+
+    // Constants
+    const PML_WIDTH = 12.0;
+    const PML_EXPONENT = 2.0;
+    const PML_STRENGTH = 1.0;
+    const OSCILLATOR_STRENGTH = 4.0;
+    const OSCILLATOR_WAVELENGTH = 10.0;
+    const C = 1.0;
+    const DT = 0.5;
+    const DX = 1.0;
+
+    // Vertex shader
+    const vertexShaderSource = `#version 300 es
+        in vec2 a_position;
+        void main() {
+          gl_Position = vec4(a_position, 0.0, 1.0);
+        }
+      `;
+
+      // Common functions for shaders
+      const commonSource = `
+        const float PML_WIDTH = ${PML_WIDTH.toFixed(1)};
+        const float PML_EXPONENT = ${PML_EXPONENT.toFixed(1)};
+        const float PML_STRENGTH = ${PML_STRENGTH.toFixed(1)};
+        const float OSCILLATOR_STRENGTH = ${OSCILLATOR_STRENGTH.toFixed(1)};
+        const float OSCILLATOR_WAVELENGTH = ${OSCILLATOR_WAVELENGTH.toFixed(1)};
+        const float C = ${C.toFixed(1)};
+        const float DT = ${DT.toFixed(1)};
+        const float DX = ${DX.toFixed(1)};
+        const float PI = 3.14159265358979;
+
+        float linearstep(float a, float b, float x) {
+          return clamp((x - a) / (b - a), 0.0, 1.0);
+        }
+
+        vec2 sigma(vec2 coord, vec2 res) {
+          return pow(
+            abs(vec2(
+              linearstep(PML_WIDTH, 0.0, coord.x) + linearstep(res.x - PML_WIDTH, res.x, coord.x),
+              linearstep(PML_WIDTH, 0.0, coord.y) + linearstep(res.y - PML_WIDTH, res.y, coord.y)
+            )),
+            vec2(PML_EXPONENT)
+          ) * PML_STRENGTH;
+        }
+      `;
+
+      // Buffer A shader (updates u and psi)
+      const bufferASource = `#version 300 es
+        precision highp float;
+        ${commonSource}
+        uniform sampler2D u_bufferA;
+        uniform sampler2D u_bufferB;
+        uniform vec2 u_resolution;
+        uniform float u_pmlWidth;
+        out vec4 fragColor;
+
+        vec2 sigmaCompute(vec2 coord, vec2 res, float pmlWidth) {
+          return pow(
+            abs(vec2(
+              linearstep(pmlWidth, 0.0, coord.x) + linearstep(res.x - pmlWidth, res.x, coord.x),
+              linearstep(pmlWidth, 0.0, coord.y) + linearstep(res.y - pmlWidth, res.y, coord.y)
+            )),
+            vec2(PML_EXPONENT)
+          ) * PML_STRENGTH;
+        }
+
+        void main() {
+          ivec2 p = ivec2(gl_FragCoord.xy);
+          vec4 state = texelFetch(u_bufferA, p, 0);
+          float u = state.x, psi = state.y, t = state.z;
+
+          float vx1 = texelFetch(u_bufferB, p + ivec2(1, 0), 0).x;
+          float vx0 = texelFetch(u_bufferB, p + ivec2(-1, 0), 0).x;
+          float vy1 = texelFetch(u_bufferB, p + ivec2(0, 1), 0).y;
+          float vy0 = texelFetch(u_bufferB, p + ivec2(0, -1), 0).y;
+
+          float dvxdx = (vx1 - vx0) / (2.0 * DX);
+          float dvydy = (vy1 - vy0) / (2.0 * DX);
+
+          vec2 s = sigmaCompute(gl_FragCoord.xy, u_resolution, u_pmlWidth);
+
+          fragColor.xyz = state.xyz + DT * vec3(
+            C * (dvxdx + dvydy) - u * (s.x + s.y) + psi,
+            C * (s.x * dvydy + s.y * dvxdx - u * s.x * s.y),
+            1.0
+          );
+
+          // Apply forcing term at center
+          float pulseInterval = 600.0;
+          float pulse = exp(-pow(abs((mod(t - pulseInterval, pulseInterval * 0.7) - pulseInterval * 0.5) / 40.0), 4.0));
+          int COUNT = 5;
+          for (int i = 0; i < COUNT; i++) {
+            vec2 r = (float(i) - float(COUNT) * 0.5) / float(COUNT) * vec2(80.0, 0.0);
+            float omega = C * PI / OSCILLATOR_WAVELENGTH;
+            float oscillatorMask = smoothstep(3.0, 2.0, length(gl_FragCoord.xy - u_resolution * 0.5 + r));
+            float u0 = sin(omega * t / float(i + 1));
+            fragColor.x += u0 * oscillatorMask * OSCILLATOR_STRENGTH * pulse;
+          }
+        }
+      `;
+
+      // Buffer B shader (updates v)
+      const bufferBSource = `#version 300 es
+        precision highp float;
+        ${commonSource}
+        uniform sampler2D u_bufferA;
+        uniform sampler2D u_bufferB;
+        uniform vec2 u_resolution;
+        uniform float u_pmlWidth;
+        out vec4 fragColor;
+
+        vec2 sigmaCompute(vec2 coord, vec2 res, float pmlWidth) {
+          return pow(
+            abs(vec2(
+              linearstep(pmlWidth, 0.0, coord.x) + linearstep(res.x - pmlWidth, res.x, coord.x),
+              linearstep(pmlWidth, 0.0, coord.y) + linearstep(res.y - pmlWidth, res.y, coord.y)
+            )),
+            vec2(PML_EXPONENT)
+          ) * PML_STRENGTH;
+        }
+
+        void main() {
+          ivec2 p = ivec2(gl_FragCoord.xy);
+          vec4 state = texelFetch(u_bufferB, p, 0);
+          vec2 v = state.xy;
+
+          float u1x = texelFetch(u_bufferA, p + ivec2(1, 0), 0).x;
+          float u0x = texelFetch(u_bufferA, p + ivec2(-1, 0), 0).x;
+          float u1y = texelFetch(u_bufferA, p + ivec2(0, 1), 0).x;
+          float u0y = texelFetch(u_bufferA, p + ivec2(0, -1), 0).x;
+
+          vec2 ugrad = vec2(u1x - u0x, u1y - u0y) / (2.0 * DX);
+          vec2 s = sigmaCompute(gl_FragCoord.xy, u_resolution, u_pmlWidth);
+
+          fragColor.xy = state.xy + DT * (C * ugrad - s * v);
+        }
+      `;
+
+      // Display shader
+      const displaySource = `#version 300 es
+        precision highp float;
+        ${commonSource}
+        uniform sampler2D u_bufferA;
+        uniform vec2 u_resolution;
+        uniform float u_showSigma;
+        uniform float u_contrast;
+        uniform float u_pmlWidth;
+        out vec4 fragColor;
+
+        vec2 sigmaDisplay(vec2 coord, vec2 res, float pmlWidth) {
+          return pow(
+            abs(vec2(
+              linearstep(pmlWidth, 0.0, coord.x) + linearstep(res.x - pmlWidth, res.x, coord.x),
+              linearstep(pmlWidth, 0.0, coord.y) + linearstep(res.y - pmlWidth, res.y, coord.y)
+            )),
+            vec2(PML_EXPONENT)
+          ) * PML_STRENGTH;
+        }
+
+        void main() {
+          vec2 uv = gl_FragCoord.xy / u_resolution;
+          vec4 state = texture(u_bufferA, uv);
+          float u = state.x * u_contrast;  // Apply contrast amplification
+
+          // White background with colored waves
+          vec3 white = vec3(1.0);
+          vec3 cyanColor = vec3(0.0, 0.65, 0.75);    // Darker cyan
+          vec3 yellowColor = vec3(0.85, 0.75, 0.0);  // Darker yellow
+
+          // Blend from white to color based on wave amplitude
+          float intensity = clamp(abs(u), 0.0, 1.0);
+          vec3 targetColor = u > 0.0 ? yellowColor : cyanColor;
+          fragColor = vec4(mix(white, targetColor, intensity), 1.0);
+
+          if (u_showSigma > 0.5) {
+            vec2 s = sqrt(sigmaDisplay(gl_FragCoord.xy, u_resolution, u_pmlWidth));  // sqrt for better low-value contrast
+            fragColor = mix(fragColor, vec4(1.0, 0.7, 0.7, 1.0), s.x * 0.5);  // Pink for x-direction
+            fragColor = mix(fragColor, vec4(0.7, 1.0, 0.7, 1.0), s.y * 0.5);  // Green for y-direction
+          }
+        }
+      `;
+
+      // Compile shader
+      function compileShader(source, type) {
+        const shader = gl.createShader(type);
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+          const error = gl.getShaderInfoLog(shader);
+          console.error('Shader compilation error:', error);
+          console.error('Shader source:', source);
+          gl.deleteShader(shader);
+          throw new Error('Shader compilation failed: ' + error);
+        }
+        return shader;
+      }
+
+      // Create program
+      function createProgram(vertSource, fragSource) {
+        const vertShader = compileShader(vertSource, gl.VERTEX_SHADER);
+        const fragShader = compileShader(fragSource, gl.FRAGMENT_SHADER);
+        const program = gl.createProgram();
+        gl.attachShader(program, vertShader);
+        gl.attachShader(program, fragShader);
+        gl.linkProgram(program);
+        if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+          const error = gl.getProgramInfoLog(program);
+          console.error('Program linking error:', error);
+          throw new Error('Program linking failed: ' + error);
+        }
+        return program;
+      }
+
+      const bufferAProgram = createProgram(vertexShaderSource, bufferASource);
+      const bufferBProgram = createProgram(vertexShaderSource, bufferBSource);
+      const displayProgram = createProgram(vertexShaderSource, displaySource);
+
+      // Create full-screen quad
+      const quadBuffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+      gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 1, -1, -1, 1, 1, 1]), gl.STATIC_DRAW);
+
+      // Create framebuffers and textures
+      function createFramebuffer(width, height) {
+        const texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, texture);
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA32F, width, height, 0, gl.RGBA, gl.FLOAT, null);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+
+        const fbo = gl.createFramebuffer();
+        gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+
+        return { fbo, texture };
+      }
+
+      const width = canvas.width;
+      const height = canvas.height;
+
+      const bufferA = [createFramebuffer(width, height), createFramebuffer(width, height)];
+      const bufferB = [createFramebuffer(width, height), createFramebuffer(width, height)];
+
+      let currentBuffer = 0;
+
+      const mouseState = { pressed: false, x: 0, y: 0 };
+
+    canvas.addEventListener('mousedown', (e) => { mouseState.pressed = true; });
+    canvas.addEventListener('mouseup', (e) => { mouseState.pressed = false; });
+    canvas.addEventListener('mousemove', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      mouseState.x = (e.clientX - rect.left) * width / rect.width;
+      mouseState.y = height - (e.clientY - rect.top) * height / rect.height;
+    });
+
+    // Uniform values that can be updated without re-running the animation
+    const uniforms = {
+      showSigma: 0.0,
+      contrast: 0.454,
+      pmlWidth: 12.0
+    };
+
+    const webgl_setup = {
+      canvas,
+      gl,
+      width,
+      height,
+      bufferAProgram,
+      bufferBProgram,
+      displayProgram,
+      quadBuffer,
+      bufferA,
+      bufferB,
+      mouseState,
+      uniforms
+    };
+  </script>
+  <script id="18" type="module">
+    // Update uniforms object when controls change (doesn't restart animation)
+    webgl_setup.uniforms.showSigma = showSigma ? 1.0 : 0.0;
+    webgl_setup.uniforms.contrast = Math.max(100**contrast, 0.1);
+    webgl_setup.uniforms.pmlWidth = pmlWidth;
+  </script>
+  <script id="19" type="module">
+    const { canvas, gl, width, height, bufferAProgram, bufferBProgram, displayProgram, quadBuffer, bufferA, bufferB, uniforms } = webgl_setup;
+
+    let currentBuffer = 0;
+    let animationId;
+    let isVisible = false;
+
+    function render() {
+      // Only render if visible
+      if (!isVisible) return;
+
+      if (!simulate) {
+          // Still render the display, just don't update the simulation
+          gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+          gl.viewport(0, 0, width, height);
+          gl.useProgram(displayProgram);
+
+          const aPositionD = gl.getAttribLocation(displayProgram, 'a_position');
+          gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+          gl.enableVertexAttribArray(aPositionD);
+          gl.vertexAttribPointer(aPositionD, 2, gl.FLOAT, false, 0, 0);
+
+          gl.activeTexture(gl.TEXTURE0);
+          gl.bindTexture(gl.TEXTURE_2D, bufferA[currentBuffer].texture);
+          gl.uniform1i(gl.getUniformLocation(displayProgram, 'u_bufferA'), 0);
+
+          gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_resolution'), width, height);
+          gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_showSigma'), uniforms.showSigma);
+          gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_contrast'), uniforms.contrast);
+          gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_pmlWidth'), uniforms.pmlWidth);
+
+          gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+          animationId = requestAnimationFrame(render);
+          return;
+        }
+
+        const current = currentBuffer;
+        const next = 1 - currentBuffer;
+
+        // Update buffer A (u, psi)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, bufferA[next].fbo);
+        gl.viewport(0, 0, width, height);
+        gl.useProgram(bufferAProgram);
+
+        const aPositionA = gl.getAttribLocation(bufferAProgram, 'a_position');
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+        gl.enableVertexAttribArray(aPositionA);
+        gl.vertexAttribPointer(aPositionA, 2, gl.FLOAT, false, 0, 0);
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, bufferA[current].texture);
+        gl.uniform1i(gl.getUniformLocation(bufferAProgram, 'u_bufferA'), 0);
+
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
+        gl.uniform1i(gl.getUniformLocation(bufferAProgram, 'u_bufferB'), 1);
+
+        gl.uniform2f(gl.getUniformLocation(bufferAProgram, 'u_resolution'), width, height);
+        gl.uniform1f(gl.getUniformLocation(bufferAProgram, 'u_pmlWidth'), uniforms.pmlWidth);
+
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // Update buffer B (v)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, bufferB[next].fbo);
+        gl.useProgram(bufferBProgram);
+
+        const aPositionB = gl.getAttribLocation(bufferBProgram, 'a_position');
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+        gl.enableVertexAttribArray(aPositionB);
+        gl.vertexAttribPointer(aPositionB, 2, gl.FLOAT, false, 0, 0);
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, bufferA[next].texture);
+        gl.uniform1i(gl.getUniformLocation(bufferBProgram, 'u_bufferA'), 0);
+
+        gl.activeTexture(gl.TEXTURE1);
+        gl.bindTexture(gl.TEXTURE_2D, bufferB[current].texture);
+        gl.uniform1i(gl.getUniformLocation(bufferBProgram, 'u_bufferB'), 1);
+
+        gl.uniform2f(gl.getUniformLocation(bufferBProgram, 'u_resolution'), width, height);
+        gl.uniform1f(gl.getUniformLocation(bufferBProgram, 'u_pmlWidth'), uniforms.pmlWidth);
+
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        // Display
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+        gl.viewport(0, 0, width, height);
+        gl.useProgram(displayProgram);
+
+        const aPositionD = gl.getAttribLocation(displayProgram, 'a_position');
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+        gl.enableVertexAttribArray(aPositionD);
+        gl.vertexAttribPointer(aPositionD, 2, gl.FLOAT, false, 0, 0);
+
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, bufferA[next].texture);
+        gl.uniform1i(gl.getUniformLocation(displayProgram, 'u_bufferA'), 0);
+
+        gl.uniform2f(gl.getUniformLocation(displayProgram, 'u_resolution'), width, height);
+        gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_showSigma'), uniforms.showSigma);
+        gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_contrast'), uniforms.contrast);
+        gl.uniform1f(gl.getUniformLocation(displayProgram, 'u_pmlWidth'), uniforms.pmlWidth);
+
+        gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+
+        currentBuffer = next;
+        animationId = requestAnimationFrame(render);
+      }
+
+    // Intersection Observer to only render when visible
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        isVisible = entry.isIntersecting;
+        if (isVisible && !animationId) {
+          animationId = requestAnimationFrame(render);
+        }
+      });
+    });
+
+    observer.observe(canvas);
+
+    // Cancel animation when cell is invalidated
+    invalidation.then(() => {
+      if (animationId) cancelAnimationFrame(animationId);
+      observer.disconnect();
+    });
+
+    display(canvas);
+  </script>
+  <script id="20" type="module">
+    const simulate = view(Inputs.toggle({label: "Simulate", value: true}));
+    const showSigma = view(Inputs.toggle({label: "Show absorption regions", value: false}));
+    const contrast = view(Inputs.range([0, 1], {label: "Contrast", step: 0.01, value: 0}));
+    const pmlWidth = view(Inputs.range([4, 40], {label: "PML width (pixels)", step: 1, value: 12}));
+  </script>
+  <script id="21" type="text/markdown">
+    ## Notes
+
+    The absorbing layer requires a width roughly on par with the wavelength. This comes from truncation error and could be improved to perhaps half a wavelength with more accurate finite difference schemes.
+
+    The resulting form is a bit involved but quite effective. The key insight is that by working in the Fourier time domain and applying complex coordinate stretching, we can derive update equations that naturally absorb outgoing waves with minimal reflection.
+  </script>
+  <script id="22" type="text/markdown">
+    ## References
+
+    This derivation extends the technique from [Steven G. Johnson's PML notes](https://math.mit.edu/~stevenj/18.369/spring14/pml.pdf) by applying the PML mapping to both x and y boundaries simultaneously.
+  </script>
+</notebook>
