@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Perfectly Matched Layers for the Wave Equation</title>  <script type="module" crossorigin src="/notebooks/assets/index-blg59xu2.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Perfectly Matched Layers for the Wave Equation</title>  <script type="module" crossorigin src="/notebooks/assets/index-1UpARN7y.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1529,53 +1529,46 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>When simulating wave propagation on a finite computational grid, a fundamental problem arises: what happens when waves reach the boundary? In physical systems, waves often propagate through unbounded space, but our simulations must work within finite memory. Simply truncating the domain causes waves to reflect artificially from the boundaries, contaminating the solution.</p>
-<p><strong>Perfectly Matched Layers (PML)</strong> solve this problem by adding absorbing regions at the domain boundaries that eliminate reflections for all angles and frequencies. This notebook demonstrates PML for the scalar wave equation, starting with a 1D example before extending to 2D.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"><div><h2 id="the-1-d-wave-equation" tabindex="-1"><a href="#the-1-d-wave-equation">The 1D Wave Equation</a></h2>
-<p>We’ll start with the scalar wave equation in 1D, written in first-order form:</p>
-<p>Here  is the scalar field (e.g., pressure or displacement),  is the velocity field, and  is the wave speed. This first-order form is equivalent to the standard second-order wave equation  but makes the PML derivation clearer.</p>
-</div></div><div id="cell-3" class="observablehq observablehq--cell"><div><h2 id="1-d-pml-derivation" tabindex="-1"><a href="#1-d-pml-derivation">1D PML Derivation</a></h2>
-<p>To derive the PML equations, we work in the Fourier time domain, replacing  with :</p>
-<p>The PML technique replaces spatial derivatives with a complex coordinate mapping:</p>
-<p>where  is the absorption strength. This stretching causes waves to decay exponentially in regions where .</p>
-<p>Applying this mapping:</p>
-<p>Multiplying both sides by :</p>
-<p>Transforming back to the time domain gives the final 1D PML equations:</p>
-<p>In the interior where , these reduce to the original wave equation. In the PML regions,  causes exponential absorption. Note that unlike the 2D case, no auxiliary field is needed in 1D since there are no cross-terms between different directions.</p>
+    <main><div id="cell-33" class="observablehq observablehq--cell"><div><p>When simulating wave propagation on a computational grid, a common problem is how to prevent waves from reflecting back into the domain. In physical systems, waves often propagate through unbounded space, but our simulations must work within finite memory. Simply truncating the domain causes waves to reflect artificially from the boundaries, contaminating the solution.</p>
+</div></div><div id="cell-1" class="observablehq observablehq--cell"><div><p><strong>Perfectly Matched Layers (PML)</strong> solve this problem by adding absorbing regions at the domain boundaries that eliminate reflections for all angles and frequencies. The technique is based on an analytic continuation of the wave equation into the complex domain. This allows waves to be attenuated independent of frequency, which is not something we can achieve with a simple damping term like for a damped spring. Even better, waves end up decaying both as the propagate toward the layer and as any residual reflections propagate back into the domain.</p>
+</div></div><div id="cell-34" class="observablehq observablehq--cell"><div><p>For comparison, this complex variable trick causes the absorbing layer to behave differently from physical absorbers such as sound-dampening foam, where high frequencies attenuate much more quickly relative to the width of the absorbing material, allowing low frequencies to pass through. Additionally, spurious reflections result when waves travling in the interior medium suddenly encounter the impedance of the absorbing layer.</p>
+</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><p>This notebook demonstrates PML for the scalar wave equation, starting with a 1D example before extending to 2D.</p>
+</div></div><div id="cell-23" class="observablehq observablehq--cell"><div><h2 id="the-1-d-wave-equation" tabindex="-1"><a href="#the-1-d-wave-equation">The 1D Wave Equation</a></h2>
+<p>The <a href="https://en.wikipedia.org/wiki/Wave_equation">scalar wave equation</a> for any number of dimensions is given by</p>
+</div></div><div id="cell-24" class="observablehq observablehq--cell"><div><p>For one dimension, we have</p>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"><div><p>We could apply PML to this equation, but it will turn out to be easier and require about the same amount of computational work to apply it to what’s probably a less familiar but strictly equivalent form which contains only first-order derivatives,</p>
+<p>Here,  is the state variable (e.g. pressure) while  functions like a velocity.</p>
+</div></div><div id="cell-25" class="observablehq observablehq--cell"><div><h2 id="1-d-pml-derivation" tabindex="-1"><a href="#1-d-pml-derivation">1D PML Derivation</a></h2>
+<p>The key insight of PML is to work in the Fourier time domain and apply a complex coordinate stretching to the spatial derivatives. In practical terms, this means replacing spatial derivatives with a modified operator.</p>
+</div></div><div id="cell-26" class="observablehq observablehq--cell"><div><p>We begin by transforming to the Fourier time domain, replacing  with  yielding</p>
+</div></div><div id="cell-27" class="observablehq observablehq--cell"><div><p>The PML technique replaces spatial derivatives with a complex coordinate mapping</p>
+</div></div><div id="cell-28" class="observablehq observablehq--cell"><div><p>where  is the absorption strength. This stretching causes waves to decay exponentially in regions where . Notice that for  (no absorption), this reduces to .</p>
+</div></div><div id="cell-29" class="observablehq observablehq--cell"><div><p>Applying this mapping gives</p>
+</div></div><div id="cell-30" class="observablehq observablehq--cell"><div><p>Multiplying both sides by  gives</p>
+</div></div><div id="cell-31" class="observablehq observablehq--cell"><div><p>Transforming back to the time domain gives the final 1D PML equations</p>
+</div></div><div id="cell-3" class="observablehq observablehq--cell"><div><p>In the interior where , these reduce to the original wave equation. In the PML regions,  causes exponential absorption.</p>
 </div></div><div id="cell-4" class="observablehq observablehq--cell"><div><h2 id="1-d-visualization" tabindex="-1"><a href="#1-d-visualization">1D Visualization</a></h2>
 <p>The plot below shows a 1D wave propagating with PML absorbing boundaries on both ends. The shaded regions indicate where . Notice how waves exit the domain smoothly without reflecting.</p>
 </div></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"><div><h2 id="extension-to-2-d" tabindex="-1"><a href="#extension-to-2-d">Extension to 2D</a></h2>
-<p>The 2D case follows the same principles but requires separate absorption coefficients  and  for each spatial direction.</p>
-</div></div><div id="cell-10" class="observablehq observablehq--cell"><div><h2 id="the-2-d-update-equations" tabindex="-1"><a href="#the-2-d-update-equations">The 2D Update Equations</a></h2>
-<p>The simulation uses two sets of quantities. The scalar field  and auxiliary field  are defined at integer time steps and integrated according to:</p>
-<p>Here,  and  are the PML layer strengths in the x- and y-directions,  is the wave speed, and  is an auxiliary quantity whose derivation is described below.</p>
-<p>The vector field  is defined at half-integer timesteps and integrated in a leap-frog manner:</p>
-<p>This naturally lends itself to two buffers: one storing  and , the other storing  and .</p>
-</div></div><div id="cell-11" class="observablehq observablehq--cell"><div><h2 id="derivation" tabindex="-1"><a href="#derivation">Derivation</a></h2>
-<p>We start with the scalar wave equation in first-order form:</p>
-<p>This form restricts spatial derivatives to first derivatives, which makes application of PML easier. You can verify by direct substitution that this is equivalent to the standard second-order form .</p>
-</div></div><div id="cell-12" class="observablehq observablehq--cell"><div><h2 id="fourier-time-domain" tabindex="-1"><a href="#fourier-time-domain">Fourier Time Domain</a></h2>
-<p>We operate in the Fourier time domain, replacing  with :</p>
-</div></div><div id="cell-13" class="observablehq observablehq--cell"><div><h2 id="pml-coordinate-mapping" tabindex="-1"><a href="#pml-coordinate-mapping">PML Coordinate Mapping</a></h2>
-<p>We replace the spatial derivatives with the PML mapping:</p>
-<p>and correspondingly for . This complex coordinate stretching causes waves to decay exponentially in the PML region.</p>
-</div></div><div id="cell-14" class="observablehq observablehq--cell"><div><h2 id="velocity-update-equations" tabindex="-1"><a href="#velocity-update-equations">Velocity Update Equations</a></h2>
-<p>Applying the PML mapping to the velocity equations and reorganizing terms:</p>
-<p>Multiplying both sides by :</p>
-<p>Transforming back to the time domain immediately yields:</p>
-<p>The equation for  follows identically.</p>
-</div></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="scalar-field-update-equation" tabindex="-1"><a href="#scalar-field-update-equation">Scalar Field Update Equation</a></h2>
-<p>The equation for  is more involved. Applying the PML mapping:</p>
-<p>Expanding and collecting terms:</p>
-<p>The term in parentheses contains factors of , which corresponds to time integration. We define this as the auxiliary quantity :</p>
-<p>Multiplying through by  and transforming back to the time domain:</p>
-<p>The update equation for  becomes:</p>
-<p>These are the equations we implement in the simulation below.</p>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><h2 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h2>
+<p>The 2D case follows the same principles but with a key difference: we need separate absorption coefficients  and  for each spatial direction. When we apply the complex coordinate mapping independently to both  and  derivatives, cross-terms emerge that don’t appear in 1D. These cross-terms require an auxiliary field  to handle the coupling between the two spatial directions within the PML regions.</p>
+<p>The derivation below shows how these auxiliary variables arise naturally from the Fourier domain analysis. In regions where only one direction has absorption (e.g.,  but ), the equations simplify. The full complexity only appears in corner regions where both directions have non-zero absorption.</p>
+</div></div><div id="cell-37" class="observablehq observablehq--cell"><div><h2 id="2-d-derivation" tabindex="-1"><a href="#2-d-derivation">2D Derivation</a></h2>
+</div></div><div id="cell-38" class="observablehq observablehq--cell"><div><p>We start with the scalar wave equation in first-order form,</p>
+</div></div><div id="cell-39" class="observablehq observablehq--cell"><div><p>Following the same approach as in 1D, we transform to the Fourier time domain, replacing  with</p>
+</div></div><div id="cell-40" class="observablehq observablehq--cell"><div><p>The PML technique replaces spatial derivatives with complex coordinate mappings</p>
+</div></div><div id="cell-41" class="observablehq observablehq--cell"><div><p>Applying the mapping to the velocity equations and multiplying through by the denominators yields</p>
+</div></div><div id="cell-42" class="observablehq observablehq--cell"><div><p>Transforming back to the time domain immediately gives</p>
+</div></div><div id="cell-43" class="observablehq observablehq--cell"><div><p>The equation for  is more involved. Applying the PML mapping gives</p>
+</div></div><div id="cell-44" class="observablehq observablehq--cell"><div><p>Expanding and collecting terms yields</p>
+</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><p>The term in parentheses contains factors of , which corresponds to time integration. We define this as the auxiliary quantity</p>
+</div></div><div id="cell-46" class="observablehq observablehq--cell"><div></div></div><div id="cell-47" class="observablehq observablehq--cell"><div><p>Multiplying through by  and transforming back to the time domain gives</p>
+</div></div><div id="cell-48" class="observablehq observablehq--cell"><div><p>The update equation for  becomes</p>
+</div></div><div id="cell-11" class="observablehq observablehq--cell"><div><p>Together with the velocity equations, we have the complete 2D PML system</p>
+</div></div><div id="cell-49" class="observablehq observablehq--cell"><div><p>These equations require tracking three fields: the scalar field , the auxiliary field , and the vector field . In practice, this naturally lends itself to a two-buffer implementation: one storing  and the other storing .</p>
+</div></div><div id="cell-50" class="observablehq observablehq--cell"><div><h2 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h2>
 <p>The following WebGL implementation simulates these equations on the GPU using fragment shaders. Use the controls below to pause/resume the simulation, adjust contrast, and visualize the PML absorption regions (red for , green for ).</p>
-</div></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="notes" tabindex="-1"><a href="#notes">Notes</a></h2>
-<p>The absorbing layer requires a width roughly on par with the wavelength. This comes from truncation error and could be improved to perhaps half a wavelength with more accurate finite difference schemes.</p>
-<p>The resulting form is a bit involved but quite effective. The key insight is that by working in the Fourier time domain and applying complex coordinate stretching, we can derive update equations that naturally absorb outgoing waves with minimal reflection.</p>
+</div></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="conclusion" tabindex="-1"><a href="#conclusion">Conclusion</a></h2>
+<p>While the resulting equations are somewhat involved, PML provides a remarkably effective solution to the absorbing boundary problem. I’m a little uncertain how to deal with irregular domains with more complicated boundaries, but that’s an exercise for the future!</p>
 </div></div><div id="cell-22" class="observablehq observablehq--cell"><div><h2 id="references" tabindex="-1"><a href="#references">References</a></h2>
 <p>This derivation extends the technique from <a href="https://math.mit.edu/~stevenj/18.369/spring14/pml.pdf">Steven G. Johnson’s PML notes</a> by applying the PML mapping to both x and y boundaries simultaneously.</p>
 </div></div></main>

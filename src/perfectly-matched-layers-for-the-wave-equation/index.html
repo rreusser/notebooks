@@ -1,63 +1,93 @@
 <!doctype html>
 <notebook theme="air">
   <title>Perfectly Matched Layers for the Wave Equation</title>
-  <script id="1" type="text/markdown">
+  <script id="32" type="text/markdown">
     # Perfectly Matched Layers for the Wave Equation
-
-    When simulating wave propagation on a finite computational grid, a fundamental problem arises: what happens when waves reach the boundary? In physical systems, waves often propagate through unbounded space, but our simulations must work within finite memory. Simply truncating the domain causes waves to reflect artificially from the boundaries, contaminating the solution.
-
-    **Perfectly Matched Layers (PML)** solve this problem by adding absorbing regions at the domain boundaries that eliminate reflections for all angles and frequencies. This notebook demonstrates PML for the scalar wave equation, starting with a 1D example before extending to 2D.
   </script>
-  <script id="2" type="text/markdown">
+  <script id="33" type="text/markdown">
+    When simulating wave propagation on a computational grid, a common problem is how to prevent waves from reflecting back into the domain. In physical systems, waves often propagate through unbounded space, but our simulations must work within finite memory. Simply truncating the domain causes waves to reflect artificially from the boundaries, contaminating the solution.
+  </script>
+  <script id="1" type="text/markdown">
+    **Perfectly Matched Layers (PML)** solve this problem by adding absorbing regions at the domain boundaries that eliminate reflections for all angles and frequencies. The technique is based on an analytic continuation of the wave equation into the complex domain. This allows waves to be attenuated independent of frequency, which is not something we can achieve with a simple damping term like for a damped spring. Even better, waves end up decaying both as the propagate toward the layer and as any residual reflections propagate back into the domain.
+  </script>
+  <script id="34" type="text/markdown">
+    For comparison, this complex variable trick causes the absorbing layer to behave differently from physical absorbers such as sound-dampening foam, where high frequencies attenuate much more quickly relative to the width of the absorbing material, allowing low frequencies to pass through. Additionally, spurious reflections result when waves travling in the interior medium suddenly encounter the impedance of the absorbing layer.
+  </script>
+  <script id="35" type="text/markdown">
+    This notebook demonstrates PML for the scalar wave equation, starting with a 1D example before extending to 2D.
+  </script>
+  <script id="23" type="text/markdown">
     ## The 1D Wave Equation
 
-    We'll start with the scalar wave equation in 1D, written in first-order form:
+    The [scalar wave equation](https://en.wikipedia.org/wiki/Wave_equation) for any number of dimensions is given by
+
+    ${tex.block`\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u.`}
+  </script>
+  <script id="24" type="text/markdown">
+    For one dimension, we have
+
+    ${tex.block`\frac{\partial^2 u}{\partial t^2} = c^2 \frac{\partial^2 u}{\partial x^2}.`}
+  </script>
+  <script id="2" type="text/markdown">
+    We could apply PML to this equation, but it will turn out to be easier and require about the same amount of computational work to apply it to what’s probably a less familiar but strictly equivalent form which contains only first-order derivatives,
 
     ${tex.block`\begin{aligned}
     \frac{\partial u}{\partial t} &= c \frac{\partial v}{\partial x} \\[10pt]
-    \frac{\partial v}{\partial t} &= c \frac{\partial u}{\partial x}
+    \frac{\partial v}{\partial t} &= c \frac{\partial u}{\partial x}.
     \end{aligned}`}
 
-    Here ${tex`u`} is the scalar field (e.g., pressure or displacement), ${tex`v`} is the velocity field, and ${tex`c`} is the wave speed. This first-order form is equivalent to the standard second-order wave equation ${tex`\frac{\partial^2 u}{\partial t^2} = c^2 \frac{\partial^2 u}{\partial x^2}`} but makes the PML derivation clearer.
+    Here, ${tex`u`} is the state variable (e.g. pressure) while ${tex`v`} functions like a velocity.
   </script>
-  <script id="3" type="text/markdown">
+  <script id="25" type="text/markdown">
     ## 1D PML Derivation
 
-    To derive the PML equations, we work in the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega`}:
+    The key insight of PML is to work in the Fourier time domain and apply a complex coordinate stretching to the spatial derivatives. In practical terms, this means replacing spatial derivatives with a modified operator.
+  </script>
+  <script id="26" type="text/markdown">
+    We begin by transforming to the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega,`} yielding
 
     ${tex.block`\begin{aligned}
     -i\omega u &= c \frac{\partial v}{\partial x} \\[10pt]
-    -i\omega v &= c \frac{\partial u}{\partial x}
+    -i\omega v &= c \frac{\partial u}{\partial x}.
     \end{aligned}`}
-
-    The PML technique replaces spatial derivatives with a complex coordinate mapping:
+  </script>
+  <script id="27" type="text/markdown">
+    The PML technique replaces spatial derivatives with a complex coordinate mapping
 
     ${tex.block`\frac{\partial}{\partial x} \rightarrow \frac{1}{1 + i\frac{\sigma}{\omega}} \frac{\partial}{\partial x}`}
-
-    where ${tex`\sigma(x) \geq 0`} is the absorption strength. This stretching causes waves to decay exponentially in regions where ${tex`\sigma > 0`}.
-
-    Applying this mapping:
+  </script>
+  <script id="28" type="text/markdown">
+    where ${tex`\sigma(x) \geq 0`} is the absorption strength. This stretching causes waves to decay exponentially in regions where ${tex`\sigma > 0`}. Notice that for ${tex`\sigma = 0`} (no absorption), this reduces to ${tex`\frac{\partial}{\partial x}`}.
+  </script>
+  <script id="29" type="text/markdown">
+    Applying this mapping gives
 
     ${tex.block`\begin{aligned}
     -i\omega u &= c \frac{1}{1 + i\frac{\sigma}{\omega}} \frac{\partial v}{\partial x} \\[10pt]
     -i\omega v &= c \frac{1}{1 + i\frac{\sigma}{\omega}} \frac{\partial u}{\partial x}
     \end{aligned}`}
 
-    Multiplying both sides by ${tex`1 + i\frac{\sigma}{\omega}`}:
+  </script>
+  <script id="30" type="text/markdown">
+    Multiplying both sides by ${tex`1 + i\frac{\sigma}{\omega}`} gives
 
     ${tex.block`\begin{aligned}
     -i\omega u - \sigma u &= c \frac{\partial v}{\partial x} \\[10pt]
-    -i\omega v - \sigma v &= c \frac{\partial u}{\partial x}
+    -i\omega v - \sigma v &= c \frac{\partial u}{\partial x}.
     \end{aligned}`}
 
-    Transforming back to the time domain gives the final 1D PML equations:
+  </script>
+  <script id="31" type="text/markdown">
+    Transforming back to the time domain gives the final 1D PML equations
 
     ${tex.block`\begin{aligned}
     \frac{\partial u}{\partial t} &= c \frac{\partial v}{\partial x} - \sigma u \\[10pt]
-    \frac{\partial v}{\partial t} &= c \frac{\partial u}{\partial x} - \sigma v
+    \frac{\partial v}{\partial t} &= c \frac{\partial u}{\partial x} - \sigma v.
     \end{aligned}`}
 
-    In the interior where ${tex`\sigma = 0`}, these reduce to the original wave equation. In the PML regions, ${tex`\sigma > 0`} causes exponential absorption. Note that unlike the 2D case, no auxiliary field is needed in 1D since there are no cross-terms between different directions.
+  </script>
+  <script id="3" type="text/markdown">
+    In the interior where ${tex`\sigma = 0`}, these reduce to the original wave equation. In the PML regions, ${tex`\sigma > 0`} causes exponential absorption.
   </script>
   <script id="4" type="text/markdown">
     ## 1D Visualization
@@ -328,105 +358,95 @@
   <script id="9" type="text/markdown">
     ## Extension to 2D
 
-    The 2D case follows the same principles but requires separate absorption coefficients ${tex`\sigma_x`} and ${tex`\sigma_y`} for each spatial direction.
-  </script>
-  <script id="10" type="text/markdown">
-    ## The 2D Update Equations
+    The 2D case follows the same principles but with a key difference: we need separate absorption coefficients ${tex`\sigma_x`} and ${tex`\sigma_y`} for each spatial direction. When we apply the complex coordinate mapping independently to both ${tex`x`} and ${tex`y`} derivatives, cross-terms emerge that don't appear in 1D. These cross-terms require an auxiliary field ${tex`\psi`} to handle the coupling between the two spatial directions within the PML regions.
 
-    The simulation uses two sets of quantities. The scalar field ${tex`u`} and auxiliary field ${tex`\psi`} are defined at integer time steps and integrated according to:
+    The derivation below shows how these auxiliary variables arise naturally from the Fourier domain analysis. In regions where only one direction has absorption (e.g., ${tex`\sigma_x > 0`} but ${tex`\sigma_y = 0`}), the equations simplify. The full complexity only appears in corner regions where both directions have non-zero absorption.
+  </script>
+  <script id="37" type="text/markdown">
+    ## 2D Derivation
+  </script>
+  <script id="38" type="text/markdown">
+    We start with the scalar wave equation in first-order form,
 
     ${tex.block`\begin{aligned}
-    \frac{du}{dt} &= c (\nabla \cdot \mathbf{v}) - (\sigma_x + \sigma_y) u + \psi \\[10pt]
-    \frac{d\psi}{dt} &= c \sigma_x \frac{\partial v_y}{\partial y} + c \sigma_y \frac{\partial v_x}{\partial x} - \sigma_x \sigma_y u
+    \frac{\partial u}{\partial t} &= c (\nabla \cdot \mathbf{v}) \\[10pt]
+    \frac{\partial v_x}{\partial t} &= c \frac{\partial u}{\partial x} \\[10pt]
+    \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y}.
     \end{aligned}`}
+  </script>
+  <script id="39" type="text/markdown">
+    Following the same approach as in 1D, we transform to the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega`}
 
-    Here, ${tex`\sigma_x`} and ${tex`\sigma_y`} are the PML layer strengths in the x- and y-directions, ${tex`c`} is the wave speed, and ${tex`\psi`} is an auxiliary quantity whose derivation is described below.
+    ${tex.block`\begin{aligned}
+    -i\omega u &= c \frac{\partial v_x}{\partial x} + c \frac{\partial v_y}{\partial y} \\[10pt]
+    -i\omega v_x &= c \frac{\partial u}{\partial x} \\[10pt]
+    -i\omega v_y &= c \frac{\partial u}{\partial y}.
+    \end{aligned}`}
+  </script>
+  <script id="40" type="text/markdown">
+    The PML technique replaces spatial derivatives with complex coordinate mappings
 
-    The vector field ${tex`\mathbf{v} = (v_x, v_y)`} is defined at half-integer timesteps and integrated in a leap-frog manner:
+    ${tex.block`\frac{\partial}{\partial x} \rightarrow \frac{1}{1 + i\frac{\sigma_x}{\omega}} \frac{\partial}{\partial x}, \quad \frac{\partial}{\partial y} \rightarrow \frac{1}{1 + i\frac{\sigma_y}{\omega}} \frac{\partial}{\partial y}`}
+  </script>
+  <script id="41" type="text/markdown">
+    Applying the mapping to the velocity equations and multiplying through by the denominators yields
+
+    ${tex.block`\begin{aligned}
+    -i\omega v_x - \sigma_x v_x &= c \frac{\partial u}{\partial x} \\[10pt]
+    -i\omega v_y - \sigma_y v_y &= c \frac{\partial u}{\partial y}
+    \end{aligned}`}
+  </script>
+  <script id="42" type="text/markdown">
+    Transforming back to the time domain immediately gives
 
     ${tex.block`\begin{aligned}
     \frac{\partial v_x}{\partial t} &= c \frac{\partial u}{\partial x} - \sigma_x v_x \\[10pt]
     \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y} - \sigma_y v_y
     \end{aligned}`}
-
-    This naturally lends itself to two buffers: one storing ${tex`u`} and ${tex`\psi`}, the other storing ${tex`v_x`} and ${tex`v_y`}.
   </script>
-  <script id="11" type="text/markdown">
-    ## Derivation
-
-    We start with the scalar wave equation in first-order form:
-
-    ${tex.block`\begin{aligned}
-    \frac{\partial u}{\partial t} &= c (\nabla \cdot \mathbf{v}) \\[10pt]
-    \frac{\partial v_x}{\partial t} &= c \frac{\partial u}{\partial x} \\[10pt]
-    \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y}
-    \end{aligned}`}
-
-    This form restricts spatial derivatives to first derivatives, which makes application of PML easier. You can verify by direct substitution that this is equivalent to the standard second-order form ${tex`\frac{\partial^2 u}{\partial t^2} = c^2 \nabla^2 u`}.
-  </script>
-  <script id="12" type="text/markdown">
-    ## Fourier Time Domain
-
-    We operate in the Fourier time domain, replacing ${tex`\frac{\partial}{\partial t}`} with ${tex`-i\omega`}:
-
-    ${tex.block`\begin{aligned}
-    -i\omega u &= c \frac{\partial v_x}{\partial x} + c \frac{\partial v_y}{\partial y} \\[10pt]
-    -i\omega v_x &= c \frac{\partial u}{\partial x} \\[10pt]
-    -i\omega v_y &= c \frac{\partial u}{\partial y}
-    \end{aligned}`}
-  </script>
-  <script id="13" type="text/markdown">
-    ## PML Coordinate Mapping
-
-    We replace the spatial derivatives with the PML mapping:
-
-    ${tex.block`\frac{\partial}{\partial x} = \frac{1}{1 + i\frac{\sigma_x}{\omega}} \frac{\partial}{\partial x}`}
-
-    and correspondingly for ${tex`\frac{\partial}{\partial y}`}. This complex coordinate stretching causes waves to decay exponentially in the PML region.
-  </script>
-  <script id="14" type="text/markdown">
-    ## Velocity Update Equations
-
-    Applying the PML mapping to the velocity equations and reorganizing terms:
-
-    ${tex.block`-i\omega v_x = c \frac{1}{1 + i\frac{\sigma_x}{\omega}} \frac{\partial u}{\partial x}`}
-
-    Multiplying both sides by ${tex`1 + i\frac{\sigma_x}{\omega}`}:
-
-    ${tex.block`-i\omega v_x - \sigma_x v_x = c \frac{\partial u}{\partial x}`}
-
-    Transforming back to the time domain immediately yields:
-
-    ${tex.block`\frac{\partial v_x}{\partial t} = c \frac{\partial u}{\partial x} - \sigma_x v_x`}
-
-    The equation for ${tex`v_y`} follows identically.
-  </script>
-  <script id="15" type="text/markdown">
-    ## Scalar Field Update Equation
-
-    The equation for ${tex`u`} is more involved. Applying the PML mapping:
+  <script id="43" type="text/markdown">
+    The equation for ${tex`u`} is more involved. Applying the PML mapping gives
 
     ${tex.block`-i\omega u = c \left(\frac{1}{1 + i\frac{\sigma_x}{\omega}} \frac{\partial v_x}{\partial x} + \frac{1}{1 + i\frac{\sigma_y}{\omega}} \frac{\partial v_y}{\partial y}\right)`}
+  </script>
+  <script id="44" type="text/markdown">
+    Expanding and collecting terms yields
 
-    Expanding and collecting terms:
-
-    ${tex.block`-i\omega u = c \left(\frac{\partial v_x}{\partial x} + \frac{\partial v_y}{\partial y}\right) - (\sigma_x + \sigma_y) u + \left(\frac{ic\sigma_x}{\omega} \frac{\partial v_y}{\partial y} + \frac{ic\sigma_y}{\omega} \frac{\partial v_x}{\partial x} - \frac{i}{\omega} \sigma_x \sigma_y u\right)`}
-
-    The term in parentheses contains factors of ${tex`\frac{i}{\omega}`}, which corresponds to time integration. We define this as the auxiliary quantity ${tex`\psi`}:
-
+    ${tex.block`\begin{aligned}
+    -i\omega u &= c \left(\frac{\partial v_x}{\partial x} + \frac{\partial v_y}{\partial y}\right) - (\sigma_x + \sigma_y) u \\
+    &\quad + \left(\frac{ic\sigma_x}{\omega} \frac{\partial v_y}{\partial y} + \frac{ic\sigma_y}{\omega} \frac{\partial v_x}{\partial x} - \frac{i}{\omega} \sigma_x \sigma_y u\right)
+    \end{aligned}`}
+  </script>
+  <script id="45" type="text/markdown">
+    The term in parentheses contains factors of ${tex`\frac{i}{\omega}`}, which corresponds to time integration. We define this as the auxiliary quantity ${tex`\psi`}
+  </script>
+  <script id="46" type="text/markdown">
     ${tex.block`\psi = \frac{ic\sigma_x}{\omega} \frac{\partial v_y}{\partial y} + \frac{ic\sigma_y}{\omega} \frac{\partial v_x}{\partial x} - \frac{i}{\omega} \sigma_x \sigma_y u`}
-
-    Multiplying through by ${tex`-i\omega`} and transforming back to the time domain:
+  </script>
+  <script id="47" type="text/markdown">
+    Multiplying through by ${tex`-i\omega`} and transforming back to the time domain gives
 
     ${tex.block`\frac{d\psi}{dt} = c \sigma_x \frac{\partial v_y}{\partial y} + c \sigma_y \frac{\partial v_x}{\partial x} - \sigma_x \sigma_y u`}
-
-    The update equation for ${tex`u`} becomes:
+  </script>
+  <script id="48" type="text/markdown">
+    The update equation for ${tex`u`} becomes
 
     ${tex.block`\frac{du}{dt} = c (\nabla \cdot \mathbf{v}) - (\sigma_x + \sigma_y) u + \psi`}
-
-    These are the equations we implement in the simulation below.
   </script>
-  <script id="16" type="text/markdown">
+  <script id="11" type="text/markdown">
+    Together with the velocity equations, we have the complete 2D PML system
+
+    ${tex.block`\begin{aligned}
+    \frac{\partial u}{\partial t} &= c (\nabla \cdot \mathbf{v}) - (\sigma_x + \sigma_y) u + \psi \\[10pt]
+    \frac{\partial \psi}{\partial t} &= c \sigma_x \frac{\partial v_y}{\partial y} + c \sigma_y \frac{\partial v_x}{\partial x} - \sigma_x \sigma_y u \\[10pt]
+    \frac{\partial v_x}{\partial t} &= c \frac{\partial u}{\partial x} - \sigma_x v_x \\[10pt]
+    \frac{\partial v_y}{\partial t} &= c \frac{\partial u}{\partial y} - \sigma_y v_y
+    \end{aligned}`}
+  </script>
+  <script id="49" type="text/markdown">
+    These equations require tracking three fields: the scalar field ${tex`u`}, the auxiliary field ${tex`\psi`}, and the vector field ${tex`\mathbf{v} = (v_x, v_y)`}. In practice, this naturally lends itself to a two-buffer implementation: one storing ${tex`(u, \psi)`} and the other storing ${tex`(v_x, v_y)`}.
+  </script>
+  <script id="50" type="text/markdown">
     ## Implementation
 
     The following WebGL implementation simulates these equations on the GPU using fragment shaders. Use the controls below to pause/resume the simulation, adjust contrast, and visualize the PML absorption regions (red for ${tex`\sigma_x`}, green for ${tex`\sigma_y`}).
@@ -952,11 +972,9 @@
     const pmlWidth = view(Inputs.range([4, 40], {label: "PML width (pixels)", step: 1, value: 12}));
   </script>
   <script id="21" type="text/markdown">
-    ## Notes
+    ## Conclusion
 
-    The absorbing layer requires a width roughly on par with the wavelength. This comes from truncation error and could be improved to perhaps half a wavelength with more accurate finite difference schemes.
-
-    The resulting form is a bit involved but quite effective. The key insight is that by working in the Fourier time domain and applying complex coordinate stretching, we can derive update equations that naturally absorb outgoing waves with minimal reflection.
+    While the resulting equations are somewhat involved, PML provides a remarkably effective solution to the absorbing boundary problem. I’m a little uncertain how to deal with irregular domains with more complicated boundaries, but that’s an exercise for the future!
   </script>
   <script id="22" type="text/markdown">
     ## References
