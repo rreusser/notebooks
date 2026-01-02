@@ -425,4 +425,60 @@
   <script id="872" type="text/x-typescript">
     import { odeRK4 } from 'observable:@rreusser/integration'
   </script>
+  <script id="880" type="text/markdown">
+    ## Mathematical Formulation
+
+    The Malkus waterwheel is governed by a system of ordinary differential equations (ODEs) that describe both the water dynamics in each bucket and the rotational motion of the wheel itself.
+
+    ### State Variables
+
+    The state vector ${tex`\mathbf{y}`} contains ${tex`n + 2`} components,
+
+    ${tex.block`\mathbf{y} = \begin{bmatrix} m_0 \\ m_1 \\ \vdots \\ m_{n-1} \\ \theta \\ \omega \end{bmatrix}`}
+
+    where ${tex`m_i`} is the mass (or fill amount) of the ${tex`i`}-th bucket, ${tex`\theta`} is the angular position of the wheel, and ${tex`\omega = \dot{\theta}`} is the angular velocity.
+
+    ### Bucket Dynamics
+
+    Each bucket drains proportionally to its fill amount,
+
+    ${tex.block`\frac{dm_i}{dt} = -k_d \cdot m_i`}
+
+    where ${tex`k_d`} is the drain rate. The topmost bucket additionally receives water at a constant fill rate ${tex`Q`},
+
+    ${tex.block`\frac{dm_{\text{top}}}{dt} = Q - k_d \cdot m_{\text{top}}`}
+
+    ### Rotational Dynamics
+
+    The wheel's rotation is governed by the rotational analog of Newton's second law,
+
+    ${tex.block`I \frac{d\omega}{dt} = M - \nu \omega`}
+
+    where ${tex`I`} is the moment of inertia, ${tex`M`} is the net torque from the water-filled buckets, and ${tex`\nu`} is the friction coefficient.
+
+    The moment of inertia includes both the wheel itself and the distributed mass of water,
+
+    ${tex.block`I = I_0 + \sum_{i=0}^{n-1} m_i`}
+
+    where ${tex`I_0`} is the base inertia of the empty wheel (here taken as 1).
+
+    The torque is the sum of moments from each bucket. Since bucket ${tex`i`} is located at angle ${tex`\theta_i = \theta + \frac{2\pi i}{n}`}, and torque is proportional to the sine of the angle (the perpendicular component of the gravitational force),
+
+    ${tex.block`M = \sum_{i=0}^{n-1} m_i \sin\left(\theta + \frac{2\pi i}{n}\right)`}
+
+    ### Complete System
+
+    The complete system of ODEs is:
+
+    ${tex.block`\begin{aligned}
+    \frac{dm_i}{dt} &= -k_d \cdot m_i \quad \text{for } i \neq \text{top} \\
+    \frac{dm_{\text{top}}}{dt} &= Q - k_d \cdot m_{\text{top}} \\
+    \frac{d\theta}{dt} &= \omega \\
+    \frac{d\omega}{dt} &= \frac{1}{I}\left(\sum_{i=0}^{n-1} m_i \sin\left(\theta + \frac{2\pi i}{n}\right) - \nu \omega\right)
+    \end{aligned}`}
+
+    To integrate the system, I've used an ODE solver I wrote in [@rreusser/integration](https://observablehq.com/@rreusser/integration), though any explicit ODE routine like a Runge-Kutta method (RK2 or RK4) works great.
+
+    Although the formulation is a bit ad hoc, the system exhibits chaotic behavior for certain parameter values, with the wheel reversing direction unpredictably and displaying sensitive dependence on initial conditions.
+  </script>
 </notebook>

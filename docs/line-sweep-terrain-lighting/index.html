@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Line Sweep Terrain Lighting with WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-BgWGN3IJ.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Line Sweep Terrain Lighting with WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-1gd4KZHO.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1529,21 +1529,31 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Hierarchical terrain lighting using WebGPU compute shaders. This demonstrates the complete pipeline from tile fetching through caching to GPU-accelerated lighting computation.</p>
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Hierarchical terrain lighting using WebGPU compute shaders. This demonstrates the complete pipeline from tile fetching through parent buffer assembly to GPU-accelerated LSAO computation.</p>
 <p>Below, you’ll see each stage of the implementation:</p>
 <ol>
 <li><strong>Tile Hierarchy</strong> - Parent tiles needed for boundary data</li>
+<li><strong>Parent Tile Assembly</strong> - 768×768 buffer for horizon initialization</li>
 <li><strong>Raw Terrain Tile</strong> - Original Mapbox terrain image</li>
 <li><strong>Decoded Elevations</strong> - Height map visualization</li>
 <li><strong>WebGPU Pipeline</strong> - Shader compilation and setup</li>
-<li><strong>Computed Lighting</strong> - Final shaded result</li>
+<li><strong>Computed Lighting</strong> - Final shaded result with LSAO</li>
 </ol>
 </div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"><div><h2 id="1-tile-hierarchy" tabindex="-1"><a href="#1-tile-hierarchy">1. Tile Hierarchy</a></h2>
-</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"><div><h2 id="2-raw-terrain-tile" tabindex="-1"><a href="#2-raw-terrain-tile">2. Raw Terrain Tile</a></h2>
-</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"><div><h2 id="3-decoded-elevations" tabindex="-1"><a href="#3-decoded-elevations">3. Decoded Elevations</a></h2>
-</div></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"><div><h2 id="4-web-gpu-pipeline-setup" tabindex="-1"><a href="#4-web-gpu-pipeline-setup">4. WebGPU Pipeline Setup</a></h2>
-</div></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"><div><h2 id="5-computed-lighting" tabindex="-1"><a href="#5-computed-lighting">5. Computed Lighting</a></h2>
-</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"><div><h2 id="2-multi-level-parent-tile-assembly" tabindex="-1"><a href="#2-multi-level-parent-tile-assembly">2. Multi-Level Parent Tile Assembly</a></h2>
+<p>For proper horizon initialization in line-sweep ambient occlusion, we need terrain data from <em>outside</em> the target tile. Instead of loading all 8 adjacent tiles at full resolution, we load 4 parent tiles at coarser zoom levels.</p>
+<p><strong>Coverage formula:</strong> Assembly size = tileSize × (1 + 2^Δz)</p>
+<ul>
+<li>Δz = -1: 512 × 1.5 = 768 pixels (3×3 tile coverage)</li>
+<li>Δz = -2: 512 × 1.25 = 640 pixels (5×5 tile coverage)</li>
+<li>Δz = -3: 512 × 1.125 = 576 pixels (7×7 tile coverage)</li>
+</ul>
+<p>Use the slider below to explore different parent zoom levels:</p>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"><div><h2 id="3-raw-terrain-tile" tabindex="-1"><a href="#3-raw-terrain-tile">3. Raw Terrain Tile</a></h2>
+</div></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"><div><h2 id="4-decoded-elevations" tabindex="-1"><a href="#4-decoded-elevations">4. Decoded Elevations</a></h2>
+</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="5-web-gpu-pipeline-setup" tabindex="-1"><a href="#5-web-gpu-pipeline-setup">5. WebGPU Pipeline Setup</a></h2>
+</div></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"><div><h2 id="6-computed-lighting" tabindex="-1"><a href="#6-computed-lighting">6. Computed Lighting</a></h2>
+</div></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
 <p>This notebook demonstrates the complete hierarchical terrain lighting pipeline:</p>
 <ul>
 <li><strong>Tile Hierarchy</strong>: Identifies parent tiles needed for boundary data</li>

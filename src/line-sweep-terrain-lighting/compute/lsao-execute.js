@@ -34,13 +34,6 @@ export async function computeLSAO({
   workgroupSize = 128,
   directions = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 }) {
-  console.log('  computeLSAO called with:');
-  console.log(`    tileSize: ${tileSize}`);
-  console.log(`    quadrant: ${quadrant}`);
-  console.log(`    targetData.length: ${targetData.length}`);
-  console.log(`    parentData.length: ${parentData.length}`);
-  console.log(`    directions: ${directions.length}`);
-
   const tileBuffer = 1;
   const parentSize = 768;
 

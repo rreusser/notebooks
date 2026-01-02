@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Malkus Waterwheel</title>  <script type="module" crossorigin src="/notebooks/assets/index-CiMQ6n3y.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Malkus Waterwheel</title>  <script type="module" crossorigin src="/notebooks/assets/index-DcxtAfr7.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1582,7 +1582,25 @@ main h6 {
 
   <span class="tok-comment">// I * d(omega)/dt = torque</span>
   <span class="tok-variable">yp</span>[<span class="tok-variable">n</span> + <span class="tok-literal">1</span>] = (<span class="tok-variable">M</span> - <span class="tok-variable">omega</span> * <span class="tok-variable">friction</span>) / <span class="tok-variable">I</span>;
-}</code></pre><div id="cell-877" class="observablehq observablehq--cell"></div><div id="cell-102" class="observablehq observablehq--cell"></div><div id="cell-468" class="observablehq observablehq--cell"></div><div id="cell-520" class="observablehq observablehq--cell"></div><div id="cell-643" class="observablehq observablehq--cell"></div><div id="cell-141" class="observablehq observablehq--cell"></div><div id="cell-111" class="observablehq observablehq--cell"></div><div id="cell-461" class="observablehq observablehq--cell"></div><div id="cell-460" class="observablehq observablehq--cell"></div><div id="cell-100" class="observablehq observablehq--cell"></div><div id="cell-89" class="observablehq observablehq--cell"></div><div id="cell-38" class="observablehq observablehq--cell"></div><div id="cell-872" class="observablehq observablehq--cell"></div></main>
+}</code></pre><div id="cell-877" class="observablehq observablehq--cell"></div><div id="cell-102" class="observablehq observablehq--cell"></div><div id="cell-468" class="observablehq observablehq--cell"></div><div id="cell-520" class="observablehq observablehq--cell"></div><div id="cell-643" class="observablehq observablehq--cell"></div><div id="cell-141" class="observablehq observablehq--cell"></div><div id="cell-111" class="observablehq observablehq--cell"></div><div id="cell-461" class="observablehq observablehq--cell"></div><div id="cell-460" class="observablehq observablehq--cell"></div><div id="cell-100" class="observablehq observablehq--cell"></div><div id="cell-89" class="observablehq observablehq--cell"></div><div id="cell-38" class="observablehq observablehq--cell"></div><div id="cell-872" class="observablehq observablehq--cell"></div><div id="cell-880" class="observablehq observablehq--cell"><div><h2 id="mathematical-formulation" tabindex="-1"><a href="#mathematical-formulation">Mathematical Formulation</a></h2>
+<p>The Malkus waterwheel is governed by a system of ordinary differential equations (ODEs) that describe both the water dynamics in each bucket and the rotational motion of the wheel itself.</p>
+<h3 id="state-variables" tabindex="-1"><a href="#state-variables">State Variables</a></h3>
+<p>The state vector  contains  components,</p>
+<p>where  is the mass (or fill amount) of the -th bucket,  is the angular position of the wheel, and  is the angular velocity.</p>
+<h3 id="bucket-dynamics" tabindex="-1"><a href="#bucket-dynamics">Bucket Dynamics</a></h3>
+<p>Each bucket drains proportionally to its fill amount,</p>
+<p>where  is the drain rate. The topmost bucket additionally receives water at a constant fill rate ,</p>
+<h3 id="rotational-dynamics" tabindex="-1"><a href="#rotational-dynamics">Rotational Dynamics</a></h3>
+<p>The wheel’s rotation is governed by the rotational analog of Newton’s second law,</p>
+<p>where  is the moment of inertia,  is the net torque from the water-filled buckets, and  is the friction coefficient.</p>
+<p>The moment of inertia includes both the wheel itself and the distributed mass of water,</p>
+<p>where  is the base inertia of the empty wheel (here taken as 1).</p>
+<p>The torque is the sum of moments from each bucket. Since bucket  is located at angle , and torque is proportional to the sine of the angle (the perpendicular component of the gravitational force),</p>
+<h3 id="complete-system" tabindex="-1"><a href="#complete-system">Complete System</a></h3>
+<p>The complete system of ODEs is:</p>
+<p>To integrate the system, I’ve used an ODE solver I wrote in <a href="https://observablehq.com/@rreusser/integration">@rreusser/integration</a>, though any explicit ODE routine like a Runge-Kutta method (RK2 or RK4) works great.</p>
+<p>Although the formulation is a bit ad hoc, the system exhibits chaotic behavior for certain parameter values, with the wheel reversing direction unpredictably and displaying sensitive dependence on initial conditions.</p>
+</div></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 

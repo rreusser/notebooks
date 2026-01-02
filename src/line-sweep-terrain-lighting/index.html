@@ -4,14 +4,15 @@
   <script id="1" type="text/markdown">
     # Line Sweep Terrain Lighting with WebGPU
 
-    Hierarchical terrain lighting using WebGPU compute shaders. This demonstrates the complete pipeline from tile fetching through caching to GPU-accelerated lighting computation.
+    Hierarchical terrain lighting using WebGPU compute shaders. This demonstrates the complete pipeline from tile fetching through parent buffer assembly to GPU-accelerated LSAO computation.
 
     Below, you'll see each stage of the implementation:
     1. **Tile Hierarchy** - Parent tiles needed for boundary data
-    2. **Raw Terrain Tile** - Original Mapbox terrain image
-    3. **Decoded Elevations** - Height map visualization
-    4. **WebGPU Pipeline** - Shader compilation and setup
-    5. **Computed Lighting** - Final shaded result
+    2. **Parent Tile Assembly** - 768×768 buffer for horizon initialization
+    3. **Raw Terrain Tile** - Original Mapbox terrain image
+    4. **Decoded Elevations** - Height map visualization
+    5. **WebGPU Pipeline** - Shader compilation and setup
+    6. **Computed Lighting** - Final shaded result with LSAO
   </script>
   <script id="2" type="module">
     import { getTerrainTile, readImageData, decodeTerrainData } from './terrain/main.js';
@@ -48,9 +49,268 @@
     tiles;
   </script>
   <script id="6" type="text/markdown">
-    ## 2. Raw Terrain Tile
+    ## 2. Multi-Level Parent Tile Assembly
+
+    For proper horizon initialization in line-sweep ambient occlusion, we need terrain data from *outside* the target tile. Instead of loading all 8 adjacent tiles at full resolution, we load 4 parent tiles at coarser zoom levels.
+
+    **Coverage formula:** Assembly size = tileSize × (1 + 2^Δz)
+    - Δz = -1: 512 × 1.5 = 768 pixels (3×3 tile coverage)
+    - Δz = -2: 512 × 1.25 = 640 pixels (5×5 tile coverage)
+    - Δz = -3: 512 × 1.125 = 576 pixels (7×7 tile coverage)
+
+    Use the slider below to explore different parent zoom levels:
   </script>
   <script id="7" type="module">
+    const maxDeltaZ = Math.min(coords.z, 4); // Can't go below z=0
+
+    const input = Inputs.range([-maxDeltaZ, -1], {
+      value: -1,
+      step: 1,
+      label: "Δz (parent zoom offset)",
+    });
+
+    const deltaZ = view(input);
+    deltaZ;
+  </script>
+  <script id="8" type="module">
+    import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from './terrain/parent-tile-assembly-multi-level.js';
+
+    // Get parent tiles at selected zoom level
+    const parentTileCoords = getParentTilesAtLevel(coords, deltaZ);
+    const parentZ = coords.z + deltaZ;
+
+    display(html`<div style="font-family: sans-serif; font-size: 13px; color: #666; margin-bottom: 12px;">
+      <strong>Parent zoom level:</strong> z${parentZ} (Δz = ${deltaZ})<br>
+      <strong>Fetching ${parentTileCoords.length} parent tiles...</strong>
+    </div>`);
+
+    const parentTiles = [];
+    for (const tileCoords of parentTileCoords) {
+      const tile = await getTerrainTile(tileCoords);
+      const imageData = readImageData(tile.img);
+      const elevations = decodeTerrainData(imageData);
+      parentTiles.push({
+        data: elevations,
+        width: tile.width,
+        height: tile.height,
+        tileSize: tile.tileSize,
+        role: tileCoords.role
+      });
+    }
+
+    // Assemble parent buffer
+    const assembled = assembleParentTileBufferMultiLevel({
+      targetTile: coords,
+      parentTiles,
+      deltaZ,
+      tileSize: 512
+    });
+
+    const { buffer: parentBuffer, size: parentSize, targetOffset, scale, targetSizeAtParent } = assembled;
+
+    ({ parentBuffer, parentSize, targetOffset, scale, targetSizeAtParent });
+  </script>
+  <script id="9" type="module">
+    // Visualize parent buffer assembly
+    const canvas = document.createElement('canvas');
+    canvas.width = parentSize;
+    canvas.height = parentSize;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(parentSize, parentSize);
+
+    // Recalculate scale from deltaZ
+    const scale = Math.pow(2, Math.abs(deltaZ));
+
+    // Find min/max in parent buffer
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < parentBuffer.length; i++) {
+      if (parentBuffer[i] < min) min = parentBuffer[i];
+      if (parentBuffer[i] > max) max = parentBuffer[i];
+    }
+
+    // Render parent buffer
+    for (let y = 0; y < parentSize; y++) {
+      for (let x = 0; x < parentSize; x++) {
+        const idx = y * parentSize + x;
+        const normalized = (parentBuffer[idx] - min) / (max - min);
+
+        const r = Math.floor(normalized * 180 + 75);
+        const g = Math.floor(normalized * 140 + 80);
+        const b = Math.floor((1 - normalized) * 120 + 60);
+
+        imageData.data[idx * 4] = r;
+        imageData.data[idx * 4 + 1] = g;
+        imageData.data[idx * 4 + 2] = b;
+        imageData.data[idx * 4 + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    // Draw target tile boundary
+    ctx.strokeStyle = '#ca4747';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(targetOffset[0], targetOffset[1], targetSizeAtParent, targetSizeAtParent);
+
+    // Add label
+    ctx.fillStyle = '#ca4747';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('Target Tile', targetOffset[0] + 5, targetOffset[1] + 20);
+
+    // Calculate coverage
+    const tileCoverage = Math.round(parentSize / (512 / scale));
+
+    const container = html`<div>
+      <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        <strong>Parent Buffer Assembly (${parentSize}×${parentSize} at z${coords.z + deltaZ} resolution)</strong><br>
+        Red box shows target tile region (${targetSizeAtParent.toFixed(0)}×${targetSizeAtParent.toFixed(0)} at parent resolution)<br>
+        Coverage: ${tileCoverage}×${tileCoverage} tiles at z${coords.z} | Scale: ${scale}:1<br>
+        Elevation range: ${min.toFixed(1)}m to ${max.toFixed(1)}m
+      </div>
+      ${canvas}
+      <div style="margin-top: 8px; font-family: sans-serif; font-size: 12px; color: #888;">
+        <strong>Key insight:</strong> The ${parentSize}×${parentSize} parent buffer covers a ${tileCoverage}×${tileCoverage} block of z${coords.z} tiles,
+        providing terrain context for horizon initialization in all sweep directions.
+        As Δz increases (coarser parents), coverage expands but resolution decreases.
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="10" type="module">
+    // Visualize coordinate mapping
+    const diagramCanvas = document.createElement('canvas');
+    diagramCanvas.width = 800;
+    diagramCanvas.height = 400;
+    const ctx = diagramCanvas.getContext('2d');
+
+    // Background
+    ctx.fillStyle = '#f9f9f9';
+    ctx.fillRect(0, 0, 800, 400);
+
+    // Left side: Parent buffer (768×768)
+    ctx.save();
+    ctx.translate(50, 50);
+
+    const scale = 300 / 768;
+    ctx.fillStyle = '#e0e0e0';
+    ctx.fillRect(0, 0, 768 * scale, 768 * scale);
+
+    ctx.strokeStyle = '#999';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(0, 0, 768 * scale, 768 * scale);
+
+    // Target region in parent
+    ctx.fillStyle = 'rgba(202, 71, 71, 0.2)';
+    ctx.fillRect(
+      targetOffset[0] * scale,
+      targetOffset[1] * scale,
+      256 * scale,
+      256 * scale
+    );
+    ctx.strokeStyle = '#ca4747';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(
+      targetOffset[0] * scale,
+      targetOffset[1] * scale,
+      256 * scale,
+      256 * scale
+    );
+
+    // Labels
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('Parent Buffer', 10, -10);
+    ctx.font = '12px sans-serif';
+    ctx.fillText('768×768 @ z-1', 10, -10 + 18);
+
+    ctx.fillStyle = '#ca4747';
+    ctx.font = 'bold 12px sans-serif';
+    ctx.fillText(
+      'Target',
+      targetOffset[0] * scale + 5,
+      targetOffset[1] * scale + 20
+    );
+    ctx.font = '11px sans-serif';
+    ctx.fillText(
+      `[${targetOffset[0]}, ${targetOffset[1]}]`,
+      targetOffset[0] * scale + 5,
+      targetOffset[1] * scale + 35
+    );
+
+    ctx.restore();
+
+    // Arrow
+    ctx.fillStyle = '#666';
+    ctx.font = '20px sans-serif';
+    ctx.fillText('→', 370, 230);
+    ctx.font = '12px sans-serif';
+    ctx.fillText('×2 resolution', 350, 250);
+
+    // Right side: Target tile (512×512)
+    ctx.save();
+    ctx.translate(450, 50);
+
+    const targetScale = 300 / 512;
+    ctx.fillStyle = 'rgba(202, 71, 71, 0.3)';
+    ctx.fillRect(0, 0, 512 * targetScale, 512 * targetScale);
+
+    ctx.strokeStyle = '#ca4747';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(0, 0, 512 * targetScale, 512 * targetScale);
+
+    ctx.fillStyle = '#333';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.fillText('Target Tile', 10, -10);
+    ctx.font = '12px sans-serif';
+    ctx.fillText(`512×512 @ z${coords.z}`, 10, -10 + 18);
+
+    ctx.restore();
+
+    // Add sweep directions
+    ctx.save();
+    ctx.translate(50 + 768 * scale / 2, 50 + 768 * scale / 2);
+
+    const arrows = [
+      { dx: 1, dy: 0, label: 'E', color: '#e74c3c' },
+      { dx: -1, dy: 0, label: 'W', color: '#3498db' },
+      { dx: 0, dy: 1, label: 'S', color: '#2ecc71' },
+      { dx: 0, dy: -1, label: 'N', color: '#f39c12' }
+    ];
+
+    arrows.forEach(({ dx, dy, label, color }) => {
+      const len = 40;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(dx * len, dy * len);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = color;
+      ctx.font = 'bold 12px sans-serif';
+      ctx.fillText(label, dx * (len + 10) - 5, dy * (len + 10) + 5);
+    });
+
+    ctx.restore();
+
+    const container = html`<div>
+      <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        <strong>Coordinate Mapping & Sweep Directions</strong>
+      </div>
+      ${diagramCanvas}
+      <div style="margin-top: 8px; font-family: sans-serif; font-size: 12px; color: #888;">
+        Each sweep starts at the parent buffer edge, builds the horizon through parent terrain,
+        then continues through the target tile to compute ambient occlusion.
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="11" type="text/markdown">
+    ## 3. Raw Terrain Tile
+  </script>
+  <script id="12" type="module">
     const targetTile = await getTerrainTile(coords);
 
     const container = html`<div>
@@ -64,10 +324,10 @@
     display(container);
     targetTile;
   </script>
-  <script id="8" type="text/markdown">
-    ## 3. Decoded Elevations
+  <script id="13" type="text/markdown">
+    ## 4. Decoded Elevations
   </script>
-  <script id="9" type="module">
+  <script id="14" type="module">
     const imageData = readImageData(targetTile.img);
     const elevations = decodeTerrainData(imageData);
 
@@ -143,10 +403,10 @@
 
     bufferedData;
   </script>
-  <script id="10" type="text/markdown">
-    ## 4. WebGPU Pipeline Setup
+  <script id="15" type="text/markdown">
+    ## 5. WebGPU Pipeline Setup
   </script>
-  <script id="11" type="module">
+  <script id="16" type="module">
     const { device, adapter } = await createWebGPUContext();
 
     const info = html`<div style="font-family: monospace; font-size: 13px;">
@@ -162,7 +422,7 @@
     invalidation.then(() => device.destroy());
     device;
   </script>
-  <script id="12" type="module">
+  <script id="17" type="module">
     const { pipeline, bindGroupLayout } = createLightingPipeline(device, {
       tileSize: 512,
       tileBuffer: 1
@@ -182,10 +442,10 @@
     display(info);
     ({ pipeline, bindGroupLayout });
   </script>
-  <script id="13" type="text/markdown">
-    ## 5. Computed Lighting
+  <script id="18" type="text/markdown">
+    ## 6. Computed Lighting
   </script>
-  <script id="14" type="module">
+  <script id="19" type="module">
     const EARTH_CIRCUMFERENCE = 40075017;
     const pixelSize = EARTH_CIRCUMFERENCE / 512 / Math.pow(2, coords.z);
 
@@ -216,7 +476,7 @@
     display(info);
     result;
   </script>
-  <script id="15" type="module">
+  <script id="20" type="module">
     const canvas = document.createElement('canvas');
     canvas.width = 512;
     canvas.height = 512;
@@ -242,7 +502,7 @@
 
     display(container);
   </script>
-  <script id="16" type="text/markdown">
+  <script id="21" type="text/markdown">
     ## Summary
 
     This notebook demonstrates the complete hierarchical terrain lighting pipeline:
