@@ -1,0 +1,428 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Malkus Waterwheel</title>
+  <script id="442" type="text/markdown">
+    # Malkus Waterwheel
+  </script>
+  <script id="631" type="text/markdown">
+    The [Malkus waterwheel](https://en.wikipedia.org/wiki/Malkus_waterwheel) is a simple mechanical model which exhibits chaotic dynamics. It consists of a wheel of buckets. The topmost bucket (red) is filled with water at a constant rate, which then slowly drains from each bucket (here, exponentially, since it's easy though not necessarily realistic) as the wheel spins. The wheel changes speed and direction and exhibits a sensitivity to initial conditions. If we plot the center of mass, we see a trajectory similar to the Lorenz attractor!
+
+    **Edit:** *I didn't speak with confidence because I wasn't certain it was equivalent to the [Lorenz attractor](https://en.wikipedia.org/wiki/Lorenz_system), but Steven Strogatz discusses in great detail in the video below (and in subsequent videos) the derivation of the waterwheel equations and that they can be mapped by a change of variables to a special case of the Lorenz equations. It's worth a watch!*
+  </script>
+  <script id="871" type="text/html">
+    <iframe width="560" height="315" src="https://www.youtube.com/embed/HljJv7Hf6Zo" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>
+  </script>
+  <script id="873" type="text/x-typescript">
+    import { reglCanvas } from './lib/regl-canvas.js'
+    import createREGL from 'npm:regl@2.1.1'
+  </script>
+  <script id="876" type="text/x-typescript">
+    // Pass the context through the resize function
+    const regl = _regl.attachResize(dimensions[0], dimensions[1])
+  </script>
+  <script id="875" type="text/x-typescript">
+    const _regl = view(reglCanvas(createREGL, {extensions: ['ANGLE_instanced_arrays']}))
+  </script>
+  <script id="391" type="application/vnd.observable.javascript">
+    viewof restart = Inputs.button('Restart')
+  </script>
+  <script id="31" type="application/vnd.observable.javascript">
+    viewof n = Inputs.range([2, 200], {
+      step: 1,
+      transform: Math.log,
+      label: 'Buckets',
+      value: 20
+    })
+  </script>
+  <script id="312" type="application/vnd.observable.javascript">
+    viewof friction = Inputs.range([1, 4], {
+      label: 'Friction',
+      value: 2.2,
+      transform: Math.log
+    })
+  </script>
+  <script id="52" type="application/vnd.observable.javascript">
+    viewof fillRate = Inputs.range([0, 1], { label: 'Fill rate', value: 0.62 })
+  </script>
+  <script id="54" type="application/vnd.observable.javascript">
+    viewof drainRate = Inputs.range([0, 0.2], {
+      label: 'Drain rate',
+      value: 0.11,
+      step: 0.001
+    })
+  </script>
+  <script id="637" type="application/vnd.observable.javascript">
+    viewof drainType = Inputs.select(['Exponential', 'Constant rate'], {
+      label: 'Draining'
+    })
+  </script>
+  <script id="355" type="application/vnd.observable.javascript">
+    viewof dt = Inputs.range([0.01, 2], {
+      transform: Math.log,
+      label: "Time step",
+      value: 0.05
+    })
+  </script>
+  <script id="434" type="application/vnd.observable.javascript">
+    viewof drawScale = Inputs.range([0.1, 10], {
+      transform: Math.log,
+      label: 'Fill scale',
+      value: 0.5
+    })
+  </script>
+  <script id="878" type="text/markdown">
+    The function below defines the derivative function which we integrate to simulate the system. The state variables of the system are the bucket fill amounts as well as the angular position and velocity of the system. For the sake of using an off-the-shelf ODE routine, we pack these into the vector ${tex`\mathbf{y}`}. The system itself is just a wheel with inertia, friction, and the moment about the axis of rotation by the buckets.
+  </script>
+  <script id="26" type="text/x-typescript" pinned="">
+    function derivative(yp, y, t) {
+      // We integrate all buckets as well as the rotation angle and velocity as a
+      // single system of coupled ODEs.
+
+      // y[0] through y[n - 1] are bucket fill amounts
+
+      // Angular position:
+      const theta = y[n];
+
+      // Angular velocity:
+      const omega = y[n + 1];
+
+      // Add up the moment of inertia, starting with a bit of mass for the wheel
+      // Note that this is quite ad hoc and we sort of elide over being careful
+      // about mass, distances, and radii
+      let I = 1;
+
+      // Iterate over buckets, adding up the torque and draining each bucket
+      let M = 0;
+
+      for (let i = 0; i < n; i++) {
+        if (isExponentialDraining) {
+          // Exponential rather than constant draining since it's smoother and
+          // easier to prevent unreasonable accumulation :shrug:
+          yp[i] = -y[i] * drainRate;
+        } else {
+          // Constant draining (with exponential return to zero if we overshoot)
+          yp[i] = y[i] < 0 ? -y[i] * drainRate : -drainRate;
+        }
+
+        // Moment (force x lever arm)
+        M += y[i] * Math.sin(theta + Math.PI * 2 * (i / n));
+
+        // Add the mass to the moment of inertia (neglecting the radius because it's
+        // sort of irrelevant up to a scaling of the problem, unless we're being more
+        // precise about everything)
+        I += y[i];
+      }
+
+      // Pour into the bucket nearest the top
+      const bucket = mod(Math.floor(n * mod(-theta / (2.0 * Math.PI), 1) + 0.5), n);
+      yp[bucket] += fillRate;
+      // For visualization:
+      mutables.activeBucket = bucket;
+
+      // d(theta)/dt = omega
+      yp[n] = omega;
+
+      // I * d(omega)/dt = torque
+      yp[n + 1] = (M - omega * friction) / I;
+    }
+  </script>
+  <script id="877" type="text/x-typescript">
+    const mutables = {
+      activeBucket: -1,
+      step: 0
+    };
+  </script>
+  <script id="102" type="text/x-typescript">
+    const simulationLoop = (function () {
+      const frame = regl.frame(() => {
+        // Take a few (sub)steps of the RK4 integrator. They're cheap so
+        // we might as well
+        let iters = 10;
+        for (let i = 0; i < iters; i++) {
+          // Update the state in-place
+          odeRK4(y, y, derivative, dt / iters);
+        }
+
+        // Compute the center of mass
+        let cmx = 0;
+        let cmy = 0;
+        const theta = y[n];
+        let bucketSum = 0;
+        for (let i = 0; i < n; i++) {
+          const bucketTheta = theta + Math.PI * 2 * (i / n);
+          cmx += y[i] * Math.sin(bucketTheta);
+          cmy += y[i] * Math.cos(bucketTheta);
+          bucketSum += y[i];
+        }
+        cmx /= bucketSum;
+        cmy /= bucketSum;
+
+        // Compute the current offset in the history array
+        let offset = mod(2 * mutables.step, centerOfMassHistory.length);
+        centerOfMassHistory[offset] = cmx;
+        centerOfMassHistory[offset + 1] = cmy;
+
+        // Replace the data in the history array buffer
+        cmHistoryBuffer.subdata(centerOfMassHistory);
+
+        // Update the state vector buffer
+        yBuffer.subdata(y);
+
+        // Start drawing. First, clear
+        regl.clear({ color: [1, 1, 1, 1] });
+
+        // Draw the buckets!
+        drawBuckets({
+          y: yBuffer,
+          theta: y[n],
+          drawScale: drawScale * (n / 15),
+          activeBucket: mutables.activeBucket
+        });
+
+        // Draw the trajectory
+        drawTrajectory({
+          trajectoryScale: 0.9,
+          cmHistoryBuffer,
+          n: Math.min(mutables.step, centerOfMassHistory.length / 2)
+        });
+
+        // Draw a the current state and the center
+        drawPoint([
+          {
+            trajectoryScale: 0.9,
+            pointSize: 7,
+            state: [cmx, cmy],
+            color: [0.3, 0.5, 0.9]
+          },
+          {
+            trajectoryScale: 0.9,
+            pointSize: 4,
+            state: [0, 0],
+            color: [0, 0, 0]
+          }
+        ]);
+
+        // Increment the position in the state vector
+        mutables.step = (mutables.step + 1) % (centerOfMassHistory.length / 2);
+      });
+      invalidation.then(() => frame.cancel());
+    })();
+  </script>
+  <script id="468" type="text/x-typescript">
+    restartTrigger;
+    mutables.step = 0;
+  </script>
+  <script id="520" type="text/x-typescript">
+    const restartTrigger = (function () {
+      restart;
+      n;
+      fillRate;
+      drainRate;
+      friction;
+      drainType;
+    })();
+  </script>
+  <script id="643" type="text/x-typescript">
+    const isExponentialDraining = drainType === 'Exponential'
+  </script>
+  <script id="141" type="text/x-typescript">
+    const y = (function () {
+      restart;
+      const y = new Float32Array(n + 2);
+
+      y[n] = (Math.PI * 2 * 0.5) / n - 0.01;
+      y[n + 1] = 0;
+      return y;
+    })();
+  </script>
+  <script id="111" type="text/x-typescript">
+    const yBuffer = (function () {
+      const buffer = regl.buffer(y);
+      invalidation.then(() => buffer.destroy());
+      return buffer;
+    })();
+  </script>
+  <script id="461" type="text/x-typescript">
+    const centerOfMassHistory = (function() {
+      restartTrigger;
+      return new Float32Array(200000);
+    })();
+  </script>
+  <script id="460" type="text/x-typescript">
+    const cmHistoryBuffer = (function () {
+      const buf = regl.buffer(centerOfMassHistory);
+      invalidation.then(() => buf.destroy());
+      return buf;
+    })();
+  </script>
+  <script id="100" type="text/x-typescript">
+    const EPS = 0.06;
+    const drawBuckets = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        attribute float y, index;
+        uniform float n;
+        uniform float theta, activeBucketIndex;
+        varying vec2 vuv;
+        varying float vy, isActive;
+        uniform float scale;
+        #define PI 3.14159265358979
+
+        // Use an instanced quad to render each bucket, coloring the glass
+        // and water level based on the position in the quad. Not fancy, but
+        // super easy.
+
+        void main () {
+          float size = clamp(4.0 / n, 0.05, 0.12);
+          vy = y * scale * 0.7;
+          vuv = uv * 2.0 - 1.0;
+          vec2 uv0 = (uv - 0.5) * size;
+          uv0.x *= (1.0 + 2.0 * uv0.y);
+          float bucketTheta = index * (PI * 2.0) / n;
+          vec2 pos = 0.9 * vec2(sin(bucketTheta + theta), cos(bucketTheta + theta));
+          isActive = activeBucketIndex == index ? 1.0 : 0.0;
+          gl_Position = vec4(pos + uv0, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        varying vec2 vuv;
+        varying float vy, isActive;
+        void main () {
+          // This is all somewhat opaque, but here's where draw the water level
+          // and glass as color of the single quad rather than separate elements.
+          // RIP antialiasing.
+
+          bool isbucket = abs(vuv.x) > 1.0 || abs(vuv.y) > 1.0;
+          float level = 0.5 + 0.5 * vuv.y - vy;
+          vec3 col = level < 0.0 ? vec3(0.3, 0.5, 0.9) : vec3(1);
+          vec3 bucketCol = isActive > 0.0 ? vec3(0.9, 0.2, 0.2) : vec3(0);
+          if (!isbucket && level > 0.0) discard;
+          gl_FragColor = vec4(isbucket ? bucketCol : col, 1);
+        }`,
+      attributes: {
+        uv: {
+          // Inside [0, 1] x [0, 1] will be water, outside will be the glass.
+          // Four vertices to form a square when rendered as a triangle strip.
+          buffer: [
+            [1 + EPS, -EPS],
+            [1 + EPS, 1 - EPS],
+            [-EPS, -EPS],
+            [-EPS, 1 - EPS]
+          ],
+          divisor: 0
+        },
+        y: {
+          buffer: regl.prop('y'),
+          divisor: 1
+        },
+        index: {
+          buffer: new Array(n).fill(0).map((d, i) => i),
+          divisor: 1
+        }
+      },
+      uniforms: {
+        n: n,
+        theta: regl.prop('theta'),
+        scale: regl.prop('drawScale'),
+        activeBucketIndex: regl.prop('activeBucket')
+      },
+      depth: { enable: false },
+      primitive: 'triangle strip',
+      instances: n,
+      count: 4
+    });
+    const drawTrajectory = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        uniform float scale;
+        void main () {
+          gl_Position = vec4(xy * scale, 0, 1);
+          gl_PointSize = 2.0;
+        }`,
+      frag: `
+        precision highp float;
+        void main () {
+          gl_FragColor = vec4(1.0 - 0.6 * vec3(0.3, 0.5, 0.9), 0.7);
+        }`,
+      attributes: {
+        xy: regl.prop('cmHistoryBuffer')
+      },
+      uniforms: {
+        scale: regl.prop('trajectoryScale')
+      },
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: 'src alpha',
+          dstRGB: 1,
+          srcAlpha: 1,
+          dstAlpha: 1
+        },
+        equation: { rgb: 'reverse subtract', alpha: 'add' }
+      },
+      depth: { enable: false },
+      primitive: 'line strip',
+      count: regl.prop('n')
+    })
+    const drawPoint = regl({
+      vert: `
+        precision highp float;
+        attribute float dummy;
+        uniform vec2 state;
+        uniform float scale;
+        uniform float pointSize;
+        void main () {
+          gl_Position = vec4(state * scale + dummy, 0, 1);
+          gl_PointSize = pointSize;
+        }`,
+      frag: `
+        precision highp float;
+        uniform float pointSize;
+        uniform vec3 color;
+        void main () {
+          vec2 uv = gl_PointCoord.xy * 2.0 - 1.0;
+          float p = length(uv) * pointSize;
+          float alpha = smoothstep(pointSize, pointSize - 1.5, p);
+          vec3 color = mix(vec3(0), color, smoothstep(pointSize - 3.0, pointSize - 5.0, p));
+          gl_FragColor = vec4(color, alpha);
+        }`,
+      attributes: {
+        dummy: [0]
+      },
+      uniforms: {
+        scale: regl.prop('trajectoryScale'),
+        state: regl.prop('state'),
+        pointSize: (ctx, props) => props.pointSize * ctx.pixelRatio,
+        color: regl.prop('color')
+      },
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: 'src alpha',
+          dstRGB: 'one minus src alpha',
+          srcAlpha: 1,
+          dstAlpha: 1
+        },
+        equation: { rgb: 'add', alpha: 'add' }
+      },
+      depth: { enable: false },
+      primitive: 'points',
+      count: 1
+    });
+  </script>
+  <script id="89" type="text/x-typescript">
+    const w = Math.min(width, 512);
+    const dimensions = [w, w];
+  </script>
+  <script id="38" type="text/x-typescript">
+    function mod(x, n) {
+      // Treat negative numbers reasonably
+      return ((x % n) + n) % n;
+    }
+  </script>
+  <script id="872" type="text/x-typescript">
+    import { odeRK4 } from 'observable:@rreusser/integration'
+  </script>
+</notebook>

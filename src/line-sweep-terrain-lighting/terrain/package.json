@@ -1,0 +1,17 @@
+{
+  "name": "terrain",
+  "version": "1.0.0",
+  "description": "Terrain tile fetching and processing for line-sweep lighting",
+  "main": "main.js",
+  "type": "module",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "devDependencies": {
+    "sharp": "^0.34.5",
+    "webgpu": "^0.3.8"
+  }
+}

@@ -3,8 +3,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="Line-Sweep Ambient Occlusion with WebGPU">
+  <meta property="og:title" content="Line-Sweep Ambient Occlusion with WebGPU">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1490,7 +1490,8 @@ main h6 {
 }
   </style>
   
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Line-Sweep Ambient Occlusion with WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-Bz37ROJ7.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1501,118 +1502,112 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Line-Sweep Ambient Occlusion with WebGPU</h1>
     <div class="byline">
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
       
     </div>
     <div class="resource-links">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/line-sweep-ambient-occlusion-with-webgpu/index.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="malkus-waterwheel/">Malkus Waterwheel</a></h2>
-            <span class="publishedAt">January 1, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="perfectly-matched-layers-for-the-wave-equation/">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <span class="publishedAt">December 31, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="reflecting-on-two-years-of-yoga/">Reflecting on Two Years of Yoga</a></h2>
-            <span class="publishedAt">December 27, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="of-noise-and-neighbors/">Of Noise and Neighbors</a></h2>
-            <span class="publishedAt">September 29, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="regl-canvas/">REGL in Observable Notebooks 2.0</a></h2>
-            <span class="publishedAt">August 12, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="spring-training/">Spring Training on the Treadmill</a></h2>
-            <span class="publishedAt">June 8, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="speed-climbing-world-record-progression/">Speed Climbing World Record Progression</a></h2>
-            <span class="publishedAt">May 3, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/">Series Acceleration with Shanks Transformation</a></h2>
-            <span class="publishedAt">September 23, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">November 16, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">May 24, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="double-pendulum-map/">The Double Pendulum Map</a></h2>
-            <span class="publishedAt">May 14, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="integers-in-single-precision-floating-point/">Visualizing Integers in Floating-Point</a></h2>
-            <span class="publishedAt">February 9, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="line-sweep-ambient-occlusion-with-webgpu/">Line-Sweep Ambient Occlusion with WebGPU</a></h2>
-            <span class="publishedAt"></span>
-          </div>
-          
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-1094" class="observablehq observablehq--cell"><div><p>This notebook contains my first real attempt at implementing something nontrivial in WebGPU. It is a direct port of <a href="https://observablehq.com/@rreusser/line-sweep-ambient-occlusion">Line Sweep Ambient Occlusion in JavaScript</a> to a WebGPU compute shader.</p>
+<p>The original algorithm iterates over all scanlines, first left, then right, then up, then down (and maybe diagonal). The nice thing about the <a href="https://karim.naaji.fr/lsao.html">Line-Sweep Ambient Occlusion algorithm</a> is that for each direction’s pass, we track horizon visibility on a stack and shade as we go so that we only need to touch each pixel exactly once. On the CPU we process these scanlines one at a time. We should be able to parallelize that on the GPU, but years of working with WebGL has taught me that while GPUs are good at evaluating pixels independently, they’re not a good fit for this type of sweep algorithm where each pixel depends on all previous pixels.</p>
+<p>But hey, WebGPU has arrived and compute shaders play by different rules, so let’s go for it. The implementation below dispatches workgroups of  invocations at a time. Each invocation implements a single scanline in a single direction. That means within a single shader invocation, we march all the way across an entire scanline, sampling the terrain data 512 times and shading all 512 pixels of the row or column.</p>
+<p>I suspect it’s a moderately suboptimal for reasons I don’t understand very well, but my hasty benchmarks indicate it’s about 20x faster than <a href="https://observablehq.com/@rreusser/line-sweep-ambient-occlusion">the CPU version of the algorithm</a> and, upon ramping it up to a hundred or so (redundant) passes and taking an average, each scanline processes in less than 0.5ms.</p>
+<p>Overall, I’m very happy with the success of translation to WebGPU, and I’m moderately happy with the performance boost. It’s not up to feature parity with <a href="https://observablehq.com/@rreusser/line-sweep-terrain-lighting">Line-Sweep Terrain Lighting</a>, but I’d like to get it there.</p>
+</div></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-1285" class="observablehq observablehq--cell"></div><div id="cell-1121" class="observablehq observablehq--cell"></div><div id="cell-193" class="observablehq observablehq--cell"></div><div id="cell-897" class="observablehq observablehq--cell"></div><div id="cell-1232" class="observablehq observablehq--cell"></div><div id="cell-136" class="observablehq observablehq--cell"><div><h2 id="get-terrain-data" tabindex="-1"><a href="#get-terrain-data">Get terrain data</a></h2>
+</div></div><div id="cell-126" class="observablehq observablehq--cell"></div><div id="cell-146" class="observablehq observablehq--cell"></div><div id="cell-140" class="observablehq observablehq--cell"></div><div id="cell-158" class="observablehq observablehq--cell"></div><div id="cell-129" class="observablehq observablehq--cell"></div><div id="cell-132" class="observablehq observablehq--cell"></div><div id="cell-628" class="observablehq observablehq--cell"></div><div id="cell-627" class="observablehq observablehq--cell"></div><div id="cell-162" class="observablehq observablehq--cell"><div><h2 id="create-a-web-gpu-context" tabindex="-1"><a href="#create-a-web-gpu-context">Create a WebGPU context</a></h2>
+</div></div><div id="cell-31" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-1206" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-969" class="observablehq observablehq--cell"></div><div id="cell-313" class="observablehq observablehq--cell"></div><div id="cell-168" class="observablehq observablehq--cell"><div><h2 id="ambient-occlusion-algorithm" tabindex="-1"><a href="#ambient-occlusion-algorithm">Ambient occlusion algorithm</a></h2>
+</div></div><div id="cell-82" class="observablehq observablehq--cell"></div><div id="cell-228" class="observablehq observablehq--cell"></div><div id="cell-48" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">computeShader = createShaderModule(device, {
+  code: `
+override tileSize = 512u;
+override tileBuffer = 1u;
+override workgroupSize = 128;
+
+struct UniformStruct {
+  tilesize: vec2&lt;u32&gt;,
+  step: vec2&lt;i32&gt;,
+  buffer: i32,
+  pixelSize: f32,
+  normalization: f32
+}
+
+@binding(0) @group(0) var&lt;uniform&gt; uniforms: UniformStruct;
+@binding(1) @group(0) var&lt;storage, read&gt; terrainData: array&lt;f32&gt;;
+@binding(2) @group(0) var&lt;storage, read_write&gt; outputData: array&lt;f32&gt;;
+
+fn unbufferedIndex(ij: vec2&lt;i32&gt;) -&gt; u32 {
+  return (u32(ij.x) % tileSize) + u32(ij.y) * tileSize;
+}
+
+fn bufferedIndex(ij: vec2&lt;i32&gt;) -&gt; u32 {
+  let w = tileSize + 2u * tileBuffer;
+  let ijbuf = vec2&lt;u32&gt;(ij + i32(tileBuffer));
+  return (ijbuf.x % w) + (ijbuf.y) * w;
+}
+
+@compute @workgroup_size(workgroupSize)
+fn main( @builtin(global_invocation_id) coord: vec3u) {
+
+  var ij = vec2&lt;i32&gt;(i32(coord.x), i32(coord.x));
+  var dijz: vec3&lt;f32&gt;;
+
+  if (uniforms.step.y == 0) {
+    ij.x = select(0i, i32(tileSize - 1), uniforms.step.x &lt; 0i);
+  } else if (uniforms.step.x == 0) {
+    ij.y = select(0i, i32(tileSize - 1), uniforms.step.y &lt; 0i);
+  }
+
+
+  var hull: array&lt;vec3&lt;f32&gt;, 64&gt;;
+  hull[0] = vec3&lt;f32&gt;(vec2&lt;f32&gt;(ij - uniforms.step), terrainData[bufferedIndex(ij - uniforms.step)]);
+  var hullPtr = 0u;
+
+  for (var i = 0u; i &lt; tileSize; i = i + 1u) {
+    let uidx = unbufferedIndex(ij);
+    let bidx = bufferedIndex(ij);
+    let z = terrainData[bidx];
+    let ijz = vec3&lt;f32&gt;(vec2&lt;f32&gt;(ij), z);
+
+    dijz = hull[hullPtr] - ijz;
+    var s0 = dijz.z * dijz.z / dot(dijz, dijz);
+    s0 = select(-s0, s0, dijz.z &gt; 0.0);
+
+    while(hullPtr &gt; 0) {
+      dijz = hull[hullPtr - 1] - ijz;
+      var s1 = dijz.z * dijz.z / dot(dijz, dijz);
+      s1 = select(-s1, s1, dijz.z &gt; 0.0);
+
+      if (s0 &gt; s1) { break; }
+
+      s0 = s1;
+      hullPtr -= 1u;
+    }
+
+    dijz = hull[hullPtr] - ijz;
+    dijz = vec3(dijz.xy, dijz.z / uniforms.pixelSize);
+    outputData[uidx] = outputData[uidx] + uniforms.normalization * exp(-dijz.z / length(dijz));
+
+    // Fail silently but gracefully if we overflow the stack
+    hullPtr = min(hullPtr + 1u, 63u);
+    hull[hullPtr] = ijz;
+
+    ij = ij + uniforms.step;
+  }
+}`
+})</code></pre><div id="cell-821" class="observablehq observablehq--cell"></div><div id="cell-816" class="observablehq observablehq--cell"></div><div id="cell-299" class="observablehq observablehq--cell"></div><div id="cell-405" class="observablehq observablehq--cell"></div><div id="cell-55" class="observablehq observablehq--cell"></div><div id="cell-80" class="observablehq observablehq--cell"></div><div id="cell-72" class="observablehq observablehq--cell"></div><div id="cell-856" class="observablehq observablehq--cell"><div><h2 id="measure-execution-time" tabindex="-1"><a href="#measure-execution-time">Measure execution time</a></h2>
+</div></div><div id="cell-863" class="observablehq observablehq--cell"></div><div id="cell-857" class="observablehq observablehq--cell"></div><div id="cell-870" class="observablehq observablehq--cell"></div><div id="cell-872" class="observablehq observablehq--cell"></div><div id="cell-946" class="observablehq observablehq--cell"><div><h2 id="render-to-screen" tabindex="-1"><a href="#render-to-screen">Render to screen</a></h2>
+</div></div><div id="cell-1111" class="observablehq observablehq--cell"></div><div id="cell-959" class="observablehq observablehq--cell"></div><div id="cell-966" class="observablehq observablehq--cell"></div><div id="cell-964" class="observablehq observablehq--cell"></div><div id="cell-1081" class="observablehq observablehq--cell"><div><h2 id="final-render" tabindex="-1"><a href="#final-render">Final render</a></h2>
+</div></div><div id="cell-70" class="observablehq observablehq--cell"></div><div id="cell-978" class="observablehq observablehq--cell"></div></main>
+  </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
 

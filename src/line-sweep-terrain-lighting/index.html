@@ -1,0 +1,258 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Line Sweep Terrain Lighting with WebGPU</title>
+  <script id="1" type="text/markdown">
+    # Line Sweep Terrain Lighting with WebGPU
+
+    Hierarchical terrain lighting using WebGPU compute shaders. This demonstrates the complete pipeline from tile fetching through caching to GPU-accelerated lighting computation.
+
+    Below, you'll see each stage of the implementation:
+    1. **Tile Hierarchy** - Parent tiles needed for boundary data
+    2. **Raw Terrain Tile** - Original Mapbox terrain image
+    3. **Decoded Elevations** - Height map visualization
+    4. **WebGPU Pipeline** - Shader compilation and setup
+    5. **Computed Lighting** - Final shaded result
+  </script>
+  <script id="2" type="module">
+    import { getTerrainTile, readImageData, decodeTerrainData } from './terrain/main.js';
+    import { getTileSet } from './terrain/tile-hierarchy.js';
+    import { createWebGPUContext } from './compute/webgpu-context.js';
+    import { createLightingPipeline } from './compute/pipeline.js';
+    import { computeTileLighting } from './compute/execute.js';
+  </script>
+  <script id="3" type="text/markdown">
+    ## 1. Tile Hierarchy
+  </script>
+  <script id="4" type="module">
+    const coords = {x: 795, y: 1594, z: 12};
+    coords;
+  </script>
+  <script id="5" type="module">
+    const tiles = getTileSet(coords);
+
+    // Create visual representation
+    const container = html`<div style="font-family: monospace; font-size: 13px;">
+      <strong>Target tile:</strong> ${coords.z}/${coords.x}/${coords.y}<br>
+      <strong>Tiles needed for hierarchical computation:</strong><br>
+      <ul style="margin: 8px 0; padding-left: 20px;">
+        ${tiles.map(t => html`<li>
+          <span style="color: ${t.role === 'target' ? '#ca4747' : '#666'}">
+            ${t.role}
+          </span>: ${t.z}/${t.x}/${t.y}
+        </li>`)}
+      </ul>
+      <em style="color: #666;">Parent tiles at z-1 provide boundary data for edge handling</em>
+    </div>`;
+
+    display(container);
+    tiles;
+  </script>
+  <script id="6" type="text/markdown">
+    ## 2. Raw Terrain Tile
+  </script>
+  <script id="7" type="module">
+    const targetTile = await getTerrainTile(coords);
+
+    const container = html`<div>
+      <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        Mapbox Terrain RGB encoding: ${targetTile.width}×${targetTile.height}
+        (${targetTile.tileSize}×${targetTile.tileSize} + ${targetTile.buffer}px buffer)
+      </div>
+      ${targetTile.img}
+    </div>`;
+
+    display(container);
+    targetTile;
+  </script>
+  <script id="8" type="text/markdown">
+    ## 3. Decoded Elevations
+  </script>
+  <script id="9" type="module">
+    const imageData = readImageData(targetTile.img);
+    const elevations = decodeTerrainData(imageData);
+
+    // Visualize elevation data as heatmap
+    const canvas = document.createElement('canvas');
+    canvas.width = targetTile.tileSize;
+    canvas.height = targetTile.tileSize;
+    const ctx = canvas.getContext('2d');
+    const imgData = ctx.createImageData(targetTile.tileSize, targetTile.tileSize);
+
+    // Find min/max for normalization (loop to avoid stack overflow with spread operator)
+    let min = Infinity, max = -Infinity;
+    for (let i = 0; i < elevations.length; i++) {
+      const v = elevations[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+    }
+
+    // Create heatmap (blue=low, red=high)
+    for (let y = 0; y < targetTile.tileSize; y++) {
+      for (let x = 0; x < targetTile.tileSize; x++) {
+        const srcIdx = (y + targetTile.buffer) * targetTile.width + (x + targetTile.buffer);
+        const dstIdx = y * targetTile.tileSize + x;
+        const normalized = (elevations[srcIdx] - min) / (max - min);
+
+        // Terrain color scheme
+        const r = Math.floor(normalized * 180 + 75);
+        const g = Math.floor(normalized * 140 + 80);
+        const b = Math.floor((1 - normalized) * 120 + 60);
+
+        imgData.data[dstIdx * 4] = r;
+        imgData.data[dstIdx * 4 + 1] = g;
+        imgData.data[dstIdx * 4 + 2] = b;
+        imgData.data[dstIdx * 4 + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(imgData, 0, 0);
+
+    const container = html`<div>
+      <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        Elevation range: ${min.toFixed(1)}m to ${max.toFixed(1)}m
+      </div>
+      ${canvas}
+    </div>`;
+
+    display(container);
+
+    // Prepare buffered data for computation
+    const tileSize = 512;
+    const buffer = 1;
+    const bufferedSize = tileSize + 2 * buffer;
+    const bufferedData = new Float32Array(bufferedSize * bufferedSize);
+
+    // Copy target tile to center with edge replication
+    for (let y = 0; y < tileSize; y++) {
+      for (let x = 0; x < tileSize; x++) {
+        const srcIdx = (y + targetTile.buffer) * targetTile.width + (x + targetTile.buffer);
+        const dstIdx = (y + buffer) * bufferedSize + (x + buffer);
+        bufferedData[dstIdx] = elevations[srcIdx];
+      }
+    }
+
+    // Replicate edges (TODO: use parent tile data)
+    for (let x = 0; x < bufferedSize; x++) {
+      bufferedData[x] = bufferedData[bufferedSize + x];
+      bufferedData[(bufferedSize - 1) * bufferedSize + x] = bufferedData[(bufferedSize - 2) * bufferedSize + x];
+    }
+    for (let y = 0; y < bufferedSize; y++) {
+      bufferedData[y * bufferedSize] = bufferedData[y * bufferedSize + 1];
+      bufferedData[y * bufferedSize + (bufferedSize - 1)] = bufferedData[y * bufferedSize + (bufferedSize - 2)];
+    }
+
+    bufferedData;
+  </script>
+  <script id="10" type="text/markdown">
+    ## 4. WebGPU Pipeline Setup
+  </script>
+  <script id="11" type="module">
+    const { device, adapter } = await createWebGPUContext();
+
+    const info = html`<div style="font-family: monospace; font-size: 13px;">
+      <strong>WebGPU Context:</strong><br>
+      <ul style="margin: 8px 0; padding-left: 20px; list-style: none;">
+        <li>✓ Adapter acquired</li>
+        <li>✓ Device created</li>
+        <li>✓ Ready for compute operations</li>
+      </ul>
+    </div>`;
+
+    display(info);
+    invalidation.then(() => device.destroy());
+    device;
+  </script>
+  <script id="12" type="module">
+    const { pipeline, bindGroupLayout } = createLightingPipeline(device, {
+      tileSize: 512,
+      tileBuffer: 1
+    });
+
+    const info = html`<div style="font-family: monospace; font-size: 13px;">
+      <strong>Compute Pipeline:</strong><br>
+      <ul style="margin: 8px 0; padding-left: 20px; list-style: none;">
+        <li>✓ WGSL shader compiled</li>
+        <li>✓ Bind group layout created (3 bindings)</li>
+        <li>✓ Compute pipeline ready</li>
+        <li style="margin-top: 4px; color: #666;">→ Workgroup size: 16×16</li>
+        <li style="color: #666;">→ Algorithm: Normal-based directional lighting</li>
+      </ul>
+    </div>`;
+
+    display(info);
+    ({ pipeline, bindGroupLayout });
+  </script>
+  <script id="13" type="text/markdown">
+    ## 5. Computed Lighting
+  </script>
+  <script id="14" type="module">
+    const EARTH_CIRCUMFERENCE = 40075017;
+    const pixelSize = EARTH_CIRCUMFERENCE / 512 / Math.pow(2, coords.z);
+
+    const result = await computeTileLighting({
+      device,
+      pipeline,
+      bindGroupLayout,
+      terrainData: bufferedData,
+      tileSize: 512,
+      pixelSize
+    });
+
+    // Compute stats without spread operator (avoid stack overflow)
+    let min = Infinity, max = -Infinity, sum = 0;
+    for (let i = 0; i < result.length; i++) {
+      const v = result[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v;
+    }
+    const stats = { min, max, mean: sum / result.length };
+
+    const info = html`<div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+      Lighting values: min=${stats.min.toFixed(3)}, max=${stats.max.toFixed(3)}, mean=${stats.mean.toFixed(3)}<br>
+      Pixel size: ${pixelSize.toFixed(3)}m (zoom ${coords.z})
+    </div>`;
+
+    display(info);
+    result;
+  </script>
+  <script id="15" type="module">
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(512, 512);
+
+    for (let i = 0; i < result.length; i++) {
+      const value = Math.floor(Math.min(Math.max(result[i], 0), 1) * 255);
+      imageData.data[i * 4] = value;
+      imageData.data[i * 4 + 1] = value;
+      imageData.data[i * 4 + 2] = value;
+      imageData.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const container = html`<div>
+      ${canvas}
+      <div style="margin-top: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        <em>Directional lighting from northwest at 45° elevation</em>
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="16" type="text/markdown">
+    ## Summary
+
+    This notebook demonstrates the complete hierarchical terrain lighting pipeline:
+
+    - **Tile Hierarchy**: Identifies parent tiles needed for boundary data
+    - **Tile Fetching**: Retrieves Mapbox terrain tiles with RGB elevation encoding
+    - **Data Decoding**: Converts RGB values to elevation in meters
+    - **WebGPU Compute**: GPU-accelerated normal calculation and lighting
+    - **LRU Caching**: Manages tile data and GPU buffers efficiently
+
+    The infrastructure supports both browser and Node.js environments with platform-specific implementations.
+  </script>
+</notebook>

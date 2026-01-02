@@ -1,0 +1,557 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Line-Sweep Ambient Occlusion with WebGPU</title>
+  <script id="0" type="text/markdown">
+    # Line-Sweep Ambient Occlusion with WebGPU
+  </script>
+  <script id="1094" type="text/markdown">
+    This notebook contains my first real attempt at implementing something nontrivial in WebGPU. It is a direct port of [Line Sweep Ambient Occlusion in JavaScript](https://observablehq.com/@rreusser/line-sweep-ambient-occlusion) to a WebGPU compute shader.
+
+    The original algorithm iterates over all scanlines, first left, then right, then up, then down (and maybe diagonal). The nice thing about the [Line-Sweep Ambient Occlusion algorithm](https://karim.naaji.fr/lsao.html) is that for each direction's pass, we track horizon visibility on a stack and shade as we go so that we only need to touch each pixel exactly once. On the CPU we process these scanlines one at a time. We should be able to parallelize that on the GPU, but years of working with WebGL has taught me that while GPUs are good at evaluating pixels independently, they're not a good fit for this type of sweep algorithm where each pixel depends on all previous pixels.
+
+    But hey, WebGPU has arrived and compute shaders play by different rules, so let's go for it. The implementation below dispatches workgroups of ${workgroupSize} invocations at a time. Each invocation implements a single scanline in a single direction. That means within a single shader invocation, we march all the way across an entire scanline, sampling the terrain data 512 times and shading all 512 pixels of the row or column.
+
+    I suspect it's a moderately suboptimal for reasons I don't understand very well, but my hasty benchmarks indicate it's about 20x faster than [the CPU version of the algorithm](https://observablehq.com/@rreusser/line-sweep-ambient-occlusion) and, upon ramping it up to a hundred or so (redundant) passes and taking an average, each scanline processes in less than 0.5ms.
+
+    Overall, I'm very happy with the success of translation to WebGPU, and I'm moderately happy with the performance boost. It's not up to feature parity with [Line-Sweep Terrain Lighting](https://observablehq.com/@rreusser/line-sweep-terrain-lighting), but I'd like to get it there.
+  </script>
+  <script id="5" type="application/vnd.observable.javascript">
+    canvas = {
+      const el = DOM.canvas(shape[0], shape[1]);
+      const maxSize = Math.min(width, shape[0] / 1);
+      el.style.width = `${Math.min(maxSize, shape[0] / 1)}px`;
+      el.style.height = `${Math.min(
+        (maxSize * shape[1]) / shape[0],
+        shape[1] / 1
+      )}px`;
+      return el;
+    }
+  </script>
+  <script id="1285" type="application/vnd.observable.javascript">
+    viewof brightness = Inputs.range([-1, 1], { label: "Brightness" })
+  </script>
+  <script id="1121" type="application/vnd.observable.javascript">
+    viewof contrast = Inputs.range([0, 1], { label: "Contrast" })
+  </script>
+  <script id="193" type="application/vnd.observable.javascript">
+    viewof workgroupSize = Inputs.select(
+      [...Array(9).keys()].map((i) => 2 ** i),
+      { value: 128, label: "Workgroup size" }
+    )
+  </script>
+  <script id="897" type="application/vnd.observable.javascript">
+    {
+      if (!supportsTimestamps) return html`<span></span>`;
+      renderToAO;
+      await readbackBuffer.mapAsync(GPUMapMode.READ);
+      const timestamps = new BigUint64Array(readbackBuffer.getMappedRange());
+      const start = timestamps[0];
+      const end = timestamps[1];
+      readbackBuffer.unmap();
+
+      // Query the timestamp period in nanoseconds
+      const timestampPeriod = adapter.limits.timestampPeriod ?? 1;
+
+      const durationNs = Number(end - start) * timestampPeriod;
+      return html`GPU execution time (${
+        dirs.length
+      } direction passes)<code> = </code><code class="observablehq--number">${(
+        durationNs / 1e6
+      ).toFixed(1)} ms</code>`;
+    }
+  </script>
+  <script id="1232" type="application/vnd.observable.javascript">
+    viewof rerun = Inputs.button('Re-run')
+  </script>
+  <script id="136" type="text/markdown">
+    ## Get terrain data
+  </script>
+  <script id="126" type="application/vnd.observable.javascript">
+    function getTerrainTile({ x, y, z }) {
+      const ACCESS_TOKEN_BUT_PLS_USE_YOUR_OWN_AND_NOT_MINE =
+        "pk.eyJ1IjoicnNyZXVzc2VyIiwiYSI6ImNtMjZmejNqczBmYzIya3B6ZjBzZnYwOGgifQ.CWSOe_wStIypz4_snROphQ";
+      const SKU = "101pM5uZK0TZt";
+      return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.src = `https://api.mapbox.com/raster/v1/mapbox.mapbox-terrain-dem-v1/${z}/${x}/${y}.webp?sku=${SKU}&access_token=${ACCESS_TOKEN_BUT_PLS_USE_YOUR_OWN_AND_NOT_MINE}`;
+        img.crossOrigin = "Anonymous";
+        img.onload = () => {
+          const tileSize = Math.pow(2, Math.floor(Math.log2(img.width)));
+          const buffer = (img.width - tileSize) / 2;
+          resolve({ img, width: img.width, height: img.height, tileSize, buffer });
+        };
+        img.onerror = () => reject("Failed to load terrain tile");
+      });
+    }
+  </script>
+  <script id="146" type="application/vnd.observable.javascript">
+    function readImageData(img) {
+      const canvas = DOM.element("canvas");
+      canvas.width = img.width;
+      canvas.height = img.height;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0);
+      return ctx.getImageData(0, 0, img.width, img.height).data;
+    }
+  </script>
+  <script id="140" type="application/vnd.observable.javascript">
+    function decodeTerrainData(data) {
+      const out = new Float32Array(data.length / 4);
+      for (let i = 0; i < data.length; i += 4) {
+        out[i >> 2] =
+          -10000 + 0.1 * ((data[i] << 16) | (data[i + 1] << 8) | data[i + 2]);
+      }
+      return out;
+    }
+  </script>
+  <script id="158" type="application/vnd.observable.javascript">
+    terrainData = decodeTerrainData(readImageData(tile.img))
+  </script>
+  <script id="129" type="application/vnd.observable.javascript">
+    xyz = ({ x: 164, y: 363, z: 10 })
+  </script>
+  <script id="132" type="application/vnd.observable.javascript">
+    tile = getTerrainTile(xyz)
+  </script>
+  <script id="628" type="application/vnd.observable.javascript">
+    MAXEXTENT = 20037508.342789244
+  </script>
+  <script id="627" type="application/vnd.observable.javascript">
+    pixelSize = (2 * MAXEXTENT) / tile.tileSize / Math.pow(2, xyz.z)
+  </script>
+  <script id="162" type="text/markdown">
+    ## Create a WebGPU context
+  </script>
+  <script id="31" type="application/vnd.observable.javascript">
+    shape = [512, 512]
+  </script>
+  <script id="10" type="application/vnd.observable.javascript">
+    adapter = navigator.gpu?.requestAdapter()
+  </script>
+  <script id="1206" type="application/vnd.observable.javascript">
+    supportsTimestamps = adapter.features.has("timestamp-query")
+  </script>
+  <script id="15" type="application/vnd.observable.javascript">
+    device = adapter?.requestDevice({
+      requiredFeatures: supportsTimestamps ? ["timestamp-query"] : []
+    })
+  </script>
+  <script id="18" type="application/vnd.observable.javascript">
+    context = {
+      const ctx = canvas.getContext("webgpu");
+      ctx.configure({ device, format });
+      return ctx;
+    }
+  </script>
+  <script id="969" type="application/vnd.observable.javascript">
+    format = navigator.gpu.getPreferredCanvasFormat()
+  </script>
+  <script id="313" type="application/vnd.observable.javascript">
+    import { createShaderModule } from "@rreusser/webgpu-utils"
+  </script>
+  <script id="168" type="text/markdown">
+    ## Ambient occlusion algorithm
+  </script>
+  <script id="82" type="application/vnd.observable.javascript">
+    terrainDataBuffer = {
+      const buffer = device.createBuffer({
+        size: terrainData.byteLength,
+        label: "Terrain data buffer",
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+        mappedAtCreation: true
+      });
+      new Float32Array(buffer.getMappedRange()).set(terrainData);
+      buffer.unmap();
+      invalidation.then(() => buffer.destroy());
+      return buffer;
+    }
+  </script>
+  <script id="228" type="application/vnd.observable.javascript">
+    computationBuffer = {
+      const buffer = device.createBuffer({
+        size: tile.tileSize ** 2 * Uint32Array.BYTES_PER_ELEMENT,
+        label: "Computation buffer",
+        usage:
+          GPUBufferUsage.STORAGE |
+          GPUBufferUsage.COPY_SRC |
+          GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true
+      });
+      new Uint32Array(buffer.getMappedRange()).fill(0);
+      buffer.unmap();
+      invalidation.then(() => buffer.destroy());
+      return buffer;
+    }
+  </script>
+  <script id="48" type="application/vnd.observable.javascript" pinned="">
+    computeShader = createShaderModule(device, {
+      code: `
+    override tileSize = 512u;
+    override tileBuffer = 1u;
+    override workgroupSize = 128;
+
+    struct UniformStruct {
+      tilesize: vec2<u32>,
+      step: vec2<i32>,
+      buffer: i32,
+      pixelSize: f32,
+      normalization: f32
+    }
+
+    @binding(0) @group(0) var<uniform> uniforms: UniformStruct;
+    @binding(1) @group(0) var<storage, read> terrainData: array<f32>;
+    @binding(2) @group(0) var<storage, read_write> outputData: array<f32>;
+
+    fn unbufferedIndex(ij: vec2<i32>) -> u32 {
+      return (u32(ij.x) % tileSize) + u32(ij.y) * tileSize;
+    }
+
+    fn bufferedIndex(ij: vec2<i32>) -> u32 {
+      let w = tileSize + 2u * tileBuffer;
+      let ijbuf = vec2<u32>(ij + i32(tileBuffer));
+      return (ijbuf.x % w) + (ijbuf.y) * w;
+    }
+
+    @compute @workgroup_size(workgroupSize)
+    fn main( @builtin(global_invocation_id) coord: vec3u) {
+
+      var ij = vec2<i32>(i32(coord.x), i32(coord.x));
+      var dijz: vec3<f32>;
+
+      if (uniforms.step.y == 0) {
+        ij.x = select(0i, i32(tileSize - 1), uniforms.step.x < 0i);
+      } else if (uniforms.step.x == 0) {
+        ij.y = select(0i, i32(tileSize - 1), uniforms.step.y < 0i);
+      }
+
+
+      var hull: array<vec3<f32>, 64>;
+      hull[0] = vec3<f32>(vec2<f32>(ij - uniforms.step), terrainData[bufferedIndex(ij - uniforms.step)]);
+      var hullPtr = 0u;
+
+      for (var i = 0u; i < tileSize; i = i + 1u) {
+        let uidx = unbufferedIndex(ij);
+        let bidx = bufferedIndex(ij);
+        let z = terrainData[bidx];
+        let ijz = vec3<f32>(vec2<f32>(ij), z);
+
+        dijz = hull[hullPtr] - ijz;
+        var s0 = dijz.z * dijz.z / dot(dijz, dijz);
+        s0 = select(-s0, s0, dijz.z > 0.0);
+
+        while(hullPtr > 0) {
+          dijz = hull[hullPtr - 1] - ijz;
+          var s1 = dijz.z * dijz.z / dot(dijz, dijz);
+          s1 = select(-s1, s1, dijz.z > 0.0);
+
+          if (s0 > s1) { break; }
+
+          s0 = s1;
+          hullPtr -= 1u;
+        }
+
+        dijz = hull[hullPtr] - ijz;
+        dijz = vec3(dijz.xy, dijz.z / uniforms.pixelSize);
+        outputData[uidx] = outputData[uidx] + uniforms.normalization * exp(-dijz.z / length(dijz));
+
+        // Fail silently but gracefully if we overflow the stack
+        hullPtr = min(hullPtr + 1u, 63u);
+        hull[hullPtr] = ijz;
+
+        ij = ij + uniforms.step;
+      }
+    }`
+    })
+  </script>
+  <script id="821" type="application/vnd.observable.javascript">
+    dirs = [
+      [1, 0],
+      [-1, 0],
+      [0, 1],
+      [0, -1]
+    ]
+  </script>
+  <script id="816" type="application/vnd.observable.javascript">
+    uniformSizePerDispatch = 256
+  </script>
+  <script id="299" type="application/vnd.observable.javascript">
+    uniformBuffer = {
+      const buffer = device.createBuffer({
+        size: uniformSizePerDispatch * dirs.length,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      invalidation.then(() => buffer.destroy());
+      return buffer;
+    }
+  </script>
+  <script id="405" type="application/vnd.observable.javascript">
+    function packUniforms(
+      [width, height],
+      [dx, dy],
+      buffer,
+      pixelSize,
+      normalization
+    ) {
+      const bytes = new Uint8Array(uniformSizePerDispatch);
+      const i32 = new Int32Array(bytes.buffer);
+      const u32 = new Uint32Array(bytes.buffer);
+      const f32 = new Float32Array(bytes.buffer);
+      u32[0] = width;
+      u32[1] = height;
+      i32[2] = dx;
+      i32[3] = dy;
+      u32[4] = buffer;
+      f32[5] = pixelSize;
+      f32[6] = normalization;
+      return bytes;
+    }
+  </script>
+  <script id="55" type="application/vnd.observable.javascript">
+    bindGroupLayout = device.createBindGroupLayout({
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "uniform", hasDynamicOffset: true }
+        },
+        {
+          binding: 1,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "read-only-storage" }
+        },
+        {
+          binding: 2,
+          visibility: GPUShaderStage.COMPUTE,
+          buffer: { type: "storage" }
+        }
+      ]
+    })
+  </script>
+  <script id="80" type="application/vnd.observable.javascript">
+    bindGroup = device.createBindGroup({
+      layout: bindGroupLayout,
+      entries: [
+        {
+          binding: 0,
+          resource: {
+            buffer: uniformBuffer,
+            offset: 0,
+            size: uniformSizePerDispatch
+          }
+        },
+        { binding: 1, resource: { buffer: terrainDataBuffer } },
+        { binding: 2, resource: { buffer: computationBuffer } }
+      ]
+    })
+  </script>
+  <script id="72" type="application/vnd.observable.javascript">
+    computePipeline = device.createComputePipeline({
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [bindGroupLayout]
+      }),
+      compute: {
+        module: computeShader,
+        entryPoint: "main",
+        constants: {
+          workgroupSize,
+          tileSize: tile.tileSize,
+          tileBuffer: tile.buffer
+        }
+      }
+    })
+  </script>
+  <script id="856" type="text/markdown">
+    ## Measure execution time
+  </script>
+  <script id="863" type="application/vnd.observable.javascript">
+    queryCount = 2
+  </script>
+  <script id="857" type="application/vnd.observable.javascript">
+    querySet = {
+      if (!supportsTimestamps) return null;
+      const set = device.createQuerySet({
+        type: "timestamp",
+        count: queryCount
+      });
+      invalidation.then(() => set.destroy());
+      return set;
+    }
+  </script>
+  <script id="870" type="application/vnd.observable.javascript">
+    timestampBuffer = {
+      const buffer = device.createBuffer({
+        size: queryCount * 8, // 2 timestamps * 8 bytes
+        usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC
+      });
+      invalidation.then(() => buffer.destroy());
+      return buffer;
+    }
+  </script>
+  <script id="872" type="application/vnd.observable.javascript">
+    readbackBuffer = {
+      const buffer = device.createBuffer({
+        size: queryCount * 8,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+      invalidation.then(() => buffer.destroy());
+      return buffer;
+    }
+  </script>
+  <script id="946" type="text/markdown">
+    ## Render to screen
+  </script>
+  <script id="1111" type="application/vnd.observable.javascript">
+    rtsUniformBuffer = {
+      const buffer = device.createBuffer({
+        size: 32,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      invalidation.then(() => buffer.destroy());
+      return buffer;
+    }
+  </script>
+  <script id="959" type="application/vnd.observable.javascript">
+    rtsShader = createShaderModule(device, {
+      code: `
+    struct Uniforms {
+      contrast: f32,
+      brightness: f32
+    }
+
+    @group(0) @binding(0) var<storage, read> values: array<f32>;
+    @group(0) @binding(1) var<uniform> uniforms: Uniforms;
+
+    const PI = ${Math.PI};
+
+    fn getIndex(coord: vec2<u32>) -> u32 {
+      return coord.y * 512u + coord.x;
+    }
+
+    @vertex
+    fn vs_main(@builtin(vertex_index) idx: u32) -> @builtin(position) vec4<f32> {
+      var pos = array<vec2<f32>, 3>(
+        vec2(-4.0, -4.0),
+        vec2(4.0, -4.0),
+        vec2(0.0, 4.0)
+      );
+      return vec4<f32>(pos[idx], 0.0, 1.0);
+    }
+
+
+    @fragment
+    fn fs_main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+      let coord = vec2<u32>(pos.xy);
+      var value = values[getIndex(coord)];
+      value = 0.5 + 0.5 * tanh((value - 1.0) * uniforms.contrast + uniforms.brightness);
+      value = pow(value, 0.454);
+      return vec4<f32>(value, value, value, 1.0);
+    }
+    `
+    })
+  </script>
+  <script id="966" type="application/vnd.observable.javascript">
+    rtsPipeline = device.createRenderPipeline({
+      layout: "auto",
+      vertex: { module: rtsShader, entryPoint: "vs_main" },
+      fragment: {
+        module: rtsShader,
+        entryPoint: "fs_main",
+        targets: [{ format }]
+      },
+      primitive: { topology: "triangle-list" }
+    })
+  </script>
+  <script id="964" type="application/vnd.observable.javascript">
+    rtsBindGroup = device.createBindGroup({
+      layout: rtsPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: computationBuffer } },
+        { binding: 1, resource: { buffer: rtsUniformBuffer } }
+      ]
+    })
+  </script>
+  <script id="1081" type="text/markdown">
+    ## Final render
+  </script>
+  <script id="70" type="application/vnd.observable.javascript">
+    renderToAO = {
+      rerun;
+      dirs.forEach((dir, i) =>
+        device.queue.writeBuffer(
+          uniformBuffer,
+          i * uniformSizePerDispatch,
+          packUniforms(
+            [tile.tileSize, tile.tileSize],
+            dir,
+            tile.buffer,
+            pixelSize,
+            1 / dirs.length
+          )
+        )
+      );
+
+      const encoder = device.createCommandEncoder();
+
+      // Clear the buffer which then accumulates the contribution from all directions
+      encoder.clearBuffer(computationBuffer);
+
+      const opts = {};
+      if (supportsTimestamps)
+        opts.timestampWrites = {
+          querySet,
+          beginningOfPassWriteIndex: 0,
+          endOfPassWriteIndex: 1
+        };
+      const pass = encoder.beginComputePass(opts);
+      pass.setPipeline(computePipeline);
+
+      // Invoke all four directions in one compute pass
+      for (let i = 0; i < dirs.length; i++) {
+        pass.setBindGroup(0, bindGroup, [i * uniformSizePerDispatch]);
+        pass.dispatchWorkgroups(Math.floor(tile.tileSize / workgroupSize));
+      }
+      pass.end();
+
+      if (supportsTimestamps) {
+        // Measure execution time
+        encoder.resolveQuerySet(querySet, 0, 2, timestampBuffer, 0);
+        encoder.copyBufferToBuffer(timestampBuffer, 0, readbackBuffer, 0, 2 * 8);
+      }
+
+      device.queue.submit([encoder.finish()]);
+    }
+  </script>
+  <script id="978" type="application/vnd.observable.javascript">
+    renderToScreen = {
+      renderToAO;
+      const encoder = device.createCommandEncoder();
+
+      device.queue.writeBuffer(
+        rtsUniformBuffer,
+        0,
+        new Float32Array([
+          Math.min(100, (7 * contrast) / (1 - contrast)),
+          Math.max(-30, Math.min(30, Math.tan((Math.PI / 2) * brightness)))
+        ])
+      );
+
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [
+          {
+            view: context.getCurrentTexture().createView(),
+            loadOp: "clear",
+            clearValue: [0, 0, 0, 1],
+            storeOp: "store"
+          }
+        ]
+      });
+
+      pass.setPipeline(rtsPipeline);
+      pass.setBindGroup(0, rtsBindGroup);
+      pass.draw(3);
+      pass.end();
+
+      device.queue.submit([encoder.finish()]);
+    }
+  </script>
+</notebook>
