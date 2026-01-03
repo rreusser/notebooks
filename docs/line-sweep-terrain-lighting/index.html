@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Line Sweep Terrain Lighting with WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-1gd4KZHO.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Line Sweep Terrain Lighting with WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-CEkwvjn-.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1553,16 +1553,43 @@ main h6 {
 </div></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"><div><h2 id="4-decoded-elevations" tabindex="-1"><a href="#4-decoded-elevations">4. Decoded Elevations</a></h2>
 </div></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="5-web-gpu-pipeline-setup" tabindex="-1"><a href="#5-web-gpu-pipeline-setup">5. WebGPU Pipeline Setup</a></h2>
 </div></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"><div><h2 id="6-computed-lighting" tabindex="-1"><a href="#6-computed-lighting">6. Computed Lighting</a></h2>
-</div></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
+</div></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="7-line-sweep-ambient-occlusion-lsao" tabindex="-1"><a href="#7-line-sweep-ambient-occlusion-lsao">7. Line Sweep Ambient Occlusion (LSAO)</a></h2>
+<p><a href="https://karim.naaji.fr/lsao.html">Line-Sweep Ambient Occlusion</a> computes ambient occlusion by sweeping across terrain in multiple directions, tracking visible horizons on a convex hull stack. This provides more realistic shadowing than simple normal-based lighting.</p>
+<p><strong>Algorithm overview:</strong></p>
+<ul>
+<li>Sweep in 4 cardinal directions: East, West, North, South</li>
+<li>Each GPU invocation processes one complete scanline (row or column)</li>
+<li>Maintain convex hull stack to track horizon visibility</li>
+<li>Compute occlusion based on elevation angle to visible horizon</li>
+<li>Accumulate contributions from all directions</li>
+</ul>
+<p>Below shows the simplified single-tile implementation (edge replication for boundaries).</p>
+</div></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-23" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-25" class="observablehq observablehq--cell"><div><h3 id="lsao-combined-with-elevation" tabindex="-1"><a href="#lsao-combined-with-elevation">LSAO Combined with Elevation</a></h3>
+<p>Multiply the ambient occlusion by normalized elevation to create a shaded relief map:</p>
+</div></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"><div><h2 id="8-final-lighting-map-rgb" tabindex="-1"><a href="#8-final-lighting-map-rgb">8. Final Lighting Map (RGB)</a></h2>
+<p>The final output combines surface normals and ambient occlusion into a single RGB image:</p>
+<ul>
+<li><strong>Red channel</strong>: Surface normal Y component (fy = 0.5 + 0.5 × ny)</li>
+<li><strong>Green channel</strong>: Ambient occlusion from LSAO</li>
+<li><strong>Blue channel</strong>: Surface normal X component (fx = 0.5 - 0.5 × nx)</li>
+</ul>
+<p>The normals are computed with physically-correct Web Mercator (EPSG:3857) scaling, accounting for latitude-dependent distortion. This allows the lighting map to be used for on-the-fly lighting during rendering.</p>
+</div></div><div id="cell-28" class="observablehq observablehq--cell"></div><div id="cell-29" class="observablehq observablehq--cell"></div><div id="cell-30" class="observablehq observablehq--cell"></div><div id="cell-31" class="observablehq observablehq--cell"><div><h3 id="channel-breakdown" tabindex="-1"><a href="#channel-breakdown">Channel Breakdown</a></h3>
+<p>Below shows each channel individually for inspection:</p>
+</div></div><div id="cell-32" class="observablehq observablehq--cell"></div><div id="cell-33" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
 <p>This notebook demonstrates the complete hierarchical terrain lighting pipeline:</p>
 <ul>
 <li><strong>Tile Hierarchy</strong>: Identifies parent tiles needed for boundary data</li>
 <li><strong>Tile Fetching</strong>: Retrieves Mapbox terrain tiles with RGB elevation encoding</li>
 <li><strong>Data Decoding</strong>: Converts RGB values to elevation in meters</li>
 <li><strong>WebGPU Compute</strong>: GPU-accelerated normal calculation and lighting</li>
+<li><strong>LSAO</strong>: Line-sweep ambient occlusion with 4-direction sweeps</li>
+<li><strong>Normal Map</strong>: Physically-correct surface normals with Web Mercator scaling</li>
+<li><strong>Final Output</strong>: RGB lighting map (R=ny, G=AO, B=nx) for on-the-fly rendering</li>
 <li><strong>LRU Caching</strong>: Manages tile data and GPU buffers efficiently</li>
 </ul>
 <p>The infrastructure supports both browser and Node.js environments with platform-specific implementations.</p>
+<p><strong>Next steps</strong>: The full LSAO implementation with parent tile support (<code>lsao-pipeline.js</code>) uses hierarchical boundary data for seamless multi-tile rendering. The lighting maps can be compressed as WebP and served as tiles for real-time terrain rendering.</p>
 </div></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>

@@ -4,20 +4,20 @@
  * Manages GPU buffers and executes LSAO compute passes with parent tile support
  */
 
-import { packLSAOUniforms, getTargetOffsetInParent } from './lsao-pipeline.js';
+import { packLSAOUniforms } from './lsao-pipeline.js';
 
 /**
- * Compute LSAO for a tile using parent buffer for horizon initialization
+ * Compute multi-level LSAO for a tile
  *
  * @param {Object} params
  * @param {GPUDevice} params.device - WebGPU device
  * @param {GPUComputePipeline} params.pipeline - LSAO compute pipeline
  * @param {GPUBindGroupLayout} params.bindGroupLayout - Bind group layout
  * @param {Float32Array} params.targetData - Target tile terrain data (514×514)
- * @param {Float32Array} params.parentData - Parent buffer data (768×768)
+ * @param {Array<Float32Array>} params.parentLevels - Parent buffer data (one per level)
+ * @param {Array<Object>} params.levelInfo - Metadata for each level
  * @param {number} params.tileSize - Target tile size (512)
  * @param {number} params.pixelSize - Target pixel size in meters
- * @param {'nw'|'ne'|'sw'|'se'} params.quadrant - Target quadrant in parent
  * @param {number} [params.workgroupSize=128] - Workgroup size
  * @param {Array<[number, number]>} [params.directions] - Sweep directions
  * @returns {Promise<Float32Array>} AO values [0,1] for each pixel
@@ -27,15 +27,19 @@ export async function computeLSAO({
   pipeline,
   bindGroupLayout,
   targetData,
-  parentData,
+  parentLevels,
+  levelInfo,
   tileSize,
   pixelSize,
-  quadrant,
   workgroupSize = 128,
   directions = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 }) {
   const tileBuffer = 1;
-  const parentSize = 768;
+  const numLevels = parentLevels.length;
+
+  if (numLevels < 1 || numLevels > 4) {
+    throw new Error(`numLevels must be 1-4, got ${numLevels}`);
+  }
 
   // Calculate dimensions
   const bufferedSize = tileSize + 2 * tileBuffer;
@@ -45,8 +49,12 @@ export async function computeLSAO({
   if (targetData.length !== bufferedSize * bufferedSize) {
     throw new Error(`Target data size mismatch: expected ${bufferedSize}×${bufferedSize}, got ${targetData.length}`);
   }
-  if (parentData.length !== parentSize * parentSize) {
-    throw new Error(`Parent data size mismatch: expected ${parentSize}×${parentSize}, got ${parentData.length}`);
+
+  for (let i = 0; i < numLevels; i++) {
+    const expectedSize = levelInfo[i].bufferSize * levelInfo[i].bufferSize;
+    if (parentLevels[i].length !== expectedSize) {
+      throw new Error(`Parent level ${i} size mismatch: expected ${expectedSize}, got ${parentLevels[i].length}`);
+    }
   }
 
   // Create GPU buffers
@@ -59,14 +67,18 @@ export async function computeLSAO({
   new Float32Array(targetBuffer.getMappedRange()).set(targetData);
   targetBuffer.unmap();
 
-  const parentBuffer = device.createBuffer({
-    size: parentData.byteLength,
-    label: 'Parent terrain buffer',
-    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-    mappedAtCreation: true
+  // Create parent buffers for each level
+  const parentBuffers = parentLevels.map((data, i) => {
+    const buffer = device.createBuffer({
+      size: data.byteLength,
+      label: `Parent level ${i} buffer`,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+      mappedAtCreation: true
+    });
+    new Float32Array(buffer.getMappedRange()).set(data);
+    buffer.unmap();
+    return buffer;
   });
-  new Float32Array(parentBuffer.getMappedRange()).set(parentData);
-  parentBuffer.unmap();
 
   const outputBuffer = device.createBuffer({
     size: outputSize * Float32Array.BYTES_PER_ELEMENT,
@@ -85,8 +97,6 @@ export async function computeLSAO({
   });
 
   // Pack uniforms for each direction
-  const targetOffsetInParent = getTargetOffsetInParent(quadrant);
-  const parentPixelSize = pixelSize * 2; // Parent is z-1, 2× coarser
   const normalization = 1.0 / directions.length;
 
   for (let i = 0; i < directions.length; i++) {
@@ -96,8 +106,7 @@ export async function computeLSAO({
       buffer: tileBuffer,
       pixelSize,
       normalization,
-      targetOffsetInParent,
-      parentPixelSize
+      levels: levelInfo
     });
 
     device.queue.writeBuffer(
@@ -107,23 +116,32 @@ export async function computeLSAO({
     );
   }
 
-  // Create bind group
+  // Create bind group with all parent buffers
+  const bindGroupEntries = [
+    {
+      binding: 0,
+      resource: {
+        buffer: uniformBuffer,
+        offset: 0,
+        size: uniformSizePerDirection
+      }
+    },
+    { binding: 1, resource: { buffer: targetBuffer } },
+    { binding: 2, resource: { buffer: outputBuffer } }
+  ];
+
+  // Add parent buffer bindings (3, 4, 5, 6)
+  for (let i = 0; i < numLevels; i++) {
+    bindGroupEntries.push({
+      binding: 3 + i,
+      resource: { buffer: parentBuffers[i] }
+    });
+  }
+
   const bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
-    label: 'LSAO bind group',
-    entries: [
-      {
-        binding: 0,
-        resource: {
-          buffer: uniformBuffer,
-          offset: 0,
-          size: uniformSizePerDirection
-        }
-      },
-      { binding: 1, resource: { buffer: targetBuffer } },
-      { binding: 2, resource: { buffer: outputBuffer } },
-      { binding: 3, resource: { buffer: parentBuffer } }
-    ]
+    label: 'Multi-level LSAO bind group',
+    entries: bindGroupEntries
   });
 
   // Encode compute passes
@@ -171,7 +189,7 @@ export async function computeLSAO({
 
   // Cleanup
   targetBuffer.destroy();
-  parentBuffer.destroy();
+  parentBuffers.forEach(b => b.destroy());
   outputBuffer.destroy();
   uniformBuffer.destroy();
   stagingBuffer.destroy();
