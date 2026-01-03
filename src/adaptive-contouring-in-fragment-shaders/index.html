@@ -1,0 +1,1275 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Adaptive Contouring in Fragment Shaders</title>
+  <script id="3614" type="text/markdown">
+    # Adaptive Contouring in Fragment Shaders
+  </script>
+  <script id="3615" type="text/markdown">
+    This notebook walks through a strategy for adaptive contouring in a fragment shader, with particular application to domain coloring. [Domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) is a simple and well-explored technique for visualizing functions in the complex plane using contours for magnitude and color for phase
+  </script>
+  <script id="3616" type="text/markdown">
+    This notebook walks through a strategy for adaptive contouring in a fragment shader, with particular application to domain coloring. [Domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) is a simple and well-explored technique for visualizing functions in the complex plane using contours for magnitude and color for phase.
+  </script>
+  <script id="2815" type="text/markdown">
+    Over the past few years and with particular help and inspiration from [Jacob Rus](https://observablehq.com/@jrus), I've slowly iterated on my approach to domain coloring. A couple of the core ideas have proved so useful and generally applicable that I've wanted to write them up carefully and clearly for a long time. In this notebook, rather than focusing on the math and interpretation of domain coloring, I'm going to focus on some of the core tricks I use for everything from domain coloring to [contour plots](https://observablehq.com/@rreusser/contour-plots-with-d3-regl-and-observable?collection=@rreusser/webgl), [wireframe meshes](https://github.com/rreusser/glsl-solid-wireframe), [3D surface visualization](https://observablehq.com/@rreusser/faking-transparency-for-3d-surfaces), [gridlines](http://rreusser.github.io/flamms-paraboloid/), [cartoon edges](http://rreusser.github.io/aligning-3d-scans/), and [trippy animated gifs](https://twitter.com/rickyreusser/status/1329489340158799872).`
+  </script>
+  <script id="2819" type="application/vnd.observable.javascript">
+    html`<figure>
+    <img src="${await FileAttachment("old.jpg").url()}" width="48%">
+    <img src="${await FileAttachment("new.jpg").url()}" width="48%">
+    <figcaption>${md`A comparison of a Möbius transformation, ${tex`f(z) = \frac{(z-a)(b-m)}{(z-b)(a-m)}`} with ${tex`a = -\frac{3}{2} + \frac{i}{2}`}, ${tex`b = \frac{3}{2} - \frac{i}{2}`}, and ${tex`m = 0`}, using my [older method for domain coloring](https://github.com/rreusser/glsl-domain-coloring) (*left*) and [the techniques from this notebook](https://observablehq.com/@rreusser/complex-function-plotter) (*right*).`}</figcaption>
+    </figure>`
+  </script>
+  <script id="3617" type="text/markdown">
+    Even without working through the mathematical interpretation, the plot on the lefthand side above has two particularly obnoxious features (apart from the garrish colorscale). The first is that the lines have non-uniform width, and the second is that the contour spacing is also highly non-uniform, ranging from half the plot size in slowly varying regions to infinitely dense near zeros and poles. Most regions, if zoomed in, would appear as nothing but a solid color. [This technique from Inigo Quilez](https://www.shadertoy.com/view/WtScDt) is a wonderful way to resolve the aliasing problems which result from dense spacing, but ideally we'd like to control the uniformity of information a bit more thoughtfully.
+  </script>
+  <script id="3618" type="text/markdown">
+    Remedying these problems is subject to one primary constraint: computing plots in a GPU shader is highly performant but means that—short of more advanced parallelization tricks—each pixel needs to be evaluated independently from all others. As a result, our ideal approach uses strictly *local* information to display lines and select contour spacing.
+  </script>
+  <script id="3619" type="text/markdown">
+    In this notebook, the first in a couple-part series, we'll walk through the core techniques by which we can resolve the above challenges. We'll use screen-space derivatives to achieve uniform-width features and the graphical equivalent of a [Shepard tone](https://en.wikipedia.org/wiki/Shepard_tone) to achieve ideally-spaced contours.
+  </script>
+  <script id="3620" type="text/markdown">
+    This notebook is presented in the following sections:
+  </script>
+  <script id="3621" type="text/markdown">
+    - [Screen-space-scaled raster contours](#contours): Using screen-space derivatives to display uniform-width lines
+    - [Local contour spacing](#localSpacing): Using the local gradient to select nice contour spacing
+    - [Blending over octaves](#blending): Smoothly blending between locally scaled contouring
+    - [Shaded contouring](#shading): Repurposing line contour techniques to achieve nicely antialiased shading
+  </script>
+  <script id="2820" type="text/markdown">
+    The contour plots in this notebook are computed and displayed in WebGL via the provided GLSL shaders. And although I've used the [regl](https://github.com/regl-project/regl) library to create them, the techniques should be applicable to any sort of language, whether on the GPU or otherwise. To make understanding easier, I've tried to keep the plotting very simple at the cost of luxuries like interactions and axes. See the [Definitions](#defs) section for implementation.
+  </script>
+  <script id="3622" type="text/markdown">
+    ## Screen-space-scaled raster contours
+  </script>
+  <script id="2595" type="text/markdown">
+    Vector graphics have many desirable properties, but in this notebook we explore lines as a raster image effect. Particular benefits are that the workload is independent of the complexity of the contours, and that we may avoid computing, storing, updating, and rendering explicit contour line geometry, commonly computed via [marching squares](https://en.wikipedia.org/wiki/Marching_squares).
+  </script>
+  <script id="3623" type="text/markdown">
+    We start by plotting the log of the magnitude of a complex function using a repeating triangle-wave colormap.
+  </script>
+  <script id="3497" type="text/x-typescript">
+    const complexSampleFunctionGLSL = view(code(
+    `vec2 complexSampleFunction (vec2 z, vec2 zMouse) {
+      return cmul(
+        cdiv(z - vec2(1, 0), z + vec2(1, 0)),
+        z - zMouse
+      );
+    }`));
+  </script>
+  <script id="2288" type="text/x-typescript">
+    const logStripesGLSL = view(code(
+      `float logStripesColormap (float f, float spacing) {
+      return 2.0 * (0.5 - abs(fract(log2(abs(f)) / spacing) - 0.5));
+    }`));
+  </script>
+  <script id="3073" type="text/markdown">
+    Adjust the threshold below and observe that although we can draw bands, we can't yet draw uniform-width lines.
+  </script>
+  <script id="2598" type="text/x-typescript">
+    const regl0 = view((function () {
+      const ctx = createREGLContext(smallCanvas);
+      const fig = html`
+        <figure>
+          ${ctx}
+          <figcaption>Our starting point: the log of the magnitude of a function, plotted with a triangle-wave color map. Adjust the threshold below and observe non-uniform lines that result.</figcaption>
+        </figure>`;
+      fig.value = ctx.value;
+      return fig;
+    })());
+  </script>
+  <script id="3022" type="application/vnd.observable.javascript">
+    viewof gradientThreshold = rangeSlider({
+      min: 0,
+      max: 1,
+      value: [0, 1],
+      description: 'Colorscale threshold'
+    })
+  </script>
+  <script id="3625" type="text/x-typescript">
+    const drawLoop0 = (function () {
+      drawCmds0.configureMouse.taint();
+      const frame = regl0.frame(() => {
+        drawCmds0.configureView(() => {
+          drawCmds0.configureBlit(() => {
+            drawCmds0.configureMouse(ctx => {
+              if (!ctx.dirty) return;
+              drawCmds0.drawField({ contourSpacing: 1, gradientThreshold });
+            });
+          });
+        });
+      });
+      invalidation.then(() => frame.cancel());
+    })();
+  </script>
+  <script id="2601" type="text/x-typescript">
+    const drawCmds0 = {
+      configureBlit: createBlitCmd(regl0),
+      configureView: createConfigureViewCmd(regl0),
+      configureMouse: createAttachMouseCmd(regl0, invalidation),
+      drawField: regl0({
+        frag: `
+          #extension GL_OES_standard_derivatives : enable
+          precision highp float;
+          uniform float contourSpacing;
+          uniform vec2 mouse;
+          uniform vec2 threshold;
+          varying vec2 xy;
+
+          ${glslComplex}
+          ${gammaCorrectGLSL}
+          ${complexSampleFunctionGLSL}
+          ${logStripesGLSL}
+
+          // Equivalent to smoothstep, but with a hard edge
+          float hardstep (float edge0, float edge1, float x) {
+            return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+          }
+
+          void main () {
+            vec2 f = complexSampleFunction(xy, mouse);
+            float contours = logStripesColormap(cabs(f), contourSpacing);
+            contours = hardstep(threshold.x, threshold.y, contours);
+            gl_FragColor = vec4(gammaCorrect(vec3(contours)), 1);
+          }`,
+        uniforms: {
+          contourSpacing: regl0.prop('contourSpacing'),
+          threshold: regl0.prop('gradientThreshold')
+        }
+      })
+    };
+  </script>
+  <script id="3613" type="text/markdown">
+    Applying a threshold to the plot above produces bands, but of course the width is highly non-uniform. To achieve uniform pixel-width lines, we must select just the right threshold at every point.
+  </script>
+  <script id="2962" type="text/markdown">
+    To select this threshold, we use screen-space derivatives. As the name suggests, screen-space derivatives represent derivatives with respect to pixels on the screen. Computed as the difference between adjacent pixel values—in the context of GPUs called *fragments*—they're built into the GPU and are commonly used in [mipmapping](https://en.wikipedia.org/wiki/Mipmap) to avoid aliasing by gauging how fast a texture changes from fragment to fragment.
+  </script>
+  <script id="2940" type="text/html">
+    <figure style="text-align:center">
+    <img src="${await FileAttachment(
+      "fragments.jpg"
+    ).url()}" style="max-width:300px;margin:auto">
+    <figcaption>${md`A block of four adjacent fragments (pixels), from which GPU shaders may request screen-space derivatives.`}</figcaption>
+    </figure>
+  </script>
+  <script id="3596" type="text/markdown">
+    GPUs evaluate fragments in ${tex`2 \times 2`} blocks and offer horizontal and vertical differences between fragments as built-in functions. These differences are equivalent to first order [finite difference](https://en.wikipedia.org/wiki/Finite_difference) approximations of the derivative with units of *units per pixel*. Horizontal derivatives within a block are defined as
+
+  </script>
+  <script id="3597" type="text/markdown">
+    ${tex.block`
+    \begin{aligned}
+    & \left.\frac{\partial f}{\partial i}\right|_{i, j} = \left.\frac{\partial f}{\partial i}\right|_{i + 1, j} \approx f_{i + 1, j} - f_{i, j} \\
+
+    & \left.\frac{\partial f}{\partial i}\right|_{i, j + 1} = \left.\frac{\partial f}{\partial i}\right|_{i + 1, j + 1} \approx f_{i + 1, j + 1} - f_{i, j + 1}
+    \end{aligned}
+    `}
+
+  </script>
+  <script id="3599" type="text/markdown">
+    where ${tex`i`} and ${tex`j`} are pixel coordinates. Vertical derivatives are defined similarly. The screen-space gradient magnitude is then the sum of the squares of the ${tex`i-`} and ${tex`j-`}derivatives.
+
+  </script>
+  <script id="3600" type="text/markdown">
+    ${tex.block`\left| \nabla f \right| = \sqrt{ \left(\frac{\partial f}{\partial i}\right)^2 +  \left(\frac{\partial f}{\partial j}\right)^2}`}
+
+  </script>
+  <script id="3601" type="text/markdown">
+    Of particular interest to us is that division of a function (*units*) by its screen-space gradient (*units per pixel*) has units of *pixels*.
+
+  </script>
+  <script id="3602" type="text/markdown">
+    ${tex.block`\frac{(\mathrm{units})}{(\frac{\mathrm{units}}{\mathrm{pixel}})} = \mathrm{pixels}`}
+
+  </script>
+  <script id="3603" type="text/markdown">
+    Thus, division of the above triangle wave gradient by the magnitude of the screen-space gradient at each point yields a new colormap which represents, *in units of pixels*, the distance from each contour line. From there, we simply apply a threshold, in units of pixels, and achieve a contour plot with uniform-width lines.
+
+  </script>
+  <script id="3604" type="text/markdown">
+    Numerical derivatives, even though only accurate to the first order, will be adequate for us. We could of course compute derivatives by analytical methods like [automatic differentiation](https://en.wikipedia.org/wiki/Automatic_differentiation), but in practice, for the accuracy required to achieve the effects in this notebook, that proves to be [massive overkill](https://observablehq.com/@rreusser/glsl-complex-auto-differentiation).
+
+  </script>
+  <script id="3605" type="text/markdown">
+    Note finally that this doesn't have to be a two-dimensional function. Since all other transforms, whether 2D, 3D, or otherwise happen before screen space differentiation, all of the techniques in this notebook can be used without modification, for example, to draw [wireframes or other function contours on 3D models](https://github.com/rreusser/glsl-solid-wireframe).
+
+  </script>
+  <script id="3606" type="text/markdown">
+    As for implementation, WebGL offers the [`OES_standard_derivatives`](https://developer.mozilla.org/en-US/docs/Web/API/OES_standard_derivatives) extension with the following functions:
+
+  </script>
+  <script id="3607" type="text/markdown">
+    - `dFdx(f)`: differences between horizontally adjacent values of `f`
+    - `dFdy(f)`: differences between vertically adjacent values of `f`
+    - `fwidth(f)`: sum of absolute values, `abs(dFdx(f)) + abs(dFdy(f))`
+
+  </script>
+  <script id="26" type="text/markdown">
+    The function `fwidth` is often used as a square-root-free proxy for the gradient magnitude but results in about a 40% anisotropy in diagonal directions (i.e. ${tex`\sqrt{2}`}), so that `length(vec2(dFdx(f), dFdy(f)))` is preferable for the best quality.
+
+  </script>
+  <script id="3608" type="text/markdown">
+    The GLSL function below implements a contouring function that receives input `f` and returns 0.0 in the background and 1.0 on a contour, with a smooth fade between for antialiasing.
+  </script>
+  <script id="220" type="text/x-typescript">
+    const logContoursGLSL = view(code(
+      `float logContours (float f, float spacing, float width, float antialiasWidth) {
+      float plotVar = log2(abs(f)) * spacing;
+      float screenSpaceGradient = hypot(vec2(dFdx(f), dFdy(f))) / abs(f) * spacing;
+      return linearstep(
+        width + 0.5 * antialiasWidth,
+        width - 0.5 * antialiasWidth,
+        (0.5 - abs(fract(plotVar) - 0.5)) / screenSpaceGradient
+      );
+    }`
+    ))
+  </script>
+  <script id="836" type="text/markdown">
+    The figures below illustrate usage of this function, first for an increasing function of one variable and then for a two-dimensional function. Modify the slider values and observe how the function is transformed into equally-spaced, antialiased contours.
+  </script>
+  <script id="3654" type="text/x-typescript">
+    const n = 401;
+    const xmax = 60;
+
+    const x = Array.from({ length: n }, (_, i) => (i / (n - 1)) * xmax);
+
+    const f = x => 0.002 * (20 * x + 0.5 * x * x);
+    const dFdx = x => 0.002 * (20 + x);
+
+    // Shared derived quantities.
+    const phase = x.map(x => (f(x) * contourSpacing) % 1);
+
+    const triangle = x.map(x =>
+      (0.5 - Math.abs(((f(x) * contourSpacing) % 1) - 0.5)) /
+      dFdx(x) /
+      contourSpacing
+    );
+
+    const clippedTriangle = triangle.map(v => Math.min(lineWidth, v));
+
+    const smooth = x.map(x =>
+      linearstep(
+        1 + (0.5 * Math.max(1e-4, lineFeather)) / lineWidth,
+        1 - (0.5 * Math.max(1e-4, lineFeather)) / lineWidth,
+        (0.5 - Math.abs(((f(x) * contourSpacing) % 1) - 0.5)) /
+          dFdx(x) /
+          (lineWidth * contourSpacing)
+      )
+    );
+
+    // (a) Input function modulo 1.
+    display(Plot.plot({
+      width: smallCanvas.width,
+      height: 120,
+      x: { domain: [0, xmax] },
+      y: { domain: [-0.1, 1.1] },
+      marginTop: 10,
+      marginBottom: 40,
+      marks: [
+
+        Plot.ruleY([0.5], { stroke: "black" }),
+        Plot.line(
+          x.map((d, i) => ({ x: d, y: phase[i] })),
+          { x: "x", y: "y", stroke: "#27c" }
+        ),
+      ]
+    }));
+
+    // (b) Triangle wave scaled by screen-space derivative.
+    display(Plot.plot({
+      width: smallCanvas.width,
+      height: 120,
+      x: { domain: [0, xmax] },
+      y: { domain: [0, 5] },
+      marginTop: 10,
+      marginBottom: 30,
+      marks: [
+        /*Plot.areaY(
+          [
+            ...x.map((d, i) => ({ x: d, y: clippedTriangle[i] })),
+            { x: xmax, y: lineWidth },
+            { x: 0, y: lineWidth }
+          ],
+          { x: "x", y: "y", fill: "#27c", fillOpacity: 0.25 }
+        ),*/
+        Plot.line(
+          x.map((d, i) => ({ x: d, y: triangle[i] })),
+          { x: "x", y: "y", stroke: "#27c" }
+        ),
+        Plot.ruleY([lineWidth], { stroke: "black" }),
+        Plot.ruleY(
+          [
+            lineWidth - 0.5 * lineFeather,
+            lineWidth + 0.5 * lineFeather
+          ],
+          { stroke: "#bbb", strokeDasharray: "4,4" }
+        )
+      ]
+    }));
+
+    // (c) Smooth thresholded output.
+    display(Plot.plot({
+      width: smallCanvas.width,
+      height: 120,
+      x: { domain: [0, xmax] },
+      y: { domain: [-0.1, 1.1] },
+      marginTop: 20,
+      marginBottom: 30,
+      marks: [
+        Plot.areaY(
+          x.map((d, i) => ({ x: d, y: smooth[i] })),
+          { x: "x", y: "y", fill: "#27c", fillOpacity: 0.25 }
+        ),
+        Plot.line(
+          x.map((d, i) => ({ x: d, y: smooth[i] })),
+          { x: "x", y: "y", stroke: "#27c" }
+        )
+      ]
+    }));
+  </script>
+  <script id="508" type="text/x-typescript">
+    const contourSpacing = view(Inputs.range([0.5, 10], {
+      step: 0.01,
+      value: 1.0,
+      label: "Contour spacing"
+    }));
+
+    const lineWidth = view(Inputs.range([0.5, 3], {
+      step: 0.1,
+      value: 1,
+      label: 'Line width'
+    }));
+
+    const lineFeather = view(Inputs.range([0, 2], {
+      step: 0.1,
+      value: 1.0,
+      label: 'Antialiasing width'
+    }));
+  </script>
+  <script id="98" type="text/x-typescript">
+    const regl1 = view((function () {
+      const ctx = createREGLContext(smallCanvas);
+      const fig = html`
+        <figure>
+          ${ctx}
+          <figcaption>Contours of the log-magnitude of a sample function computed in a WebGL fragment shader with the screen-space derivatives technique.</figcaption>
+        </figure>`;
+      fig.value = ctx.value;
+      return fig;
+    })());
+  </script>
+  <script id="121" type="text/x-typescript">
+    const drawLoop1 = (function () {
+      drawCmds1.configureMouse.taint();
+      const frame = regl1.frame(() => {
+        drawCmds1.configureView(() => {
+          drawCmds1.configureBlit(() => {
+            drawCmds1.configureMouse(ctx => {
+              if (!ctx.dirty) return;
+              drawCmds1.drawField({ lineWidth, lineFeather, contourSpacing });
+            });
+          });
+        });
+      });
+      invalidation.then(() => frame.cancel());
+    })();
+  </script>
+  <script id="358" type="text/x-typescript">
+    const drawCmds1 = ({
+      configureBlit: createBlitCmd(regl1),
+      configureView: createConfigureViewCmd(regl1),
+      configureMouse: createAttachMouseCmd(regl1, invalidation),
+      drawField: regl1({
+        frag: `
+          #extension GL_OES_standard_derivatives : enable
+          precision highp float;
+          uniform float lineWidth, lineFeather, contourSpacing;
+          uniform vec2 mouse;
+          varying vec2 xy;
+
+          ${linearStepGLSL}
+          ${glslComplex}
+          ${gammaCorrectGLSL}
+          ${logContoursGLSL}
+          ${complexSampleFunctionGLSL}
+
+          void main () {
+            vec2 f = complexSampleFunction(xy, mouse);
+
+            float contours = logContours(cabs(f), contourSpacing, lineWidth, lineFeather);
+
+            // Awhite background with black contours
+            gl_FragColor = vec4(gammaCorrect(vec3(1.0 - contours)), 1);
+          }`,
+        uniforms: {
+          contourSpacing: regl1.prop('contourSpacing'),
+          lineWidth: (ctx, props) => ctx.pixelRatio * props.lineWidth,
+          lineFeather: (ctx, props) =>
+            Math.max(1e-4, ctx.pixelRatio * props.lineFeather)
+        }
+      })
+    });
+  </script>
+  <script id="1976" type="text/html">
+    <div style="padding-top: 5em"></div>
+  </script>
+  <script id="3626" type="text/markdown">
+    ## Local contour spacing
+  </script>
+  <script id="3627" type="text/markdown">
+    ***Note: Gosh, this section just isn't written that clearly. For some further illumination of the motivation, see: [rreusser.github.io#29](https://github.com/rreusser/rreusser.github.io/issues/29).***
+  </script>
+  <script id="3628" type="text/markdown">
+    We now turn our attention to contour *spacing*. As successful as the above plot is, the spacing for this very tame function still varies from less than a pixel to more than a hundred.
+  </script>
+  <script id="3629" type="text/markdown">
+    Our next observation is that we can use the same gradient to select a locally appropriate contour step size. We call regions of equal spacing *octaves*, and every time the octave increments, we split one division into ${tex`D`} divisions.
+  </script>
+  <script id="3630" type="text/markdown">
+    To select the locally appropriate contour spacing octave, we use the equation
+  </script>
+  <script id="3631" type="text/markdown">
+    ${tex.block`
+    N_{octave} = \left \lceil \log_{D}{\left( m \frac{\left|\nabla f\right|}{|f|} \right)} \right \rceil
+    `}
+  </script>
+  <script id="3632" type="text/markdown">
+    ${tex.block`
+    N_{octave} = \left \lceil \log_{D}{\left( m \frac{\left|\nabla f\right|}{|f|} \right)} \right \rceil
+    `}
+  </script>
+  <script id="3633" type="text/markdown">
+    where ${tex`N_{octave}`} is an integer indicating to which octave a given region belongs, ${tex`D`} is the number of divisions per octave, and ${tex`m`} is the minimum spacing, in pixels, between divisions. Note that the term in the inner parentheses is dimensionless.
+  </script>
+  <script id="3634" type="text/markdown">
+    We then compute the contour spacing ${tex`\delta`} as
+  </script>
+  <script id="3635" type="text/markdown">
+    ${tex.block`
+    \delta = D^{N_{octave}}.
+    `}
+  </script>
+  <script id="3636" type="text/markdown">
+    We'll plot *logarithmically* spaced contours of the function, so in the equation above we've used the [logarithmic derivative](https://en.wikipedia.org/wiki/Logarithmic_derivative), recalling that the derivative of a logarithm is equal to the derivative of the function divided by its value,
+  </script>
+  <script id="3637" type="text/markdown">
+    ${tex.block`
+    \frac{d}{dx} \ln{f(x)} = \frac{1}{f(x)} \frac{d f(x)}{dx}.
+    `}
+  </script>
+  <script id="3638" type="text/markdown">
+    We may wish to place contours at evenly *linearly* spaced function values, in which case we would remove division of `screenSpaceGrad` in the function below by `abs(f)` then plot `abs(f)` instead of `log2(abs(f))`.
+  </script>
+  <script id="913" type="text/markdown">
+    Whether to place contours linearly or logarithmically is a bit of a subtle decision. Personally, I think linearly spaced contours make more sense, but I observe that when shading is applied, it's easier to tell the difference between roots and poles when contours are placed logarithmically. Fortunately they're both valid and we don't have to commit to a decision.
+  </script>
+  <script id="3639" type="text/markdown">
+    The shader below implements a function which places contours at logarithmically spaced function values, adjusting the spacing to keep contours everywhere nicely spaced.
+  </script>
+  <script id="938" type="text/x-typescript">
+    const locallyScaledLogContoursGLSL = view(code(`float locallyScaledLogContours (float f,
+                                    float minSpacing,
+                                    float divisions,
+                                    float lineWidth,
+                                    float antialiasWidth
+    ) {
+      float screenSpaceGrad = hypot(vec2(dFdx(f), dFdy(f)))${
+        scalingType2 === "Linear" ? "" : " / abs(f)"
+      };
+
+      // Select which integer-valued octave a region falls into
+      float localOctave = ceil(log2(screenSpaceGrad * minSpacing) / log2(divisions));
+
+      // An integer power of the divisions per octave
+      float contourSpacing = pow(divisions, localOctave);
+
+      // Plot contours at each multiple of the contour spacing
+      float plotVar = ${
+        scalingType2 === "Logarithmic" ? "log2(abs(f))" : "abs(f)"
+      } / contourSpacing;
+
+      // A magic width scale to make the lines uniform
+      float widthScale = 2.0 * contourSpacing / screenSpaceGrad${
+        scalingType2 === "Logarithmic" ? "" : " * 2.0"
+      };
+
+      return linearstep(
+        lineWidth + antialiasWidth,
+        lineWidth - antialiasWidth,
+        (0.5 - abs(fract(plotVar) - 0.5)) * widthScale
+      );
+    }`));
+  </script>
+  <script id="2316" type="text/markdown">
+    Change the parameters below and observe the effect on the contours. Note in particular that changing the minimum contour spacing does not affect the position of the contours. Instead, it only affects the location of the thresholds between the octaves.
+  </script>
+  <script id="3478" type="text/x-typescript">
+    const baselineSpacing = view(Inputs.range([2, 40], {
+      step: 1,
+      value: 15,
+      label: 'Minimum contour spacing, in pixels'
+    }));
+
+    const octaveDivisions = view(Inputs.range([2, 8], {
+      step: 1,
+      value: 2,
+      label: 'Divisions per octave'
+    }));
+
+    const scalingType2 = view(Inputs.radio(["Logarithmic", "Linear"], {
+        value: "Logarithmic"
+      }));
+
+    const debugColor = view(
+      Inputs.checkbox(['Visualize octave with color'], {value: ['Visualize octave with color']})
+    );
+  </script>
+  <script id="927" type="text/x-typescript">
+    const regl2 = view((function () {
+      const ctx = createREGLContext(largeCanvas);
+      const fig = html`
+        <figure>
+          ${ctx}
+          <figcaption>Log-distributed contours with spacing scaled by the local relative gradient of the function.</figcaption>
+        </figure>`;
+      fig.value = ctx.value;
+      return fig;
+    })());
+  </script>
+  <script id="932" type="text/x-typescript">
+    const drawLoop2 = (function () {
+      drawCmds2.configureMouse.taint();
+      const frame = regl2.frame(() => {
+        drawCmds2.configureView(() => {
+          drawCmds2.configureBlit(() => {
+            drawCmds2.configureMouse(ctx => {
+              if (!ctx.dirty) return;
+              drawCmds2.drawField({
+                lineWidth: 1.5,
+                lineFeather: 1.5,
+                contourSpacing,
+                octaveDivisions,
+                baselineSpacing,
+                debugColor: debugColor.includes('Visualize octave with color')
+              });
+            });
+          });
+        });
+      });
+      invalidation.then(() => frame.cancel());
+    })();
+  </script>
+  <script id="929" type="text/x-typescript">
+    const drawCmds2 = ({
+      configureBlit: createBlitCmd(regl2),
+      configureView: createConfigureViewCmd(regl2),
+      configureMouse: createAttachMouseCmd(regl2, invalidation),
+      drawField: regl2({
+        frag: `
+          #extension GL_OES_standard_derivatives : enable
+          precision highp float;
+          uniform float lineWidth, lineFeather, octaveDivisions, baselineSpacing;
+          uniform bool debugColor;
+          uniform vec2 mouse;
+          varying vec2 xy;
+
+          ${linearStepGLSL}
+          ${glslComplex}
+          ${gammaCorrectGLSL}
+          ${complexSampleFunctionGLSL}
+          ${locallyScaledLogContoursGLSL}
+
+          vec3 randomColor (float x) {
+            return 0.5 + 0.5 * vec3(cos(x), cos(x - PI * 2.0 / 3.0), cos(x - PI * 4.0 / 3.0));
+          }
+
+          vec3 octaveColor (float f, float minSpacing, float divisions) {
+            float screenSpaceGrad = hypot(vec2(dFdx(f), dFdy(f)))${
+              scalingType2 === "Linear" ? "" : " / abs(f)"
+            };
+            float localOctave = ceil(log2(screenSpaceGrad * minSpacing) / log2(divisions));
+            return randomColor(localOctave);
+          }
+
+          void main () {
+            vec2 f = complexSampleFunction(xy, mouse);
+            vec3 color = mix(vec3(1), octaveColor(cabs(f), baselineSpacing, octaveDivisions), debugColor ? 0.3 : 0.0);
+
+            gl_FragColor = vec4(gammaCorrect(color * vec3(
+              1.0 - locallyScaledLogContours(
+                cabs(f),
+                baselineSpacing,
+                octaveDivisions,
+                lineWidth,
+                lineFeather)
+              )), 1);
+          }`,
+        uniforms: {
+          debugColor: (ctx, props) => !!props.debugColor,
+          octaveDivisions: regl2.prop("octaveDivisions"),
+          baselineSpacing: (ctx, props) => props.baselineSpacing * ctx.pixelRatio,
+          lineWidth: (ctx, props) => ctx.pixelRatio * props.lineWidth,
+          lineFeather: (ctx, props) =>
+            Math.max(1e-4, ctx.pixelRatio * props.lineFeather)
+        }
+      })
+    });
+  </script>
+  <script id="1980" type="text/html">
+    <div style="padding-top: 5em"></div>
+  </script>
+  <script id="1035" type="application/vnd.observable.javascript">
+    blending = md`## Blending over octaves
+
+    We've made progress, except we have sharp transitions between successive contour spacings. The final major trick is to blend these contours over a number of octaves, starting at the finest spacing relative to pixels and increasing the size until contours would cover the entire image, at which point further octaves have no use.
+
+    This approach is not unlike a [Shepard tone](https://en.wikipedia.org/wiki/Shepard_tone), which appears to increase infinitely, fading out tones as they leave the upper end of the auditory range and replacing them with new tones at the bottom end of the auditory range. Similarly, we fade out contours as they leave the desirable range, becoming either too densely spaced or too spread out.`
+  </script>
+  <script id="1049" type="text/x-typescript">
+    const blendedOctavesGLSL = view(code(`float blendedContours (float f, float minSpacing, float width, float antialiasing) {
+      // Compile-time constants
+      const int octaves = ${octaveCount};
+      const float n = ${octaveCount.toFixed(1)};
+
+      float screenSpaceGrad = hypot(vec2(dFdx(f), dFdy(f)))${
+        scalingType3 === "Linear" ? "" : " / abs(f)"
+      };${scalingType3 === "Linear" ? "antialiasing /= 2.0;" : ""}
+
+      float localOctave = log2(screenSpaceGrad * minSpacing) / log2(octaveDivisions);
+      float contourSpacing = pow(octaveDivisions, ceil(localOctave));
+
+      float plotVar = ${
+        scalingType3 === "Logarithmic" ? "log2(abs(f))" : "abs(f)"
+      } / contourSpacing;
+      float widthScale = contourSpacing / screenSpaceGrad;
+
+      float contourSum = 0.0;
+      for(int i = 0; i < octaves; i++) {
+        // A weight which fades in the smallest octave and fades out the largest
+        float t = float(i + 1) - fract(localOctave);
+        float weight = smoothstep(0.0, 1.0, t) * smoothstep(n, n - 1.0, t);
+
+        contourSum += weight * linearstep(
+          0.5 * (width + antialiasing),
+          0.5 * (width - antialiasing),
+          (0.5 - abs(fract(plotVar) - 0.5)) * widthScale
+        );
+
+        // Rescale for the next octave
+        widthScale *= octaveDivisions;
+        plotVar /= octaveDivisions;
+      }
+
+      return contourSum / n;
+    }`));
+  </script>
+  <script id="1164" type="text/x-typescript">
+    const baselineSpacing2 = view(Inputs.range([1, 5], {
+      step: 0.1,
+      value: 2,
+      label: 'Minimum contour spacing, in pixels'
+    }));
+
+    const octaveDivisions2 = view(Inputs.range([2, 8], {
+      step: 1,
+      value: 6,
+      label: 'Divisons per octave'
+    }));
+
+    const octaveCount = view(Inputs.range([1, 8], {
+      step: 1,
+      value: 4,
+      label: 'Octaves'
+    }));
+
+    const scalingType3 =
+      view(Inputs.radio(["Logarithmic", "Linear"], {
+        value: "Logarithmic"
+      }));
+  </script>
+  <script id="1038" type="text/x-typescript">
+    const regl3 = view((function () {
+      const ctx = createREGLContext(largeCanvas);
+      const fig = html`
+        <figure>
+          ${ctx}
+          <figcaption>Locally-scaled contours, blended across multiple octaves.</figcaption>
+        </figure>`;
+      fig.value = ctx.value;
+      return fig;
+    })());
+  </script>
+  <script id="1043" type="text/x-typescript">
+    const drawLoop3 = (function () {
+      drawCmds3.configureMouse.taint();
+      const frame = regl3.frame(() => {
+        drawCmds3.configureView(() => {
+          drawCmds3.configureBlit(() => {
+            drawCmds3.configureMouse(ctx => {
+              if (!ctx.dirty) return;
+              drawCmds3.drawField({
+                lineWidth: 1.5,
+                lineFeather: 1.5,
+                contourSpacing,
+                octaveDivisions: octaveDivisions2,
+                baselineSpacing: baselineSpacing2
+              });
+            });
+          });
+        });
+      });
+      invalidation.then(() => frame.cancel());
+    })();
+  </script>
+  <script id="1046" type="text/x-typescript">
+    const drawCmds3 = ({
+      configureBlit: createBlitCmd(regl3),
+      configureView: createConfigureViewCmd(regl3),
+      configureMouse: createAttachMouseCmd(regl3, invalidation),
+      drawField: regl3({
+        frag: `
+          #extension GL_OES_standard_derivatives : enable
+          precision highp float;
+          uniform float lineWidth, lineFeather, octaveDivisions, baselineSpacing;
+          uniform vec2 mouse;
+          varying vec2 xy;
+
+          ${linearStepGLSL}
+          ${glslComplex}
+          ${gammaCorrectGLSL}
+          ${complexSampleFunctionGLSL}
+          ${blendedOctavesGLSL}
+
+          void main () {
+            vec2 f = complexSampleFunction(xy, mouse);
+
+            gl_FragColor = vec4(
+              gammaCorrect(
+                vec3(1.0 - 1.5 * blendedContours(hypot(f), baselineSpacing, lineWidth, lineFeather))
+              ), 1);
+          }`,
+        uniforms: {
+          octaveDivisions: regl3.prop('octaveDivisions'),
+          baselineSpacing: (ctx, props) => props.baselineSpacing * ctx.pixelRatio,
+          lineWidth: (ctx, props) => ctx.pixelRatio * props.lineWidth,
+          lineFeather: (ctx, props) =>
+            Math.max(1e-4, ctx.pixelRatio * props.lineFeather)
+        }
+      })
+    })
+  </script>
+  <script id="2634" type="application/vnd.observable.javascript">
+    html`<div style="padding-top: 5em"></div>`
+  </script>
+  <script id="1208" type="application/vnd.observable.javascript">
+    shading = md`## Shaded contouring
+
+    We've so far spent all of our time on line contours. Next, we repurpose the exact same concepts for shaded regions.
+
+    Since shading fills entire regions, it may at first appear that our screen-space trick for relating function values to pixel widths has no place here. However, if we smoothly shade regions from a value of zero to one with a sharp jump back to zero, we'll encounter aliasing at the threshold.
+
+    To antialias, we use the above screen-space derivative trick to produce a function that goes smoothly from zero to one then back to zero *over a given number of pixels*.`
+  </script>
+  <script id="3652" type="text/x-typescript">
+    const xmax = 30;
+
+    // Primitive line segments expressed as data.
+    const baseLine = [
+      { x: 0, y: 0 },
+      { x: xmax, y: 1 }
+    ];
+
+    const dashedLine = [
+      { x: 0, y: xmax / antialiasing4 },
+      { x: xmax, y: 0 }
+    ];
+
+    const areaShape = [
+      { x: 0, y: 0 },
+      { x: xmax - antialiasing4 + antialiasing4 / xmax, y: 1 - antialiasing4 / xmax },
+      { x: xmax, y: 0 }
+    ];
+
+    display(Plot.plot({
+      width: smallCanvas.width,
+      height: 300,
+      y: { domain: [0, 1.5] },
+      marginTop: 20,
+      marginRight: 20,
+      marginBottom: 40,
+      marginLeft: 40,
+      marks: [
+        // Filled antialiasing wedge.
+        Plot.areaY(areaShape, {
+          x: "x",
+          y: "y",
+          fill: "#27c",
+          fillOpacity: 0.25
+        }),
+
+        // Main solid line with endpoints emphasized.
+        Plot.line(baseLine, {
+          x: "x",
+          y: "y",
+          stroke: "#27c"
+        }),
+        Plot.dot(baseLine, {
+          x: "x",
+          y: "y",
+          fill: "#27c",
+          r: 3
+        }),
+
+        // Dashed falloff line.
+        Plot.line(dashedLine, {
+          x: "x",
+          y: "y",
+          stroke: "#27c",
+          strokeDasharray: "4,4"
+        })
+      ]
+    }));
+  </script>
+  <script id="2386" type="application/vnd.observable.javascript">
+    viewof antialiasing4 = Inputs.range([0, 2], {
+      step: 0.1,
+      value: 1,
+      label: 'Antialiasing width'
+    })
+  </script>
+  <script id="2502" type="application/vnd.observable.javascript">
+    md`Of course we may not want our coloring to go *linearly* from zero to one. In the style of [unsharp masking](https://en.wikipedia.org/wiki/Unsharp_masking), we can distribute the slope toward the edges of the ramp to increase the perceived contrast. The plot below shows a simple single-parameter contrast ramp layered over multiple octaves.`
+  </script>
+  <script id="2508" type="text/x-typescript">
+    const contrastFunctionGLSL = view(code(
+    `float contrastFunction(float x, float power) {
+      x = 2.0 * x - 1.0;
+      return 0.5 + 0.5 * pow(abs(x), power) * sign(x);
+    }`))
+  </script>
+  <script id="3649" type="text/x-typescript">
+    // Parameters assumed to exist.
+    const n = 801;
+    const xmax = 1;
+
+    // Domain.
+    const x = Array.from({ length: n }, (_, i) => i / (n - 1));
+
+    // Helpers.
+    function ramp(x, power) {
+      x = 2 * x - 1;
+      return 0.5 + 0.5 * Math.pow(Math.abs(x), power) * Math.sign(x);
+    }
+
+    function f(x) {
+      let scale = 1.0;
+      let sum = 0.0;
+
+      for (let i = 0; i < octaveCount4; i++) {
+        sum += ramp((x * scale) % 1, rampPower4);
+        scale *= octaveDivisions4;
+      }
+
+      return sum / octaveCount4;
+    }
+
+    // Data.
+    const data = x.map(d => ({ x: d, y: f(d) }));
+
+    // Plot.
+    display(Plot.plot({
+      width: smallCanvas.width,
+      height: 300,
+      y: { domain: [0, 1] },
+      marginTop: 20,
+      marginRight: 20,
+      marginBottom: 40,
+      marginLeft: 40,
+      marks: [
+        Plot.areaY(data, {
+          x: "x",
+          y: "y",
+          fill: "#27c",
+          fillOpacity: 0.25
+        }),
+        Plot.line(data, {
+          x: "x",
+          y: "y",
+          stroke: "#27c",
+          strokeWidth: 1
+        })
+      ]
+    }));
+  </script>
+  <script id="2498" type="text/x-typescript">
+    const rampPower4 = view(Inputs.range([1, 4], {
+      step: 0.01,
+      value: 2,
+      label: 'Contrast ramp power'
+    }));
+    const octaveCount4 = view(Inputs.range([1, 8], {
+      step: 1,
+      value: 4,
+      label: 'Octaves'
+    }));
+    const octaveDivisions4 = view(Inputs.range([2, 8], {
+      step: 1,
+      value: 5,
+      label: 'Divisons per octave'
+    }));
+    const contourSpacing4 = view(Inputs.range([1, 5], {
+      step: 0.1,
+      value: 1,
+      label: 'Minimum contour spacing, in pixels'
+    }));
+
+    const antialiasing5 = view(Inputs.range([0, 2], {
+      step: 0.1,
+      value: 1,
+      label: 'Antialiasing width'
+    }));
+
+    const scalingType = view(Inputs.radio(["Logarithmic", "Linear"], {
+      value: "Logarithmic"
+    }))
+  </script>
+  <script id="2330" type="application/vnd.observable.javascript">
+    viewof regl4 = {
+      const ctx = createREGLContext(largeCanvas);
+      const fig = html`
+        <figure>
+          ${ctx}
+          <figcaption>The line contouring code, repurposed for shading. Adjust the zoom below and observe that the contours always adjust just right to produce the illusion of infinite detail.</figcaption>
+        </figure>`;
+      fig.value = ctx.value;
+      return fig;
+    }
+  </script>
+  <script id="3343" type="text/x-typescript">
+    const zoom = view((function () {
+      const s = Inputs.range([-3, 3], {
+        step: 0.001,
+        precision: 3,
+        value: 0, //2 * Math.sin(now / 3000),
+        label: 'Zoom'
+      });
+      s.classList.add('wide');
+      return s;
+    })());;
+  </script>
+  <script id="2325" type="text/x-typescript">
+    const shadedOctavesGLSL = view(code(
+      `float shadedContours (float f, float minSpacing, float antialiasWidth, float rampPower) {
+      // Compile-time constants
+      const int octaves = ${octaveCount4};
+      const float fOctaves = ${octaveCount4.toFixed(1)};
+
+      float screenSpaceGrad = hypot(vec2(dFdx(f), dFdy(f)))${
+        scalingType === "Linear" ? "" : " / abs(f)"
+      };${scalingType === "Linear" ? "antialiasWidth /= 2.0;" : ""}
+
+      float localOctave = log2(screenSpaceGrad * minSpacing) / log2(octaveDivisions);
+      float contourSpacing = pow(octaveDivisions, ceil(localOctave));
+
+      float plotVar = ${
+        scalingType === "Logarithmic" ? "log2(abs(f))" : "abs(f)"
+      } / contourSpacing;
+      float widthScale = contourSpacing / screenSpaceGrad;
+
+      float contourSum = 0.0;
+      for(int i = 0; i < octaves; i++) {
+        // A weight which fades in the smallest octave and fades out the largest
+        float t = float(i + 1) - fract(localOctave);
+        float weight = smoothstep(0.0, 1.0, t) * smoothstep(fOctaves, fOctaves - 1.0, t);
+
+        // Shading for this octave is the contrast ramp with a chunk cut out of the corner for antialiasing
+        float y = fract(plotVar);
+        contourSum += weight * min(
+          contrastFunction(y, rampPower),
+          (1.0 - y) * 0.5 * widthScale / antialiasWidth
+        );
+
+        // Adjust scales for the next octave
+        widthScale *= octaveDivisions;
+        plotVar /= octaveDivisions;
+      }
+
+      return contourSum / fOctaves;
+    }`
+    ));
+  </script>
+  <script id="2332" type="text/x-typescript">
+    const drawLoop4 = (function () {
+      drawCmds4.configureMouse.taint();
+      drawCmds4.configureMouse.reset();
+      const frame = regl4.frame(() => {
+        drawCmds4.configureView({ scale: Math.pow(10, -zoom) * 2.0 }, () => {
+          drawCmds4.configureBlit(() => {
+            drawCmds4.configureMouse(ctx => {
+              if (!ctx.dirty) return;
+              drawCmds4.drawField({
+                antialiasWidth: antialiasing5,
+                octaveDivisions: octaveDivisions4,
+                baselineSpacing: contourSpacing4,
+                rampPower: rampPower4
+              });
+            });
+          });
+        });
+      });
+      invalidation.then(() => frame.cancel());
+    })();
+  </script>
+  <script id="2334" type="text/x-typescript">
+    const drawCmds4 = ({
+      configureBlit: createBlitCmd(regl4),
+      configureView: createConfigureViewCmd(regl4),
+      configureMouse: createAttachMouseCmd(regl4, invalidation),
+      drawField: regl4({
+        frag: `
+          #extension GL_OES_standard_derivatives : enable
+          precision highp float;
+          uniform float antialiasWidth, octaveDivisions, baselineSpacing, rampPower;
+          uniform vec2 mouse;
+          varying vec2 xy;
+
+          ${glslComplex}
+          ${gammaCorrectGLSL}
+          ${contrastFunctionGLSL}
+          ${complexSampleFunctionGLSL}
+          ${shadedOctavesGLSL}
+
+          void main () {
+            vec2 f = complexSampleFunction(xy, mouse);
+
+            gl_FragColor = vec4(vec3(
+              gammaCorrect(vec3(1.0 - shadedContours(hypot(f), baselineSpacing, antialiasWidth, rampPower)))
+            ), 1);
+          }`,
+        uniforms: {
+          octaveDivisions: regl4.prop('octaveDivisions'),
+          rampPower: regl4.prop('rampPower'),
+          baselineSpacing: (ctx, props) => props.baselineSpacing * ctx.pixelRatio,
+          antialiasWidth: (ctx, props) => Math.max(1e-4, props.antialiasWidth)
+        }
+      })
+    })
+  </script>
+  <script id="2579" type="text/markdown">
+    At this point, what we've created is sort of like a fractal pattern, carefully band-limited so that the smallest-scale pattern is pinned to the scale of just a few pixels. The number of octaves may be chosen by the user, but in fact there is a fairly concrete answer to the question of how many octaves should be used. The number of octaves should be chosen so that the largest scale pattern precisely covers the entire image.
+  </script>
+  <script id="2649" type="application/vnd.observable.javascript">
+    html`<div style="padding-top: 5em"></div>`
+  </script>
+  <script id="3643" type="text/markdown">
+    ## Conclusions
+  </script>
+  <script id="3645" type="text/markdown">
+    This is where we'll leave it for now! These are the core components of my currently-favorite approach to domain coloring, and I've found many other uses for them. In a followup up post, I'll work through coloring by phase and applying these contours to the phase, finally arriving at a flexible, configurable shader for domain coloring.
+  </script>
+  <script id="3646" type="text/markdown">
+    In the mean time, though the code is messier than I'd like, you can play with domain coloring using my [Complex Function Plotter](https://observablehq.com/@rreusser/complex-function-plotter) notebook.
+  </script>
+  <script id="3288" type="text/markdown">
+    And finally, I'd especially like to thank Observable for making this notebook possible, Mikola Lysenko for his excellent [regl](https://github.com/regl-project/regl) library, and Jacob Rus for help, thought and feedback along the way.
+  </script>
+  <script id="3647" type="text/markdown">
+    Feel free to leave comments on this notebook or contact me [on Bluesky](https://bsky.app/profile/rreusser.bsky.social) or [on Mastodon](https://mathstodon.xyz/@rreusser).
+  </script>
+  <script id="432" type="text/x-typescript">
+    function createREGLContext(shape) {
+      function createCanvas(width, height, dpi) {
+        const el = DOM.canvas(Math.floor(width * dpi), Math.floor(height * dpi));
+        el.style.width = `${width}px`;
+        el.style.height = `${height}px`;
+        return el;
+      }
+
+      const canvas = createCanvas(shape.width, shape.height, shape.pixelRatio);
+      const regl = createREGL({
+        pixelRatio: shape.pixelRatio,
+        canvas,
+        extensions: ['OES_standard_derivatives']
+      });
+      canvas.value = regl;
+      return canvas;
+    }
+  </script>
+  <script id="410" type="text/x-typescript">
+    const createBlitCmd = function(regl) {
+      return regl({
+        vert: `
+          precision highp float;
+          attribute vec2 uv;
+          varying vec2 xy;
+          uniform mat3 view;
+          void main () {
+            xy = (view * vec3(uv, 1)).xy;
+            gl_Position = vec4(uv, 0, 1);
+          }`,
+        attributes: {
+          uv: [-4, -4, 4, -4, 0, 4]
+        },
+        count: 3,
+        depth: { enable: false }
+      });
+    }
+  </script>
+  <script id="340" type="text/x-typescript">
+    function createConfigureViewCmd(regl) {
+      const view = mat3create();
+      return regl({
+        uniforms: {
+          view: regl.context('view')
+        },
+        context: {
+          view: (ctx, props) => {
+            var aspect = ctx.framebufferWidth / ctx.framebufferHeight;
+            var scale = !props || props.scale === undefined ? 2.0 : props.scale;
+            return mat3ortho(
+              view,
+              -1 / (scale * aspect),
+              1 / (scale * aspect),
+              -1 / scale,
+              1 / scale
+            );
+          }
+        }
+      });
+    }
+  </script>
+  <script id="381" type="text/x-typescript">
+    const createAttachMouseCmd = function(regl, invalidation) {
+      const canvas = regl._gl.canvas;
+      let dirty = true;
+      const mouseIJ = [canvas.clientWidth / 2, canvas.clientHeight / 2];
+      const mouseXYZ = [0, 0, 1];
+      const mouseXY = new Float32Array([0, 0]);
+
+      function onMouseMove(event) {
+        mouseIJ[0] = event.offsetX;
+        mouseIJ[1] = event.offsetY;
+        dirty = true;
+      }
+
+      const configureMouseCmd = regl({
+        context: {
+          dirty: () => dirty,
+          mouse: ctx => {
+            const c = 2 * ctx.pixelRatio;
+            mouseXYZ[0] = -1 + c * (mouseIJ[0] / ctx.viewportWidth);
+            mouseXYZ[1] = 1 - c * (mouseIJ[1] / ctx.viewportHeight);
+            mouseXYZ[2] = 1;
+            mat3multiply(mouseXYZ, ctx.view, mouseXYZ);
+            mouseXY[0] = mouseXYZ[0];
+            mouseXY[1] = mouseXYZ[1];
+            return mouseXY;
+          }
+        },
+        uniforms: {
+          mouse: regl.context('mouse')
+        }
+      });
+
+      canvas.addEventListener('mousemove', onMouseMove);
+      invalidation.then(() => {
+        canvas.removeEventListener('mousemove', onMouseMove);
+      });
+
+      const returnValue = function configureContext(callback) {
+        configureMouseCmd(callback);
+        dirty = false;
+      };
+
+      returnValue.taint = function() {
+        dirty = true;
+      };
+
+      returnValue.reset = function() {
+        mouseIJ[0] = canvas.clientWidth / 2;
+        mouseIJ[1] = canvas.clientHeight / 2;
+      };
+
+      return returnValue;
+    }
+  </script>
+  <script id="255" type="text/x-typescript">
+    const smallCanvas = {
+      width: Math.min(640, width),
+      height: Math.floor(Math.min(640, width) * 0.6),
+      pixelRatio: devicePixelRatio
+    };
+    const largeCanvas = {
+      width: width,
+      height: Math.max(300, Math.floor(width * 0.6)),
+      pixelRatio: devicePixelRatio
+    };
+  </script>
+  <script id="2728" type="text/x-typescript">
+    function linearstep(min, max, value) {
+      return Math.max(0, Math.min(1, (value - min) / (max - min)));
+    }
+
+    const linearStepGLSL = `
+    float linearstep(float edge0, float edge1, float x) {
+      return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+    }`;
+
+    const gammaCorrectGLSL = `
+    vec3 gammaCorrect(vec3 color) {
+      // Quick approximate gamma correction
+      return pow(color, vec3(0.454));
+    }`;
+  </script>
+  <script id="639" type="text/html">
+    <style>
+    .observablehq figcaption {
+      color: black;
+      font-size: 1em;
+      font-family: serif;
+      margin-top: 1em;
+      max-width: 600px;
+      text-align: left;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+    }
+    .observablehq figcaption > p {
+      display: inline-block;
+      max-width: 600px;
+      margin: auto;
+      text-align: left;
+    }
+    .observablehq figure {
+      padding-bottom: 2em;
+    }
+
+    .observablehq form.wide input {
+      width: 500px;
+      max-width:100%;
+    }
+    </style>
+  </script>
+  <script id="92" type="text/x-typescript">
+    import createREGL from 'npm:regl@2.1.1'
+    import { rangeSlider } from 'observable:@mootari/range-slider'
+    import { glslComplex } from 'observable:@rreusser/glsl-complex'
+    import {
+      mat3invert,
+      mat3multiply,
+      mat3create,
+      mat3ortho
+    } from 'observable:@rreusser/gl-mat3'
+  </script>
+  <script id="3593" type="text/x-typescript">
+    function code (str, {language='glsl'}={}) {
+      const el = md`\`\`\`${language}\n${str}\n\`\`\``;
+      el.value = str;
+      el.style.fontSize = '0.9em';
+      return el;
+    }
+  </script>
+</notebook>
