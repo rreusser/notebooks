@@ -3,9 +3,9 @@
  * This helps identify coordinate mapping errors
  */
 
-import { getTerrainTile } from '../fetch-tile-sharp.js';
-import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../parent-tile-assembly-multi-level.js';
-import { saveAsImage } from '../save-image-node.js';
+import { getTerrainTile } from '../data/fetch-tile-sharp.js';
+import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../data/parent-tile-assembly-multi-level.js';
+import { saveAsImage } from '../data/save-image-node.js';
 import sharp from 'sharp';
 
 const targetTile = { x: 795, y: 1594, z: 12 };

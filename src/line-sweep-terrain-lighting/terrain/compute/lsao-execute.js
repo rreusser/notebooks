@@ -67,18 +67,35 @@ export async function computeLSAO({
   new Float32Array(targetBuffer.getMappedRange()).set(targetData);
   targetBuffer.unmap();
 
-  // Create parent buffers for each level
-  const parentBuffers = parentLevels.map((data, i) => {
-    const buffer = device.createBuffer({
-      size: data.byteLength,
-      label: `Parent level ${i} buffer`,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
-      mappedAtCreation: true
-    });
-    new Float32Array(buffer.getMappedRange()).set(data);
-    buffer.unmap();
-    return buffer;
-  });
+  // Create parent buffers for each level (always create 4 buffers)
+  // Unused levels get small dummy buffers
+  const parentBuffers = [];
+  for (let i = 0; i < 4; i++) {
+    if (i < numLevels) {
+      const data = parentLevels[i];
+      const buffer = device.createBuffer({
+        size: data.byteLength,
+        label: `Parent level ${i} buffer`,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true
+      });
+      new Float32Array(buffer.getMappedRange()).set(data);
+      buffer.unmap();
+      parentBuffers.push(buffer);
+    } else {
+      // Create dummy buffer for unused level (make it reasonably sized)
+      const dummySize = 256; // Small but not minimal
+      const dummyBuffer = device.createBuffer({
+        size: dummySize * Float32Array.BYTES_PER_ELEMENT,
+        label: `Parent level ${i} buffer (dummy)`,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+        mappedAtCreation: true
+      });
+      new Float32Array(dummyBuffer.getMappedRange()).fill(0);
+      dummyBuffer.unmap();
+      parentBuffers.push(dummyBuffer);
+    }
+  }
 
   const outputBuffer = device.createBuffer({
     size: outputSize * Float32Array.BYTES_PER_ELEMENT,
@@ -116,32 +133,26 @@ export async function computeLSAO({
     );
   }
 
-  // Create bind group with all parent buffers
-  const bindGroupEntries = [
-    {
-      binding: 0,
-      resource: {
-        buffer: uniformBuffer,
-        offset: 0,
-        size: uniformSizePerDirection
-      }
-    },
-    { binding: 1, resource: { buffer: targetBuffer } },
-    { binding: 2, resource: { buffer: outputBuffer } }
-  ];
-
-  // Add parent buffer bindings (3, 4, 5, 6)
-  for (let i = 0; i < numLevels; i++) {
-    bindGroupEntries.push({
-      binding: 3 + i,
-      resource: { buffer: parentBuffers[i] }
-    });
-  }
-
+  // Create bind group with all 4 parent buffers (including dummy buffers)
   const bindGroup = device.createBindGroup({
     layout: bindGroupLayout,
     label: 'Multi-level LSAO bind group',
-    entries: bindGroupEntries
+    entries: [
+      {
+        binding: 0,
+        resource: {
+          buffer: uniformBuffer,
+          offset: 0,
+          size: uniformSizePerDirection
+        }
+      },
+      { binding: 1, resource: { buffer: targetBuffer } },
+      { binding: 2, resource: { buffer: outputBuffer } },
+      { binding: 3, resource: { buffer: parentBuffers[0] } },
+      { binding: 4, resource: { buffer: parentBuffers[1] } },
+      { binding: 5, resource: { buffer: parentBuffers[2] } },
+      { binding: 6, resource: { buffer: parentBuffers[3] } }
+    ]
   });
 
   // Encode compute passes
@@ -154,8 +165,12 @@ export async function computeLSAO({
   const pass = encoder.beginComputePass({ label: 'LSAO compute pass' });
   pass.setPipeline(pipeline);
 
-  // Dispatch all directions
-  const numWorkgroups = Math.ceil(tileSize / workgroupSize);
+  // Calculate max sweep size (must match pipeline calculation)
+  const maxDeltaZ = -numLevels;
+  const maxSweepSize = Math.floor(tileSize * (1 + Math.pow(2, maxDeltaZ)));
+
+  // Dispatch all directions (dispatch based on maxSweepSize, not tileSize!)
+  const numWorkgroups = Math.ceil(maxSweepSize / workgroupSize);
   for (let i = 0; i < directions.length; i++) {
     pass.setBindGroup(0, bindGroup, [i * uniformSizePerDirection]);
     pass.dispatchWorkgroups(numWorkgroups);
@@ -181,6 +196,9 @@ export async function computeLSAO({
 
   // Submit commands
   device.queue.submit([encoder.finish()]);
+
+  // Wait for GPU to complete all work
+  await device.queue.onSubmittedWorkDone();
 
   // Read back results
   await stagingBuffer.mapAsync(GPUMapMode.READ);

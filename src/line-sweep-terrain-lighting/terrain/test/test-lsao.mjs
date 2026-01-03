@@ -8,13 +8,13 @@
  * 4. Save results
  */
 
-import { getTerrainTile } from '../fetch-tile-sharp.js';
+import { getTerrainTile } from '../data/fetch-tile-sharp.js';
 import { getQuadrant } from '../tile-hierarchy.js';
-import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../parent-tile-assembly-multi-level.js';
-import { createWebGPUContext } from '../webgpu-context-node.js';
+import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../data/parent-tile-assembly-multi-level.js';
+import { createWebGPUContext } from '../data/webgpu-context-node.js';
 import { createLSAOPipeline } from '../../compute/lsao-pipeline.js';
 import { computeLSAO } from '../../compute/lsao-execute.js';
-import { saveAsImage, getStats } from '../save-image-node.js';
+import { saveAsImage, getStats } from '../data/save-image-node.js';
 
 async function testLSAO() {
   console.log('=== LSAO with Parent Tile Support ===\n');

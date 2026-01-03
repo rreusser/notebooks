@@ -8,12 +8,12 @@
  * 3. Three-level (deltaZ=-1, -2, -3)
  */
 
-import { getTerrainTile } from '../fetch-tile-sharp.js';
-import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../parent-tile-assembly-multi-level.js';
-import { createWebGPUContext } from '../webgpu-context-node.js';
-import { createLSAOPipeline, calculateLevelInfo } from '../../compute/lsao-pipeline.js';
-import { computeLSAO } from '../../compute/lsao-execute.js';
-import { saveAsImage, getStats } from '../save-image-node.js';
+import { getTerrainTile } from '../data/fetch-tile-sharp.js';
+import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../data/parent-tile-assembly-multi-level.js';
+import { createWebGPUContext } from '../data/webgpu-context-node.js';
+import { createLSAOPipeline, calculateLevelInfo } from '../compute/lsao-pipeline.js';
+import { computeLSAO } from '../compute/lsao-execute.js';
+import { saveAsImage, getStats } from '../data/save-image-node.js';
 
 async function testMultiLevelLSAO() {
   console.log('=== Multi-Level LSAO Test ===\n');
@@ -77,9 +77,14 @@ async function testMultiLevelLSAO() {
       });
 
       parentLevels.push(assembled.buffer);
-      levelInfo.push(calculateLevelInfo(deltaZ, 512));
+
+      // CRITICAL: Pass targetOffset from assembly to level info
+      const info = calculateLevelInfo(deltaZ, 512, assembled.targetOffset);
+      levelInfo.push(info);
 
       console.log(`  ✓ Assembled ${assembled.size}×${assembled.size} buffer`);
+      console.log(`    Target offset: [${assembled.targetOffset[0]}, ${assembled.targetOffset[1]}]`);
+      console.log(`    Coverage: [${info.coverageMin[0].toFixed(2)}, ${info.coverageMin[1].toFixed(2)}] to [${info.coverageMax[0].toFixed(2)}, ${info.coverageMax[1].toFixed(2)}]`);
     }
 
     // Create pipeline with correct number of levels

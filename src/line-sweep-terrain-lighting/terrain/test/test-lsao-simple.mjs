@@ -4,10 +4,10 @@
  * Tests the shader with simple ramp data to verify basic functionality
  */
 
-import { createWebGPUContext } from '../webgpu-context-node.js';
+import { createWebGPUContext } from '../data/webgpu-context-node.js';
 import { createLSAOPipeline } from '../../compute/lsao-pipeline.js';
 import { computeLSAO } from '../../compute/lsao-execute.js';
-import { saveAsImage } from '../save-image-node.js';
+import { saveAsImage } from '../data/save-image-node.js';
 
 async function testSimpleLSAO() {
   console.log('=== Simple LSAO Test ===\n');

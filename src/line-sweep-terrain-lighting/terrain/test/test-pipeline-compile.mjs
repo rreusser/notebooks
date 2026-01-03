@@ -2,7 +2,7 @@
  * Simple test to validate pipeline compilation
  */
 
-import { createWebGPUContext } from '../webgpu-context-node.js';
+import { createWebGPUContext } from '../data/webgpu-context-node.js';
 import { createLSAOPipeline, calculateLevelInfo } from '../../compute/lsao-pipeline.js';
 
 async function testPipelineCompile() {

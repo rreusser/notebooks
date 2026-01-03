@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 
 // Fetch a real terrain tile and visualize it
-import { getTerrainTile } from '../fetch-tile-sharp.js';
-import { saveAsImage, getStats } from '../save-image-node.js';
+import { getTerrainTile } from '../data/fetch-tile-sharp.js';
+import { saveAsImage, getStats } from '../data/save-image-node.js';
 import { getTileSet } from '../tile-hierarchy.js';
 import sharp from 'sharp';
 

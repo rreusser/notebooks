@@ -38,11 +38,12 @@ export function createLSAOPipeline(device, options = {}) {
   // Create shader module
   const shaderModule = createShaderModule(device, LSAO_SHADER);
 
-  // Create bind group layout with variable parent buffers
+  // Create bind group layout with all 4 parent buffer bindings
+  // (Shader always declares all 4, so we always need all 4 bindings)
   // Binding 0: Uniform buffer (dynamic offset)
   // Binding 1: Target terrain (514×514)
   // Binding 2: Output AO (512×512)
-  // Binding 3+: Parent level buffers (1-4 levels)
+  // Binding 3-6: Parent level buffers (always 4 bindings, unused ones get dummy buffers)
   const entries = [
     {
       binding: 0,
@@ -58,17 +59,28 @@ export function createLSAOPipeline(device, options = {}) {
       binding: 2,
       visibility: GPUShaderStage.COMPUTE,
       buffer: { type: "storage" }
-    }
-  ];
-
-  // Add parent buffer bindings (3, 4, 5, 6)
-  for (let i = 0; i < numLevels; i++) {
-    entries.push({
-      binding: 3 + i,
+    },
+    {
+      binding: 3,
       visibility: GPUShaderStage.COMPUTE,
       buffer: { type: "read-only-storage" }
-    });
-  }
+    },
+    {
+      binding: 4,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: "read-only-storage" }
+    },
+    {
+      binding: 5,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: "read-only-storage" }
+    },
+    {
+      binding: 6,
+      visibility: GPUShaderStage.COMPUTE,
+      buffer: { type: "read-only-storage" }
+    }
+  ];
 
   const bindGroupLayout = device.createBindGroupLayout({
     label: 'Multi-level LSAO bind group layout',
@@ -155,8 +167,8 @@ export function packLSAOUniforms({
       f32[offset++] = level.coverageMin[1];
       f32[offset++] = level.coverageMax[0];
       f32[offset++] = level.coverageMax[1];
-      f32[offset++] = 0; // padding
-      f32[offset++] = 0; // padding
+      f32[offset++] = level.targetOffset[0];
+      f32[offset++] = level.targetOffset[1];
     } else {
       // Mark unused level with bufferSize = 0
       u32[offset++] = 0;
@@ -211,9 +223,10 @@ export function getTargetOffsetInParent(quadrant) {
  *
  * @param {number} deltaZ - Zoom level offset (e.g., -1, -2, -3, -4)
  * @param {number} tileSize - Target tile size (default: 512)
- * @returns {Object} Level metadata {bufferSize, scale, coverageMin, coverageMax}
+ * @param {[number, number]} [targetOffset] - Target position in buffer (optional, defaults to centered)
+ * @returns {Object} Level metadata {bufferSize, scale, coverageMin, coverageMax, targetOffset}
  */
-export function calculateLevelInfo(deltaZ, tileSize = 512) {
+export function calculateLevelInfo(deltaZ, tileSize = 512, targetOffset = null) {
   if (deltaZ >= 0) {
     throw new Error(`deltaZ must be negative, got ${deltaZ}`);
   }
@@ -222,15 +235,25 @@ export function calculateLevelInfo(deltaZ, tileSize = 512) {
   const scale = Math.pow(2, stepsUp);
   const bufferSize = Math.floor(tileSize * (1 + Math.pow(2, deltaZ)));
 
-  // Coverage in normalized space
-  // deltaZ=-1 covers (-1, -1) to (2, 2)
-  // deltaZ=-2 covers (-2, -2) to (3, 3), etc.
-  const coverage = stepsUp;
+  // Default: target is centered in buffer
+  // Target size at this level's resolution
+  const targetSizeAtLevel = tileSize / scale;
+  const defaultOffset = [(bufferSize - targetSizeAtLevel) / 2, (bufferSize - targetSizeAtLevel) / 2];
+  const actualOffset = targetOffset || defaultOffset;
+
+  // Coverage in normalized space based on actual buffer size and target position
+  // Normalized coordinates: 1.0 = tileSize pixels at target resolution
+  // Buffer extends beyond target - calculate actual coverage
+  const leftMargin = actualOffset[0] * scale / tileSize;  // Convert to normalized units
+  const topMargin = actualOffset[1] * scale / tileSize;
+  const rightMargin = (bufferSize - actualOffset[0] - targetSizeAtLevel) * scale / tileSize;
+  const bottomMargin = (bufferSize - actualOffset[1] - targetSizeAtLevel) * scale / tileSize;
 
   return {
     bufferSize,
     scale,
-    coverageMin: [-coverage, -coverage],
-    coverageMax: [1 + coverage, 1 + coverage]
+    coverageMin: [-leftMargin, -topMargin],
+    coverageMax: [1 + rightMargin, 1 + bottomMargin],
+    targetOffset: actualOffset  // Position of target within buffer (in buffer pixel coordinates)
   };
 }

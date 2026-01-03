@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 // Test script to verify image saving works
-import { saveAsImage, getStats } from '../save-image-node.js';
+import { saveAsImage, getStats } from '../data/save-image-node.js';
 
 const tileSize = 512;
 const data = new Float32Array(tileSize * tileSize);

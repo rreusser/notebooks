@@ -95,6 +95,9 @@ async function readBuffer(device, buffer, size) {
   encoder.copyBufferToBuffer(buffer, 0, stagingBuffer, 0, byteSize);
   device.queue.submit([encoder.finish()]);
 
+  // Wait for GPU work to complete
+  await device.queue.onSubmittedWorkDone();
+
   // Map and read staging buffer
   await stagingBuffer.mapAsync(GPUMapMode.READ);
   const data = new Float32Array(stagingBuffer.getMappedRange()).slice();

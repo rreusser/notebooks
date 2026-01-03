@@ -7,11 +7,11 @@
  * 3. Save results
  */
 
-import { getTerrainTile } from '../fetch-tile-sharp.js';
-import { createWebGPUContext } from '../webgpu-context-node.js';
+import { getTerrainTile } from '../data/fetch-tile-sharp.js';
+import { createWebGPUContext } from '../data/webgpu-context-node.js';
 import { createSimpleLSAOPipeline } from '../../compute/lsao-simple-pipeline.js';
 import { computeSimpleLSAO } from '../../compute/lsao-simple-execute.js';
-import { saveAsImage, getStats } from '../save-image-node.js';
+import { saveAsImage, getStats } from '../data/save-image-node.js';
 
 async function testSingleTileLSAO() {
   console.log('=== Single-Tile LSAO (No Parent Data) ===\n');

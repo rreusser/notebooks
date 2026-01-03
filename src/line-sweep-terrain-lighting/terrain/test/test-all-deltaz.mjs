@@ -2,8 +2,8 @@
  * Test all possible deltaZ values for a given tile
  */
 
-import { getTerrainTile } from '../fetch-tile-sharp.js';
-import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../parent-tile-assembly-multi-level.js';
+import { getTerrainTile } from '../data/fetch-tile-sharp.js';
+import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../data/parent-tile-assembly-multi-level.js';
 
 const targetTile = { x: 795, y: 1594, z: 12 };
 

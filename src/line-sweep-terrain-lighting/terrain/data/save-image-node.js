@@ -1,6 +1,6 @@
-// Image saving utilities for Node.js using sharp
-import { writeFile } from 'node:fs/promises';
-import sharp from 'sharp';
+// Image saving utilities for Node.js using pngjs (pure JavaScript)
+import { writeFileSync } from 'node:fs';
+import { PNG } from 'pngjs';
 
 /**
  * Save Float32Array as grayscale PNG image
@@ -11,23 +11,28 @@ import sharp from 'sharp';
  * @returns {Promise<void>}
  */
 export async function saveAsImage(data, size, filename) {
-  // Convert Float32Array [0,1] to Uint8Array [0,255]
-  const pixels = new Uint8Array(data.length);
+  // Create PNG - pngjs always uses RGBA internally
+  const png = new PNG({
+    width: size,
+    height: size,
+    colorType: 0, // Grayscale output
+    bitDepth: 8
+  });
 
+  // Convert Float32Array [0,1] to RGBA pixels (grayscale = R=G=B)
+  // pngjs buffer is always RGBA (4 bytes per pixel) regardless of colorType
   for (let i = 0; i < data.length; i++) {
-    pixels[i] = Math.floor(Math.min(Math.max(data[i], 0), 1) * 255);
+    const value = Math.floor(Math.min(Math.max(data[i], 0), 1) * 255);
+    const idx = i * 4;
+    png.data[idx] = value;      // R
+    png.data[idx + 1] = value;  // G
+    png.data[idx + 2] = value;  // B
+    png.data[idx + 3] = 255;    // A (fully opaque)
   }
 
-  // Use sharp to create PNG
-  await sharp(pixels, {
-    raw: {
-      width: size,
-      height: size,
-      channels: 1
-    }
-  })
-  .png()
-  .toFile(filename);
+  // Encode and save
+  const buffer = PNG.sync.write(png);
+  writeFileSync(filename, buffer);
 }
 
 /**

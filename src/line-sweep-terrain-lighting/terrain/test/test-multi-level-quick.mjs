@@ -2,7 +2,7 @@
  * Quick test for multi-level parent assembly
  */
 
-import { assembleParentTileBufferMultiLevel, getParentTilesAtLevel } from '../parent-tile-assembly-multi-level.js';
+import { assembleParentTileBufferMultiLevel, getParentTilesAtLevel } from '../data/parent-tile-assembly-multi-level.js';
 
 console.log('Testing multi-level parent assembly...\n');
 

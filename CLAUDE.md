@@ -89,6 +89,60 @@ Notebooks use the `<notebook>` element with cells as `<script>` elements:
 - `pinned` - Shows source code in output
 - `hidden` - Suppresses output display
 
+### Import Scope (CRITICAL - READ THIS)
+
+**Observable notebooks have GLOBAL import scope** - imports are NOT scoped to individual cells!
+
+When you `import` a symbol in ANY cell, that symbol becomes available to ALL cells in the notebook. Importing the same symbol again in another cell causes a **"defined more than once" RuntimeError**.
+
+❌ **WRONG** - This causes "defined more than once" errors:
+```html
+<!-- Cell 1 -->
+<script id="1" type="module">
+  import { foo } from './module.js';
+  foo();
+</script>
+
+<!-- Cell 2 -->
+<script id="2" type="module">
+  import { foo } from './module.js';  // ❌ ERROR: foo already imported!
+  foo();
+</script>
+```
+
+✅ **CORRECT** - Import once, use everywhere:
+```html
+<!-- Cell 1: Import at top of notebook -->
+<script id="1" type="module">
+  import { foo, bar, baz } from './module.js';
+</script>
+
+<!-- Cell 2: Just use it, no import needed -->
+<script id="2" type="module">
+  foo();  // ✓ Available from cell 1's import
+</script>
+
+<!-- Cell 3: Import only NEW symbols -->
+<script id="3" type="module">
+  import { qux } from './other-module.js';  // ✓ OK - qux not imported yet
+  foo();  // ✓ Still works from cell 1
+  qux();  // ✓ Works from this import
+</script>
+```
+
+**Best practice:**
+- Create a dedicated imports cell at the top of the notebook
+- Import ALL symbols you'll need across the notebook in that one cell
+- Individual cells can then use those imports without re-importing
+- Only use `import` in later cells for NEW symbols not yet imported anywhere else
+
+**When adding new sections to existing notebooks:**
+1. Check the top-level imports cell for already-imported symbols
+2. Only import symbols that aren't already imported
+3. If you need new symbols, either:
+   - Add them to the top-level imports cell (preferred), OR
+   - Import only the new symbols in your new cell
+
 ### Reactive Programming Model
 
 Observable notebooks support two types of JavaScript cells with different reactive behaviors:
@@ -195,6 +249,63 @@ The Handlebars template wraps notebook content with:
 - Index list generation (for index.html only)
 
 Template receives data from both the notebook's parsed structure and metadata.yml.
+
+### Layout Guidelines for Notebooks
+
+**DO NOT create horizontal layouts with multiple images/canvases side-by-side** - they run off the edge of the notebook viewport.
+
+❌ **WRONG** - Horizontal grid layout:
+```javascript
+html`<div style="display: grid; grid-template-columns: repeat(3, 1fr);">
+  <div>${canvas1}</div>
+  <div>${canvas2}</div>
+  <div>${canvas3}</div>
+</div>`
+```
+
+✅ **CORRECT** - Vertical stack layout:
+```javascript
+html`<div style="display: flex; flex-direction: column; gap: 24px;">
+  <div>
+    <div style="margin-bottom: 8px;"><strong>First Image</strong></div>
+    ${canvas1}
+  </div>
+  <div>
+    <div style="margin-bottom: 8px;"><strong>Second Image</strong></div>
+    ${canvas2}
+  </div>
+  <div>
+    <div style="margin-bottom: 8px;"><strong>Third Image</strong></div>
+    ${canvas3}
+  </div>
+</div>`
+```
+
+**Always orient visualizations vertically** with clear labels above each image/canvas.
+
+### Visualization Guidelines
+
+**DO NOT normalize data for display using min/max normalization** - this makes results incomparable across different methods or configurations.
+
+❌ **WRONG** - Independent normalization makes comparison meaningless:
+```javascript
+// Method 1 result: [0.5, 0.6, 0.7] → normalized to [0.0, 0.5, 1.0]
+// Method 2 result: [0.8, 0.9, 1.0] → normalized to [0.0, 0.5, 1.0]
+// Both look identical after normalization despite being very different!
+const normalized = (value - min) / (max - min);
+```
+
+✅ **CORRECT** - Use raw values or consistent clamping:
+```javascript
+// Both methods use same scale, visually comparable
+const displayValue = Math.min(Math.max(value, 0), 1) * 255;
+```
+
+**When visualizing results:**
+- Display raw values when possible (with appropriate clamping to valid range)
+- If normalization is necessary, use the SAME min/max for all compared images
+- Clearly label whether images show raw or normalized values
+- For scientific visualizations, prefer raw values to preserve absolute magnitudes
 
 ### Shared Libraries
 

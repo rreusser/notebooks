@@ -4,11 +4,60 @@ This project implements hierarchical terrain lighting using WebGPU compute shade
 
 ## Architecture
 
-The project is organized into modules:
+The project is organized into a unified terrain module:
 
-- **terrain/** - Tile fetching, caching, and data management
-- **compute/** - WebGPU pipeline, shaders, and execution
-- **scripts/** - CLI tools and utilities
+```
+terrain/
+├── index.js           # Unified API (browser)
+├── cli.js             # Command-line tool (Node.js)
+├── data/              # Tile fetching and caching
+│   ├── main.js
+│   ├── tile-hierarchy.js
+│   ├── tile-cache.js
+│   └── ...
+├── compute/           # WebGPU pipelines and shaders
+│   ├── pipeline.js
+│   ├── execute.js
+│   ├── lsao-pipeline.js
+│   └── ...
+└── dist/              # Built bundles
+    └── terrain.js     # Standalone ESM bundle
+```
+
+## Quick Start
+
+### High-Level API (Recommended)
+
+**Browser:**
+```js
+import { computeLighting } from './terrain/index.js';
+
+const result = await computeLighting({
+  device,               // WebGPU device
+  x: 795,               // Tile X coordinate
+  y: 1594,              // Tile Y coordinate
+  z: 12,                // Zoom level
+  algorithm: 'lsao',    // 'lighting' or 'lsao'
+  numLevels: 2          // Number of parent levels (1-4)
+});
+// => {data: Float32Array, width: 512, height: 512}
+```
+
+### Using the Bundle
+
+Build and use the standalone bundle:
+```bash
+cd terrain
+npm install
+npm run build
+```
+
+In your notebook:
+```js
+import * as Terrain from './terrain/dist/terrain.js';
+
+const result = await Terrain.computeLighting({device, x: 795, y: 1594, z: 12});
+```
 
 ## Module APIs
 
@@ -28,10 +77,10 @@ const elevations = decodeTerrainData(imageData);
 // => Float32Array (elevation in meters)
 ```
 
-**Node.js (terrain/fetch-tile-node.js):**
+**Node.js (terrain/fetch-tile-sharp.js):**
 ```js
-import { getTerrainTile, readImageData, decodeTerrainData } from './terrain/fetch-tile-node.js';
-// Same API, uses JSDOM for Image and Canvas
+import { getTerrainTile } from './terrain/fetch-tile-sharp.js';
+// Returns tile with data already decoded to Float32Array
 ```
 
 ### Tile Hierarchy
@@ -96,9 +145,9 @@ bufferCache.destroy(); // Clean up all buffers
 
 ### WebGPU Pipeline
 
-**compute/webgpu-context.js:**
+**terrain/compute/webgpu-context.js:**
 ```js
-import { createWebGPUContext, isWebGPUAvailable } from './compute/webgpu-context.js';
+import { createWebGPUContext, isWebGPUAvailable } from './terrain/compute/webgpu-context.js';
 
 if (isWebGPUAvailable()) {
   const { adapter, device } = await createWebGPUContext();
@@ -107,9 +156,9 @@ if (isWebGPUAvailable()) {
 }
 ```
 
-**compute/pipeline.js:**
+**terrain/compute/pipeline.js:**
 ```js
-import { createLightingPipeline } from './compute/pipeline.js';
+import { createLightingPipeline } from './terrain/compute/pipeline.js';
 
 const { pipeline, bindGroupLayout } = createLightingPipeline(device, {
   tileSize: 512,
@@ -117,9 +166,9 @@ const { pipeline, bindGroupLayout } = createLightingPipeline(device, {
 });
 ```
 
-**compute/execute.js:**
+**terrain/compute/execute.js:**
 ```js
-import { computeTileLighting } from './compute/execute.js';
+import { computeTileLighting } from './terrain/compute/execute.js';
 
 const result = await computeTileLighting({
   device,
@@ -132,44 +181,67 @@ const result = await computeTileLighting({
 // => Float32Array of lighting values [0,1]
 ```
 
+**Or use the unified API:**
+```js
+import { computeLighting } from './terrain/index.js';
+
+const result = await computeLighting({device, x: 795, y: 1594, z: 12});
+// Handles fetching, buffering, pipeline creation, and computation
+```
+
 ## CLI Usage
 
 Compute terrain lighting from command line:
 
 ```bash
-node src/line-sweep-terrain-lighting/scripts/compute-tile.mjs \
-  --x=795 --y=1594 --z=12 \
-  --output=result.png
+# Simple lighting
+cd terrain
+node cli.js --x=795 --y=1594 --z=12 --output=result.png
+
+# LSAO with multiple levels
+node cli.js --x=795 --y=1594 --z=12 --algorithm=lsao --levels=2 --output=lsao.png
 ```
 
-**Note:** WebGPU in Node.js requires `@webgpu/dawn` or similar native bindings. The CLI currently fetches and assembles tiles but skips WebGPU computation. Use the browser notebook for full computation.
+**Options:**
+- `--x`, `--y`, `--z` - Tile coordinates (required)
+- `--output` - Output filename (default: output.png)
+- `--algorithm` - Algorithm: 'lighting' or 'lsao' (default: lighting)
+- `--levels` - Number of parent levels for LSAO: 1-4 (default: 1)
+
+**Requirements:** WebGPU in Node.js (uses `webgpu` package with native bindings)
 
 ## Testing
 
-### Manual Tests
+### CLI Testing
 
-Test tile hierarchy:
 ```bash
-node -e "import('./src/line-sweep-terrain-lighting/terrain/tile-hierarchy.js').then(m => console.log(m.getTileSet({x: 795, y: 1594, z: 12})))"
-```
+cd terrain
 
-Test Node.js tile fetching:
-```bash
-node -e "import('./src/line-sweep-terrain-lighting/terrain/fetch-tile-node.js').then(async m => console.log(await m.getTerrainTile({x: 795, y: 1594, z: 12})))"
-```
+# Run tests
+node test/compute-simple.mjs         # Full pipeline test
+node test/fetch-and-visualize.mjs   # Elevation visualization
+node test/test-lsao.mjs             # LSAO computation
 
-Run CLI tool:
-```bash
-node src/line-sweep-terrain-lighting/scripts/compute-tile.mjs --x=795 --y=1594 --z=12
+# Run CLI
+node cli.js --x=795 --y=1594 --z=12
 ```
 
 ### Browser Testing
 
 ```bash
+# From repository root
 npm start
 ```
 
 Open the notebook in browser to see WebGPU computation and visualization.
+
+### Building the Bundle
+
+```bash
+cd terrain
+npm install  # Install dependencies including esbuild
+npm run build  # Creates dist/terrain.js
+```
 
 ## Data Structures
 
@@ -202,7 +274,7 @@ Open the notebook in browser to see WebGPU computation and visualization.
 
 ## Shader Details
 
-The lighting shader (compute/shaders.js) computes surface normals using central differences and applies directional lighting:
+The lighting shader (terrain/compute/shaders.js) computes surface normals using central differences and applies directional lighting:
 
 - Input: Buffered terrain data `(tileSize + 2*buffer)²`
 - Output: Lighting values `[0,1]` for each pixel
@@ -210,10 +282,28 @@ The lighting shader (compute/shaders.js) computes surface normals using central 
 - Light direction: Northwest at 45° elevation
 - Includes ambient term (0.2) to prevent pure black
 
+The LSAO shader (terrain/compute/lsao-shaders.js) implements line-sweep ambient occlusion with multi-level parent tile support.
+
+## Building and Bundling
+
+The terrain module can be built into a standalone ESM bundle for use in notebooks:
+
+```bash
+cd terrain
+npm install
+npm run build
+```
+
+This creates `dist/terrain.js` which includes all dependencies except Node.js-only packages (sharp, webgpu). The bundle exports:
+
+- `computeLighting()` - High-level API
+- All data APIs (getTerrainTile, getTileSet, etc.)
+- All compute APIs (createLightingPipeline, computeLSAO, etc.)
+- Cache classes (TileDataCache, BufferCache)
+
 ## Future Work
 
-1. **Hierarchical boundary assembly**: Use parent tile data for boundaries instead of edge replication
-2. **Full line-sweep horizon occlusion**: Implement the advanced algorithm from https://karim.naaji.fr/lsao.html
-3. **Node.js WebGPU**: Add `@webgpu/dawn` support for command-line computation
-4. **GPU buffer caching integration**: Use BufferCache in execute.js for better performance
-5. **Multi-tile computation**: Batch process multiple tiles efficiently
+1. **GPU buffer caching integration**: Use BufferCache in execute.js for better performance
+2. **Multi-tile computation**: Batch process multiple tiles efficiently
+3. **Adaptive quality**: Adjust LSAO levels based on zoom/performance
+4. **Tile preloading**: Predictive cache warming for smooth panning

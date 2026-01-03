@@ -4,9 +4,9 @@
  * Simplified end-to-end test focusing on WebGPU computation
  */
 
-import { getTerrainTile } from '../fetch-tile-sharp.js';
-import { saveAsImage } from '../save-image-node.js';
-import { createWebGPUContext } from '../webgpu-context-node.js';
+import { getTerrainTile } from '../data/fetch-tile-sharp.js';
+import { saveAsImage } from '../data/save-image-node.js';
+import { createWebGPUContext } from '../data/webgpu-context-node.js';
 import { createLightingPipeline } from '../../compute/pipeline.js';
 import { computeTileLighting } from '../../compute/execute.js';
 

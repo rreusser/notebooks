@@ -22,7 +22,7 @@ struct LevelInfo {
   scale: f32,
   coverageMin: vec2<f32>,
   coverageMax: vec2<f32>,
-  padding: vec2<f32>
+  targetOffset: vec2<f32>  // Position of target in buffer (buffer pixel coords)
 }
 
 struct UniformStruct {
@@ -47,14 +47,19 @@ struct UniformStruct {
 
 // Get index in target tile (unbuffered, 512×512)
 fn unbufferedIndex(ij: vec2<i32>) -> u32 {
-  return (u32(ij.x) % tileSize) + u32(ij.y) * tileSize;
+  // Clamp to valid range
+  let clamped = clamp(ij, vec2<i32>(0), vec2<i32>(i32(tileSize) - 1));
+  return u32(clamped.x) + u32(clamped.y) * tileSize;
 }
 
 // Get index in target tile (buffered, 514×514)
 fn bufferedIndex(ij: vec2<i32>) -> u32 {
   let w = tileSize + 2u * tileBuffer;
-  let ijbuf = vec2<u32>(ij + i32(tileBuffer));
-  return (ijbuf.x % w) + (ijbuf.y) * w;
+  // Buffered data includes 1 pixel border: valid range is [-1, 512] in target coords
+  // Clamp to this range
+  let clamped = clamp(ij, vec2<i32>(-i32(tileBuffer)), vec2<i32>(i32(tileSize) + i32(tileBuffer) - 1));
+  let ijbuf = vec2<u32>(clamped + i32(tileBuffer));
+  return ijbuf.x + ijbuf.y * w;
 }
 
 // Convert sweep index to normalized coordinates
@@ -100,16 +105,15 @@ fn isInLevel(normPos: vec2<f32>, level: u32) -> bool {
 fn normalizedToBufferCoords(normPos: vec2<f32>, level: u32) -> vec2<f32> {
   let info = uniforms.levels[level];
 
-  // Calculate center of level buffer in normalized space
-  let levelCenter = (info.coverageMin + info.coverageMax) * 0.5;
+  // Normalized coordinates: (0,0) = top-left of target, (1,1) = bottom-right of target
+  // Target is positioned at info.targetOffset within the buffer
+  // At this level's resolution, target size = tileSize / scale
 
-  // Offset from center in normalized space
-  let offsetFromCenter = normPos - levelCenter;
-
-  // Convert to buffer pixel coordinates
-  // Level buffer is centered with target at specific position
-  let bufferCenter = vec2<f32>(f32(info.bufferSize)) * 0.5;
-  let bufferCoords = bufferCenter + offsetFromCenter * f32(tileSize) / info.scale;
+  // Convert normalized position to buffer coordinates
+  // normPos * tileSize gives position in target pixel space
+  // Divide by scale to get position in buffer's resolution
+  // Add targetOffset to account for target's position in buffer
+  let bufferCoords = info.targetOffset + normPos * f32(tileSize) / info.scale;
 
   return bufferCoords;
 }
@@ -139,10 +143,10 @@ fn sampleParentBilinear(normPos: vec2<f32>, level: u32) -> f32 {
 
   // Clamp coordinates to buffer bounds
   let maxCoord = i32(info.bufferSize) - 1;
-  let x1 = min(x0 + 1, maxCoord);
-  let y1 = min(y0 + 1, maxCoord);
   let cx0 = clamp(x0, 0, maxCoord);
   let cy0 = clamp(y0, 0, maxCoord);
+  let cx1 = clamp(x0 + 1, 0, maxCoord);
+  let cy1 = clamp(y0 + 1, 0, maxCoord);
 
   // Sample 4 corners
   var v00: f32;
@@ -153,27 +157,27 @@ fn sampleParentBilinear(normPos: vec2<f32>, level: u32) -> f32 {
   switch (level) {
     case 0u: {
       v00 = parentLevel0[u32(cy0 * i32(info.bufferSize) + cx0)];
-      v10 = parentLevel0[u32(cy0 * i32(info.bufferSize) + x1)];
-      v01 = parentLevel0[u32(y1 * i32(info.bufferSize) + cx0)];
-      v11 = parentLevel0[u32(y1 * i32(info.bufferSize) + x1)];
+      v10 = parentLevel0[u32(cy0 * i32(info.bufferSize) + cx1)];
+      v01 = parentLevel0[u32(cy1 * i32(info.bufferSize) + cx0)];
+      v11 = parentLevel0[u32(cy1 * i32(info.bufferSize) + cx1)];
     }
     case 1u: {
       v00 = parentLevel1[u32(cy0 * i32(info.bufferSize) + cx0)];
-      v10 = parentLevel1[u32(cy0 * i32(info.bufferSize) + x1)];
-      v01 = parentLevel1[u32(y1 * i32(info.bufferSize) + cx0)];
-      v11 = parentLevel1[u32(y1 * i32(info.bufferSize) + x1)];
+      v10 = parentLevel1[u32(cy0 * i32(info.bufferSize) + cx1)];
+      v01 = parentLevel1[u32(cy1 * i32(info.bufferSize) + cx0)];
+      v11 = parentLevel1[u32(cy1 * i32(info.bufferSize) + cx1)];
     }
     case 2u: {
       v00 = parentLevel2[u32(cy0 * i32(info.bufferSize) + cx0)];
-      v10 = parentLevel2[u32(cy0 * i32(info.bufferSize) + x1)];
-      v01 = parentLevel2[u32(y1 * i32(info.bufferSize) + cx0)];
-      v11 = parentLevel2[u32(y1 * i32(info.bufferSize) + x1)];
+      v10 = parentLevel2[u32(cy0 * i32(info.bufferSize) + cx1)];
+      v01 = parentLevel2[u32(cy1 * i32(info.bufferSize) + cx0)];
+      v11 = parentLevel2[u32(cy1 * i32(info.bufferSize) + cx1)];
     }
     default: {
       v00 = parentLevel3[u32(cy0 * i32(info.bufferSize) + cx0)];
-      v10 = parentLevel3[u32(cy0 * i32(info.bufferSize) + x1)];
-      v01 = parentLevel3[u32(y1 * i32(info.bufferSize) + cx0)];
-      v11 = parentLevel3[u32(y1 * i32(info.bufferSize) + x1)];
+      v10 = parentLevel3[u32(cy0 * i32(info.bufferSize) + cx1)];
+      v01 = parentLevel3[u32(cy1 * i32(info.bufferSize) + cx0)];
+      v11 = parentLevel3[u32(cy1 * i32(info.bufferSize) + cx1)];
     }
   }
 
@@ -209,16 +213,33 @@ fn main(@builtin(global_invocation_id) coord: vec3u) {
   let scanlineIdx = coord.x;
 
   // Initialize convex hull stack (increased size for longer sweeps)
-  var hull: array<vec3<f32>, 256>;
+  var hull: array<vec3<f32>, 128>;
   var hullPtr = 0u;
 
-  // Initialize hull with point just outside sweep range
-  let startNormPos = sweepIndexToNormalized(0u, scanlineIdx);
-  let startZ = sampleElevation(startNormPos);
-  let startPhysPos = getPhysicalPosition(startNormPos);
-  hull[0] = vec3<f32>(startPhysPos, startZ);
+  // Initialize hull with point before sweep range (equivalent to sweepIdx=-1)
+  // Calculate position one step before the first sweep position
+  var initPixelPos = vec2<i32>(0);
+  if (uniforms.step.y == 0) {
+    // Horizontal sweep
+    let startX = select(0, i32(maxSweepSize) - 1, uniforms.step.x < 0);
+    initPixelPos.x = startX - uniforms.step.x; // One step before start
+    initPixelPos.y = i32(scanlineIdx);
+  } else {
+    // Vertical sweep
+    let startY = select(0, i32(maxSweepSize) - 1, uniforms.step.y < 0);
+    initPixelPos.x = i32(scanlineIdx);
+    initPixelPos.y = startY - uniforms.step.y; // One step before start
+  }
 
-  // Sweep through all positions (maxSweepSize pixels)
+  let bufferCenter = f32(maxSweepSize) * 0.5;
+  let targetHalfSize = f32(tileSize) * 0.5;
+  let initNormPos = (vec2<f32>(initPixelPos) - bufferCenter + targetHalfSize) / f32(tileSize);
+  let initZ = sampleElevation(initNormPos);
+  let initPhysPos = getPhysicalPosition(initNormPos);
+  hull[0] = vec3<f32>(initPhysPos, initZ);
+  hullPtr = 0u;
+
+  // Sweep through all positions
   for (var i = 0u; i < maxSweepSize; i++) {
     let normPos = sweepIndexToNormalized(i, scanlineIdx);
 
@@ -259,7 +280,7 @@ fn main(@builtin(global_invocation_id) coord: vec3u) {
 
     // Push current point onto hull
     // Gracefully handle overflow
-    hullPtr = min(hullPtr + 1u, 255u);
+    hullPtr = min(hullPtr + 1u, 127u);
     hull[hullPtr] = ijz;
   }
 }
