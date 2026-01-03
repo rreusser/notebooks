@@ -3,6 +3,7 @@
  */
 
 import { LSAO_SHADER, createShaderModule } from './lsao-shaders.js';
+import type { LSAOPipeline, LSAOPipelineOptions } from './types.js';
 
 /**
  * Create compute pipeline for multi-level LSAO
@@ -11,16 +12,11 @@ import { LSAO_SHADER, createShaderModule } from './lsao-shaders.js';
  * - Shader module compilation
  * - Bind group layout (uniforms, target/parent buffers, output)
  * - Pipeline layout and compilation
- *
- * @param {GPUDevice} device - WebGPU device
- * @param {Object} options - Pipeline options
- * @param {number} options.tileSize - Target tile size in pixels (default: 512)
- * @param {number} options.tileBuffer - Buffer pixels on each edge (default: 1)
- * @param {number} options.numLevels - Number of parent levels (default: 1, max: 4)
- * @param {number} options.workgroupSize - Workgroup size (default: 128)
- * @returns {{pipeline: GPUComputePipeline, bindGroupLayout: GPUBindGroupLayout}}
  */
-export function createLSAOPipeline(device, options = {}) {
+export function createLSAOPipeline(
+  device: GPUDevice,
+  options: LSAOPipelineOptions = {}
+): LSAOPipeline {
   const tileSize = options.tileSize || 512;
   const tileBuffer = options.tileBuffer || 1;
   const numLevels = options.numLevels || 1;
@@ -44,41 +40,41 @@ export function createLSAOPipeline(device, options = {}) {
   // Binding 1: Target terrain (514×514)
   // Binding 2: Output AO (512×512)
   // Binding 3-6: Parent level buffers (always 4 bindings, unused ones get dummy buffers)
-  const entries = [
+  const entries: GPUBindGroupLayoutEntry[] = [
     {
       binding: 0,
       visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: "uniform", hasDynamicOffset: true }
+      buffer: { type: "uniform" as GPUBufferBindingType, hasDynamicOffset: true }
     },
     {
       binding: 1,
       visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: "read-only-storage" }
+      buffer: { type: "read-only-storage" as GPUBufferBindingType }
     },
     {
       binding: 2,
       visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: "storage" }
+      buffer: { type: "storage" as GPUBufferBindingType }
     },
     {
       binding: 3,
       visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: "read-only-storage" }
+      buffer: { type: "read-only-storage" as GPUBufferBindingType }
     },
     {
       binding: 4,
       visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: "read-only-storage" }
+      buffer: { type: "read-only-storage" as GPUBufferBindingType }
     },
     {
       binding: 5,
       visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: "read-only-storage" }
+      buffer: { type: "read-only-storage" as GPUBufferBindingType }
     },
     {
       binding: 6,
       visibility: GPUShaderStage.COMPUTE,
-      buffer: { type: "read-only-storage" }
+      buffer: { type: "read-only-storage" as GPUBufferBindingType }
     }
   ];
 
@@ -115,24 +111,9 @@ export function createLSAOPipeline(device, options = {}) {
 
 /**
  * Pack uniform data for a single sweep direction (multi-level)
- *
- * @param {Object} params
- * @param {[number, number]} params.tileSize - Tile dimensions [width, height]
- * @param {[number, number]} params.step - Sweep direction [dx, dy]
- * @param {number} params.buffer - Tile buffer size
- * @param {number} params.pixelSize - Target pixel size in meters
- * @param {number} params.normalization - Normalization factor (1/num_directions)
- * @param {Array<Object>} params.levels - Array of level info objects (1-4 levels)
- * @returns {Uint8Array} Packed uniform data
  */
-export function packLSAOUniforms({
-  tileSize,
-  step,
-  buffer,
-  pixelSize,
-  normalization,
-  levels
-}) {
+export function packLSAOUniforms(params: import('./types.js').LSAOUniformParams): Uint8Array {
+  const { tileSize, step, buffer, pixelSize, normalization, levels } = params;
   // Align to 256 bytes for dynamic offset
   const uniformSize = 256;
   const bytes = new Uint8Array(uniformSize);
@@ -196,11 +177,8 @@ export function packLSAOUniforms({
  * - Target is in one quadrant of parent-base (256×256 region at parent res)
  * - Extraction takes 768×768 from 1024×1024
  * - Target position in 768×768 depends on extraction offset and target quadrant
- *
- * @param {'nw'|'ne'|'sw'|'se'} quadrant - Target's quadrant within parent
- * @returns {[number, number]} Offset [x, y] in parent buffer space (768×768)
  */
-export function getTargetOffsetInParent(quadrant) {
+export function getTargetOffsetInParent(quadrant: 'nw' | 'ne' | 'sw' | 'se'): [number, number] {
   // Grid layout and extraction logic (see parent-tile-assembly-multi-level.js):
   //
   // NW quadrant: parent-base at (512, 512) in assembly, extraction (256, 256)
@@ -226,13 +204,12 @@ export function getTargetOffsetInParent(quadrant) {
 
 /**
  * Calculate metadata for a parent level
- *
- * @param {number} deltaZ - Zoom level offset (e.g., -1, -2, -3, -4)
- * @param {number} tileSize - Target tile size (default: 512)
- * @param {[number, number]} [targetOffset] - Target position in buffer (optional, defaults to centered)
- * @returns {Object} Level metadata {bufferSize, scale, coverageMin, coverageMax, targetOffset}
  */
-export function calculateLevelInfo(deltaZ, tileSize = 512, targetOffset = null) {
+export function calculateLevelInfo(
+  deltaZ: number,
+  tileSize: number = 512,
+  targetOffset: [number, number] | null = null
+): import('./types.js').LevelInfo {
   if (deltaZ >= 0) {
     throw new Error(`deltaZ must be negative, got ${deltaZ}`);
   }
@@ -244,8 +221,8 @@ export function calculateLevelInfo(deltaZ, tileSize = 512, targetOffset = null) 
   // Default: target is centered in buffer
   // Target size at this level's resolution
   const targetSizeAtLevel = tileSize / scale;
-  const defaultOffset = [(bufferSize - targetSizeAtLevel) / 2, (bufferSize - targetSizeAtLevel) / 2];
-  const actualOffset = targetOffset || defaultOffset;
+  const defaultOffset: [number, number] = [(bufferSize - targetSizeAtLevel) / 2, (bufferSize - targetSizeAtLevel) / 2];
+  const actualOffset: [number, number] = targetOffset || defaultOffset;
 
   // Coverage in normalized space based on actual buffer size and target position
   // Normalized coordinates: 1.0 = tileSize pixels at target resolution

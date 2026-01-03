@@ -10,7 +10,7 @@
  * - Parent levels extend coverage: deltaZ=-1 covers (-1,-1) to (2,2), etc.
  * - Buffer space: Pixel coordinates within each level's buffer
  */
-export const LSAO_SHADER = /* wgsl */ `
+export const LSAO_SHADER: string = /* wgsl */ `
 override tileSize = 512u;
 override tileBuffer = 1u;
 override maxSweepSize = 768u;  // Maximum sweep range
@@ -289,12 +289,8 @@ fn main(@builtin(global_invocation_id) coord: vec3u) {
 
 /**
  * Create shader module from WGSL code
- *
- * @param {GPUDevice} device - WebGPU device
- * @param {string} code - WGSL shader code
- * @returns {GPUShaderModule}
  */
-export function createShaderModule(device, code) {
+export function createShaderModule(device: GPUDevice, code: string): GPUShaderModule {
   return device.createShaderModule({
     code,
     label: 'LSAO shader with parent buffer support'

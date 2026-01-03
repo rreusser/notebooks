@@ -2,10 +2,14 @@
   "name": "terrain",
   "version": "1.0.0",
   "description": "Terrain tile fetching and processing for line-sweep lighting",
-  "main": "main.js",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "esbuild index.js --bundle --format=esm --outfile=dist/terrain.js --platform=browser --external:sharp --external:webgpu",
+    "build": "npm run build:types && npm run build:js",
+    "build:types": "tsc",
+    "build:js": "esbuild compute/lsao-shaders.ts compute/lsao-pipeline.ts compute/lsao-execute.ts --bundle --format=esm --outdir=dist --platform=node --external:@webgpu/types",
+    "clean": "rm -rf dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
@@ -17,6 +21,9 @@
     "webgpu": "^0.3.8"
   },
   "devDependencies": {
-    "esbuild": "^0.24.2"
+    "@types/node": "^22.0.0",
+    "@webgpu/types": "^0.1.51",
+    "esbuild": "^0.24.2",
+    "typescript": "^5.7.2"
   }
 }
