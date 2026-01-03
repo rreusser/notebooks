@@ -17,9 +17,25 @@ node test/compute-simple.mjs
 node test/fetch-and-visualize.mjs
 # Output: test/elevation-heatmap.png, test/elevation-grayscale.png
 
-# Generate test pattern image
-node test/generate-test-image.mjs
-# Output: test/test-gradient.png
+# Test multi-level parent assembly at all zoom levels
+node test/test-all-deltaz.mjs
+# Comprehensive test of deltaZ from -1 to -8
+
+# Quick verification of multi-level assembly
+node test/test-multi-level-quick.mjs
+# Fast sanity check for deltaZ=-1 and deltaZ=-2
+
+# Compare extracted regions with actual target tile
+node test/compare-with-actual-target.mjs
+# Validates coordinate calculations are correct
+
+# LSAO tests (advanced)
+node test/test-lsao.mjs        # Full LSAO pipeline
+node test/test-lsao-simple.mjs # Simple LSAO test
+
+# Utilities
+node test/generate-test-image.mjs  # Generate test patterns
+node test/compute-tile.mjs         # CLI tile computation
 ```
 
 View results: `open test/lighting.png` (or your preferred image viewer)
@@ -75,34 +91,53 @@ const quad = getQuadrant(795, 1594);
 // Returns: 'ne' (northeast quadrant)
 ```
 
-### 3. Parent Tile Assembly
+### 3. Multi-Level Parent Tile Assembly
 
 ```javascript
-import { assembleParentTileBuffer } from './parent-tile-assembly.js';
-import { getTileSet } from './tile-hierarchy.js';
+import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from './parent-tile-assembly-multi-level.js';
 import { getTerrainTile } from './fetch-tile-sharp.js';
 
-// Get target and parent tiles
+// Get target tile coordinates
 const targetTile = {x: 795, y: 1594, z: 12};
-const tileSet = getTileSet(targetTile);
 
-// Fetch all tiles
-const tiles = await Promise.all(
-  tileSet.map(coords => getTerrainTile(coords).then(tile => ({...tile, role: coords.role})))
+// Choose zoom level offset (e.g., -1 for z-1, -2 for z-2)
+const deltaZ = -1;
+
+// Get parent tiles at that zoom level
+const parentTileCoords = getParentTilesAtLevel(targetTile, deltaZ);
+
+// Fetch parent tiles
+const parentTiles = await Promise.all(
+  parentTileCoords.map(async coords => {
+    const tile = await getTerrainTile(coords);
+    return {
+      data: tile.data,
+      width: tile.width,
+      height: tile.height,
+      tileSize: tile.tileSize,
+      role: coords.role
+    };
+  })
 );
 
-// Separate parents from target
-const parentTiles = tiles.filter(t => t.role !== 'target');
-
-// Assemble 768×768 parent buffer
-const parentBuffer = assembleParentTileBuffer({
+// Assemble parent buffer
+const assembled = assembleParentTileBufferMultiLevel({
   targetTile,
-  parentTiles
+  parentTiles,
+  deltaZ,
+  tileSize: 512
 });
-// Returns: Float32Array(768 * 768) - 3×3 tile coverage at z-1 resolution
-// - Each z tile occupies 256×256 pixels (512 / 2)
-// - Centered on target tile position
-// - Provides boundary context for line-sweep algorithms
+
+// Returns:
+// - buffer: Float32Array of parent terrain data
+// - size: Buffer dimensions (e.g., 768 for deltaZ=-1, 640 for deltaZ=-2)
+// - targetOffset: [x, y] position of target in buffer (always centered)
+// - scale: Resolution scale (2 for deltaZ=-1, 4 for deltaZ=-2, etc.)
+// - targetSizeAtParent: Size of target at parent resolution
+
+console.log(`Parent buffer: ${assembled.size}×${assembled.size}`);
+console.log(`Target at: [${assembled.targetOffset[0]}, ${assembled.targetOffset[1]}]`);
+console.log(`Scale: ${assembled.scale}:1`);
 ```
 
 ### 4. WebGPU Context (Node.js)
@@ -299,37 +334,49 @@ for (const tileCoords of tiles) {
 ### Task: Assemble Parent Tile Buffer for LSAO
 
 ```javascript
-import { getTileSet } from './tile-hierarchy.js';
+import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from './parent-tile-assembly-multi-level.js';
 import { getTerrainTile } from './fetch-tile-sharp.js';
-import { assembleParentTileBuffer } from './parent-tile-assembly.js';
 import { saveAsImage } from './save-image-node.js';
 
 // Define target tile
 const targetTile = {x: 795, y: 1594, z: 12};
 
-// Get and fetch all tiles (target + parents)
-const tileSet = getTileSet(targetTile);
-const tiles = await Promise.all(
-  tileSet.map(async (coords) => {
+// Use deltaZ=-1 for z-1 parent tiles (most common use case)
+const deltaZ = -1;
+
+// Get parent tile coordinates
+const parentTileCoords = getParentTilesAtLevel(targetTile, deltaZ);
+
+// Fetch parent tiles
+const parentTiles = await Promise.all(
+  parentTileCoords.map(async (coords) => {
     const tile = await getTerrainTile(coords);
-    return { ...tile, role: coords.role };
+    return {
+      data: tile.data,
+      width: tile.width,
+      height: tile.height,
+      tileSize: tile.tileSize,
+      role: coords.role
+    };
   })
 );
 
-// Separate parent tiles
-const parentTiles = tiles.filter(t => t.role !== 'target');
-
-// Assemble 768×768 parent buffer
-const parentBuffer = assembleParentTileBuffer({
+// Assemble parent buffer
+const assembled = assembleParentTileBufferMultiLevel({
   targetTile,
-  parentTiles
+  parentTiles,
+  deltaZ,
+  tileSize: 512
 });
 
-console.log(`Parent buffer: ${Math.sqrt(parentBuffer.length)}×${Math.sqrt(parentBuffer.length)}`);
-// Output: "Parent buffer: 768×768"
+console.log(`Parent buffer: ${assembled.size}×${assembled.size}`);
+// Output: "Parent buffer: 768×768" (for deltaZ=-1)
 
-// Use this buffer for horizon initialization in line-sweep algorithms
-// This provides boundary context from surrounding terrain at z-1 resolution
+console.log(`Target centered at: [${assembled.targetOffset[0]}, ${assembled.targetOffset[1]}]`);
+// Output: "Target centered at: [256, 256]" (always centered)
+
+// Use assembled.buffer for horizon initialization in line-sweep algorithms
+// This provides boundary context from surrounding terrain at parent resolution
 ```
 
 ## Key Concepts
@@ -394,22 +441,25 @@ const pixelSize = EARTH_CIRCUMFERENCE / tileSize / Math.pow(2, z);
 
 ```
 terrain/
-├── main.js                       # Browser tile fetching
-├── fetch-tile.js                 # Platform-agnostic core
-├── fetch-tile-sharp.js           # Node.js tile fetching
-├── tile-hierarchy.js             # Quadtree navigation
-├── parent-tile-assembly.js       # Parent tile buffer assembly (NEW)
-├── tile-cache.js                 # Tile data LRU cache
-├── buffer-cache.js               # GPU buffer LRU cache
-├── save-image-node.js            # Image export (Node.js)
-├── webgpu-context-node.js        # WebGPU context (Node.js)
-├── package.json                  # Dependencies (sharp, webgpu)
-└── test/                         # Test scripts
-    ├── compute-simple.mjs        # Full pipeline test
-    ├── fetch-and-visualize.mjs   # Elevation visualization
-    ├── generate-test-image.mjs   # Test pattern generator
-    ├── test-parent-assembly.mjs  # Parent assembly tests (NEW)
-    └── test-parent-assembly-real.mjs  # Real terrain assembly (NEW)
+├── main.js                            # Browser tile fetching
+├── fetch-tile.js                      # Platform-agnostic core
+├── fetch-tile-sharp.js                # Node.js tile fetching
+├── tile-hierarchy.js                  # Quadtree navigation
+├── parent-tile-assembly-multi-level.js # Multi-level parent tile assembly
+├── tile-cache.js                      # Tile data LRU cache
+├── buffer-cache.js                    # GPU buffer LRU cache
+├── save-image-node.js                 # Image export (Node.js)
+├── webgpu-context-node.js             # WebGPU context (Node.js)
+├── package.json                       # Dependencies (sharp, webgpu)
+└── test/                              # Test scripts
+    ├── compute-simple.mjs             # Full pipeline test
+    ├── fetch-and-visualize.mjs        # Elevation visualization
+    ├── generate-test-image.mjs        # Test pattern generator
+    ├── test-all-deltaz.mjs            # Multi-level assembly verification
+    ├── test-multi-level-quick.mjs     # Quick assembly sanity check
+    ├── compare-with-actual-target.mjs # Coordinate validation
+    ├── test-lsao.mjs                  # Full LSAO pipeline test
+    └── test-lsao-simple.mjs           # Simple LSAO test
 ```
 
 **Shared with browser:**

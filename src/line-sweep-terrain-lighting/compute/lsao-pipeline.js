@@ -146,7 +146,7 @@ export function packLSAOUniforms({
  * @returns {[number, number]} Offset [x, y] in parent buffer space (768×768)
  */
 export function getTargetOffsetInParent(quadrant) {
-  // Grid layout and extraction logic (see parent-tile-assembly.js):
+  // Grid layout and extraction logic (see parent-tile-assembly-multi-level.js):
   //
   // NW quadrant: parent-base at (512, 512) in assembly, extraction (256, 256)
   //   → target in NW of parent-base: (512+0, 512+0) to (512+256, 512+256) in assembly

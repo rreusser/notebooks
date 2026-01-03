@@ -20,6 +20,10 @@
     import { createWebGPUContext } from './compute/webgpu-context.js';
     import { createLightingPipeline } from './compute/pipeline.js';
     import { computeTileLighting } from './compute/execute.js';
+    import { createSimpleLSAOPipeline } from './compute/lsao-simple-pipeline.js';
+    import { computeSimpleLSAO } from './compute/lsao-simple-execute.js';
+    import { createNormalMapPipeline } from './compute/normal-map-pipeline.js';
+    import { computeNormalMap } from './compute/normal-map-execute.js';
   </script>
   <script id="3" type="text/markdown">
     ## 1. Tile Hierarchy
@@ -106,9 +110,9 @@
       tileSize: 512
     });
 
-    const { buffer: parentBuffer, size: parentSize, targetOffset, scale, targetSizeAtParent } = assembled;
+    const { buffer: parentBuffer, size: parentSize, targetOffset } = assembled;
 
-    ({ parentBuffer, parentSize, targetOffset, scale, targetSizeAtParent });
+    ({ parentBuffer, parentSize, targetOffset });
   </script>
   <script id="9" type="module">
     // Visualize parent buffer assembly
@@ -118,8 +122,9 @@
     const ctx = canvas.getContext('2d');
     const imageData = ctx.createImageData(parentSize, parentSize);
 
-    // Recalculate scale from deltaZ
+    // Recalculate scale and targetSizeAtParent from deltaZ
     const scale = Math.pow(2, Math.abs(deltaZ));
+    const targetSizeAtParent = 512 / scale;
 
     // Find min/max in parent buffer
     let min = Infinity, max = -Infinity;
@@ -503,6 +508,334 @@
     display(container);
   </script>
   <script id="21" type="text/markdown">
+    ## 7. Line Sweep Ambient Occlusion (LSAO)
+
+    [Line-Sweep Ambient Occlusion](https://karim.naaji.fr/lsao.html) computes ambient occlusion by sweeping across terrain in multiple directions, tracking visible horizons on a convex hull stack. This provides more realistic shadowing than simple normal-based lighting.
+
+    **Algorithm overview:**
+    - Sweep in 4 cardinal directions: East, West, North, South
+    - Each GPU invocation processes one complete scanline (row or column)
+    - Maintain convex hull stack to track horizon visibility
+    - Compute occlusion based on elevation angle to visible horizon
+    - Accumulate contributions from all directions
+
+    Below shows the simplified single-tile implementation (edge replication for boundaries).
+  </script>
+  <script id="22" type="module">
+    const { pipeline: lsaoPipeline, bindGroupLayout: lsaoBindGroupLayout } = createSimpleLSAOPipeline(device, {
+      tileSize: 512,
+      tileBuffer: 1,
+      workgroupSize: 128
+    });
+
+    const info = html`<div style="font-family: monospace; font-size: 13px;">
+      <strong>LSAO Compute Pipeline:</strong><br>
+      <ul style="margin: 8px 0; padding-left: 20px; list-style: none;">
+        <li>✓ LSAO shader compiled</li>
+        <li>✓ Bind group layout created</li>
+        <li>✓ Pipeline ready for 4-direction sweep</li>
+        <li style="margin-top: 4px; color: #666;">→ Workgroup size: 128 (scanline parallelism)</li>
+        <li style="color: #666;">→ Algorithm: Line-sweep horizon tracking</li>
+      </ul>
+    </div>`;
+
+    display(info);
+    ({ lsaoPipeline, lsaoBindGroupLayout });
+  </script>
+  <script id="23" type="module">
+    const EARTH_CIRCUMFERENCE = 40075017;
+    const pixelSize = EARTH_CIRCUMFERENCE / 512 / Math.pow(2, coords.z);
+
+    const startTime = performance.now();
+
+    const lsaoResult = await computeSimpleLSAO({
+      device,
+      pipeline: lsaoPipeline,
+      bindGroupLayout: lsaoBindGroupLayout,
+      terrainData: bufferedData,
+      tileSize: 512,
+      pixelSize,
+      workgroupSize: 128,
+      directions: [[1, 0], [-1, 0], [0, 1], [0, -1]]
+    });
+
+    const elapsed = performance.now() - startTime;
+
+    // Compute stats
+    let min = Infinity, max = -Infinity, sum = 0;
+    for (let i = 0; i < lsaoResult.length; i++) {
+      const v = lsaoResult[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v;
+    }
+    const lsaoStats = { min, max, mean: sum / lsaoResult.length };
+
+    const info = html`<div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+      LSAO values: min=${lsaoStats.min.toFixed(3)}, max=${lsaoStats.max.toFixed(3)}, mean=${lsaoStats.mean.toFixed(3)}<br>
+      Computation time: ${elapsed.toFixed(1)}ms (4 direction sweeps)<br>
+      Pixel size: ${pixelSize.toFixed(3)}m
+    </div>`;
+
+    display(info);
+    lsaoResult;
+  </script>
+  <script id="24" type="module">
+    // Normalize LSAO to [0, 1] for display
+    const lsaoNormalized = new Float32Array(lsaoResult.length);
+    for (let i = 0; i < lsaoResult.length; i++) {
+      lsaoNormalized[i] = (lsaoResult[i] - lsaoStats.min) / (lsaoStats.max - lsaoStats.min);
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(512, 512);
+
+    for (let i = 0; i < lsaoNormalized.length; i++) {
+      const value = Math.floor(Math.min(Math.max(lsaoNormalized[i], 0), 1) * 255);
+      imageData.data[i * 4] = value;
+      imageData.data[i * 4 + 1] = value;
+      imageData.data[i * 4 + 2] = value;
+      imageData.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const container = html`<div>
+      ${canvas}
+      <div style="margin-top: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        <em>Pure ambient occlusion (normalized for display)</em>
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="25" type="text/markdown">
+    ### LSAO Combined with Elevation
+
+    Multiply the ambient occlusion by normalized elevation to create a shaded relief map:
+  </script>
+  <script id="26" type="module">
+    // Compute elevation min/max from the elevations data
+    let elevMin = Infinity, elevMax = -Infinity;
+    for (let i = 0; i < elevations.length; i++) {
+      const v = elevations[i];
+      if (v < elevMin) elevMin = v;
+      if (v > elevMax) elevMax = v;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(512, 512);
+
+    for (let y = 0; y < 512; y++) {
+      for (let x = 0; x < 512; x++) {
+        const idx = y * 512 + x;
+        const srcIdx = (y + 1) * targetTile.width + (x + 1);
+
+        // Normalize elevation
+        const elevNorm = (elevations[srcIdx] - elevMin) / (elevMax - elevMin);
+
+        // Normalize AO
+        const aoNorm = (lsaoResult[idx] - lsaoStats.min) / (lsaoStats.max - lsaoStats.min);
+
+        // Combine: AO × elevation with terrain coloring
+        const combined = elevNorm * aoNorm;
+
+        // Terrain color scheme
+        const r = Math.floor(combined * 180 + 75);
+        const g = Math.floor(combined * 140 + 80);
+        const b = Math.floor((1 - combined) * 120 + 60);
+
+        imageData.data[idx * 4] = r;
+        imageData.data[idx * 4 + 1] = g;
+        imageData.data[idx * 4 + 2] = b;
+        imageData.data[idx * 4 + 3] = 255;
+      }
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const container = html`<div>
+      ${canvas}
+      <div style="margin-top: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        <em>Shaded relief: LSAO × normalized elevation with terrain colors</em>
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="27" type="text/markdown">
+    ## 8. Final Lighting Map (RGB)
+
+    The final output combines surface normals and ambient occlusion into a single RGB image:
+
+    - **Red channel**: Surface normal Y component (fy = 0.5 + 0.5 × ny)
+    - **Green channel**: Ambient occlusion from LSAO
+    - **Blue channel**: Surface normal X component (fx = 0.5 - 0.5 × nx)
+
+    The normals are computed with physically-correct Web Mercator (EPSG:3857) scaling, accounting for latitude-dependent distortion. This allows the lighting map to be used for on-the-fly lighting during rendering.
+  </script>
+  <script id="28" type="module">
+    const { pipeline: normalPipeline, bindGroupLayout: normalBindGroupLayout } = createNormalMapPipeline(device, {
+      tileSize: 512,
+      tileBuffer: 1
+    });
+
+    const info = html`<div style="font-family: monospace; font-size: 13px;">
+      <strong>Normal Map Pipeline:</strong><br>
+      <ul style="margin: 8px 0; padding-left: 20px; list-style: none;">
+        <li>✓ Normal map shader compiled</li>
+        <li>✓ Web Mercator distortion correction enabled</li>
+        <li>✓ Physically-correct normal vectors</li>
+        <li style="margin-top: 4px; color: #666;">→ Workgroup size: 16×16</li>
+        <li style="color: #666;">→ Output: RGB (R=ny, G=reserved, B=nx)</li>
+      </ul>
+    </div>`;
+
+    display(info);
+    ({ normalPipeline, normalBindGroupLayout });
+  </script>
+  <script id="29" type="module">
+    // Compute normal map
+    const normalMapData = await computeNormalMap({
+      device,
+      pipeline: normalPipeline,
+      bindGroupLayout: normalBindGroupLayout,
+      terrainData: bufferedData,
+      tileX: coords.x,
+      tileY: coords.y,
+      tileZ: coords.z,
+      tileSize: 512
+    });
+
+    const info = html`<div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+      Normal map computed (${normalMapData.length / 4} pixels, vec3 per pixel with 16-byte alignment)
+    </div>`;
+
+    display(info);
+    normalMapData;
+  </script>
+  <script id="30" type="module">
+    // Combine normals (R/B) with LSAO (G) into final RGB image
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d');
+    const imageData = ctx.createImageData(512, 512);
+
+    // Normalize AO to [0, 1]
+    for (let i = 0; i < 512 * 512; i++) {
+      const aoNorm = (lsaoResult[i] - lsaoStats.min) / (lsaoStats.max - lsaoStats.min);
+
+      // normalMapData has vec3<f32> with 16-byte alignment (stride = 4 floats)
+      const r = normalMapData[i * 4 + 0];      // fy (ny component)
+      const b = normalMapData[i * 4 + 2];      // fx (nx component)
+      const g = aoNorm;                         // AO
+
+      imageData.data[i * 4 + 0] = Math.floor(Math.min(Math.max(r, 0), 1) * 255);
+      imageData.data[i * 4 + 1] = Math.floor(Math.min(Math.max(g, 0), 1) * 255);
+      imageData.data[i * 4 + 2] = Math.floor(Math.min(Math.max(b, 0), 1) * 255);
+      imageData.data[i * 4 + 3] = 255;
+    }
+
+    ctx.putImageData(imageData, 0, 0);
+
+    const container = html`<div>
+      ${canvas}
+      <div style="margin-top: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+        <strong>Final Lighting Map</strong><br>
+        R: Normal Y (fy = 0.5 + 0.5×ny) | G: Ambient Occlusion | B: Normal X (fx = 0.5 - 0.5×nx)
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="31" type="text/markdown">
+    ### Channel Breakdown
+
+    Below shows each channel individually for inspection:
+  </script>
+  <script id="32" type="module">
+    const canvases = [];
+
+    // Red channel (ny) - stride is 4 floats due to vec3 alignment
+    const canvasR = document.createElement('canvas');
+    canvasR.width = 512;
+    canvasR.height = 512;
+    let ctx = canvasR.getContext('2d');
+    let imgData = ctx.createImageData(512, 512);
+    for (let i = 0; i < 512 * 512; i++) {
+      const val = Math.floor(normalMapData[i * 4 + 0] * 255);
+      imgData.data[i * 4 + 0] = val;
+      imgData.data[i * 4 + 1] = val;
+      imgData.data[i * 4 + 2] = val;
+      imgData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Green channel (AO)
+    const canvasG = document.createElement('canvas');
+    canvasG.width = 512;
+    canvasG.height = 512;
+    ctx = canvasG.getContext('2d');
+    imgData = ctx.createImageData(512, 512);
+    for (let i = 0; i < 512 * 512; i++) {
+      const aoNorm = (lsaoResult[i] - lsaoStats.min) / (lsaoStats.max - lsaoStats.min);
+      const val = Math.floor(aoNorm * 255);
+      imgData.data[i * 4 + 0] = val;
+      imgData.data[i * 4 + 1] = val;
+      imgData.data[i * 4 + 2] = val;
+      imgData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Blue channel (nx) - stride is 4 floats due to vec3 alignment
+    const canvasB = document.createElement('canvas');
+    canvasB.width = 512;
+    canvasB.height = 512;
+    ctx = canvasB.getContext('2d');
+    imgData = ctx.createImageData(512, 512);
+    for (let i = 0; i < 512 * 512; i++) {
+      const val = Math.floor(normalMapData[i * 4 + 2] * 255);
+      imgData.data[i * 4 + 0] = val;
+      imgData.data[i * 4 + 1] = val;
+      imgData.data[i * 4 + 2] = val;
+      imgData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const container = html`<div>
+      <div>
+        ${canvasR}
+        <div style="margin-top: 4px; font-family: sans-serif; font-size: 12px; color: #e74c3c; text-align: center;">
+          <strong>Red Channel</strong><br>
+          Normal Y (fy)
+        </div>
+      </div>
+      <div>
+        ${canvasG}
+        <div style="margin-top: 4px; font-family: sans-serif; font-size: 12px; color: #27ae60; text-align: center;">
+          <strong>Green Channel</strong><br>
+          Ambient Occlusion
+        </div>
+      </div>
+      <div>
+        ${canvasB}
+        <div style="margin-top: 4px; font-family: sans-serif; font-size: 12px; color: #3498db; text-align: center;">
+          <strong>Blue Channel</strong><br>
+          Normal X (fx)
+        </div>
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="33" type="text/markdown">
     ## Summary
 
     This notebook demonstrates the complete hierarchical terrain lighting pipeline:
@@ -511,8 +844,13 @@
     - **Tile Fetching**: Retrieves Mapbox terrain tiles with RGB elevation encoding
     - **Data Decoding**: Converts RGB values to elevation in meters
     - **WebGPU Compute**: GPU-accelerated normal calculation and lighting
+    - **LSAO**: Line-sweep ambient occlusion with 4-direction sweeps
+    - **Normal Map**: Physically-correct surface normals with Web Mercator scaling
+    - **Final Output**: RGB lighting map (R=ny, G=AO, B=nx) for on-the-fly rendering
     - **LRU Caching**: Manages tile data and GPU buffers efficiently
 
     The infrastructure supports both browser and Node.js environments with platform-specific implementations.
+
+    **Next steps**: The full LSAO implementation with parent tile support (`lsao-pipeline.js`) uses hierarchical boundary data for seamless multi-tile rendering. The lighting maps can be compressed as WebP and served as tiles for real-time terrain rendering.
   </script>
 </notebook>

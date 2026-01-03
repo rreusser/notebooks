@@ -134,15 +134,41 @@ export function assembleParentTileBufferMultiLevel({
   const gridLayout = getGridLayoutMultiLevel(quadrant);
 
   // Copy each parent tile into assembly
+  console.log(`\n[DEBUG] Copying tiles to assembly:`);
   for (const [role, position] of Object.entries(gridLayout)) {
     const tile = roleMap.get(role);
-    if (!tile) continue;
+    if (!tile) {
+      console.log(`  ${role}: MISSING (position would be (${position.x}, ${position.y}))`);
+      continue;
+    }
 
+    console.log(`  ${role}: copying to position (${position.x}, ${position.y})`);
     copyTileToAssembly(tile, assembly, position, assemblySize);
   }
 
+  // Calculate target size at parent resolution (needed for extraction)
+  const targetSizeAtParent = tileSize / scale;
+
+  // Calculate where target actually is in the assembly
+  const gridPos = gridLayout['parent-base'];
+  const targetPosInParentBase = getTargetPositionInParentTile(targetTile, deltaZ, tileSize);
+  const targetPosInAssembly = {
+    x: gridPos.x + targetPosInParentBase.x,
+    y: gridPos.y + targetPosInParentBase.y
+  };
+
+  console.log(`[DEBUG] Assembly details:`);
+  console.log(`  Quadrant: ${quadrant}`);
+  console.log(`  parent-base position in assembly: (${gridPos.x}, ${gridPos.y})`);
+  console.log(`  Target position in parent-base: (${targetPosInParentBase.x}, ${targetPosInParentBase.y})`);
+  console.log(`  Target position in assembly: (${targetPosInAssembly.x}, ${targetPosInAssembly.y})`);
+  console.log(`  Target size at parent: ${targetSizeAtParent}`);
+
   // Extract centered region
-  const extractionOffset = getExtractionOffsetMultiLevel(quadrant, targetSizeAtParent);
+  const extractionOffset = getExtractionOffsetMultiLevel(targetPosInAssembly, targetSizeAtParent, outputSize);
+  console.log(`  Extraction offset: (${extractionOffset.x}, ${extractionOffset.y})`);
+  console.log(`  Target position in output: (${targetPosInAssembly.x - extractionOffset.x}, ${targetPosInAssembly.y - extractionOffset.y})`);
+
   const output = new Float32Array(outputSize * outputSize);
 
   for (let y = 0; y < outputSize; y++) {
@@ -156,12 +182,13 @@ export function assembleParentTileBufferMultiLevel({
   }
 
   // Calculate target tile offset in output buffer
-  // Target tile is tileSize/scale pixels at parent resolution
-  const targetSizeAtParent = tileSize / scale;
+  // This is where the target actually ends up after extraction
   const targetOffsetInOutput = [
-    Math.floor((outputSize - targetSizeAtParent) / 2),
-    Math.floor((outputSize - targetSizeAtParent) / 2)
+    targetPosInAssembly.x - extractionOffset.x,
+    targetPosInAssembly.y - extractionOffset.y
   ];
+
+  console.log(`  Returning targetOffset: [${targetOffsetInOutput[0]}, ${targetOffsetInOutput[1]}]`);
 
   return {
     buffer: output,
@@ -233,41 +260,52 @@ function copyTileToAssembly(tile, assembly, position, assemblySize) {
 }
 
 /**
+ * Get target position within parent-base tile
+ *
+ * Calculates the exact position based on the target's fractional coordinates
+ * within the parent tile, not just the quadrant.
+ */
+function getTargetPositionInParentTile(targetTile, deltaZ, tileSize) {
+  const { x, y } = targetTile;
+  const scale = Math.pow(2, Math.abs(deltaZ));
+
+  // Calculate which parent tile contains the target
+  const parentX = Math.floor(x / scale);
+  const parentY = Math.floor(y / scale);
+
+  // Calculate fractional position within parent tile
+  const fracX = (x / scale) - parentX;
+  const fracY = (y / scale) - parentY;
+
+  // Convert to pixel position (parent tile is 512×512)
+  const posX = fracX * tileSize;
+  const posY = fracY * tileSize;
+
+  return { x: posX, y: posY };
+}
+
+/**
  * Get extraction offset to center target in output buffer
  *
- * The target tile occupies one quadrant of parent-base (which is 512×512).
- * Different quadrants place parent-base at different positions in the 1024×1024 assembly.
- * This function calculates the extraction offset to ensure the target always ends up
- * at position (256, 256) in the output buffer, regardless of quadrant or deltaZ.
+ * Calculates the extraction offset to ensure the target is always centered
+ * in the output buffer at position (outputSize/2 - targetSize/2, outputSize/2 - targetSize/2).
  *
- * @param {string} quadrant - Target quadrant ('nw', 'ne', 'sw', 'se')
+ * @param {{x: number, y: number}} targetPosInAssembly - Target position in assembly
  * @param {number} targetSizeAtParent - Target size in parent pixel space
+ * @param {number} outputSize - Output buffer size
  * @returns {{x: number, y: number}} Extraction offset
  */
-function getExtractionOffsetMultiLevel(quadrant, targetSizeAtParent) {
-  // Target position in 1024×1024 assembly depends on quadrant:
-  // - NW: parent-base at (512, 512), target at (512, 512)
-  // - NE: parent-base at (0, 512), target at (512-targetSize, 512)
-  // - SW: parent-base at (512, 0), target at (512, 512-targetSize)
-  // - SE: parent-base at (0, 0), target at (512-targetSize, 512-targetSize)
-  //
-  // To center target at (256, 256) in output:
-  // extraction_offset = target_position_in_assembly - (256, 256)
+function getExtractionOffsetMultiLevel(targetPosInAssembly, targetSizeAtParent, outputSize) {
+  // We want the target to be centered in the output buffer
+  // Center position in output: (outputSize/2 - targetSize/2, outputSize/2 - targetSize/2)
+  const targetCenterInOutput = {
+    x: outputSize / 2 - targetSizeAtParent / 2,
+    y: outputSize / 2 - targetSizeAtParent / 2
+  };
 
-  switch (quadrant) {
-    case 'nw':
-      // Target at (512, 512) → extract from (256, 256)
-      return { x: 256, y: 256 };
-    case 'ne':
-      // Target at (512-targetSize, 512) → extract from (256-targetSize, 256)
-      return { x: 256 - targetSizeAtParent, y: 256 };
-    case 'sw':
-      // Target at (512, 512-targetSize) → extract from (256, 256-targetSize)
-      return { x: 256, y: 256 - targetSizeAtParent };
-    case 'se':
-      // Target at (512-targetSize, 512-targetSize) → extract from (256-targetSize, 256-targetSize)
-      return { x: 256 - targetSizeAtParent, y: 256 - targetSizeAtParent };
-    default:
-      throw new Error(`Unknown quadrant: ${quadrant}`);
-  }
+  // Extraction offset = target position in assembly - desired position in output
+  return {
+    x: targetPosInAssembly.x - targetCenterInOutput.x,
+    y: targetPosInAssembly.y - targetCenterInOutput.y
+  };
 }

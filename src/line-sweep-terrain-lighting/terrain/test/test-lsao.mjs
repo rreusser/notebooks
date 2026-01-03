@@ -9,8 +9,8 @@
  */
 
 import { getTerrainTile } from '../fetch-tile-sharp.js';
-import { getTileSet, getQuadrant } from '../tile-hierarchy.js';
-import { assembleParentTileBuffer } from '../parent-tile-assembly.js';
+import { getQuadrant } from '../tile-hierarchy.js';
+import { getParentTilesAtLevel, assembleParentTileBufferMultiLevel } from '../parent-tile-assembly-multi-level.js';
 import { createWebGPUContext } from '../webgpu-context-node.js';
 import { createLSAOPipeline } from '../../compute/lsao-pipeline.js';
 import { computeLSAO } from '../../compute/lsao-execute.js';
@@ -26,44 +26,59 @@ async function testLSAO() {
   const quadrant = getQuadrant(targetTile.x, targetTile.y);
   console.log(`Quadrant: ${quadrant}\n`);
 
-  // Step 1: Fetch all tiles
-  console.log('Step 1: Fetching tiles...');
-  const tileSet = getTileSet(targetTile);
-  console.log(`  Fetching ${tileSet.length} tiles:`, tileSet.map(t => t.role).join(', '));
+  // Step 1: Fetch target tile
+  console.log('Step 1: Fetching target tile...');
+  const targetTileData = await getTerrainTile(targetTile);
+  console.log(`  ✓ Fetched target tile\n`);
 
-  const tiles = await Promise.all(
-    tileSet.map(async (coords) => {
+  // Step 2: Fetch parent tiles and assemble buffer (using deltaZ=-1)
+  console.log('Step 2: Fetching parent tiles...');
+  const deltaZ = -1;
+  const parentTileCoords = getParentTilesAtLevel(targetTile, deltaZ);
+  console.log(`  Fetching ${parentTileCoords.length} parent tiles at z=${targetTile.z + deltaZ}:`, parentTileCoords.map(t => t.role).join(', '));
+
+  const parentTiles = await Promise.all(
+    parentTileCoords.map(async (coords) => {
       const tile = await getTerrainTile(coords);
-      return { ...tile, role: coords.role };
+      return {
+        data: tile.data,
+        width: tile.width,
+        height: tile.height,
+        tileSize: tile.tileSize,
+        role: coords.role
+      };
     })
   );
+  console.log(`  ✓ Fetched ${parentTiles.length} parent tiles\n`);
 
-  const targetTileData = tiles.find(t => t.role === 'target');
-  const parentTiles = tiles.filter(t => t.role !== 'target');
-  console.log(`  ✓ Fetched target tile and ${parentTiles.length} parent tiles\n`);
+  // Step 3: Assemble parent buffer
+  console.log('Step 3: Assembling parent buffer...');
+  const assembled = assembleParentTileBufferMultiLevel({
+    targetTile,
+    parentTiles,
+    deltaZ,
+    tileSize: 512
+  });
+  const parentBuffer = assembled.buffer;
+  console.log(`  ✓ Assembled ${assembled.size}×${assembled.size} parent buffer\n`);
 
-  // Step 2: Assemble parent buffer
-  console.log('Step 2: Assembling parent buffer...');
-  const parentBuffer = assembleParentTileBuffer({ targetTile, parentTiles });
-  console.log(`  ✓ Assembled ${Math.sqrt(parentBuffer.length)}×${Math.sqrt(parentBuffer.length)} parent buffer\n`);
-
-  // Step 3: Initialize WebGPU
-  console.log('Step 3: Initializing WebGPU...');
+  // Step 4: Initialize WebGPU
+  console.log('Step 4: Initializing WebGPU...');
   const { device } = await createWebGPUContext();
   console.log(`  ✓ WebGPU context created\n`);
 
-  // Step 4: Create LSAO pipeline
-  console.log('Step 4: Creating LSAO pipeline...');
+  // Step 5: Create LSAO pipeline
+  console.log('Step 5: Creating LSAO pipeline...');
   const { pipeline, bindGroupLayout } = createLSAOPipeline(device, {
     tileSize: 512,
     tileBuffer: 1,
-    parentSize: 768,
+    parentSize: assembled.size,
     workgroupSize: 128
   });
   console.log(`  ✓ LSAO pipeline created\n`);
 
-  // Step 5: Compute LSAO
-  console.log('Step 5: Computing LSAO...');
+  // Step 6: Compute LSAO
+  console.log('Step 6: Computing LSAO...');
   const EARTH_CIRCUMFERENCE = 40075017;
   const pixelSize = EARTH_CIRCUMFERENCE / 512 / Math.pow(2, targetTile.z);
   console.log(`  Pixel size: ${pixelSize.toFixed(2)}m`);
@@ -87,14 +102,14 @@ async function testLSAO() {
   const elapsed = performance.now() - startTime;
   console.log(`  ✓ Computation complete in ${elapsed.toFixed(1)}ms\n`);
 
-  // Step 6: Analyze results
-  console.log('Step 6: Analyzing results...');
+  // Step 7: Analyze results
+  console.log('Step 7: Analyzing results...');
   const stats = getStats(aoData);
   console.log(`  AO range: ${stats.min.toFixed(3)} to ${stats.max.toFixed(3)}`);
   console.log(`  Mean: ${stats.mean.toFixed(3)}\n`);
 
-  // Step 7: Save outputs
-  console.log('Step 7: Saving outputs...');
+  // Step 8: Save outputs
+  console.log('Step 8: Saving outputs...');
 
   // Save AO result
   await saveAsImage(aoData, 512, 'test/lsao-result.png');
