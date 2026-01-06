@@ -27,9 +27,9 @@ export function createLSAOPipeline(
   }
 
   // Calculate max sweep size from outermost level
-  // For N levels: bufferSize = floor(tileSize * (1 + 2^(-N)))
+  // For N levels: bufferSize = floor(tileSize * (1 + 2^N))
   const maxDeltaZ = -numLevels;
-  const maxSweepSize = Math.floor(tileSize * (1 + Math.pow(2, maxDeltaZ)));
+  const maxSweepSize = Math.floor(tileSize * (1 + Math.pow(2, Math.abs(maxDeltaZ))));
 
   // Create shader module
   const shaderModule = createShaderModule(device, LSAO_SHADER);

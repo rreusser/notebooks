@@ -6,9 +6,8 @@
   "types": "dist/index.d.ts",
   "type": "module",
   "scripts": {
-    "build": "npm run build:types && npm run build:js",
+    "build": "npm run clean && npm run build:types",
     "build:types": "tsc",
-    "build:js": "esbuild compute/lsao-shaders.ts compute/lsao-pipeline.ts compute/lsao-execute.ts --bundle --format=esm --outdir=dist --platform=node --external:@webgpu/types",
     "clean": "rm -rf dist",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -21,7 +20,9 @@
     "webgpu": "^0.3.8"
   },
   "devDependencies": {
+    "@types/jsdom": "^27.0.0",
     "@types/node": "^22.0.0",
+    "@types/pngjs": "^6.0.5",
     "@webgpu/types": "^0.1.51",
     "esbuild": "^0.24.2",
     "typescript": "^5.7.2"

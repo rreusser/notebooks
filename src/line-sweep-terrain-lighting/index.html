@@ -22,8 +22,10 @@
     import { computeTileLighting } from './terrain/compute/execute.js';
     import { createSimpleLSAOPipeline } from './terrain/compute/lsao-simple-pipeline.js';
     import { computeSimpleLSAO } from './terrain/compute/lsao-simple-execute.js';
+    import { computeSimpleLSAOCPU } from './terrain/compute/lsao-simple-cpu.js';
     import { createLSAOPipeline, calculateLevelInfo } from './terrain/compute/lsao-pipeline.js';
     import { computeLSAO } from './terrain/compute/lsao-execute.js';
+    import { computeLSAOCPU } from './terrain/compute/lsao-cpu.js';
     import { createNormalMapPipeline } from './terrain/compute/normal-map-pipeline.js';
     import { computeNormalMap } from './terrain/compute/normal-map-execute.js';
   </script>
@@ -1328,6 +1330,247 @@
     </div>`;
 
     display(container);
+  </script>
+  <script id="40a" type="text/markdown">
+    ## 9. CPU vs GPU Validation
+
+    To validate our GPU shader implementations, we've created CPU reference implementations that exactly match the shader logic. This allows us to debug the algorithms more easily and verify correctness.
+
+    Below, we compare CPU and GPU results for both simple and multi-level LSAO:
+  </script>
+  <script id="40b" type="module">
+    // Run simple LSAO on CPU
+    const cpuStartTime = performance.now();
+
+    // Calculate pixelSize locally to avoid ambiguity
+    const EARTH_CIRCUMFERENCE = 40075017;
+    const cpuPixelSize = EARTH_CIRCUMFERENCE / 512 / Math.pow(2, coords.z);
+
+    const cpuSimpleResult = computeSimpleLSAOCPU({
+      terrainData: bufferedData,
+      tileSize: 512,
+      pixelSize: cpuPixelSize,
+      directions: [[1, 0], [-1, 0], [0, 1], [0, -1]]
+    });
+
+    const cpuElapsed = performance.now() - cpuStartTime;
+
+    // Compute stats
+    let min = Infinity, max = -Infinity, sum = 0;
+    for (let i = 0; i < cpuSimpleResult.length; i++) {
+      const v = cpuSimpleResult[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v;
+    }
+    const cpuStats = { min, max, mean: sum / cpuSimpleResult.length };
+
+    // Compare with GPU result
+    let totalDiff = 0;
+    let maxDiff = 0;
+    let diffCount = 0;
+    for (let i = 0; i < cpuSimpleResult.length; i++) {
+      const diff = Math.abs(cpuSimpleResult[i] - lsaoResult[i]);
+      totalDiff += diff;
+      maxDiff = Math.max(maxDiff, diff);
+      if (diff > 0.001) diffCount++;
+    }
+    const meanDiff = totalDiff / cpuSimpleResult.length;
+
+    const info = html`<div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+      <strong>Simple LSAO - CPU Implementation:</strong><br>
+      Values: min=${cpuStats.min.toFixed(3)}, max=${cpuStats.max.toFixed(3)}, mean=${cpuStats.mean.toFixed(3)}<br>
+      Computation time: ${cpuElapsed.toFixed(1)}ms<br>
+      <br>
+      <strong>CPU vs GPU Comparison:</strong><br>
+      Mean absolute difference: ${meanDiff.toFixed(6)}<br>
+      Max absolute difference: ${maxDiff.toFixed(6)}<br>
+      Pixels with diff > 0.001: ${diffCount} (${(diffCount / cpuSimpleResult.length * 100).toFixed(2)}%)<br>
+      ${meanDiff < 0.0001 ? '<span style="color: #27ae60;">✓ Excellent match - implementations are equivalent</span>' :
+        meanDiff < 0.001 ? '<span style="color: #f39c12;">⚠️ Small differences - likely floating-point precision</span>' :
+        '<span style="color: #ca4747;">⚠️ Large differences - possible bug!</span>'}
+    </div>`;
+
+    display(info);
+    cpuSimpleResult;
+  </script>
+  <script id="40c" type="module">
+    // Visualize CPU result and difference map
+    const canvasCPU = document.createElement('canvas');
+    canvasCPU.width = 512;
+    canvasCPU.height = 512;
+    let ctx = canvasCPU.getContext('2d');
+    let imgData = ctx.createImageData(512, 512);
+
+    for (let i = 0; i < cpuSimpleResult.length; i++) {
+      const value = Math.floor(Math.min(Math.max(cpuSimpleResult[i], 0), 1) * 255);
+      imgData.data[i * 4] = value;
+      imgData.data[i * 4 + 1] = value;
+      imgData.data[i * 4 + 2] = value;
+      imgData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Create difference map (amplified)
+    const canvasDiff = document.createElement('canvas');
+    canvasDiff.width = 512;
+    canvasDiff.height = 512;
+    ctx = canvasDiff.getContext('2d');
+    imgData = ctx.createImageData(512, 512);
+
+    for (let i = 0; i < cpuSimpleResult.length; i++) {
+      const diff = Math.abs(cpuSimpleResult[i] - lsaoResult[i]);
+      // Amplify differences for visibility (×1000)
+      const value = Math.floor(Math.min(diff * 1000, 1) * 255);
+      imgData.data[i * 4] = value;
+      imgData.data[i * 4 + 1] = value;
+      imgData.data[i * 4 + 2] = value;
+      imgData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const container = html`<div style="display: flex; flex-direction: column; gap: 24px;">
+      <div>
+        <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+          <strong>CPU Result</strong>
+        </div>
+        ${canvasCPU}
+      </div>
+      <div>
+        <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+          <strong>Absolute Difference (×1000)</strong> - White = larger difference
+        </div>
+        ${canvasDiff}
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="40d" type="module">
+    // Run multi-level LSAO on CPU
+    const cpuMultiStartTime = performance.now();
+
+    // Calculate pixelSize locally to avoid ambiguity
+    const EARTH_CIRCUMFERENCE = 40075017;
+    const cpuMultiPixelSize = EARTH_CIRCUMFERENCE / 512 / Math.pow(2, coords.z);
+
+    const cpuMultiResult = computeLSAOCPU({
+      targetData: bufferedData,
+      parentLevels: parentLevelsData,
+      levelInfo,
+      tileSize: 512,
+      pixelSize: cpuMultiPixelSize,
+      directions: [[1, 0], [-1, 0], [0, 1], [0, -1]]
+    });
+
+    const cpuMultiElapsed = performance.now() - cpuMultiStartTime;
+
+    // Compute stats
+    let min = Infinity, max = -Infinity, sum = 0;
+    for (let i = 0; i < cpuMultiResult.length; i++) {
+      const v = cpuMultiResult[i];
+      if (v < min) min = v;
+      if (v > max) max = v;
+      sum += v;
+    }
+    const cpuMultiStats = { min, max, mean: sum / cpuMultiResult.length };
+
+    // Compare with GPU result
+    let totalDiff = 0;
+    let maxDiff = 0;
+    let diffCount = 0;
+    for (let i = 0; i < cpuMultiResult.length; i++) {
+      const diff = Math.abs(cpuMultiResult[i] - multiLevelResult[i]);
+      totalDiff += diff;
+      maxDiff = Math.max(maxDiff, diff);
+      if (diff > 0.001) diffCount++;
+    }
+    const meanDiff = totalDiff / cpuMultiResult.length;
+
+    const info = html`<div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+      <strong>Multi-Level LSAO - CPU Implementation (${numLevels} levels):</strong><br>
+      Values: min=${cpuMultiStats.min.toFixed(3)}, max=${cpuMultiStats.max.toFixed(3)}, mean=${cpuMultiStats.mean.toFixed(3)}<br>
+      Computation time: ${cpuMultiElapsed.toFixed(1)}ms<br>
+      <br>
+      <strong>CPU vs GPU Comparison:</strong><br>
+      Mean absolute difference: ${meanDiff.toFixed(6)}<br>
+      Max absolute difference: ${maxDiff.toFixed(6)}<br>
+      Pixels with diff > 0.001: ${diffCount} (${(diffCount / cpuMultiResult.length * 100).toFixed(2)}%)<br>
+      ${meanDiff < 0.0001 ? '<span style="color: #27ae60;">✓ Excellent match - implementations are equivalent</span>' :
+        meanDiff < 0.001 ? '<span style="color: #f39c12;">⚠️ Small differences - likely floating-point precision</span>' :
+        '<span style="color: #ca4747;">⚠️ Large differences - possible bug!</span>'}
+    </div>`;
+
+    display(info);
+    cpuMultiResult;
+  </script>
+  <script id="40e" type="module">
+    // Visualize CPU multi-level result and difference map
+    const canvasCPU = document.createElement('canvas');
+    canvasCPU.width = 512;
+    canvasCPU.height = 512;
+    let ctx = canvasCPU.getContext('2d');
+    let imgData = ctx.createImageData(512, 512);
+
+    for (let i = 0; i < cpuMultiResult.length; i++) {
+      const value = Math.floor(Math.min(Math.max(cpuMultiResult[i], 0), 1) * 255);
+      imgData.data[i * 4] = value;
+      imgData.data[i * 4 + 1] = value;
+      imgData.data[i * 4 + 2] = value;
+      imgData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    // Create difference map (amplified)
+    const canvasDiff = document.createElement('canvas');
+    canvasDiff.width = 512;
+    canvasDiff.height = 512;
+    ctx = canvasDiff.getContext('2d');
+    imgData = ctx.createImageData(512, 512);
+
+    for (let i = 0; i < cpuMultiResult.length; i++) {
+      const diff = Math.abs(cpuMultiResult[i] - multiLevelResult[i]);
+      // Amplify differences for visibility (×1000)
+      const value = Math.floor(Math.min(diff * 1000, 1) * 255);
+      imgData.data[i * 4] = value;
+      imgData.data[i * 4 + 1] = value;
+      imgData.data[i * 4 + 2] = value;
+      imgData.data[i * 4 + 3] = 255;
+    }
+    ctx.putImageData(imgData, 0, 0);
+
+    const container = html`<div style="display: flex; flex-direction: column; gap: 24px;">
+      <div>
+        <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+          <strong>CPU Result (${numLevels} levels)</strong>
+        </div>
+        ${canvasCPU}
+      </div>
+      <div>
+        <div style="margin-bottom: 8px; font-family: sans-serif; font-size: 13px; color: #666;">
+          <strong>Absolute Difference (×1000)</strong> - White = larger difference
+        </div>
+        ${canvasDiff}
+      </div>
+    </div>`;
+
+    display(container);
+  </script>
+  <script id="40f" type="text/markdown">
+    ### Performance Comparison
+
+    The CPU implementations are much slower than GPU (typically 100-1000× slower), but they serve an important role:
+
+    - **Debugging**: Easier to step through and debug algorithm logic
+    - **Validation**: Verify GPU shader correctness by comparing outputs
+    - **Reference**: Canonical implementation for testing edge cases
+
+    The small floating-point differences between CPU and GPU are expected due to:
+    - Different floating-point precision (CPU uses double precision in some calculations, GPU uses single precision)
+    - Different order of operations (GPU parallelism vs CPU sequential)
+    - Different rounding modes
+
+    As long as the mean difference is < 0.001, the implementations are considered equivalent.
   </script>
   <script id="41" type="text/markdown">
     ## Summary

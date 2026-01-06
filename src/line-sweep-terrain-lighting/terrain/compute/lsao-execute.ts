@@ -118,7 +118,7 @@ export async function computeLSAO(params: LSAOComputeParams): Promise<Float32Arr
     device.queue.writeBuffer(
       uniformBuffer,
       i * uniformSizePerDirection,
-      uniformData
+      uniformData as GPUAllowSharedBufferSource
     );
   }
 
@@ -156,7 +156,7 @@ export async function computeLSAO(params: LSAOComputeParams): Promise<Float32Arr
 
   // Calculate max sweep size (must match pipeline calculation)
   const maxDeltaZ = -numLevels;
-  const maxSweepSize = Math.floor(tileSize * (1 + Math.pow(2, maxDeltaZ)));
+  const maxSweepSize = Math.floor(tileSize * (1 + Math.pow(2, Math.abs(maxDeltaZ))));
 
   // Dispatch all directions (dispatch based on maxSweepSize, not tileSize!)
   const numWorkgroups = Math.ceil(maxSweepSize / workgroupSize);

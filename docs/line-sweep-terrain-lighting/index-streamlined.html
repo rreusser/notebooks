@@ -3,8 +3,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Line Sweep Terrain Lighting with WebGPU">
-  <meta property="og:title" content="Line Sweep Terrain Lighting with WebGPU">
+  <meta name="twitter:title" content="Multi-Level Line Sweep Ambient Occlusion - Algorithm Deep Dive">
+  <meta property="og:title" content="Multi-Level Line Sweep Ambient Occlusion - Algorithm Deep Dive">
   <meta name="twitter:description" content="Shading terrain using a line-sweep algorithm">
   <meta name="subject" content="Shading terrain using a line-sweep algorithm">
   <meta name="description" content="Shading terrain using a line-sweep algorithm">
@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Line Sweep Terrain Lighting with WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-B8mRVj_N.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Multi-Level Line Sweep Ambient Occlusion - Algorithm Deep Dive</title>  <script type="module" crossorigin src="/notebooks/assets/index-streamlined-CgbqBXhD.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1506,7 +1506,7 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Line Sweep Terrain Lighting with WebGPU</h1>
+    <h1>Multi-Level Line Sweep Ambient Occlusion - Algorithm Deep Dive</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
       <time pubdate="" datetime="20260101">January 1, 2026</time>
@@ -1519,7 +1519,7 @@ main h6 {
           </svg>
           Live notebook
         </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/line-sweep-terrain-lighting/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/line-sweep-terrain-lighting/index-streamlined.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1529,106 +1529,85 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Hierarchical terrain lighting using WebGPU compute shaders. This demonstrates the complete pipeline from tile fetching through parent buffer assembly to GPU-accelerated LSAO computation.</p>
-<p>Below, you’ll see each stage of the implementation:</p>
+    <main><div id="cell-1" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"><div><h1>Multi-Level Line Sweep Ambient Occlusion</h1>
+<p><a href="https://karim.naaji.fr/lsao.html">Line-Sweep Ambient Occlusion (LSAO)</a> computes ambient occlusion by sweeping across terrain in multiple directions, tracking visible horizons to determine shadowing.</p>
+<p><strong>This page uses CPU-only execution</strong> to enable detailed debugging and visualization of the algorithm’s execution.</p>
+<h2 id="key-concepts" tabindex="-1"><a href="#key-concepts">Key Concepts</a></h2>
+<ul>
+<li><strong>Hierarchical parent tiles</strong>: Instead of loading 8 adjacent tiles at full resolution, we use coarser parent tiles at zoom levels z-1, z-2, etc.</li>
+<li><strong>Native resolution sweeps</strong>: Each level is sampled at its own resolution - no wasteful upsampling</li>
+<li><strong>Efficient boundary context</strong>: A 512×512 target tile only needs ~768 pixels of sweep distance (not thousands!)</li>
+</ul>
+</div></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"><div><h2 id="terrain-data" tabindex="-1"><a href="#terrain-data">Terrain Data</a></h2>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"><div><h2 id="parent-tile-assemblies" tabindex="-1"><a href="#parent-tile-assemblies">Parent Tile Assemblies</a></h2>
+<p>Visualizing the parent tile buffers that provide boundary context:</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"><div><h2 id="computing-lsao-cpu-implementation" tabindex="-1"><a href="#computing-lsao-cpu-implementation">Computing LSAO (CPU Implementation)</a></h2>
+</div></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"><div><h2 id="algorithm-analysis" tabindex="-1"><a href="#algorithm-analysis">Algorithm Analysis</a></h2>
+<h3 id="current-implementation-issues" tabindex="-1"><a href="#current-implementation-issues">Current Implementation Issues</a></h3>
+<p>The current algorithm creates a unified sweep space of size <code>tileSize × (1 + 2^numLevels)</code>:</p>
+<ul>
+<li><strong>1 level</strong>: 512 × 3 = 1536 pixels</li>
+<li><strong>2 levels</strong>: 512 × 5 = 2560 pixels</li>
+<li><strong>3 levels</strong>: 512 × 9 = 4608 pixels</li>
+</ul>
+<p><strong>This is fundamentally wrong!</strong> Each sweep should operate at the native resolution of each level.</p>
+<h3 id="correct-approach" tabindex="-1"><a href="#correct-approach">Correct Approach</a></h3>
+<p>For a west-to-east sweep:</p>
 <ol>
-<li><strong>Tile Hierarchy</strong> - Parent tiles needed for boundary data</li>
-<li><strong>Parent Tile Assembly</strong> - 768×768 buffer for horizon initialization</li>
-<li><strong>Raw Terrain Tile</strong> - Original Mapbox terrain image</li>
-<li><strong>Decoded Elevations</strong> - Height map visualization</li>
-<li><strong>WebGPU Pipeline</strong> - Shader compilation and setup</li>
-<li><strong>Computed Lighting</strong> - Final shaded result with LSAO</li>
+<li><strong>Parent z-1</strong>: Sweep across 256 pixels (one 256×256 tile at native resolution)</li>
+<li><strong>Target z</strong>: Sweep across 512 pixels (the target tile)</li>
+<li><strong>Total</strong>: 256 + 512 = <strong>768 pixels</strong> (not 1536!)</li>
 </ol>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"><div><h2 id="1-tile-hierarchy" tabindex="-1"><a href="#1-tile-hierarchy">1. Tile Hierarchy</a></h2>
-</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"><div><h2 id="2-multi-level-parent-tile-assembly" tabindex="-1"><a href="#2-multi-level-parent-tile-assembly">2. Multi-Level Parent Tile Assembly</a></h2>
-<p>For proper horizon initialization in line-sweep ambient occlusion, we need terrain data from <em>outside</em> the target tile. Instead of loading all 8 adjacent tiles at full resolution, we load 4 parent tiles at coarser zoom levels.</p>
-<p><strong>Coverage formula:</strong> Assembly size = tileSize × (1 + 2^Δz)</p>
+<p>For two levels (z-2 and z-1):</p>
+<ol>
+<li><strong>Parent z-2</strong>: 128 pixels (one 128×128 tile at native resolution)</li>
+<li><strong>Parent z-1</strong>: 256 pixels (one 256×256 tile at native resolution)</li>
+<li><strong>Target z</strong>: 512 pixels</li>
+<li><strong>Total</strong>: 128 + 256 + 512 = <strong>896 pixels</strong> (not 2560!)</li>
+</ol>
+<h3 id="why-this-matters" tabindex="-1"><a href="#why-this-matters">Why This Matters</a></h3>
+<p>The current implementation:</p>
 <ul>
-<li>Δz = -1: 512 × 1.5 = 768 pixels (3×3 tile coverage)</li>
-<li>Δz = -2: 512 × 1.25 = 640 pixels (5×5 tile coverage)</li>
-<li>Δz = -3: 512 × 1.125 = 576 pixels (7×7 tile coverage)</li>
+<li>Wastes computation by upsampling parent data to target resolution</li>
+<li>Creates a massive sweep space that doesn’t match the actual data structure</li>
+<li>Misunderstands how hierarchical tile assemblies work</li>
 </ul>
-<p>Use the slider below to explore different parent zoom levels:</p>
-</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"><div><h2 id="3-raw-terrain-tile" tabindex="-1"><a href="#3-raw-terrain-tile">3. Raw Terrain Tile</a></h2>
-</div></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"><div><h2 id="4-decoded-elevations" tabindex="-1"><a href="#4-decoded-elevations">4. Decoded Elevations</a></h2>
-</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="5-web-gpu-pipeline-setup" tabindex="-1"><a href="#5-web-gpu-pipeline-setup">5. WebGPU Pipeline Setup</a></h2>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"><div><h2 id="6-computed-lighting" tabindex="-1"><a href="#6-computed-lighting">6. Computed Lighting</a></h2>
-</div></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="7-line-sweep-ambient-occlusion-lsao" tabindex="-1"><a href="#7-line-sweep-ambient-occlusion-lsao">7. Line Sweep Ambient Occlusion (LSAO)</a></h2>
-<p><a href="https://karim.naaji.fr/lsao.html">Line-Sweep Ambient Occlusion</a> computes ambient occlusion by sweeping across terrain in multiple directions, tracking visible horizons on a convex hull stack. This provides more realistic shadowing than simple normal-based lighting.</p>
-<p><strong>Algorithm overview:</strong></p>
+<p>The correct implementation should:</p>
 <ul>
-<li>Sweep in 4 cardinal directions: East, West, North, South</li>
-<li>Each GPU invocation processes one complete scanline (row or column)</li>
-<li>Maintain convex hull stack to track horizon visibility</li>
-<li>Compute occlusion based on elevation angle to visible horizon</li>
-<li>Accumulate contributions from all directions</li>
+<li>Step through each level at its own native resolution</li>
+<li>Build the horizon stack progressively as we move from parent → target</li>
+<li>Only perform as many steps as there are actual data points</li>
 </ul>
-<p>Below shows the simplified single-tile implementation (edge replication for boundaries).</p>
-</div></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-23" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-25" class="observablehq observablehq--cell"><div><h3 id="lsao-combined-with-elevation" tabindex="-1"><a href="#lsao-combined-with-elevation">LSAO Combined with Elevation</a></h3>
-<p>Multiply the ambient occlusion by normalized elevation to create a shaded relief map:</p>
-</div></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"><div><h2 id="8-final-lighting-map-rgb" tabindex="-1"><a href="#8-final-lighting-map-rgb">8. Final Lighting Map (RGB)</a></h2>
-<p>The final output combines surface normals and ambient occlusion into a single RGB image:</p>
+</div></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"><div><h2 id="next-steps" tabindex="-1"><a href="#next-steps">Next Steps</a></h2>
+<p>To properly visualize and fix the algorithm, we need to:</p>
+<ol>
+<li>
+<p><strong>Create a step-by-step visualization</strong> showing how the horizon stack builds as we sweep through:</p>
 <ul>
-<li><strong>Red channel</strong>: Surface normal Y component (fy = 0.5 + 0.5 × ny)</li>
-<li><strong>Green channel</strong>: Ambient occlusion from LSAO</li>
-<li><strong>Blue channel</strong>: Surface normal X component (fx = 0.5 - 0.5 × nx)</li>
+<li>Parent level data (at parent resolution)</li>
+<li>Target level data (at target resolution)</li>
 </ul>
-<p>The normals are computed with physically-correct Web Mercator (EPSG:3857) scaling, accounting for latitude-dependent distortion. This allows the lighting map to be used for on-the-fly lighting during rendering.</p>
-</div></div><div id="cell-28" class="observablehq observablehq--cell"></div><div id="cell-29" class="observablehq observablehq--cell"></div><div id="cell-30" class="observablehq observablehq--cell"></div><div id="cell-31" class="observablehq observablehq--cell"><div><h3 id="channel-breakdown" tabindex="-1"><a href="#channel-breakdown">Channel Breakdown</a></h3>
-<p>Below shows each channel individually for inspection:</p>
-</div></div><div id="cell-32" class="observablehq observablehq--cell"></div><div id="cell-33" class="observablehq observablehq--cell"><div><h2 id="7-synthetic-test-validating-multi-level-lsao" tabindex="-1"><a href="#7-synthetic-test-validating-multi-level-lsao">7. Synthetic Test: Validating Multi-Level LSAO</a></h2>
-<p>Before testing on real terrain, let’s validate the implementation with synthetic data where we know the expected behavior.</p>
-<p><strong>Test setup:</strong></p>
+</li>
+<li>
+<p><strong>Instrument the CPU implementation</strong> to capture:</p>
 <ul>
-<li>Target tile: Flat at elevation 0</li>
-<li>West parent region: Elevated ridge (z=100) that should cast a shadow</li>
-<li>Expected result: West edge of target should show occlusion in multi-level LSAO</li>
+<li>Hull state at each step</li>
+<li>Which level is being sampled</li>
+<li>Visibility calculations</li>
 </ul>
-</div></div><div id="cell-34" class="observablehq observablehq--cell"></div><div id="cell-35" class="observablehq observablehq--cell"></div><div id="cell-36" class="observablehq observablehq--cell"></div><div id="cell-37" class="observablehq observablehq--cell"></div><div id="cell-38" class="observablehq observablehq--cell"></div><div id="cell-39" class="observablehq observablehq--cell"><div><h2 id="8-multi-level-lsao-with-real-terrain" tabindex="-1"><a href="#8-multi-level-lsao-with-real-terrain">8. Multi-Level LSAO with Real Terrain</a></h2>
-<p>Now test with actual Mapbox terrain data:</p>
-</div></div><div id="cell-40" class="observablehq observablehq--cell"></div><div id="cell-41" class="observablehq observablehq--cell"></div><div id="cell-42" class="observablehq observablehq--cell"></div><div id="cell-43" class="observablehq observablehq--cell"></div><div id="cell-44" class="observablehq observablehq--cell"></div><div id="cell-45" class="observablehq observablehq--cell"><div><h3 id="comparison-simple-vs-multi-level-lsao" tabindex="-1"><a href="#comparison-simple-vs-multi-level-lsao">Comparison: Simple vs Multi-Level LSAO</a></h3>
-<p>Compare the results side-by-side to see the improvement from using parent tile data:</p>
-</div></div><div id="cell-46" class="observablehq observablehq--cell"></div><div id="cell-47" class="observablehq observablehq--cell"><div><h2 id="9-cpu-vs-gpu-validation" tabindex="-1"><a href="#9-cpu-vs-gpu-validation">9. CPU vs GPU Validation</a></h2>
-<p>To validate our GPU shader implementations, we’ve created CPU reference implementations that exactly match the shader logic. This allows us to debug the algorithms more easily and verify correctness.</p>
-<p>Below, we compare CPU and GPU results for both simple and multi-level LSAO:</p>
-</div></div><div id="cell-48" class="observablehq observablehq--cell"></div><div id="cell-49" class="observablehq observablehq--cell"></div><div id="cell-50" class="observablehq observablehq--cell"></div><div id="cell-51" class="observablehq observablehq--cell"></div><div id="cell-52" class="observablehq observablehq--cell"><div><h3 id="performance-comparison" tabindex="-1"><a href="#performance-comparison">Performance Comparison</a></h3>
-<p>The CPU implementations are much slower than GPU (typically 100-1000× slower), but they serve an important role:</p>
+</li>
+<li>
+<p><strong>Implement the corrected algorithm</strong> that:</p>
 <ul>
-<li><strong>Debugging</strong>: Easier to step through and debug algorithm logic</li>
-<li><strong>Validation</strong>: Verify GPU shader correctness by comparing outputs</li>
-<li><strong>Reference</strong>: Canonical implementation for testing edge cases</li>
+<li>Doesn’t create a unified sweep space</li>
+<li>Steps through each level at native resolution</li>
+<li>Builds the horizon progressively</li>
 </ul>
-<p>The small floating-point differences between CPU and GPU are expected due to:</p>
-<ul>
-<li>Different floating-point precision (CPU uses double precision in some calculations, GPU uses single precision)</li>
-<li>Different order of operations (GPU parallelism vs CPU sequential)</li>
-<li>Different rounding modes</li>
-</ul>
-<p>As long as the mean difference is &lt; 0.001, the implementations are considered equivalent.</p>
-</div></div><div id="cell-53" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
-<p>This notebook demonstrates the complete hierarchical terrain lighting pipeline:</p>
-<ul>
-<li><strong>Tile Hierarchy</strong>: Identifies parent tiles needed for boundary data</li>
-<li><strong>Multi-Level Parent Assembly</strong>: Configurable parent levels (Δz = -1 to -4) for extended coverage</li>
-<li><strong>Tile Fetching</strong>: Retrieves Mapbox terrain tiles with RGB elevation encoding</li>
-<li><strong>Data Decoding</strong>: Converts RGB values to elevation in meters</li>
-<li><strong>WebGPU Compute</strong>: GPU-accelerated normal calculation and lighting</li>
-<li><strong>Simple LSAO</strong>: Line-sweep ambient occlusion with 4-direction sweeps (target tile only)</li>
-<li><strong>Multi-Level LSAO</strong>: Advanced LSAO with 1-3 parent levels for seamless boundaries</li>
-<li><strong>Normal Map</strong>: Physically-correct surface normals with Web Mercator scaling</li>
-<li><strong>Final Output</strong>: RGB lighting map (R=ny, G=AO, B=nx) for on-the-fly rendering</li>
-<li><strong>LRU Caching</strong>: Manages tile data and GPU buffers efficiently</li>
-</ul>
-<h3 id="key-innovation-multi-level-lsao" tabindex="-1"><a href="#key-innovation-multi-level-lsao">Key Innovation: Multi-Level LSAO</a></h3>
-<p>The multi-level LSAO implementation extends the horizon visibility stack beyond tile boundaries by:</p>
-<ul>
-<li>Using normalized coordinates (target at 0,0 to 1,1)</li>
-<li>Sampling from parent tiles with bilinear interpolation</li>
-<li>Progressive horizon initialization from coarsest to finest level</li>
-<li>Supporting configurable 1-4 parent levels</li>
-</ul>
-<p>This eliminates boundary artifacts and enables seamless multi-tile terrain rendering.</p>
-<p>The infrastructure supports both browser and Node.js environments with platform-specific implementations. Lighting maps can be compressed as WebP and served as tiles for real-time terrain rendering.</p>
+</li>
+<li>
+<p><strong>Compare results</strong> between current and corrected implementations to validate the fix</p>
+</li>
+</ol>
 </div></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
