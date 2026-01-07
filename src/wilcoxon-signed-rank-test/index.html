@@ -1,0 +1,416 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Wilcoxon Signed-Rank Test for Performance Testing</title>
+  <script id="39" type="text/markdown">
+    # Wilcoxon Signed-Rank Test for Performance Testing
+  </script>
+  <script id="41" type="text/markdown">
+    ## The Problem
+  </script>
+  <script id="68" type="text/markdown">
+    Imagine you've modified an algorithm and want to know: **has this change affected performance?**
+  </script>
+  <script id="42" type="text/markdown">
+    You run your test suite before and after the change, measuring execution time for each test case. The challenge is that each test case has its own baseline time, statistical noise, and the actual performance change you're trying to detect.
+  </script>
+  <script id="1" type="text/markdown">
+    It's tempting to just compare the mean times before and after, but this can be misleading when the data isn't normally distributed, there are outliers, or when the noise is proportional to execution time.
+  </script>
+  <script id="44" type="text/markdown">
+    The Wilcoxon signed-rank test addresses these issues by focusing on the **ranks** of differences rather than their absolute values.
+  </script>
+  <script id="45" type="text/markdown">
+    ## When to Use This Test
+  </script>
+  <script id="46" type="text/markdown">
+    The Wilcoxon signed-rank test has several key advantages for this scenario.
+  </script>
+  <script id="48" type="text/markdown">
+    The test is non-parametric, so it doesn't assume your timing data follows a normal distribution. Real-world performance measurements are often skewed, with occasional outliers.
+
+    By ranking the changes by magnitude, the test finds a sweet spot between using only the sign of each difference (which throws away useful information about the size of changes) and using the full magnitude (which can make results overly sensitive to extreme outliers).
+  </script>
+  <script id="49" type="text/markdown">
+    If you believe differences are normally distributed, a parametric paired t-test will be more sensitive. But real-world performance data isn't usually normally distributed.
+
+    If you only care about the direction of change and not magnitude, the sign test is simpler but throws away information. Use it when you have a good reason to distrust even the relative magnitudes of changes.
+
+    If samples are unpaired, using different tests before and after changes, the Mann-Whitney U test is the right choice. It's less powerful than paired tests when pairing is actually available.
+  </script>
+  <script id="74" type="text/markdown">
+    ## How the Test Works
+  </script>
+  <script id="73" type="text/markdown">
+    The Wilcoxon signed-rank test proceeds in several steps.
+  </script>
+  <script id="69" type="text/markdown">
+    1. **Calculate differences**. For each test case ${tex`i`}, compute the difference
+
+        ${tex.block`d_i = t_{\text{after},i} - t_{\text{before},i},`}
+
+        where positive values indicate the algorithm got slower, negative values indicate it got faster.
+
+  </script>
+  <script id="70" type="text/markdown">
+    2. **Rank the absolute differences**. Ignore the signs temporarily and rank the absolute differences ${tex`|d_i|`} from smallest (rank 1) to largest (rank ${tex`n`}). If there are ties, assign each tied value the average of the ranks they would have received.
+
+  </script>
+  <script id="71" type="text/markdown">
+    3. **Apply signs to ranks**. Restore the signs from the original differences to the ranks. This gives us signed ranks ${tex`R_i`}.
+
+  </script>
+  <script id="72" type="text/markdown">
+    4. **Sum ranks by sign**. Calculate:
+        - ${tex`W^+ = \sum_{i: d_i > 0} R_i`} (sum of ranks where algorithm got slower)
+        - ${tex`W^- = \sum_{i: d_i < 0} |R_i|`} (sum of absolute ranks where algorithm got faster)
+
+        Note that ${tex`W^+ + W^- = \frac{n(n+1)}{2}`}, the sum of all ranks from 1 to ${tex`n`}.
+
+  </script>
+  <script id="7" type="text/markdown">
+    5. **Test Statistic and Null Hypothesis**. The test statistic is ${tex`W = \min(W^+, W^-)`}. Under the null hypothesis that there's no systematic difference (the median difference is zero), we expect ${tex`W^+`} and ${tex`W^-`} to be roughly equal. A small value of ${tex`W`} indicates one-sided behavior.
+
+        For large samples (${tex`n > 10`}), ${tex`W`} is approximately normally distributed with:
+        - Mean: ${tex`\mu_W = \frac{n(n+1)}{4}`}
+        - Variance: ${tex`\sigma^2_W = \frac{n(n+1)(2n+1)}{24}`}
+
+        We can compute a z-score: ${tex`z = \frac{W - \mu_W}{\sigma_W}`} and derive a p-value from the standard normal distribution.
+  </script>
+  <script id="3" type="text/x-typescript">
+    // Generate synthetic performance data
+    function generatePerformanceData(numTestCases, baselineTimeMin, baselineTimeMax,
+                                     noiseStdDevFraction, truePerformanceChange, seed = 42) {
+
+      // Simple seeded random number generator
+      let rng = seed;
+      const random = () => {
+        rng = (rng * 1664525 + 1013904223) % 4294967296;
+        return rng / 4294967296;
+      };
+
+      const boxMuller = () => {
+        const u1 = random();
+        const u2 = random();
+        return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+      };
+
+      const testCases = [];
+
+      for (let i = 0; i < numTestCases; i++) {
+        // Each test case has its own baseline time
+        const baselineTime = baselineTimeMin + random() * (baselineTimeMax - baselineTimeMin);
+        const noiseStdDev = baselineTime * noiseStdDevFraction;
+
+        // Performance before the change (baseline + noise)
+        const timeBefore = baselineTime + boxMuller() * noiseStdDev;
+
+        // Performance after the change (baseline * (1 + change) + noise)
+        const timeAfter = baselineTime * (1 + truePerformanceChange) + boxMuller() * noiseStdDev;
+
+        testCases.push({
+          id: `test_${i + 1}`,
+          baselineTime: baselineTime,
+          timeBefore: Math.max(0.1, timeBefore),
+          timeAfter: Math.max(0.1, timeAfter)
+        });
+      }
+
+      return testCases;
+    }
+  </script>
+  <script id="5" type="text/x-typescript">
+    // Calculate the Wilcoxon signed-rank test
+    function wilcoxonSignedRank(pairedData) {
+      // Step 1: Calculate differences and their absolute values
+      const differences = pairedData.map(d => ({
+        diff: d.timeAfter - d.timeBefore,
+        absDiff: Math.abs(d.timeAfter - d.timeBefore),
+        id: d.id
+      })).filter(d => d.diff !== 0); // Remove zeros
+
+      if (differences.length === 0) {
+        return {error: "All differences are zero"};
+      }
+
+      // Step 2: Rank the absolute differences
+      const sorted = [...differences].sort((a, b) => a.absDiff - b.absDiff);
+
+      // Assign ranks, handling ties by averaging
+      const ranks = [];
+      let i = 0;
+      while (i < sorted.length) {
+        let j = i;
+        // Find all tied values
+        while (j < sorted.length && sorted[j].absDiff === sorted[i].absDiff) {
+          j++;
+        }
+        // Assign average rank to all tied values
+        const avgRank = (i + 1 + j) / 2;
+        for (let k = i; k < j; k++) {
+          ranks.push({
+            ...sorted[k],
+            rank: avgRank
+          });
+        }
+        i = j;
+      }
+
+      // Step 3 & 4: Sum ranks for positive and negative differences
+      let wPlus = 0;  // Sum of ranks for positive differences (slower)
+      let wMinus = 0; // Sum of ranks for negative differences (faster)
+
+      ranks.forEach(r => {
+        if (r.diff > 0) {
+          wPlus += r.rank;
+        } else {
+          wMinus += r.rank;
+        }
+      });
+
+      // Step 5: Test statistic is the smaller of the two
+      const W = Math.min(wPlus, wMinus);
+      const n = ranks.length;
+
+      // Calculate z-score for normal approximation (valid for n > 10)
+      const expectedW = n * (n + 1) / 4;
+      const varianceW = n * (n + 1) * (2 * n + 1) / 24;
+      const stdDevW = Math.sqrt(varianceW);
+
+      // Continuity correction
+      const zScore = (W - expectedW + 0.5 * Math.sign(W - expectedW)) / stdDevW;
+
+      // Two-tailed p-value using normal approximation
+      const pValue = 2 * (1 - normalCDF(Math.abs(zScore)));
+
+      return {
+        n,
+        wPlus,
+        wMinus,
+        W,
+        zScore,
+        pValue,
+        ranks,
+        significant: pValue < 0.05
+      };
+    }
+
+    // Standard normal cumulative distribution function
+    function normalCDF(x) {
+      const t = 1 / (1 + 0.2316419 * Math.abs(x));
+      const d = 0.3989423 * Math.exp(-x * x / 2);
+      const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
+      return x > 0 ? 1 - prob : prob;
+    }
+  </script>
+  <script id="8" type="text/markdown">
+    ## Interactive Demo
+
+    Adjust the parameters below to explore how different scenarios affect the results:
+  </script>
+  <script id="16" type="module">
+    const numTestCases = view(Inputs.range([5, 50], {
+      label: "Number of test cases",
+      step: 1,
+      value: 20
+    }));
+    const truePerformanceChange = view(Inputs.range([-0.2, 0.2], {
+      label: "True performance change",
+      step: 0.01,
+      value: 0.05
+    }));
+    const noiseLevel = view(Inputs.range([0, 0.5], {
+      label: "Noise level (σ as fraction of baseline)",
+      step: 0.01,
+      value: 0.15
+    }));
+    const seed = view(Inputs.range([1, 100], {
+      label: "Random seed",
+      step: 1,
+      value: 42
+    }));
+  </script>
+  <script id="34" type="text/x-typescript">
+    const baselineTimeMin = 10;
+    const baselineTimeMax = 100;
+    const testData = generatePerformanceData(
+      numTestCases,
+      baselineTimeMin,
+      baselineTimeMax,
+      noiseLevel,
+      truePerformanceChange,
+      seed
+    );
+    const testResult = wilcoxonSignedRank(testData);
+    const chartData = testData.map(d => ({
+      id: d.id,
+      before: d.timeBefore,
+      after: d.timeAfter,
+      difference: d.timeAfter - d.timeBefore,
+      percentChange: ((d.timeAfter - d.timeBefore) / d.timeBefore) * 100
+    }));
+  </script>
+  <script id="60" type="text/markdown">
+    ## Sample Data
+  </script>
+  <script id="35" type="text/markdown">
+    Below is the synthetic data generated with your chosen parameters, showing before/after timings for each test case.
+  </script>
+  <script id="37" type="module">
+    const dataTable = chartData.map(d => ({
+      "Test Case": d.id,
+      "Before (ms)": d.before.toFixed(2),
+      "After (ms)": d.after.toFixed(2),
+      "Difference (ms)": d.difference.toFixed(2),
+      "Change (%)": d.percentChange.toFixed(1)
+    }));
+    display(Inputs.table(dataTable, {
+      width: "100%",
+      maxHeight: 200
+    }));
+  </script>
+  <script id="59" type="text/markdown">
+    ### A Note on What We're Ranking
+
+    The table below shows these same differences ranked by magnitude. Notice we're ranking by **absolute time difference** rather than **percent change**. This choice matters: absolute time differences work well when you care about wall-clock impact (like total test suite runtime), while percent changes are better for detecting proportional algorithmic improvements regardless of baseline speed.
+
+    For this example, we use absolute differences, which means a 10ms change gets the same rank whether it happens in a 50ms test or a 500ms test. If you wanted to detect algorithmic changes more uniformly across fast and slow tests, you'd rank by percent change instead—though that would give less weight to changes in your longest-running tests.
+  </script>
+  <script id="30" type="text/x-typescript">
+    const rankedTable = testResult.ranks
+      .sort((a, b) => a.rank - b.rank)
+      .map(r => ({
+        "Test Case": r.id,
+        "Difference (ms)": r.diff.toFixed(3),
+        "Absolute Difference": r.absDiff.toFixed(3),
+        "Rank": r.rank,
+        "Sign": r.diff > 0 ? "+" : "−"
+      }));
+  </script>
+  <script id="31" type="module">
+    display(Inputs.table(rankedTable, {
+      width: "100%",
+      maxHeight: 200
+    }));
+  </script>
+  <script id="61" type="text/markdown">
+    The test proceeds by computing the sum of the positive (W+) and negative (W-) ranks:
+
+  </script>
+  <script id="38" type="text/markdown">
+    **Sample size (n):** ${testResult.n} paired observations<br>
+    **Sum of positive ranks (W+):** ${testResult.wPlus.toFixed(1)} (cases where algorithm got slower)<br>
+    **Sum of negative ranks (W−):** ${testResult.wMinus.toFixed(1)} (cases where algorithm got faster)<br>
+    **Test statistic (W):** ${testResult.W.toFixed(1)}
+  </script>
+  <script id="26" type="module">
+    display(Plot.plot({
+      height: 400,
+      marginLeft: 60,
+      marginBottom: 60,
+      x: {label: "Time Before (ms)", grid: true},
+      y: {label: "Time After (ms)", grid: true},
+      marks: [
+        // Diagonal line for no change
+        Plot.line([[0, 0], [120, 120]], {stroke: "#ccc", strokeDasharray: "4 4"}),
+        // Points
+        Plot.dot(chartData, {
+          x: "before",
+          y: "after",
+          fill: d => d.after > d.before ? "#e74c3c" : "#2ecc71",
+          r: 5,
+          title: d => `${d.id}\nBefore: ${d.before.toFixed(2)}ms\nAfter: ${d.after.toFixed(2)}ms\nChange: ${d.percentChange.toFixed(1)}%`
+        }),
+        // Connecting lines
+        Plot.link(chartData, {
+          x1: "before",
+          y1: "before",
+          x2: "before",
+          y2: "after",
+          stroke: d => d.after > d.before ? "#e74c3c" : "#2ecc71",
+          strokeOpacity: 0.3,
+          strokeWidth: 1
+        })
+      ],
+      caption: "Each point shows before/after performance. Points above the diagonal line indicate performance degradation (slower)."
+    }));
+  </script>
+  <script id="27" type="text/markdown">
+    ## Distribution of Differences
+  </script>
+  <script id="28" type="module">
+    display(Plot.plot({
+      height: 300,
+      marginLeft: 60,
+      x: {label: "Performance difference (ms, positive = slower)", grid: true},
+      y: {label: "Frequency"},
+      marks: [
+        Plot.rectY(chartData, Plot.binX(
+          {y: "count"},
+          {
+            x: "difference",
+            fill: d => d.difference > 0 ? "#e74c3c" : "#2ecc71",
+            thresholds: 20
+          }
+        )),
+        Plot.ruleX([0], {stroke: "#333", strokeWidth: 2})
+      ],
+      caption: "Distribution of time differences. Positive values (red) indicate the algorithm got slower."
+    }));
+  </script>
+  <script id="62" type="text/markdown">
+    ## Computing Statistical Significance
+
+    With the test statistic W in hand, we compute a z-score and p-value using the normal approximation.
+  </script>
+  <script id="63" type="text/markdown">
+    ### The Z-score Calculation
+
+    For reasonably large samples (${tex`n > 10`}), the test statistic ${tex`W`} is approximately normally distributed. We can compute the expected value and standard deviation under the null hypothesis (no systematic change):
+  </script>
+  <script id="64" type="text/x-typescript">
+    const expectedW = testResult.n * (testResult.n + 1) / 4;
+    const varianceW = testResult.n * (testResult.n + 1) * (2 * testResult.n + 1) / 24;
+    const stdDevW = Math.sqrt(varianceW);
+  </script>
+  <script id="65" type="text/markdown">
+    **Expected value:** ${tex`\mu_W = \frac{n(n+1)}{4} = \frac{${testResult.n} \cdot ${testResult.n + 1}}{4} = ${expectedW.toFixed(2)}`}
+
+    **Variance:** ${tex`\sigma^2_W = \frac{n(n+1)(2n+1)}{24} = \frac{${testResult.n} \cdot ${testResult.n + 1} \cdot ${2 * testResult.n + 1}}{24} = ${varianceW.toFixed(2)}`}
+
+    **Standard deviation:** ${tex`\sigma_W = \sqrt{\sigma^2_W} = ${stdDevW.toFixed(2)}`}
+
+    The **continuity correction** accounts for approximating a discrete distribution (integer ranks) with a continuous distribution (normal). Since ${tex`W`} can only take integer values, we adjust by 0.5 in the direction of the mean, which improves the accuracy of the p-value for small to moderate sample sizes.
+
+    **Z-score (with continuity correction):** ${tex`z = \frac{W - \mu_W + 0.5 \cdot \text{sign}(W - \mu_W)}{\sigma_W} = \frac{${testResult.W.toFixed(1)} - ${expectedW.toFixed(2)} + ${(0.5 * Math.sign(testResult.W - expectedW)).toFixed(1)}}{${stdDevW.toFixed(2)}} = ${testResult.zScore.toFixed(3)}`}
+  </script>
+  <script id="66" type="text/markdown">
+    ### Test Results
+
+    ${testResult.wPlus > testResult.wMinus
+      ? "The algorithm appears to have **degraded** (gotten slower)."
+      : "The algorithm appears to have **improved** (gotten faster)."}
+
+    **Z-score:** ${testResult.zScore.toFixed(3)}<br>
+    **P-value:** ${testResult.pValue.toFixed(4)}<br>
+
+
+    **Conclusion:** ${testResult.significant
+      ? "**Statistically significant** difference detected (p < 0.05)"
+      : "No statistically significant difference (p ≥ 0.05)"}
+  </script>
+  <script id="67" type="text/markdown">
+    ## Interpreting Results
+
+    The p-value tells us: if there were truly no performance change, what's the probability of seeing differences this extreme? A p-value below 0.05 provides strong evidence of a real performance change—the pattern we're seeing is unlikely to be just random noise. A p-value of 0.05 or higher means insufficient evidence to conclude there's a systematic change. Important caveat: this doesn't prove there's no change. Absence of evidence is not evidence of absence. You might just need more test cases or less noisy measurements.
+
+    The direction of change comes from comparing the rank sums. If ${tex`W^+`} (sum of positive ranks) is larger, your algorithm got slower. If ${tex`W^-`} (sum of negative ranks) is larger, your algorithm got faster.
+
+    ### Statistical vs. Practical Significance
+
+    Statistical significance doesn't mean practical importance. You might detect a statistically significant 0.5% slowdown with p = 0.001, but if your entire test suite only takes 10 seconds, that's 50 milliseconds, probably not worth worrying about. Conversely, a 10% speedup might not reach significance (p = 0.08) with only 15 test cases, but it could still be a valuable improvement worth investigating further.
+
+    For performance work, look at the actual timing differences in the data table alongside the test results. If most changes are under 1ms, statistical significance might not matter. If you're seeing 50% slowdowns on critical paths, you should investigate even if p = 0.06.
+
+    The beauty of using ranks is that they give more weight to consistent patterns while being robust to outliers. If one test case shows a massive slowdown but all others are neutral or faster, the test won't overreact. If most test cases show small but consistent slowdowns, the test will detect the pattern even without dramatic outliers. This makes the test well-suited for real-world performance testing where you might have occasional strange measurements but care about systematic trends.
+  </script>
+</notebook>
