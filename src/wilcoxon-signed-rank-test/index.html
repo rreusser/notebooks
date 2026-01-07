@@ -209,25 +209,93 @@
   </script>
   <script id="16" type="module">
     const numTestCases = view(Inputs.range([5, 50], {
-      label: "Number of test cases",
+      label: "Test cases",
       step: 1,
       value: 20
     }));
     const truePerformanceChange = view(Inputs.range([-0.2, 0.2], {
-      label: "True performance change",
+      label: "True change",
       step: 0.01,
       value: 0.05
     }));
     const noiseLevel = view(Inputs.range([0, 0.5], {
-      label: "Noise level (σ as fraction of baseline)",
+      label: "Noise level, σ",
       step: 0.01,
       value: 0.15
     }));
-    const seed = view(Inputs.range([1, 100], {
-      label: "Random seed",
-      step: 1,
-      value: 42
-    }));
+    const seed = 42;
+  </script>
+  <script id="75" type="module">
+    // Make the controls sticky when scrolling
+    const controlsCell = document.getElementById('cell-16');
+
+    if (controlsCell) {
+      // Store original position
+      let scrollCheckEl = controlsCell;
+      let isSticky = false;
+
+      // Create a placeholder to preserve space when controls become fixed
+      const placeholder = document.createElement('div');
+      controlsCell.parentNode.insertBefore(placeholder, controlsCell);
+
+      const handleScroll = () => {
+        const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+
+        const originalTop = scrollCheckEl.offsetTop;
+        if (scrollTop > originalTop && !isSticky) {
+          // Make sticky
+          scrollCheckEl = placeholder;
+          isSticky = true;
+          const rect = controlsCell.getBoundingClientRect();
+          placeholder.style.height = `${controlsCell.offsetHeight}px`;
+          placeholder.style.display = 'block';
+          controlsCell.style.position = 'fixed';
+          controlsCell.style.top = '0';
+          controlsCell.style.left = '0';
+          controlsCell.style.right = '0';
+          controlsCell.style.width = '100%';
+          controlsCell.style.maxWidth = '640px';
+          controlsCell.style.padding = '0 10px 10px 10px';
+          controlsCell.style.margin = '0 auto';
+          controlsCell.style.zIndex = '1000';
+          controlsCell.style.backgroundColor = 'var(--theme-background, white)';
+          controlsCell.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+        } else if (scrollTop <= originalTop && isSticky) {
+          scrollCheckEl = controlsCell;
+          // Remove sticky
+          isSticky = false;
+          placeholder.style.display = 'none';
+          controlsCell.style.position = '';
+          controlsCell.style.top = '';
+          controlsCell.style.left = '';
+          controlsCell.style.right = '';
+          controlsCell.style.width = '';
+          controlsCell.style.zIndex = '';
+          controlsCell.style.margin = '';
+          controlsCell.style.padding = '';
+          controlsCell.style.backgroundColor = '';
+          controlsCell.style.boxShadow = '';
+        }
+      };
+
+      window.addEventListener('scroll', handleScroll, { passive: true });
+
+      // Clean up on cell re-run
+      invalidation.then(() => {
+        window.removeEventListener('scroll', handleScroll);
+        placeholder.remove();
+        if (isSticky) {
+          controlsCell.style.position = '';
+          controlsCell.style.top = '';
+          controlsCell.style.left = '';
+          controlsCell.style.right = '';
+          controlsCell.style.width = '';
+          controlsCell.style.zIndex = '';
+          controlsCell.style.backgroundColor = '';
+          controlsCell.style.boxShadow = '';
+        }
+      });
+    }
   </script>
   <script id="34" type="text/x-typescript">
     const baselineTimeMin = 10;
@@ -250,7 +318,7 @@
     }));
   </script>
   <script id="60" type="text/markdown">
-    ## Sample Data
+    ### Sample Data
   </script>
   <script id="35" type="text/markdown">
     Below is the synthetic data generated with your chosen parameters, showing before/after timings for each test case.
@@ -268,41 +336,7 @@
       maxHeight: 200
     }));
   </script>
-  <script id="59" type="text/markdown">
-    ### A Note on What We're Ranking
-
-    The table below shows these same differences ranked by magnitude. Notice we're ranking by **absolute time difference** rather than **percent change**. This choice matters: absolute time differences work well when you care about wall-clock impact (like total test suite runtime), while percent changes are better for detecting proportional algorithmic improvements regardless of baseline speed.
-
-    For this example, we use absolute differences, which means a 10ms change gets the same rank whether it happens in a 50ms test or a 500ms test. If you wanted to detect algorithmic changes more uniformly across fast and slow tests, you'd rank by percent change instead—though that would give less weight to changes in your longest-running tests.
-  </script>
-  <script id="30" type="text/x-typescript">
-    const rankedTable = testResult.ranks
-      .sort((a, b) => a.rank - b.rank)
-      .map(r => ({
-        "Test Case": r.id,
-        "Difference (ms)": r.diff.toFixed(3),
-        "Absolute Difference": r.absDiff.toFixed(3),
-        "Rank": r.rank,
-        "Sign": r.diff > 0 ? "+" : "−"
-      }));
-  </script>
-  <script id="31" type="module">
-    display(Inputs.table(rankedTable, {
-      width: "100%",
-      maxHeight: 200
-    }));
-  </script>
-  <script id="61" type="text/markdown">
-    The test proceeds by computing the sum of the positive (W+) and negative (W-) ranks:
-
-  </script>
-  <script id="38" type="text/markdown">
-    **Sample size (n):** ${testResult.n} paired observations<br>
-    **Sum of positive ranks (W+):** ${testResult.wPlus.toFixed(1)} (cases where algorithm got slower)<br>
-    **Sum of negative ranks (W−):** ${testResult.wMinus.toFixed(1)} (cases where algorithm got faster)<br>
-    **Test statistic (W):** ${testResult.W.toFixed(1)}
-  </script>
-  <script id="26" type="module">
+  <script id="76" type="text/x-typescript">
     display(Plot.plot({
       height: 400,
       marginLeft: 60,
@@ -334,37 +368,42 @@
       caption: "Each point shows before/after performance. Points above the diagonal line indicate performance degradation (slower)."
     }));
   </script>
-  <script id="27" type="text/markdown">
-    ## Distribution of Differences
+  <script id="59" type="text/markdown">
+    The table below shows these same differences ranked by magnitude. Notice we're ranking by **absolute time difference** rather than **percent change**. Absolute time differences work well when you care about wall-clock time (like total test suite runtime), while percent changes are better for detecting proportional algorithmic improvements regardless of baseline speed.
   </script>
-  <script id="28" type="module">
-    display(Plot.plot({
-      height: 300,
-      marginLeft: 60,
-      x: {label: "Performance difference (ms, positive = slower)", grid: true},
-      y: {label: "Frequency"},
-      marks: [
-        Plot.rectY(chartData, Plot.binX(
-          {y: "count"},
-          {
-            x: "difference",
-            fill: d => d.difference > 0 ? "#e74c3c" : "#2ecc71",
-            thresholds: 20
-          }
-        )),
-        Plot.ruleX([0], {stroke: "#333", strokeWidth: 2})
-      ],
-      caption: "Distribution of time differences. Positive values (red) indicate the algorithm got slower."
+  <script id="30" type="text/x-typescript">
+    const rankedTable = testResult.ranks
+      .sort((a, b) => a.rank - b.rank)
+      .map(r => ({
+        "Test Case": r.id,
+        "Difference (ms)": r.diff.toFixed(3),
+        "Absolute Difference": r.absDiff.toFixed(3),
+        "Rank": r.rank,
+        "Sign": r.diff > 0 ? "+" : "−"
+      }));
+  </script>
+  <script id="31" type="module">
+    display(Inputs.table(rankedTable, {
+      width: "100%",
+      maxHeight: 200
     }));
   </script>
+  <script id="61" type="text/markdown">
+    The test proceeds by computing the sum of the positive (W+) and negative (W-) ranks:
+
+  </script>
+  <script id="38" type="text/markdown">
+    **Sample size (n):** ${testResult.n} paired observations<br>
+    **Sum of positive ranks (W+):** ${testResult.wPlus.toFixed(1)} (cases where algorithm got slower)<br>
+    **Sum of negative ranks (W−):** ${testResult.wMinus.toFixed(1)} (cases where algorithm got faster)<br>
+    **Test statistic (W):** ${testResult.W.toFixed(1)}
+  </script>
   <script id="62" type="text/markdown">
-    ## Computing Statistical Significance
+    ### Statistical Significance
 
     With the test statistic W in hand, we compute a z-score and p-value using the normal approximation.
   </script>
   <script id="63" type="text/markdown">
-    ### The Z-score Calculation
-
     For reasonably large samples (${tex`n > 10`}), the test statistic ${tex`W`} is approximately normally distributed. We can compute the expected value and standard deviation under the null hypothesis (no systematic change):
   </script>
   <script id="64" type="text/x-typescript">
