@@ -3,8 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="Wilcoxon Signed-Rank Test for Performance Testing">
+  <meta property="og:title" content="Wilcoxon Signed-Rank Test for Performance Testing">
+  <meta name="twitter:description" content="Wilcoxon Signed-Rank Test">
+  <meta name="subject" content="Wilcoxon Signed-Rank Test">
+  <meta name="description" content="Wilcoxon Signed-Rank Test">
+  <meta property="og:description" content="Wilcoxon Signed-Rank Test">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1489,8 +1493,9 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Wilcoxon Signed-Rank Test for Performance Testing</title>  <script type="module" crossorigin src="/notebooks/assets/index-BCQDWImI.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1501,125 +1506,95 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Wilcoxon Signed-Rank Test for Performance Testing</h1>
     <div class="byline">
-      
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20260106">January 6, 2026</time>
     </div>
     <div class="resource-links">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/wilcoxon-signed-rank-test/index.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="wilcoxon-signed-rank-test/">Wilcoxon Signed-Rank Test for Performance Testing</a></h2>
-            <span class="publishedAt">January 6, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="perfectly-matched-layers-for-the-wave-equation/">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <span class="publishedAt">December 31, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="reflecting-on-two-years-of-yoga/">Reflecting on Two Years of Yoga</a></h2>
-            <span class="publishedAt">December 27, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="of-noise-and-neighbors/">Of Noise and Neighbors</a></h2>
-            <span class="publishedAt">September 29, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="regl-canvas/">REGL in Observable Notebooks 2.0</a></h2>
-            <span class="publishedAt">August 12, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="spring-training/">Spring Training on the Treadmill</a></h2>
-            <span class="publishedAt">June 8, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="speed-climbing-world-record-progression/">Speed Climbing World Record Progression</a></h2>
-            <span class="publishedAt">May 3, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/">Series Acceleration with Shanks Transformation</a></h2>
-            <span class="publishedAt">September 23, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">November 16, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">May 24, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="double-pendulum-map/">The Double Pendulum Map</a></h2>
-            <span class="publishedAt">May 14, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="malkus-waterwheel/">Malkus Waterwheel</a></h2>
-            <span class="publishedAt">February 13, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="adaptive-contouring-in-fragment-shaders/">Adaptive Contouring in Fragment Shaders</a></h2>
-            <span class="publishedAt">November 21, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="integers-in-single-precision-floating-point/">Visualizing Integers in Floating-Point</a></h2>
-            <span class="publishedAt">February 9, 2020</span>
-          </div>
-          
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-41" class="observablehq observablehq--cell"><div><h2 id="the-problem" tabindex="-1"><a href="#the-problem">The Problem</a></h2>
+</div></div><div id="cell-68" class="observablehq observablehq--cell"><div><p>Imagine you’ve modified an algorithm and want to know whether its performance has changed.</p>
+</div></div><div id="cell-42" class="observablehq observablehq--cell"><div><p>You run your test suite before and after the change, measuring execution time for each test case. It’s easy enough to come up with an <em>ad hoc</em> performance metric and get a sense of good/bad, but it’s tricky to be more rigorous, accounting for the different baseline performance of each test, separating signal from noise, and determining the statistical significance of the results.</p>
+</div></div><div id="cell-44" class="observablehq observablehq--cell"><div><p>Of the numerous applicable statistical tests, the <a href="https://en.wikipedia.org/wiki/Wilcoxon_signed-rank_test"><strong>Wilcoxon signed-rank test</strong></a> achieves a nice balance in this scenario by focusing on the <em>ranks</em> of the changes rather than their <em>absolute values</em>.</p>
+</div></div><div id="cell-78" class="observablehq observablehq--cell"><div><p>First though, a brief disclaimer. I’ve never been very good with statistics and I’m not a great person to elucidate even a relatively basic concept like this. I became aware of the Wilcoxon signed-rank test at a previous job when it was used for this sort of benchmarking, but I was afraid of it. Like a mystical artifact I admire without understanding, I put it on a shelf somewhere in a dark closet in the back of my mind and decided to dust it off when the time came to finally use it. That time has arrived, so I’m using this notebook to rid myself of any fear and figure out what’s really going on.</p>
+</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><h2 id="when-to-use-this-test" tabindex="-1"><a href="#when-to-use-this-test">When to Use This Test</a></h2>
+</div></div><div id="cell-79" class="observablehq observablehq--cell"><div><p>A key advantage of the Wilcoxon signed-rank test is that it’s <em>non-parametric</em>, so it doesn’t assume your performance data follows any particular distribution. This can be useful for benchmarking where occasional extreme outliers can really throw off the results.</p>
+</div></div><div id="cell-48" class="observablehq observablehq--cell"><div><p>Instead, the test ranks changes by magnitude and uses the numerical rank rather than magnitude of the changes. This choice preserves some information about the relative size of changes while making it less sensitive to noise and outliers.</p>
+</div></div><div id="cell-80" class="observablehq observablehq--cell"><div><p>There are, of course, tests for normally distributed data (<a href="https://en.wikipedia.org/wiki/Student%27s_t-test">paired t-test</a>) or for when you know the sign of changes only (<a href="https://en.wikipedia.org/wiki/Sign_test">sign test</a>) or when the tests are ranked but not paired (<a href="https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U_test">Mann–Whitney U test</a>). In short, there are many methods for many configurations, but if I had my choice of setting up some basic benchmarking, the Wilcoxon signed-rank test would be a pretty good fit.</p>
+</div></div><div id="cell-74" class="observablehq observablehq--cell"><div><h2 id="how-the-test-works" tabindex="-1"><a href="#how-the-test-works">How the Test Works</a></h2>
+</div></div><div id="cell-73" class="observablehq observablehq--cell"><div><p>Consider measuring the performance of an algorithm before and after some changes, say  and  The Wilcoxon signed-rank test proceeds in several steps.</p>
+</div></div><div id="cell-69" class="observablehq observablehq--cell"><div><ol>
+<li>
+<p><strong>Calculate differences</strong>. For each test case , compute the difference</p>
+<p>where positive values indicate the algorithm got slower, negative values indicate it got faster.</p>
+</li>
+</ol>
+</div></div><div id="cell-70" class="observablehq observablehq--cell"><div><ol start="2">
+<li><strong>Rank the absolute differences</strong>. Ignore the signs temporarily and rank the absolute differences  from smallest (rank 1) to largest (rank ). If there are ties, assign each tied value the average of the ranks they would have received.</li>
+</ol>
+</div></div><div id="cell-71" class="observablehq observablehq--cell"><div><ol start="3">
+<li><strong>Apply signs to ranks</strong>. Restore the signs from the original differences to the ranks. This gives us signed ranks .</li>
+</ol>
+</div></div><div id="cell-72" class="observablehq observablehq--cell"><div><ol start="4">
+<li>
+<p><strong>Sum ranks by sign</strong>. Calculate:</p>
+<ul>
+<li>(sum of ranks where algorithm got slower)</li>
+<li>(sum of absolute ranks where algorithm got faster)</li>
+</ul>
+<p>Note that , the sum of all ranks from 1 to .</p>
+</li>
+</ol>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"><div><ol start="5">
+<li>
+<p><strong>Test Statistic and Null Hypothesis</strong>. The test statistic is . Under the null hypothesis that there’s no systematic difference (the median difference is zero), we expect  and  to be roughly equal. A small value of  indicates one-sided behavior.</p>
+<p>For large samples (),  is approximately normally distributed with</p>
+<p>We can compute a z-score,</p>
+<p>and derive a p-value from the standard normal distribution.</p>
+<p>A <a href="https://www.mathspanda.com/A2FM/Lessons/Normal_approximations_with_Wilcoxon_tests_LESSON.pdf"><strong>continuity correction</strong></a> accounts for approximating a discrete distribution (integer ranks) with a continuous distribution (normal). Since  can only take integer values, we adjust by 0.5 in the direction of the mean, which improves the accuracy of the p-value for small to moderate sample sizes.</p>
+<p>I sorta get the reasoning, but the precise reasoning is a bit fuzzy to me. At the end of the day, we use the adjusted equation,</p>
+</li>
+</ol>
+</div></div><div id="cell-90" class="observablehq observablehq--cell"><div><ol start="6">
+<li><strong>P-value</strong>. Finally, we compute a <a href="https://stats.oarc.ucla.edu/other/mult-pkg/faq/general/faq-what-are-the-differences-between-one-tailed-and-two-tailed-tests/">“two-tailed” p-value</a> using the normal CDF function. After reading the above reference and working out a line or two of algebra, we end up with</li>
+</ol>
+</div></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"><div><h2 id="interactive-demo" tabindex="-1"><a href="#interactive-demo">Interactive Demo</a></h2>
+<p>Adjust the parameters below to explore how different scenarios affect the results:</p>
+</div></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-75" class="observablehq observablehq--cell"></div><div id="cell-34" class="observablehq observablehq--cell"></div><div id="cell-60" class="observablehq observablehq--cell"><div><h3 id="sample-data" tabindex="-1"><a href="#sample-data">Sample Data</a></h3>
+</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><p>Below is the synthetic data generated with the chosen parameters, showing before and after timings for each test case.</p>
+</div></div><div id="cell-37" class="observablehq observablehq--cell"></div><div id="cell-76" class="observablehq observablehq--cell"></div><div id="cell-59" class="observablehq observablehq--cell"><div><p>The table below shows these same differences ranked by magnitude. Notice we’re ranking by <strong>absolute time difference</strong> rather than <strong>percent change</strong>. One or the other may be more appropriate, depending on how you expect performance to change across tests, for example whether by a fixed latency or a proportional change.</p>
+</div></div><div id="cell-30" class="observablehq observablehq--cell"></div><div id="cell-31" class="observablehq observablehq--cell"></div><div id="cell-61" class="observablehq observablehq--cell"><div><p>The test proceeds by computing the sum of the positive (W+) and negative (W-) ranks:</p>
+</div></div><div id="cell-38" class="observablehq observablehq--cell"><div><p><strong>Sample size ():</strong>  paired observations<br>
+<strong>Sum of positive ranks ():</strong>  (cases where algorithm got slower)<br>
+<strong>Sum of negative ranks ():</strong>  (cases where algorithm got faster)<br>
+<strong>Test statistic ():</strong></p>
+</div></div><div id="cell-88" class="observablehq observablehq--cell"><div><h3 id="statistical-significance" tabindex="-1"><a href="#statistical-significance">Statistical Significance</a></h3>
+</div></div><div id="cell-62" class="observablehq observablehq--cell"><div><p>With the test statistic W in hand, we compute a z-score and p-value using the normal approximation.</p>
+</div></div><div id="cell-63" class="observablehq observablehq--cell"><div><p>For reasonably large samples (), the test statistic  is approximately normally distributed. We can compute the expected value and standard deviation under the null hypothesis (no systematic change):</p>
+</div></div><div id="cell-64" class="observablehq observablehq--cell"></div><div id="cell-81" class="observablehq observablehq--cell"><div><p><strong>Expected value:</strong></p>
+</div></div><div id="cell-82" class="observablehq observablehq--cell"><div><p><strong>Variance:</strong></p>
+</div></div><div id="cell-83" class="observablehq observablehq--cell"><div><p><strong>Standard deviation:</strong></p>
+</div></div><div id="cell-84" class="observablehq observablehq--cell"><div><p><strong>Z-score (with continuity correction):</strong></p>
+</div></div><div id="cell-87" class="observablehq observablehq--cell"><div><h3 id="test-results" tabindex="-1"><a href="#test-results">Test Results</a></h3>
+</div></div><div id="cell-66" class="observablehq observablehq--cell"><div><p><strong>Z-score:</strong> <br>
+<strong>P-value:</strong> <br>
+<strong>Conclusion:</strong></p>
+</div></div><div id="cell-89" class="observablehq observablehq--cell"><div><h3 id="interpreting-results" tabindex="-1"><a href="#interpreting-results">Interpreting Results</a></h3>
+</div></div><div id="cell-67" class="observablehq observablehq--cell"><div><p>The p-value tells us the probability of seeing differences this extreme if there were no performance change. A p-value below 0.05 provides strong evidence of a real performance change. A p-value of 0.05 or higher means insufficient evidence to conclude there’s a systematic change.</p>
+</div></div><div id="cell-91" class="observablehq observablehq--cell"><div><h2 id="conclusion" tabindex="-1"><a href="#conclusion">Conclusion</a></h2>
+</div></div><div id="cell-93" class="observablehq observablehq--cell"><div><p>At the end of the day, this was a lot more intuitive and less scary than I expected. We really just rank the changes and compare the rankings to what we’d expect if there were no performance difference. I like the precision and rigor with which it does this, and I like that it respects the relative size of changes without being fully sensitive to bizarre outliers. I’m still not great with statistics, but for what I need, it feels like the right tool for the job and I’m pretty content here.</p>
+</div></div></main>
+  </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
 
