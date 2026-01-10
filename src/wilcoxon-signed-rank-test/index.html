@@ -22,11 +22,11 @@
   <script id="45" type="text/markdown">
     ## When to Use This Test
   </script>
-  <script id="79" type="text/markdown">
-    A key advantage of the Wilcoxon signed-rank test is that it’s *non-parametric*, so it doesn't assume your performance data follows any particular distribution. This can be useful for benchmarking where occasional extreme outliers can really throw off the results.
+  <script id="95" type="text/markdown">
+    The Wilcoxon signed-rank test might be a good fit if you’ve measured some indicator for performance of something and want to determine whether the performance has improved or degraded. This could be something like wall clock run time. The key thing for this test is that the measurements are paired, like a single test suite run before and after some change.
   </script>
-  <script id="48" type="text/markdown">
-    Instead, the test ranks changes by magnitude and uses the numerical rank rather than magnitude of the changes. This choice preserves some information about the relative size of changes while making it less sensitive to noise and outliers.
+  <script id="94" type="text/markdown">
+    Measuring algorithm performance can be weird. Things are pretty consistent, except every now and then garbage collection or some other browser tab eats up all the CPU cycles and you get some extreme outliers. The Wilcoxon signed-rank test is non-parametric, meaning it doesn’t assume your measurements follow a particular distribution. Instead, it ranks the measurements by magnitude and uses the numerical rank as the input, thus preserving some information about the relative size of changes while making it less sensitive to noise and outliers.
   </script>
   <script id="80" type="text/markdown">
     There are, of course, tests for normally distributed data ([paired t-test](https://en.wikipedia.org/wiki/Student%27s_t-test)) or for when you know the sign of changes only ([sign test](https://en.wikipedia.org/wiki/Sign_test)) or when the tests are ranked but not paired ([Mann–Whitney U test](https://en.wikipedia.org/wiki/Mann%E2%80%93Whitney_U_test)). In short, there are many methods for many configurations, but if I had my choice of setting up some basic benchmarking, the Wilcoxon signed-rank test would be a pretty good fit.
