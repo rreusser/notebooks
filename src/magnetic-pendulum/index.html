@@ -196,7 +196,10 @@
     ```
   </script>
   <script id="52" type="text/markdown">
-    That’s it! Once in place, adaptive methods are just great. It’s a pretty handy function which you’re free to lift and use. (The source is MIT Licensed.) You can view the live notebook [on Observable](https://observablehq.com/@rreusser/magnetic-pendulum).
+    The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of GLSL fragment shaders, we can’t really know, so we just do our best and go with it.
+  </script>
+  <script id="53" type="text/markdown">
+    That’s it. Once in place, adaptive methods are just great. It’s a pretty handy function which you’re free to lift and use. (The source is MIT Licensed.) You can view the live notebook [on Observable](https://observablehq.com/@rreusser/magnetic-pendulum).
   </script>
   <script id="7" type="text/x-typescript">
     import { mat4 } from 'npm:gl-matrix'
