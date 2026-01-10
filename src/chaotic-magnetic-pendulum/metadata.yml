@@ -2,3 +2,4 @@ publishedAt: "August 7, 2024"
 description: "Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics."
 maxWidth: 640px
 observableUrl: https://observablehq.com/@rreusser/magnetic-pendulum
+image: https://rreusser.github.io/notebooks/meta/chaotic-magnetic-pendulum.png
