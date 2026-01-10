@@ -103,7 +103,7 @@
     Both therefore use the adaptive RK4(5) method. The CPU variant is implemented in [@rreusser/integration#ode45](https://observablehq.com/@rreusser/integration#ode45). Adaptive means that the timestep is modified on each step to maximize the step size while controlling the error. This is done through careful construction of the [Runge-Kutta](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods) method using coefficients of the [Cash-Karp method](https://en.wikipedia.org/wiki/Cash%E2%80%93Karp_method). The coefficients allow the same derivative evaluations to produce both a fifth order and so-called *embedded* fourth order estimate of the next state. The difference between the estimates produces an error estimate, which can subsequently be worked backwards into the timestep required to achieve a specified error threshold.
   </script>
   <script id="50" type="text/markdown">
-    First, we define the derivative function
+    To get started, we define the derivative function
   </script>
   <script id="49" type="text/markdown">
     ```glsl
