@@ -1,8 +1,8 @@
 <!doctype html>
 <notebook theme="air">
-  <title>Magnetic Pendulum</title>
+  <title>Chaotic Magnetic Pendulum</title>
   <script id="1" type="text/markdown">
-    # Magnetic Pendulum
+    # Chaotic Magnetic Pendulum
   </script>
   <script id="29" type="text/x-typescript">
     const el = createElementStack({
@@ -79,7 +79,7 @@
     }));
   </script>
   <script id="9" type="text/markdown">
-    The plot above represents a top-down view of a [magnetic pendulum](https://simple.wikipedia.org/wiki/Magnetic_pendulum). The dots arranged in an equilateral triangle represent three attracting magnets. Click and drag to move them. Each point on the plot represents the starting position of a pendulum. A pendulum is released from rest, and a bit of friction ensures it eventually comes to rest at one of the three magnets. Color indicates which of the three.
+    The plot above represents a top-down view of a chaotic [magnetic pendulum](https://simple.wikipedia.org/wiki/Magnetic_pendulum). The black dots represent attracting magnets. Click and drag to move them. Each point on the plot represents the starting position of a pendulum. A pendulum is released from rest, and a bit of friction ensures it eventually comes to rest at one of the magnets. Color indicates which.
   </script>
   <script id="10" type="text/markdown">
     For two-dimensional position ${tex`\mathbf{x}`}, friction ${tex`b`}, and magnets ${tex`\mathbf{X}_n`}, the pendulum moves according to the equations
@@ -490,7 +490,7 @@
       depth: { enable: false }
     })
   </script>
-  <script id="59" type="text/x-typescript" pinned="">
+  <script id="59" type="text/x-typescript">
     function srgbToLinear(c) {
       return c <= 0.04045
         ? c / 12.92
@@ -510,7 +510,7 @@
       return [r, g, b];
     }
   </script>
-  <script id="60" type="text/x-typescript" pinned="">
+  <script id="60" type="text/x-typescript">
     const colorScheme = d3.schemeCategory10.map(hexToLinearRgb).map(([r, g, b]) => `vec3(${r},${g},${b})`);
   </script>
 </notebook>
