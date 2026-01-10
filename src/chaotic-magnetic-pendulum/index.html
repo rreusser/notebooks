@@ -217,7 +217,7 @@
     }`;
     const glslScheme = `vec3 computeWeightedColor (vec2 y) {
       ${i.map(i => `vec2 r${i} = y - p${i};`).join('\n  ')}
-      ${i.map(i => `float w${i} = 1.0 / dot(r${i}, r${i});`).join('\n  ')}
+      ${i.map(i => `float w${i} = 1.0 / dot(r${i}, r${i}); w${i} *= w${i};`).join('\n  ')}
       return (
         ${
           /*i.map(i => `w${i} * ${colorScheme[i]}`).join(' +\n    ')*/

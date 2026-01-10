@@ -31,7 +31,7 @@ vec3 palette(float t) {
 }`,n=`vec3 computeWeightedColor (vec2 y) {
   ${e.map(d=>`vec2 r${d} = y - p${d};`).join(`
   `)}
-  ${e.map(d=>`float w${d} = 1.0 / dot(r${d}, r${d});`).join(`
+  ${e.map(d=>`float w${d} = 1.0 / dot(r${d}, r${d}); w${d} *= w${d};`).join(`
   `)}
   return (
     ${e.map(d=>`w${d} * mix(palette(0.63 + quasirandom(${d})), vec3(0.9), 0.35)`).join(` +
