@@ -11,4 +11,4 @@ This repository contains notebooks designed for publishing on the web and editin
 
 ## License
 
-&copy; 2025 Ricky Reusser. MIT License.
+&copy; 2026 Ricky Reusser. MIT License.

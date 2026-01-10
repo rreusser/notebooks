@@ -1,0 +1,464 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Magnetic Pendulum</title>
+  <script id="1" type="text/markdown">
+    # Magnetic Pendulum
+  </script>
+  <script id="29" type="text/x-typescript">
+    const el = createElementStack({
+      container: stackEl,
+      width: Math.min(width, 640),
+      height: Math.min(640, width),
+      layers: {
+        regl: ({ current, width, height }) => {
+          const pixelRatio = devicePixelRatio;
+          current = current || reglCanvas(createREGL, {
+            attributes: { depthStencil: false },
+            pixelRatio,
+          });
+          current.style.width = `${width}px`;
+          current.style.height = `${height}px`;
+          current.width = width * pixelRatio;
+          current.height = height * pixelRatio;
+          return current;
+        },
+        plot: ({ width, height }) =>
+          Plot.plot({
+            width,
+            height,
+            aspectRatio: 1,
+            marginTop: 0,
+            marginRight: 5,
+            marginLeft: 22,
+            marginBottom: 20,
+            style: { backgroundColor: "transparent", maxWidth: "none" },
+            x: { domain: [-3, 3], grid: true, tickSpacing: 100 },
+            y: {
+              domain: [(-2.9 * height) / width, (2.9 * height) / width],
+              grid: true,
+              tickSpacing: 100
+            }
+          }),
+        svg: ({ width, height }) =>
+          d3.create("svg").attr("width", width).attr("height", height).node()
+      }
+    });
+    const stack = el.value;
+    display(html`<figure>
+      ${el}
+      <figcaption>Drag points to adjust magnet positions.</figcaption>
+    </figure>`);
+  </script>
+  <script id="30" type="text/x-typescript">
+    const h = view(Inputs.range([1e-3 * 0, 1], {
+      //transform: Math.log,
+      label: "pendulum height, h",
+      value: 0.5
+    }))
+    const b = view(Inputs.range([1e-8, 1], { label: "friction", value: 0.15 }))
+    const tolerance = view(Inputs.range([1e-6, 1e-2], {
+      transform: Math.log,
+      label: "tolerance",
+      value: 3e-4
+    }))
+    const steps = view(Inputs.range([0, 200], {
+      label: "integration steps",
+      value: 120,
+      step: 1
+    }))
+    const opts = view(Inputs.checkbox([
+      "Draw trajectory",
+      //'Use steps which exceed tolerance'
+    ], {
+      value: ["Draw trajectory", 'Use steps which exceed tolerance']
+    }));
+  </script>
+  <script id="9" type="text/markdown">
+    The plot above represents a top-down view of a [magnetic pendulum](https://simple.wikipedia.org/wiki/Magnetic_pendulum). The dots arranged in an equilateral triangle represent three attracting magnets. Click and drag to move them. Each point on the plot represents the starting position of a pendulum. A pendulum is released from rest, and a bit of friction ensures it eventually comes to rest at one of the three magnets. Color indicates which of the three.
+  </script>
+  <script id="10" type="text/markdown">
+    For two-dimensional position ${tex`\mathbf{x}`}, friction ${tex`b`}, and magnets ${tex`\mathbf{X}_n`}, the pendulum moves according to the equations
+  </script>
+  <script id="11" type="text/markdown">
+    ${tex.block`
+    \frac{d^2 \mathbf{x}}{dt^2} + b \frac{d\mathbf{x}}{dt} + \mathbf{x} = \sum_{n=1}^{3} \frac{\mathbf{X}_n - x}{\left(|\mathbf{X}_n - \mathbf{x}|^2 + h^2\right)^{5/2}}.
+    `}
+  </script>
+  <script id="12" type="text/markdown">
+    Pendulum height ${tex`h`} means the bottom of the pendulum is elevated slightly above the magnets so that it doesn't experience infinite acceleration when it gets close.
+  </script>
+  <script id="13" type="text/markdown">
+    For more information, see [The Magnetic Pendulum](https://chalkdustmagazine.com/features/the-magnetic-pendulum/) or [Gravity Fractals](https://www.youtube.com/watch?v=LavXSS5Xtbg&ab_channel=2swap).
+  </script>
+  <script id="35" type="text/markdown">
+    ## Implementation
+  </script>
+  <script id="38" type="text/markdown">
+    The trajectory when the mouse is moved—corresponding to *one* trajectory—is computed on the CPU, while the colorful background field—corresponding to *every* trajectory—is iterated on the GPU.
+  </script>
+  <script id="40" type="text/markdown">
+    In both formats, the biggest challenge is computing trajectories efficiently. The pendulum may change direction quickly and so needs a small time step, but the pendulum can take a long time to come to a rest. These competing priorities make efficient evaluation essential.
+  </script>
+  <script id="39" type="text/markdown">
+    Both therefore use the adaptive RK4(5) method. The CPU variant is implemented in [@rreusser/integration#ode45](https://observablehq.com/@rreusser/integration#ode45). Adaptive means that the timestep is modified on each step to maximize the step size while controlling the error. This is done through careful construction of the [Runge-Kutta](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods) method using coefficients of the [Cash-Karp method](https://en.wikipedia.org/wiki/Cash%E2%80%93Karp_method). The coefficients allow the same derivative evaluations to produce both a fifth order and so-called *embedded* fourth order estimate of the next state. The difference between the estimates produces an error estimate, which can subsequently be worked backwards into the timestep required to achieve a specified error threshold.
+  </script>
+  <script id="50" type="text/markdown">
+    First, we define the derivative function
+  </script>
+  <script id="49" type="text/markdown">
+    ```glsl
+    vec4 deriv (vec4 y) {
+      vec2 pos = y.xy;
+      vec2 vel = y.zw;
+      vec2 r0 = p0 - pos;
+      vec2 r1 = p1 - pos;
+      vec2 r2 = p2 - pos;
+      float d0 = dot(r0, r0) + h2;
+      float d1 = dot(r1, r1) + h2;
+      float d2 = dot(r2, r2) + h2;
+      vec2 force = r0 / (d0 * d0 * sqrt(d0)) +
+                   r1 / (d1 * d1 * sqrt(d1)) +
+                   r2 / (d2 * d2 * sqrt(d2));
+      return vec4(vel, force - b * vel - pos);
+    }
+    ```
+  </script>
+  <script id="47" type="text/markdown">
+    The GLSL variant of `ode45` is reproduced below. It’s mostly equivalent to the CPU variant except modified for the limitations of GLSL control flow.
+  </script>
+  <script id="42" type="text/markdown">
+    ```glsl
+    const float safety = 0.95;
+    const float maxDecrease = 0.02;
+    const float maxIncrease = 50.0;
+
+    vec4 ode45 (vec4 y, inout float dt) {
+      // Fifth order estimate using constants for the Cash-Karp method
+      vec4 k1 = deriv(y);
+      vec4 k2 = deriv(y + dt * 0.2 * k1);
+      vec4 k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
+      vec4 k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
+      vec4 k5 = deriv(y + dt * (
+        -0.203703703703703703 * k1 +
+        2.5 * k2 -
+        2.592592592592592592 * k3 +
+        1.296296296296296296 * k4
+      ));
+      vec4 k6 = deriv(y + dt * (
+        0.029495804398148148 * k1 +
+        0.341796875 * k2 +
+        0.041594328703703703 * k3 +
+        0.400345413773148148 * k4 +
+        0.061767578125 * k5
+      ));
+
+      // Estimate the error using the embedded fourth order method
+      vec4 tmp = dt * (
+        0.004293774801587301 * k1 -
+        0.018668586093857832 * k3 +
+        0.034155026830808080 * k4 +
+        0.019321986607142857 * k5 -
+        0.039102202145680406 * k6
+      );
+      float err2 = dot(tmp, tmp);
+
+      // Wasteful, but only accept the step if error is within tolerance
+      bool accept = err2 <= tol2;
+      if (accept) y += dt * (
+        0.097883597883597883 * k1 +
+        0.402576489533011272 * k3 +
+        0.210437710437710437 * k4 +
+        0.289102202145680406 * k6
+      );
+
+      // Either way, adjust dt according to the estimate
+      dt *= clamp(
+        safety * pow(tol2 / err2, accept ? 0.125 : 0.1),
+        maxDecrease,
+        maxIncrease
+      );
+
+      return y;
+    }
+    ```
+  </script>
+  <script id="48" type="text/markdown">
+    Note that if the error threshold is not achieved (that is, if we need to reduce the time step to keep error under control), then we simply throw out the timestep entirely. This is very wasteful! *C’est la vie*.
+  </script>
+  <script id="43" type="text/markdown">
+    Given zero velocity and starting position `xy`, the final iteration loop is reproduced below. We start by packing the state into a `vec4`. We update the state ${steps} times, overwriting the state and mutating `dt` on each step. The iteration is quite straightfoward, but GLSL 1.00 does not permit loop bounds to be computed at runtime, so we have to hard-code the loop extents into the shader.
+  </script>
+  <script id="45" type="text/markdown">
+    ```glsl
+    vec4 y = vec4(xy, vec2(0));
+    float dt = 0.01;
+    for (int i = 0; i < ${steps}; i++) y = ode45(y, dt);
+    ```
+  </script>
+  <script id="52" type="text/markdown">
+    That’s it! Once in place, adaptive methods are just great. It’s a pretty handy function which you’re free to lift and use. (The source is MIT Licensed.) You can view the live notebook [on Observable](https://observablehq.com/@rreusser/magnetic-pendulum).
+  </script>
+  <script id="7" type="text/x-typescript">
+    import { mat4 } from 'npm:gl-matrix'
+    import createREGL from 'npm:regl'
+    import { ode45 } from "observable:@rreusser/integration"
+  </script>
+  <script id="2" type="text/x-typescript">
+    import { initializeElementStack, createElementStack, createAxisConfiguration } from './lib/element-stack.js'
+    import { reglCanvas } from './lib/regl-canvas.js'
+  </script>
+  <script id="3" type="text/x-typescript">
+    const stackEl = initializeElementStack();
+  </script>
+  <script id="18" type="text/x-typescript">
+    const regl = stack.regl.value;
+    const svg = stack.svg.value;
+    const state = {
+      dirty: false
+    };
+  </script>
+  <script id="27" type="text/x-typescript">
+    const magnets = [
+      { index: 0, x: -Math.sqrt(3) * 0.5, y: -0.5 },
+      { index: 1, x: Math.sqrt(3) * 0.5, y: -0.5 },
+      { index: 2, x: 0, y: 1 }
+    ];
+  </script>
+  <script id="24" type="text/x-typescript">
+    function deriv(yp, [x, y, u, v]) {
+      const [m0, m1, m2] = magnets;
+      const r0x = m0.x - x;
+      const r0y = m0.y - y;
+      const r1x = m1.x - x;
+      const r1y = m1.y - y;
+      const r2x = m2.x - x;
+      const r2y = m2.y - y;
+      const d0 = r0x * r0x + r0y * r0y + h * h;
+      const d1 = r1x * r1x + r1y * r1y + h * h;
+      const d2 = r2x * r2x + r2y * r2y + h * h;
+      const den0 = 1.0 / (d0 * d0 * Math.sqrt(d0));
+      const den1 = 1.0 / (d1 * d1 * Math.sqrt(d1));
+      const den2 = 1.0 / (d2 * d2 * Math.sqrt(d2));
+      const fx = r0x * den0 + r1x * den1 + r2x * den2;
+      const fy = r0y * den0 + r1y * den1 + r2y * den2;
+      yp[0] = u;
+      yp[1] = v;
+      yp[2] = fx - b * u - x;
+      yp[3] = fy - b * v - y;
+    }
+    function computeTrajectory([x, y]) {
+      if (!~opts.indexOf("Draw trajectory") || isNaN(x)) return [];
+      const state = { y: [x, y, 0, 0], t: 0 };
+      const history = [{ x: state.y[0], y: state.y[1] }];
+      for (let i = 0; i < 2000 && !state.limitReached; i++) {
+        ode45(state, deriv, { tLimit: 50, tolerance: 2e-6 });
+        history.push({ x: state.y[0], y: state.y[1] });
+      }
+      return history;
+    };
+  </script>
+  <script id="26" type="text/x-typescript">
+    const xScale = stack.plot.scale("x");
+    const yScale = stack.plot.scale("y");
+    const svg = d3.select(stack.svg).style("cursor", "crosshair");
+    d3.selectAll("circle").remove();
+    svg.on("mousemove", (event) => {
+      updateTrajectory(computeTrajectory([
+        xScale.invert(event.offsetX),
+        yScale.invert(event.offsetY)
+      ]));
+    });
+    //window.addEventListener("mouseout", () => (state.trajectoryStart = null));
+
+    const makeline = d3
+      .line()
+      .x(({ x }) => xScale.apply(x))
+      .y(({ y }) => yScale.apply(y));
+    function updateTrajectory (trajectory) {
+      const line = svg
+        .selectAll(".trajectory")
+        .data([trajectory || []])
+        .join(
+          (enter) =>
+            enter
+              .append("path")
+              .style("fill", "none")
+              .style("stroke-width", 1)
+              .style("stroke", "black")
+              .attr("class", "trajectory")
+              .attr("d", makeline),
+          (update) => update.attr("d", makeline)
+        );
+    }
+
+    function updatePositions(p) {
+      p.attr("r", 5)
+        .attr("cx", ({ x }) => xScale.apply(x))
+        .attr("cy", ({ y }) => yScale.apply(y));
+    }
+
+    updateTrajectory([]);
+    svg
+      .selectAll("circle")
+      .data(magnets)
+      .join(
+        (enter) =>
+          enter
+            .append("circle")
+            .style("fill", "black")
+            .style("stroke", "white")
+            .style("stroke-width", 2)
+            .style("cursor", "move")
+            .call(updatePositions)
+            .call(
+              d3.drag().on("drag", (event) => {
+                let {
+                  sourceEvent: { offsetX, offsetY, touches },
+                  subject: { index }
+                } = event;
+                if (touches?.length) {
+                  const { x, y } = svg.node().getBoundingClientRect();
+                  offsetX = touches[0].clientX - x;
+                  offsetY = touches[0].clientY - y;
+                }
+                magnets[index].x = xScale.invert(offsetX);
+                magnets[index].y = yScale.invert(offsetY);
+                svg.selectAll("circle").call(updatePositions);
+                state.dirty = true;
+              })
+            ),
+        (update) => update.call(updatePositions)
+      );
+  </script>
+  <script id="20" type="text/x-typescript">
+    state.dirty = true;
+    let loop = regl.frame(({ time }) => {
+      if (!state.dirty) return;
+      try {
+        configureAxes(stack.plot.scale("x"), stack.plot.scale("y"), () => {
+          regl.clear({ color: [1, 0, 0, 1] });
+          drawField({
+            h, b, magnets, tolerance,
+            discard: !opts.includes('Use steps which exceed tolerance')
+          });
+        });
+        state.dirty = false;
+      } catch (e) {
+        console.error(e);
+        if (loop) loop.cancel();
+        loop = null;
+      }
+    });
+    invalidation.then(() => {
+      if (loop) loop.cancel();
+      loop = null;
+    });
+  </script>
+  <script id="22" type="text/x-typescript">
+    const configureAxes = createAxisConfiguration(mat4, regl)
+  </script>
+  <script id="21" type="text/x-typescript">
+    const drawField = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        varying vec2 xy;
+        uniform mat4 viewInverse;
+        void main () {
+          xy = (viewInverse * vec4(uv, 0, 1)).xy;
+          gl_Position = vec4(uv, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        varying vec2 xy;
+        uniform float h2, b, tol2;
+        uniform vec2 p0, p1, p2;
+        uniform bool discardFails;
+
+        vec4 deriv (vec4 y) {
+          vec2 pos = y.xy;
+          vec2 vel = y.zw;
+          vec2 r0 = p0 - pos;
+          vec2 r1 = p1 - pos;
+          vec2 r2 = p2 - pos;
+          float d0 = dot(r0, r0) + h2;
+          float d1 = dot(r1, r1) + h2;
+          float d2 = dot(r2, r2) + h2;
+          vec2 force = r0 / (d0 * d0 * sqrt(d0)) +
+                       r1 / (d1 * d1 * sqrt(d1)) +
+                       r2 / (d2 * d2 * sqrt(d2));
+          // Derivative of first two components (pos) is vel
+          // Derivative of second two components (vel) is accel,
+          // which comes from putting everything on RHS of the ODE
+          return vec4(vel, force - b * vel - pos);
+        }
+
+        const float safety = 0.95;
+        const float maxDecrease = 0.02;
+        const float maxIncrease = 50.0;
+
+        vec4 rk45 (vec4 y, inout float dt) {
+          // Fifth order estimate using constants for the Cash-Karp method
+          vec4 k1 = deriv(y);
+          vec4 k2 = deriv(y + dt * 0.2 * k1);
+          vec4 k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
+          vec4 k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
+          vec4 k5 = deriv(y + dt * (-0.203703703703703703 * k1 + 2.5 * k2 - 2.592592592592592592 * k3 + 1.296296296296296296 * k4));
+          vec4 k6 = deriv(y + dt * (0.029495804398148148 * k1 + 0.341796875 * k2 + 0.041594328703703703 * k3 + 0.400345413773148148 * k4 + 0.061767578125 * k5));
+
+          // Estimate the error using the embedded fourth order method
+          vec4 tmp = dt * (0.004293774801587301 * k1 - 0.018668586093857832 * k3 + 0.034155026830808080 * k4 + 0.019321986607142857 * k5 - 0.039102202145680406 * k6);
+          float err2 = dot(tmp, tmp);
+
+          // Wasteful, but only accept the step if error is within tolerance
+          bool accept = err2 <= tol2;
+          if (accept || !discardFails) y += dt * (0.097883597883597883 * k1 + 0.402576489533011272 * k3 + 0.210437710437710437 * k4 + 0.289102202145680406 * k6);
+
+          // Either way, adjust dt according to the estimate
+          dt *= clamp(safety * pow(tol2 / err2, accept ? 0.125 : 0.1), maxDecrease, maxIncrease);
+
+          return y;
+        }
+
+        const float GAMMA = 2.2;
+        const vec3 col0 = pow(vec3(0.9, 0.2, 0.6), vec3(GAMMA));
+        const vec3 col1 = pow(vec3(0.6, 0.9, 0.2), vec3(GAMMA));
+        const vec3 col2 = pow(vec3(0.2, 0.6, 0.9), vec3(GAMMA));
+
+        vec3 computeWeightedColor (vec2 y) {
+          vec2 r0 = y - p0;
+          vec2 r1 = y - p1;
+          vec2 r2 = y - p2;
+          float w0 = 1.0 / dot(r0, r0);
+          float w1 = 1.0 / dot(r1, r1);
+          float w2 = 1.0 / dot(r2, r2);
+
+          // Alternatively, don't weight and return the nearest
+          // return w0 > w1 ? (w2 > w0 ? col2 : col0) : (w2 > w1 ? col2 : col1);
+
+          return (w0 * col0 + w1 * col1 + w2 * col2) / (w0 + w1 + w2);
+        }
+
+        void main () {
+          vec4 y = vec4(xy, vec2(0));
+          float dtCurrent = 0.01;
+          for (int i = 0; i < ${steps}; i++) y = rk45(y, dtCurrent);
+          gl_FragColor = vec4(pow(computeWeightedColor(y.xy), vec3(1.0 / GAMMA)), 1);
+        }`,
+      attributes: {
+        uv: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        h2: (_, { h }) => h * h,
+        b: regl.prop("b"),
+        tol2: (_, { tolerance }) => tolerance * tolerance,
+        p0: (_, { magnets }) => [magnets[0].x, magnets[0].y],
+        p1: (_, { magnets }) => [magnets[1].x, magnets[1].y],
+        p2: (_, { magnets }) => [magnets[2].x, magnets[2].y],
+        discardFails: regl.prop('discard')
+      },
+      count: 3,
+      depth: { enable: false }
+    })
+  </script>
+</notebook>
