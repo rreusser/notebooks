@@ -1494,7 +1494,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Magnetic Pendulum</title>  <script type="module" crossorigin src="/notebooks/assets/index-8MkgFBaY.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Magnetic Pendulum</title>  <script type="module" crossorigin src="/notebooks/assets/index-CWpm4gMo.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1538,20 +1538,7 @@ main h6 {
 </div></div><div id="cell-40" class="observablehq observablehq--cell"><div><p>In both formats, the biggest challenge is computing trajectories efficiently. The pendulum may change direction quickly and so needs a small time step, but the pendulum can take a long time to come to a rest. These competing priorities make efficient evaluation essential.</p>
 </div></div><div id="cell-39" class="observablehq observablehq--cell"><div><p>Both therefore use the adaptive RK4(5) method. The CPU variant is implemented in <a href="https://observablehq.com/@rreusser/integration#ode45">@rreusser/integration#ode45</a>. Adaptive means that the timestep is modified on each step to maximize the step size while controlling the error. This is done through careful construction of the <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods">Runge-Kutta</a> method using coefficients of the <a href="https://en.wikipedia.org/wiki/Cash%E2%80%93Karp_method">Cash-Karp method</a>. The coefficients allow the same derivative evaluations to produce both a fifth order and so-called <em>embedded</em> fourth order estimate of the next state. The difference between the estimates produces an error estimate, which can subsequently be worked backwards into the timestep required to achieve a specified error threshold.</p>
 </div></div><div id="cell-50" class="observablehq observablehq--cell"><div><p>To get started, we define the derivative function</p>
-</div></div><div id="cell-49" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">vec4 deriv (vec4 y) {
-  vec2 pos = y.xy;
-  vec2 vel = y.zw;
-  vec2 r0 = p0 - pos;
-  vec2 r1 = p1 - pos;
-  vec2 r2 = p2 - pos;
-  float d0 = dot(r0, r0) + h2;
-  float d1 = dot(r1, r1) + h2;
-  float d2 = dot(r2, r2) + h2;
-  vec2 force = r0 / (d0 * d0 * sqrt(d0)) +
-               r1 / (d1 * d1 * sqrt(d1)) +
-               r2 / (d2 * d2 * sqrt(d2));
-  return vec4(vel, force - b * vel - pos);
-}
+</div></div><div id="cell-49" class="observablehq observablehq--cell"></div><div id="cell-55" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">
 </code></pre>
 </div></div><div id="cell-47" class="observablehq observablehq--cell"><div><p>The GLSL variant of <code>ode45</code> is reproduced below. It’s mostly equivalent to the CPU variant except modified for the limitations of GLSL control flow.</p>
 </div></div><div id="cell-42" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">const float safety = 0.95;
@@ -1614,8 +1601,30 @@ float dt = 0.01;
 for (int i = 0; i &lt; ; i++) y = ode45(y, dt);
 </code></pre>
 </div></div><div id="cell-52" class="observablehq observablehq--cell"><div><p>The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of GLSL fragment shaders, we can’t really know, so we just do our best and go with it.</p>
+<p>I’ve chosen a rainbow color palette from <a href="https://iquilezles.org/articles/palettes/">Inigo Quilez</a> and used a <a href="https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/">quasirandom sequence</a> from Martin Roberts to distribute the colors somewhat randomly so that adjacent colors around the unit circle aren’t also adjacent around the color wheel.</p>
+</div></div><div id="cell-67" class="observablehq observablehq--cell"></div><div id="cell-68" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">
+</code></pre>
+</div></div><div id="cell-69" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">
+</code></pre>
 </div></div><div id="cell-53" class="observablehq observablehq--cell"><div><p>That’s it. Once in place, adaptive methods are just great. It’s a pretty handy function which you’re free to lift and use. (The source is MIT Licensed.) You can view the live notebook <a href="https://observablehq.com/@rreusser/magnetic-pendulum">on Observable</a>.</p>
-</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div></main>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-59" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">function</span> <span class="tok-definition">srgbToLinear</span>(<span class="tok-definition">c</span>) {
+  <span class="tok-keyword">return</span> <span class="tok-variable">c</span> &lt;= <span class="tok-literal">0.04045</span>
+    ? <span class="tok-variable">c</span> / <span class="tok-literal">12.92</span>
+    : <span class="tok-variable">Math</span>.<span class="tok-definition">pow</span>((<span class="tok-variable">c</span> + <span class="tok-literal">0.055</span>) / <span class="tok-literal">1.055</span>, <span class="tok-literal">2.4</span>);
+}
+
+<span class="tok-keyword">function</span> <span class="tok-definition">hexToLinearRgb</span>(<span class="tok-definition">hex</span>) {
+  <span class="tok-variable">hex</span> = <span class="tok-variable">hex</span>.<span class="tok-definition">replace</span>(<span class="tok-string">/^#/</span>, <span class="tok-string">""</span>);
+  <span class="tok-keyword">if</span> (<span class="tok-variable">hex</span>.<span class="tok-definition">length</span> === <span class="tok-literal">3</span>) {
+    <span class="tok-variable">hex</span> = <span class="tok-variable">hex</span>.<span class="tok-definition">split</span>(<span class="tok-string">""</span>).<span class="tok-definition">map</span>(<span class="tok-definition">c</span> =&gt; <span class="tok-variable">c</span> + <span class="tok-variable">c</span>).<span class="tok-definition">join</span>(<span class="tok-string">""</span>);
+  }
+
+  <span class="tok-keyword">const</span> <span class="tok-definition">r</span> = <span class="tok-variable">srgbToLinear</span>(<span class="tok-variable">parseInt</span>(<span class="tok-variable">hex</span>.<span class="tok-definition">slice</span>(<span class="tok-literal">0</span>, <span class="tok-literal">2</span>), <span class="tok-literal">16</span>) / <span class="tok-literal">255</span>);
+  <span class="tok-keyword">const</span> <span class="tok-definition">g</span> = <span class="tok-variable">srgbToLinear</span>(<span class="tok-variable">parseInt</span>(<span class="tok-variable">hex</span>.<span class="tok-definition">slice</span>(<span class="tok-literal">2</span>, <span class="tok-literal">4</span>), <span class="tok-literal">16</span>) / <span class="tok-literal">255</span>);
+  <span class="tok-keyword">const</span> <span class="tok-definition">b</span> = <span class="tok-variable">srgbToLinear</span>(<span class="tok-variable">parseInt</span>(<span class="tok-variable">hex</span>.<span class="tok-definition">slice</span>(<span class="tok-literal">4</span>, <span class="tok-literal">6</span>), <span class="tok-literal">16</span>) / <span class="tok-literal">255</span>);
+
+  <span class="tok-keyword">return</span> [<span class="tok-variable">r</span>, <span class="tok-variable">g</span>, <span class="tok-variable">b</span>];
+}</code></pre><div id="cell-60" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">colorScheme</span> = <span class="tok-variable">d3</span>.<span class="tok-definition">schemeCategory10</span>.<span class="tok-definition">map</span>(<span class="tok-variable">hexToLinearRgb</span>).<span class="tok-definition">map</span>(([<span class="tok-definition">r</span>, <span class="tok-definition">g</span>, <span class="tok-definition">b</span>]) =&gt; <span class="tok-string">`vec3(</span>${<span class="tok-variable">r</span>}<span class="tok-string">,</span>${<span class="tok-variable">g</span>}<span class="tok-string">,</span>${<span class="tok-variable">b</span>}<span class="tok-string">)`</span>);</code></pre></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 

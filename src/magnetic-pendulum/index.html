@@ -55,7 +55,7 @@
       label: "pendulum height, h",
       value: 0.5
     }))
-    const b = view(Inputs.range([1e-8, 1], { label: "friction", value: 0.15 }))
+    const b = view(Inputs.range([1e-8, 1], { label: "friction", value: 0.2 }))
     const tolerance = view(Inputs.range([1e-6, 1e-2], {
       transform: Math.log,
       label: "tolerance",
@@ -64,6 +64,11 @@
     const steps = view(Inputs.range([0, 200], {
       label: "integration steps",
       value: 120,
+      step: 1
+    }))
+    const N = view(Inputs.range([2, 10], {
+      label: "Pendulum count",
+      value: 3,
       step: 1
     }))
     const opts = view(Inputs.checkbox([
@@ -81,7 +86,7 @@
   </script>
   <script id="11" type="text/markdown">
     ${tex.block`
-    \frac{d^2 \mathbf{x}}{dt^2} + b \frac{d\mathbf{x}}{dt} + \mathbf{x} = \sum_{n=1}^{3} \frac{\mathbf{X}_n - x}{\left(|\mathbf{X}_n - \mathbf{x}|^2 + h^2\right)^{5/2}}.
+    \frac{d^2 \mathbf{x}}{dt^2} + b \frac{d\mathbf{x}}{dt} + \mathbf{x} = \sum_{n=1}^{${N}} \frac{\mathbf{X}_n - x}{\left(|\mathbf{X}_n - \mathbf{x}|^2 + h^2\right)^{5/2}}.
     `}
   </script>
   <script id="12" type="text/markdown">
@@ -105,22 +110,20 @@
   <script id="50" type="text/markdown">
     To get started, we define the derivative function
   </script>
-  <script id="49" type="text/markdown">
-    ```glsl
-    vec4 deriv (vec4 y) {
+  <script id="49" type="text/x-typescript">
+    const i = Array.from({length: N}).map((_, i) => i);
+    const glslDeriv = `vec4 deriv (vec4 y) {
       vec2 pos = y.xy;
       vec2 vel = y.zw;
-      vec2 r0 = p0 - pos;
-      vec2 r1 = p1 - pos;
-      vec2 r2 = p2 - pos;
-      float d0 = dot(r0, r0) + h2;
-      float d1 = dot(r1, r1) + h2;
-      float d2 = dot(r2, r2) + h2;
-      vec2 force = r0 / (d0 * d0 * sqrt(d0)) +
-                   r1 / (d1 * d1 * sqrt(d1)) +
-                   r2 / (d2 * d2 * sqrt(d2));
+      ${i.map(i => `vec2 r${i} = p${i} - pos;`).join('\n  ')}
+      ${i.map(i => `float d${i} = dot(r${i}, r${i}) + h2;`).join('\n  ')}
+      vec2 force = ${i.map(i => `r${i} / (d${i} * d${i} * sqrt(d${i}))`).join(' +\n               ')};
       return vec4(vel, force - b * vel - pos);
-    }
+    }`
+  </script>
+  <script id="55" type="text/markdown">
+    ```glsl
+    ${glslDeriv}
     ```
   </script>
   <script id="47" type="text/markdown">
@@ -197,6 +200,47 @@
   </script>
   <script id="52" type="text/markdown">
     The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of GLSL fragment shaders, we can’t really know, so we just do our best and go with it.
+
+    I’ve chosen a rainbow color palette from [Inigo Quilez](https://iquilezles.org/articles/palettes/) and used a [quasirandom sequence](https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/) from Martin Roberts to distribute the colors somewhat randomly so that adjacent colors around the unit circle aren’t also adjacent around the color wheel.
+  </script>
+  <script id="67" type="text/x-typescript">
+    const i = Array.from({length: N}).map((_, i) => i);
+    const glslPalette = `float quasirandom (int n) {
+      return fract(0.5 + ${1.0 / 1.6180339887498948482} * float(n));
+    }
+    vec3 palette(float t) {
+      const vec3 a = vec3(0.5, 0.5, 0.5);
+      const vec3 b = vec3(0.5, 0.5, 0.5);
+      const vec3 c = vec3(1.0, 1.0, 1.0);
+      const vec3 d = vec3(0.00, 0.33, 0.67);
+      return a + b * cos(6.283185 * (c * t + d));
+    }`;
+    const glslScheme = `vec3 computeWeightedColor (vec2 y) {
+      ${i.map(i => `vec2 r${i} = y - p${i};`).join('\n  ')}
+      ${i.map(i => `float w${i} = 1.0 / dot(r${i}, r${i});`).join('\n  ')}
+      return (
+        ${
+          /*i.map(i => `w${i} * ${colorScheme[i]}`).join(' +\n    ')*/
+          i.map(i => {
+            const theta = Math.PI * 2 * i / N;
+            const a = 0.5 + 0.5 * Math.cos(theta);
+            const b = 0.5 + 0.5 * Math.cos(theta + Math.PI * 2 / 3);
+            const c = 0.5 + 0.5 * Math.cos(theta + Math.PI * 4 / 3);
+            return `w${i} * mix(palette(0.63 + quasirandom(${i})), vec3(0.9), 0.35)`;
+          }).join(' +\n    ')
+        }
+      ) / (${i.map(i => `w${i}`).join(' + ')});
+    }`;
+  </script>
+  <script id="68" type="text/markdown">
+    ```glsl
+    ${glslPalette}
+    ```
+  </script>
+  <script id="69" type="text/markdown">
+    ```glsl
+    ${glslScheme}
+    ```
   </script>
   <script id="53" type="text/markdown">
     That’s it. Once in place, adaptive methods are just great. It’s a pretty handy function which you’re free to lift and use. (The source is MIT Licensed.) You can view the live notebook [on Observable](https://observablehq.com/@rreusser/magnetic-pendulum).
@@ -221,29 +265,26 @@
     };
   </script>
   <script id="27" type="text/x-typescript">
-    const magnets = [
-      { index: 0, x: -Math.sqrt(3) * 0.5, y: -0.5 },
-      { index: 1, x: Math.sqrt(3) * 0.5, y: -0.5 },
-      { index: 2, x: 0, y: 1 }
-    ];
+    const magnets = Array.from({length: N}).map((_, i) => ({
+      index: i,
+      x: Math.sin(2 * Math.PI * i / N),
+      y: Math.cos(2 * Math.PI * i / N)
+    }));
   </script>
   <script id="24" type="text/x-typescript">
     function deriv(yp, [x, y, u, v]) {
-      const [m0, m1, m2] = magnets;
-      const r0x = m0.x - x;
-      const r0y = m0.y - y;
-      const r1x = m1.x - x;
-      const r1y = m1.y - y;
-      const r2x = m2.x - x;
-      const r2y = m2.y - y;
-      const d0 = r0x * r0x + r0y * r0y + h * h;
-      const d1 = r1x * r1x + r1y * r1y + h * h;
-      const d2 = r2x * r2x + r2y * r2y + h * h;
-      const den0 = 1.0 / (d0 * d0 * Math.sqrt(d0));
-      const den1 = 1.0 / (d1 * d1 * Math.sqrt(d1));
-      const den2 = 1.0 / (d2 * d2 * Math.sqrt(d2));
-      const fx = r0x * den0 + r1x * den1 + r2x * den2;
-      const fy = r0y * den0 + r1y * den1 + r2y * den2;
+      let fx = 0.0;
+      let fy = 0.0;
+
+      for (let i = 0; i < magnets.length; i++) {
+        const dx = magnets[i].x - x;
+        const dy = magnets[i].y - y;
+        const d = dx * dx + dy * dy + h * h;
+        const inv = 1.0 / (d * d * Math.sqrt(d));
+        fx += dx * inv;
+        fy += dy * inv;
+      }
+
       yp[0] = u;
       yp[1] = v;
       yp[2] = fx - b * u - x;
@@ -271,14 +312,28 @@
         yScale.invert(event.offsetY)
       ]));
     });
-    //window.addEventListener("mouseout", () => (state.trajectoryStart = null));
+    //window.addEventListener("mouseout", () => updateTrajectory(null));
 
     const makeline = d3
       .line()
       .x(({ x }) => xScale.apply(x))
       .y(({ y }) => yScale.apply(y));
     function updateTrajectory (trajectory) {
-      const line = svg
+      svg
+        .selectAll(".trajectorybg")
+        .data([trajectory || []])
+        .join(
+          (enter) =>
+            enter
+              .append("path")
+              .style("fill", "none")
+              .style("stroke-width", 5)
+              .style("stroke", "rgba(255,255,255,0.6)")
+              .attr("class", "trajectorybg")
+              .attr("d", makeline),
+          (update) => update.attr("d", makeline)
+        );
+      svg
         .selectAll(".trajectory")
         .data([trajectory || []])
         .join(
@@ -286,8 +341,8 @@
             enter
               .append("path")
               .style("fill", "none")
-              .style("stroke-width", 1)
-              .style("stroke", "black")
+              .style("stroke-width", 2)
+              .style("stroke", "blue")
               .attr("class", "trajectory")
               .attr("d", makeline),
           (update) => update.attr("d", makeline)
@@ -361,6 +416,11 @@
     const configureAxes = createAxisConfiguration(mat4, regl)
   </script>
   <script id="21" type="text/x-typescript">
+    const magnetUniforms = {};
+    for (let i = 0; i < N; i++) {
+      magnetUniforms[`p${i}`] = (_, { magnets }) => [magnets[i].x, magnets[i].y];
+    }
+
     const drawField = regl({
       vert: `
         precision highp float;
@@ -375,26 +435,10 @@
         precision highp float;
         varying vec2 xy;
         uniform float h2, b, tol2;
-        uniform vec2 p0, p1, p2;
+        uniform vec2 ${Object.keys(magnetUniforms).join(', ')};
         uniform bool discardFails;
 
-        vec4 deriv (vec4 y) {
-          vec2 pos = y.xy;
-          vec2 vel = y.zw;
-          vec2 r0 = p0 - pos;
-          vec2 r1 = p1 - pos;
-          vec2 r2 = p2 - pos;
-          float d0 = dot(r0, r0) + h2;
-          float d1 = dot(r1, r1) + h2;
-          float d2 = dot(r2, r2) + h2;
-          vec2 force = r0 / (d0 * d0 * sqrt(d0)) +
-                       r1 / (d1 * d1 * sqrt(d1)) +
-                       r2 / (d2 * d2 * sqrt(d2));
-          // Derivative of first two components (pos) is vel
-          // Derivative of second two components (vel) is accel,
-          // which comes from putting everything on RHS of the ODE
-          return vec4(vel, force - b * vel - pos);
-        }
+        ${glslDeriv}
 
         const float safety = 0.95;
         const float maxDecrease = 0.02;
@@ -423,30 +467,14 @@
           return y;
         }
 
-        const float GAMMA = 2.2;
-        const vec3 col0 = pow(vec3(0.9, 0.2, 0.6), vec3(GAMMA));
-        const vec3 col1 = pow(vec3(0.6, 0.9, 0.2), vec3(GAMMA));
-        const vec3 col2 = pow(vec3(0.2, 0.6, 0.9), vec3(GAMMA));
-
-        vec3 computeWeightedColor (vec2 y) {
-          vec2 r0 = y - p0;
-          vec2 r1 = y - p1;
-          vec2 r2 = y - p2;
-          float w0 = 1.0 / dot(r0, r0);
-          float w1 = 1.0 / dot(r1, r1);
-          float w2 = 1.0 / dot(r2, r2);
-
-          // Alternatively, don't weight and return the nearest
-          // return w0 > w1 ? (w2 > w0 ? col2 : col0) : (w2 > w1 ? col2 : col1);
-
-          return (w0 * col0 + w1 * col1 + w2 * col2) / (w0 + w1 + w2);
-        }
+        ${glslPalette}
+        ${glslScheme}
 
         void main () {
           vec4 y = vec4(xy, vec2(0));
           float dtCurrent = 0.01;
           for (int i = 0; i < ${steps}; i++) y = rk45(y, dtCurrent);
-          gl_FragColor = vec4(pow(computeWeightedColor(y.xy), vec3(1.0 / GAMMA)), 1);
+          gl_FragColor = vec4(computeWeightedColor(y.xy), 1);
         }`,
       attributes: {
         uv: [-4, -4, 4, -4, 0, 4]
@@ -455,13 +483,34 @@
         h2: (_, { h }) => h * h,
         b: regl.prop("b"),
         tol2: (_, { tolerance }) => tolerance * tolerance,
-        p0: (_, { magnets }) => [magnets[0].x, magnets[0].y],
-        p1: (_, { magnets }) => [magnets[1].x, magnets[1].y],
-        p2: (_, { magnets }) => [magnets[2].x, magnets[2].y],
-        discardFails: regl.prop('discard')
+        discardFails: regl.prop('discard'),
+        ...magnetUniforms
       },
       count: 3,
       depth: { enable: false }
     })
+  </script>
+  <script id="59" type="text/x-typescript" pinned="">
+    function srgbToLinear(c) {
+      return c <= 0.04045
+        ? c / 12.92
+        : Math.pow((c + 0.055) / 1.055, 2.4);
+    }
+
+    function hexToLinearRgb(hex) {
+      hex = hex.replace(/^#/, "");
+      if (hex.length === 3) {
+        hex = hex.split("").map(c => c + c).join("");
+      }
+
+      const r = srgbToLinear(parseInt(hex.slice(0, 2), 16) / 255);
+      const g = srgbToLinear(parseInt(hex.slice(2, 4), 16) / 255);
+      const b = srgbToLinear(parseInt(hex.slice(4, 6), 16) / 255);
+
+      return [r, g, b];
+    }
+  </script>
+  <script id="60" type="text/x-typescript" pinned="">
+    const colorScheme = d3.schemeCategory10.map(hexToLinearRgb).map(([r, g, b]) => `vec3(${r},${g},${b})`);
   </script>
 </notebook>
