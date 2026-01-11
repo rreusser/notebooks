@@ -84,14 +84,37 @@ export default defineConfig({
         return Handlebars.compile(template)(data);
       },
       transformNotebook: async function (notebook, { filename }) {
+        // Inject early console patching as the first cell (dev only)
+        const consolePatching = `
+if (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname.match(/127\\.0\\.0\\.1/))) {
+  if (!window.__earlyConsoleLogs) {
+    window.__earlyConsoleLogs = [];
+    window.__originalConsole = {};
+    ['log', 'info', 'warn', 'error', 'debug'].forEach(function(level) {
+      window.__originalConsole[level] = console[level];
+      console[level] = function() {
+        var args = Array.prototype.slice.call(arguments);
+        window.__originalConsole[level].apply(console, args);
+        window.__earlyConsoleLogs.push({ level: level, args: args, timestamp: Date.now() });
+      };
+    });
+  }
+}`;
+        notebook.cells.unshift({
+          id: '__console_patch',
+          value: consolePatching,
+          mode: 'js'
+        });
+
         // Remove the leading h1, preserving additional cell content, if present.
-        if (!notebook.cells.length) return notebook;
-        const lines = notebook.cells[0].value.split("\n") || [];
-        if (lines[0].startsWith("# ")) lines.splice(0, 1);
+        // Note: index shifted by 1 due to console patching cell
+        if (notebook.cells.length < 2) return notebook;
+        const lines = notebook.cells[1].value.split("\n") || [];
+        if (lines[0]?.startsWith("# ")) lines.splice(0, 1);
         if (lines.filter(Boolean).length) {
-          notebook.cells[0].value = lines.join("\n");
+          notebook.cells[1].value = lines.join("\n");
         } else {
-          notebook.cells.splice(0, 1);
+          notebook.cells.splice(1, 1);
         }
         return notebook;
       },

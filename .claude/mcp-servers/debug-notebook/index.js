@@ -107,7 +107,7 @@ function handleBrowserMessage(message, ws) {
   const { type, sessionId, data, timestamp, requestId } = message;
 
   // Handle responses to our requests
-  if (type === 'cell_value_response' || type === 'cells_list_response') {
+  if (type === 'cell_value_response' || type === 'cells_list_response' || type === 'errors_response') {
     const pending = pendingRequests.get(requestId);
     if (pending) {
       clearTimeout(pending.timer);
@@ -266,6 +266,13 @@ async function requestCellValue(cellName, timeout = DEFAULT_TIMEOUT) {
  */
 async function requestCellsList(timeout = DEFAULT_TIMEOUT) {
   return createRequest('list_cells', {}, timeout);
+}
+
+/**
+ * Request errors from browser
+ */
+async function requestErrors(timeout = DEFAULT_TIMEOUT) {
+  return createRequest('get_errors', {}, timeout);
 }
 
 /**
@@ -526,6 +533,20 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             }
           }
         }
+      },
+      {
+        name: 'get_errors',
+        description: 'Get all runtime errors from cells in the notebook. Checks each cell and returns errors with cell name, message, and stack trace.',
+        inputSchema: {
+          type: 'object',
+          properties: {
+            timeout_ms: {
+              type: 'number',
+              description: 'Maximum time to wait in milliseconds',
+              default: DEFAULT_TIMEOUT
+            }
+          }
+        }
       }
     ]
   };
@@ -633,6 +654,45 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         content: [{
           type: 'text',
           text: formatSessionOutput(session)
+        }]
+      };
+    }
+
+    if (name === 'get_errors') {
+      const { timeout_ms = DEFAULT_TIMEOUT } = args || {};
+
+      const response = await requestErrors(timeout_ms);
+
+      if (!response.success) {
+        return {
+          content: [{ type: 'text', text: `Error: ${response.error}` }],
+          isError: true
+        };
+      }
+
+      if (response.errors.length === 0) {
+        return {
+          content: [{
+            type: 'text',
+            text: 'No errors found in notebook cells.'
+          }]
+        };
+      }
+
+      const errorList = response.errors.map(e => {
+        let msg = `Cell: ${e.cell}\nError: ${e.error}`;
+        if (e.stack) {
+          // Show first few lines of stack
+          const stackLines = e.stack.split('\n').slice(0, 4).join('\n');
+          msg += `\nStack:\n${stackLines}`;
+        }
+        return msg;
+      }).join('\n\n---\n\n');
+
+      return {
+        content: [{
+          type: 'text',
+          text: `Found ${response.errors.length} error(s):\n\n${errorList}`
         }]
       };
     }

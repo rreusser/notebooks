@@ -10,10 +10,19 @@ const RECONNECT_INTERVAL = 2000;
 const ERROR_CHECK_INTERVAL = 500;
 const SESSION_TIMEOUT = 5000;  // Time to wait for errors after page load
 
+const REFRESH_SESSION_KEY = '__debug_refresh_session';
+
 class DebugClient {
   constructor() {
     this.ws = null;
-    this.sessionId = `session-${Date.now()}`;
+    // Check for pending refresh session (stored before reload)
+    const pendingSession = sessionStorage.getItem(REFRESH_SESSION_KEY);
+    if (pendingSession) {
+      this.sessionId = pendingSession;
+      sessionStorage.removeItem(REFRESH_SESSION_KEY);
+    } else {
+      this.sessionId = `session-${Date.now()}`;
+    }
     this.connected = false;
     this.messageQueue = [];
     this.originalConsole = {};
@@ -60,6 +69,37 @@ class DebugClient {
     window.__debugClient = this;
 
     console.log(`[DebugClient] Session started: ${this.sessionId}`);
+
+    // Signal notebook ready when runtime is available
+    this.signalReady();
+  }
+
+  /**
+   * Signal that the notebook is ready
+   */
+  signalReady() {
+    // Check if runtime is already available
+    const checkReady = () => {
+      const runtime = this.getRuntimeModule();
+      if (runtime) {
+        console.log('[NOTEBOOK_READY]');
+        return true;
+      }
+      return false;
+    };
+
+    // If runtime is already available, signal immediately
+    if (checkReady()) return;
+
+    // Otherwise poll briefly (runtime should be available very soon)
+    let attempts = 0;
+    const maxAttempts = 50; // 50 * 100ms = 5 seconds max
+    const interval = setInterval(() => {
+      attempts++;
+      if (checkReady() || attempts >= maxAttempts) {
+        clearInterval(interval);
+      }
+    }, 100);
   }
 
   /**
@@ -111,8 +151,9 @@ class DebugClient {
    */
   handleServerMessage(message) {
     if (message.type === 'refresh') {
-      console.log('[DebugClient] Received refresh command');
-      this.sessionId = message.sessionId;
+      console.log('[DebugClient] Received refresh command, session:', message.sessionId);
+      // Store sessionId so the new page uses it after reload
+      sessionStorage.setItem(REFRESH_SESSION_KEY, message.sessionId);
       window.location.reload();
       return;
     }
@@ -124,6 +165,11 @@ class DebugClient {
 
     if (message.type === 'list_cells') {
       this.handleListCellsRequest(message);
+      return;
+    }
+
+    if (message.type === 'get_errors') {
+      this.handleGetErrorsRequest(message);
       return;
     }
   }
@@ -214,6 +260,73 @@ class DebugClient {
   }
 
   /**
+   * Handle get errors request from server
+   */
+  async handleGetErrorsRequest(message) {
+    const errors = [];
+
+    // Method 1: Check DOM for error elements (catches errors during cell definition)
+    const errorSelectors = [
+      '.observablehq--error',
+      '.notebook-error',
+      '[data-error]',
+      '.error'
+    ];
+
+    for (const selector of errorSelectors) {
+      document.querySelectorAll(selector).forEach(el => {
+        const cellElement = el.closest('[id^="cell-"]') || el.closest('script') || el.parentElement;
+        const cellId = cellElement?.id || 'unknown';
+        const errorText = el.textContent?.trim() || el.getAttribute('data-error') || 'Unknown error';
+
+        // Avoid duplicates
+        if (!errors.some(e => e.cell === cellId && e.error === errorText)) {
+          errors.push({
+            cell: cellId,
+            error: errorText,
+            source: 'dom'
+          });
+        }
+      });
+    }
+
+    // Method 2: Check runtime cells for errors (catches runtime errors)
+    const runtime = this.getRuntimeModule();
+    if (runtime && runtime._scope) {
+      const cells = Array.from(runtime._scope.keys())
+        .filter(name => !name.startsWith('_'));
+
+      for (const cellName of cells) {
+        try {
+          await Promise.race([
+            runtime.value(cellName),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 100))
+          ]);
+        } catch (err) {
+          if (err.message !== 'timeout') {
+            // Avoid duplicates
+            if (!errors.some(e => e.cell === cellName)) {
+              errors.push({
+                cell: cellName,
+                error: err.message,
+                stack: err.stack,
+                source: 'runtime'
+              });
+            }
+          }
+        }
+      }
+    }
+
+    this.send({
+      type: 'errors_response',
+      requestId: message.requestId,
+      success: true,
+      errors
+    });
+  }
+
+  /**
    * Send message to server
    */
   send(message) {
@@ -237,8 +350,11 @@ class DebugClient {
   patchConsole() {
     const levels = ['log', 'info', 'warn', 'error', 'debug'];
 
+    // Use early-patched original console if available
+    const earlyOriginal = window.__originalConsole || {};
+
     levels.forEach(level => {
-      this.originalConsole[level] = console[level];
+      this.originalConsole[level] = earlyOriginal[level] || console[level];
 
       console[level] = (...args) => {
         // Call original console method
@@ -254,6 +370,21 @@ class DebugClient {
         });
       };
     });
+
+    // Flush early console logs that were captured before debug client loaded
+    if (window.__earlyConsoleLogs && window.__earlyConsoleLogs.length > 0) {
+      window.__earlyConsoleLogs.forEach(log => {
+        this.send({
+          type: 'log',
+          timestamp: log.timestamp,
+          data: {
+            level: log.level,
+            args: log.args.map(arg => this.serializeArg(arg))
+          }
+        });
+      });
+      window.__earlyConsoleLogs = []; // Clear after flushing
+    }
   }
 
   /**

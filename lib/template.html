@@ -2,6 +2,21 @@
 <html lang="en">
 <head>
   <meta charset="utf-8" />
+  <!-- Early console patching - must be first to capture all logs -->
+  <script>
+    if (window.location.hostname === 'localhost' || window.location.hostname.match(/127\.0\.0\.1/)) {
+      window.__earlyConsoleLogs = [];
+      window.__originalConsole = {};
+      ['log', 'info', 'warn', 'error', 'debug'].forEach(function(level) {
+        window.__originalConsole[level] = console[level];
+        console[level] = function() {
+          var args = Array.prototype.slice.call(arguments);
+          window.__originalConsole[level].apply(console, args);
+          window.__earlyConsoleLogs.push({ level: level, args: args, timestamp: Date.now() });
+        };
+      });
+    }
+  </script>
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="author" content="Ricky Reusser" />
   <meta property="article:author" content="Ricky Reusser" />
