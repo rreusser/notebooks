@@ -1547,7 +1547,7 @@ main h6 {
 </div></div><div id="cell-17" class="observablehq observablehq--cell"><div><p>The four basis function weights in the interval  are</p>
 </div></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"><div><h2 id="monotone" tabindex="-1"><a href="#monotone">Monotone</a></h2>
 <p>Monotone interpolation (as in D3’s <a href="https://github.com/d3/d3-shape#curveMonotoneX"><code>curveMonotoneX</code></a>) is a Hermite spline with clipped slopes so that local extrema only occur at the data points. It’s a compromise between B-spline (too smooth, undershoots) and Hermite (overshoots).</p>
-</div></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"><div><p><strong>Update</strong>: In 2D, monotone interpolation doesn’t commute—interpolating horizontally then vertically gives different results than vertically then horizontally. So this was a fun exercise, but monotone didn’t pan out for my use case.</p>
+</div></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"><div><p><strong>Update</strong>: In 2D, monotone interpolation doesn’t commute. Interpolating horizontally then vertically gives different results than vertically then horizontally. So this was a fun exercise, but monotone didn’t pan out for my use case.</p>
 </div></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
