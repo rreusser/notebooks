@@ -11,9 +11,7 @@
   </script>
 
   <script type="text/markdown">
-    The diagram below illustrates three different methods of cubic spline interpolation which in the style of D3 I'll call cubic basis and Hermite splines. (In addition, I've tested out _monotone_ Hermite interpolation.)
-
-    Click to plot the derivatives as well, which provides some interesting insight to just how smooth each method is and how monotone interpolation works.
+    This diagram compares three cubic spline interpolation methods: B-spline (cubic basis), Hermite, and monotone Hermite. Drag the points to see how each method responds. Toggle "derivatives" to see how smooth each method is.
   </script>
 
   <script type="module">
@@ -398,14 +396,16 @@
       display(html`
     <figure style="max-width:100%">
       ${svg.node()}
-      <figcaption>Three styles of cubic interpolation: <span style="color:#f38">cubic basis</span> which undershoots the data, <span style="color:#38f">Hermite</span> which overshoots the data, and <span style="color:#3d8">monotone cubic</span> which clips the slopes of Hermite interpolation to enforce monotonicity and offer a compromise.</figcaption>
+      <figcaption><span style="color:#f38">B-spline</span> undershoots, <span style="color:#38f">Hermite</span> overshoots, and <span style="color:#3d8">monotone</span> clips slopes to stay in between.</figcaption>
     </figure>
     `);
     }
   </script>
 
   <script type="text/markdown">
-    Cubic basis spline interpolation uses data as spline control points. A simple method for computing it is repeated linear interpolation, referred to as [De Casteljau's algorithm](https://en.wikipedia.org/wiki/De_Casteljau%27s_algorithm). Since the weight of points in each linear interpolation is in the range ${tex`[0, 1]`}, the weight of points in the repeated sequence of linear interpolations must also be in the range ${tex`[0, 1]`}. This form lends itself well to efficient interpolation using built-in linear filtering capability of GPU hardware. This method is described in *[GPU Gems Chapter 20: Fast Third-Order Texture Filtering](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering)* and tested out in the notebook [Bicubic Texture Interpolation using Linear Filtering](https://rreusser.github.io/notebooks/bicubic-texture-interpolation-using-linear-filtering/).
+    ## B-spline
+
+    B-spline interpolation treats data points as control points. It can be computed via repeated linear interpolation ([De Casteljau's algorithm](https://en.wikipedia.org/wiki/De_Casteljau%27s_algorithm)), which keeps all weights in ${tex`[0, 1]`}. This makes it efficient on GPUs using hardware linear filtering. See *[GPU Gems Chapter 20](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering)* and my notebook [Bicubic Texture Interpolation using Linear Filtering](https://rreusser.github.io/notebooks/bicubic-texture-interpolation-using-linear-filtering/).
   </script>
 
   <script type="text/markdown">
@@ -444,13 +444,15 @@
           Plot.line(data, { x: "u", y: "b3", stroke: "#d83", strokeWidth: 2 })
         ]
       })}
-      <figcaption>Basis functions for B-spline interpolation. Note the maximum value of 2/3, which results in undershoot.</figcaption>
+      <figcaption>B-spline basis functions. The maximum is 2/3, causing undershoot.</figcaption>
       </figure>`);
     }
   </script>
 
   <script type="text/markdown">
-    Hermite interpolation represents a cubic spline with the derivative specified at two endpoints through which it passes. For one-dimensional interpolation, this derivative can be computed as a simple finite difference of adjacent points. This method results in negative contribution of points, which results in overshoot.
+    ## Hermite
+
+    Hermite interpolation passes through endpoints with a specified derivative. For 1D data, the derivative is just a finite difference of neighboring points. Unlike B-splines, some basis weights go negative, which causes overshoot. These negative weights preclude using the linear filtering trick on the GPU.
   </script>
 
   <script type="text/markdown">
@@ -458,7 +460,7 @@
   </script>
 
   <script type="module">
-    display(tex`f(u) = \frac{1}{2}
+    display(tex.block`f(u) = \frac{1}{2}
     \begin{bmatrix}
     -u^3 + 2u^2 - u \\
     3u^3 - 5u^2 + 2 \\
@@ -488,30 +490,30 @@
           Plot.line(data, { x: "u", y: "b3", stroke: "#d83", strokeWidth: 2 })
         ]
       })}
-      <figcaption>Basis functions for Hermite interpolation. Note the slightly negative weights which result in overshoot.</figcaption>
+      <figcaption>Hermite basis functions. Negative weights cause overshoot.</figcaption>
       </figure>`);
     }
   </script>
 
   <script type="text/markdown">
-    Finally, there's one more option using the concepts from [`curveMonotoneX`](https://github.com/d3/d3-shape#curveMonotoneX) in d3. It's a Hermite spline (passes through endpoints with a derivative) but clips the slope to ensure that local extrema may only occur at the points. I'm holding out this will be a good balance between cubic basis splines which are too fuzzy and Hermite splines which overshoot the data.
+    ## Monotone
+
+    Monotone interpolation (as in D3's [`curveMonotoneX`](https://github.com/d3/d3-shape#curveMonotoneX)) is a Hermite spline with clipped slopes so that local extrema only occur at the data points. It's a compromise between B-spline (too smooth, undershoots) and Hermite (overshoots).
   </script>
 
   <script type="module">
-    display(tex`
+    display(tex.block`
     \begin{aligned}
     s_0 &= f_1 - f_0 \\
     s_1 &= f_2 - f_1 \\
     f'_1 &= (\operatorname{sign}(s_0) + \operatorname{sign}(s_1))
-    \operatorname{min}\left(\left|s_0\right|, \left|s_1\right|, \left|\frac{s_0 + s_1}{4}\right|\right)
-    \end{aligned}`)
-  </script>
-
-  <script type="module">
-    display(tex`
-    \begin{aligned}
+    \operatorname{min}\left(\left|s_0\right|, \left|s_1\right|, \left|\frac{s_0 + s_1}{4}\right|\right) \\
     \Delta &= f_2 - f_1 \\
     f(u) &= f_1 + f'_1 u + (3\Delta - 2f'_1 - f'_2) u^2 + (f'_1 + f'_2 - 2\Delta) u^3
     \end{aligned}`)
+  </script>
+
+  <script type="text/markdown">
+    **Update**: In 2D, monotone interpolation doesn't commute—interpolating horizontally then vertically gives different results than vertically then horizontally. So this was a fun exercise, but monotone didn't pan out for my use case.
   </script>
 </notebook>
