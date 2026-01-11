@@ -155,15 +155,23 @@ function handleBrowserMessage(message, ws) {
   // Handle session start
   if (type === 'session_start') {
     currentSessionId = sessionId;
-    sessions.set(sessionId, {
-      id: sessionId,
-      startTime: timestamp,
-      logs: [],
-      errors: [],
-      binary: [],
-      ended: false
-    });
-    console.error(`[Server] Session started: ${sessionId}`);
+    // Check if session already exists (early logs may have created it)
+    const existing = sessions.get(sessionId);
+    if (existing) {
+      // Update start time but preserve existing logs
+      existing.startTime = timestamp;
+      console.error(`[Server] Session started (merged): ${sessionId}`);
+    } else {
+      sessions.set(sessionId, {
+        id: sessionId,
+        startTime: timestamp,
+        logs: [],
+        errors: [],
+        binary: [],
+        ended: false
+      });
+      console.error(`[Server] Session started: ${sessionId}`);
+    }
     return;
   }
 
@@ -338,26 +346,47 @@ async function waitForCompletion(sessionId, timeout) {
 
 /**
  * Format session output for display
+ * @param {object} session - Session data
+ * @param {string} filter - Optional substring filter for logs
  */
-function formatSessionOutput(session) {
+function formatSessionOutput(session, filter) {
   if (!session) {
     return 'No session data available';
   }
 
   const output = [];
 
+  // Filter logs if filter provided
+  let filteredLogs = session.logs || [];
+  if (filter) {
+    filteredLogs = filteredLogs.filter(log => {
+      const logText = log.args?.map(arg => {
+        if (typeof arg === 'object') {
+          return JSON.stringify(arg);
+        }
+        return String(arg);
+      }).join(' ') || '';
+      return logText.includes(filter);
+    });
+  }
+
   // Summary
   output.push(`Session: ${session.id}`);
   const startTime = session.startTime ? new Date(session.startTime).toISOString() : 'unknown';
   output.push(`Started: ${startTime}`);
-  output.push(`Logs: ${session.logs?.length || 0}`);
+  if (filter) {
+    output.push(`Filter: "${filter}"`);
+    output.push(`Logs: ${filteredLogs.length} (of ${session.logs?.length || 0} total)`);
+  } else {
+    output.push(`Logs: ${session.logs?.length || 0}`);
+  }
   output.push(`Errors: ${session.errors?.length || 0}`);
   output.push('');
 
   // Logs
-  if (session.logs && session.logs.length > 0) {
+  if (filteredLogs.length > 0) {
     output.push('=== LOGS ===');
-    session.logs.forEach(log => {
+    filteredLogs.forEach(log => {
       const time = log.timestamp ? new Date(log.timestamp).toISOString().split('T')[1].slice(0, -1) : '??:??:??';
       const level = log.level.toUpperCase().padEnd(5);
       const args = log.args?.map(arg => {
@@ -530,6 +559,10 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
             session_id: {
               type: 'string',
               description: 'Specific session ID (optional, uses current session if not provided)'
+            },
+            filter: {
+              type: 'string',
+              description: 'Filter logs by substring match (e.g., "[DebugClient]" to show only debug client logs)'
             }
           }
         }
@@ -567,21 +600,33 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       // Wait for completion
       const result = await waitForCompletion(sessionId, timeout);
 
-      // Format response
-      const statusText = result.completed
-        ? `✓ Notebook completed in ${result.duration}ms`
-        : `⏱ Timeout after ${result.duration}ms (still waiting for completion)`;
+      // Format minimal response (logs available via get_session_logs)
+      const session = result.session;
+      const errorCount = session?.errors?.length || 0;
+      const logCount = session?.logs?.length || 0;
 
-      const output = [
-        statusText,
-        '',
-        formatSessionOutput(result.session)
-      ].join('\n');
+      const statusText = result.completed
+        ? `✓ Notebook refreshed in ${result.duration}ms`
+        : `⏱ Timeout after ${result.duration}ms`;
+
+      const output = [statusText];
+
+      if (errorCount > 0) {
+        output.push(`Errors: ${errorCount}`);
+        // Include error details since they're important
+        session.errors.forEach(error => {
+          output.push(`  - ${error.message}${error.cellId ? ` (cell: ${error.cellId})` : ''}`);
+        });
+      } else {
+        output.push('No errors');
+      }
+
+      output.push(`Logs: ${logCount} (use get_session_logs to view)`);
 
       return {
         content: [{
           type: 'text',
-          text: output
+          text: output.join('\n')
         }]
       };
     }
@@ -635,7 +680,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     }
 
     if (name === 'get_session_logs') {
-      const { session_id } = args || {};
+      const { session_id, filter } = args || {};
 
       const sessionId = session_id || currentSessionId;
 
@@ -653,7 +698,7 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
       return {
         content: [{
           type: 'text',
-          text: formatSessionOutput(session)
+          text: formatSessionOutput(session, filter)
         }]
       };
     }
