@@ -1,0 +1,1570 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Fast Generalized Winding Numbers in 2D</title>
+
+  <script id="1760" type="text/markdown">
+    # Fast Generalized Winding Numbers in 2D
+  </script>
+
+  <script id="imports" type="module">
+    import createREGL from 'npm:regl@2.1.1'
+    import { reglCanvas } from './lib/regl-canvas.js'
+    import simplify from 'npm:simplify-js@1.2.4'
+    import * as d3 from 'npm:d3@7'
+
+    const colorscale = d3.quantize(d3.interpolateRdBu, 256).map((c) => {
+      return (c = d3.rgb(c)), [c.r, c.g, c.b, 1];
+    })
+  </script>
+
+  <script id="1761" type="text/markdown">
+    This notebook demonstrates computation of winding numbers in two dimensions based on Jacobson *et al.'s* *[Robust Inside-Outside Segmentation using Generalized Winding Numbers](https://www.cs.utah.edu/~ladislav/jacobson13robust/jacobson13robust.html)* as well as the subsequent optimization of Barill *et al.* in *[Fast Winding Numbers for Soups and Clouds](https://www.dgp.toronto.edu/projects/fast-winding-numbers/)*.
+
+    The winding number of a curve relative to a point is a straightforward concept. We trace the curve, add up the angle swept out relative to the point—positive for counterclockwise motion and negative for clockwise—and divide by ${tex`2\pi`}. For any point not on the curve itself, this procedure counts count how many times the curve encircles the point, ${tex`+1`} for each counterclockwise encircling, ${tex`-1`} for each clockwise encircling, and ${tex`0`} for points entirely outside the curve.
+
+
+  </script>
+  <script id="1762" type="module">
+    view(html`<figure>
+    ${await FileAttachment("winding@6.svg").image()}
+    <figcaption>A winding number is computed by adding up the angle swept out as the curve is traced and dividing by ${tex`2\pi`}. Inside a counterclockwise-oriented curve, this adds up to ${tex`+1`}; for points outside, the angles cancel and add up to ${tex`0`}. </figcaption>
+    </figure>`);
+  </script>
+  <script id="240" type="text/markdown">
+    Stating this procedure mathematically, we write the winding number relative to point ${tex`\mathbf{q}`} as the integral
+    ${tex.block`w(\mathbf{q}) = \frac{1}{2\pi} \oint_C d\theta.`}
+    For a curve comprised of discrete line segments, the integral becomes the summation
+    ${tex.block`w(\mathbf{q}) = \frac{1}{2\pi} \sum_{i=1}^{n} \theta_i.`}
+    Jacobson *et al.* offer a formula for computing the angle swept out relative to point ${tex`\mathbf{p}`} by the line segment with endpoints ${tex`\mathbf{c}_i`} and ${tex`\mathbf{c}_{i+1}`}. Defining ${tex`\mathbf{a} = \mathbf{c}_i - \mathbf{q}`} and ${tex`\mathbf{b} = \mathbf{c}_{i+1} - \mathbf{q}`}, the angle swept out by the segment is
+    ${tex.block`
+    \tan\left(\theta_i(\mathbf{q})\right) = \frac{a_x b_y - a_y b_x}{a_x b_x + a_y b_y}.
+    `}
+    The curve does not need to be closed to use the above equation. The figure below plots the winding number induced by a single segment of length ${tex`l`}. Color represents this generalized winding number. (The contours are scaled by ${tex`1/l`} to better represent the shape of the field.) The winding number is exactly ${tex`+1/2`} on one side of the segment, ${tex`-1/2`} on the other, and varying shades between as we move around the segment from one side to the other.
+  </script>
+  <script id="2168" type="module">
+    const _reglCanvas0 = reglCanvas(createREGL, {
+      pixelRatio: devicePixelRatio,
+      extensions: ["OES_standard_derivatives"]
+    });
+    const regl0 = _reglCanvas0.value.attachResize(Math.min(640, width), Math.min(640, width) * 0.6);
+    const texture0 = regl0.texture({
+      data: [colorscale],
+      min: "linear",
+      mag: "linear"
+    });
+    regl0.drawField = regl0({
+      vert: `
+      precision highp float;
+      attribute vec2 xy;
+      void main () {
+        gl_Position = vec4(xy, 0, 1);
+      }`,
+      frag: `
+      #extension GL_OES_standard_derivatives : enable
+      precision highp float;
+      uniform vec2 res;
+      uniform float rad;
+      uniform sampler2D colorscale;
+
+      float gridFactor (float parameter, float width, float feather) {
+        float w1 = width - feather * 0.5;
+        float d = length(vec2(dFdx(parameter), dFdy(parameter)));
+        float looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+        return smoothstep(d * (w1 + feather), d * w1, looped);
+      }
+
+      float field (vec2 p1, vec2 p2, vec2 q) {
+        vec2 a = p1 - q;
+        vec2 b = p2 - q;
+        return atan(a.x * b.y - a.y * b.x, dot(a, b)) / (3.14159 * 2.0);
+      }
+
+      const int count = 64;
+      vec2 pt (int i) {
+        float theta = float(i) / float(count - 1) * (3.14159 * 2.0) * rad;
+        return 0.5 * vec2(cos(theta), sin(theta));
+      }
+
+      float contrast (float x) {
+        return 0.5 + atan(x * 5.0) / 3.14159;
+      }
+
+      void main () {
+        vec2 q = (gl_FragCoord.xy / res - 0.5) * 2.0 * vec2(res.x / res.y, 1);
+        float f = field(vec2(-rad, 0), vec2(rad, 0), q);
+        const float wid = ${(devicePixelRatio / 2).toFixed(1)};
+        float contours = 1.0 - gridFactor(6.0 * f / rad, wid, 2.0) * 0.15;
+
+        vec3 color = mix(vec3(0), texture2D(colorscale, vec2(0.5 + f, 0.5)).rgb, contours);
+        gl_FragColor = vec4(color, 1);
+      }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        res: (ctx) => [ctx.framebufferWidth, ctx.framebufferHeight],
+        colorscale: texture0,
+        rad: regl0.prop("radius")
+      },
+      count: 3
+    });
+  </script>
+  <script id="2172" type="module">
+    const segmentLengthInput = Inputs.range([0.01, 1], {
+      step: 0.001,
+      value: 0.75,
+      label: html`Segment length, ${tex`l`}`
+    });
+    const segmentLength = view(segmentLengthInput);
+    function drawRegl0() {
+      regl0.poll();
+      regl0.drawField({ radius: segmentLengthInput.value });
+    }
+    segmentLengthInput.addEventListener("input", drawRegl0);
+    drawRegl0();
+  </script>
+  <script id="2168b" type="module">
+    view(html`<figure>
+      ${_reglCanvas0}
+      <figcaption>The integrated winding number field of a single segment with positive winding numbers <span style="color:#12c">blue</span> and negative winding numbers <span style="color:#c12">red</span>.</figcaption>
+    </figure>`);
+  </script>
+  <script id="2219" type="text/markdown">
+    The summation above represents a perfectly adequate means of computing a winding number. We may superimpose the above segment solutions, allowing us to iterate over the segments which make up a curve and directly compute the total winding number relative to a given point.
+
+    The plot below illustrates this summation for a circle made up of 32 segments. Note that when the curve is fully closed, the winding number becomes exactly 0 or 1 everywhere.
+  </script>
+  <script id="1790" type="module">
+    const _reglCanvas1 = reglCanvas(createREGL, {
+      pixelRatio: devicePixelRatio,
+      extensions: ["OES_standard_derivatives"]
+    });
+    const regl1 = _reglCanvas1.value.attachResize(Math.min(640, width), Math.min(640, width) * 0.6);
+    const texture1 = regl1.texture({
+      data: [colorscale],
+      min: "linear",
+      mag: "linear"
+    });
+    regl1.drawField = regl1({
+      vert: `
+      precision highp float;
+      attribute vec2 xy;
+      void main () {
+        gl_Position = vec4(xy, 0, 1);
+      }`,
+      frag: `
+      #extension GL_OES_standard_derivatives : enable
+      precision highp float;
+      uniform vec2 res;
+      uniform float progress, sides, offset;
+      uniform sampler2D colorscale;
+      uniform bool threshold;
+
+      float gridFactor (float parameter, float width, float feather) {
+        float w1 = width - feather * 0.5;
+        float d = length(vec2(dFdx(parameter), dFdy(parameter)));
+        float looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+        return smoothstep(d * (w1 + feather), d * w1, looped);
+      }
+
+      float G (vec2 p1, vec2 p2, vec2 q) {
+        vec2 a = p1 - q;
+        vec2 b = p2 - q;
+        return atan(a.x * b.y - a.y * b.x, dot(a, b)) / (3.14159 * 2.0);
+      }
+
+      vec2 pt (int i) {
+        float t = min(float(i), progress * float(sides));
+        float t0 = floor(t);
+        float theta0 = (t0 - 0.5) * 3.1415926 * 2.0 / float(sides);
+        float theta1 = (t0 + 0.5) * 3.1415926 * 2.0 / float(sides);
+        vec2 p0 = vec2(cos(theta0), sin(theta0)) * 0.7;
+        vec2 p1 = vec2(cos(theta1), sin(theta1)) * 0.7;
+        return mix(p0, p1, clamp(t - t0, 0.0, 1.0));
+      }
+
+      void main () {
+        vec2 q = (gl_FragCoord.xy / res - 0.5) * 2.0 * vec2(res.x / res.y, 1);
+
+        float f = 0.0;
+        vec2 prev;
+        const int count = 32;
+        for (int i = 0; i <= count; i++) {
+          if (i > int(sides)) continue;
+          vec2 next = pt(i);
+          vec2 t = normalize(next - prev);
+          vec2 n = dot(t, t) > 0.0 ? vec2(t.y, -t.x) : vec2(0);
+          vec2 p1 = prev + n * offset;
+          vec2 p2 = next + n * offset;
+          if (i > 0) f += G(p1, p2, q);
+          prev = next;
+        }
+
+        float contours = 1.0 - gridFactor(16.0 * f, ${(devicePixelRatio / 2).toFixed(1)}, 2.0) * smoothstep(1.0, 0.95, progress * smoothstep(0.01, 0.0, abs(offset))) * 0.25;
+
+        vec3 fieldColor = texture2D(colorscale, vec2(0.5 + 0.5 * f, 0.5)).rgb;
+        vec3 thresholdColor = mix(vec3(1), vec3(0), smoothstep(-1.0, 1.0, (f - 0.5) / fwidth(f)));
+        vec3 color = mix(vec3(0), threshold ? thresholdColor : fieldColor, contours);
+        gl_FragColor = vec4(color, 1);
+      }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        res: (ctx) => [ctx.framebufferWidth, ctx.framebufferHeight],
+        colorscale: texture1,
+        progress: regl1.prop("progress"),
+        sides: regl1.prop("sides"),
+        offset: regl1.prop("offset"),
+        threshold: regl1.prop("threshold")
+      },
+      count: 3
+    });
+  </script>
+  <script id="1829" type="module">
+    const progressInput = Inputs.range([0.001, 1], {
+      step: 0.001,
+      value: 0.4,
+      label: "Progress"
+    });
+    const sidesInput = Inputs.range([3, 32], {
+      step: 1,
+      value: 32,
+      label: "Sides"
+    });
+    const offsetInput = Inputs.range([-0.3, 0.3], {
+      step: 0.01,
+      value: 0.0,
+      label: "Offset"
+    });
+    const thresholdInput1 = Inputs.checkbox(["Threshold"]);
+    function drawRegl1() {
+      regl1.poll();
+      regl1.drawField({
+        progress: progressInput.value,
+        sides: sidesInput.value,
+        offset: offsetInput.value,
+        threshold: !!~thresholdInput1.value.indexOf("Threshold")
+      });
+    }
+    [progressInput, sidesInput, thresholdInput1, offsetInput].forEach((input) =>
+      input.addEventListener("input", drawRegl1)
+    );
+    drawRegl1();
+    view(html`${progressInput}${sidesInput}${offsetInput}${thresholdInput1}`);
+  </script>
+  <script id="1790b" type="module">
+    view(html`<figure>
+      ${_reglCanvas1}
+      <figcaption>32 discrete line segments form a circular arc.</figcaption>
+    </figure>`);
+  </script>
+  <script id="1921" type="text/markdown">
+    This procedure works great for toy examples, but if we want to visualize an entire field, the global nature of this algorithm presents a major problem: every point depends on all geometry! Imagine we have geometry with 100,000 line segments. A 512 &times; 512 image contains about 260,000 pixels. Rasterizing such an image requires 26 billion evaluations of the above equation!
+
+    If you have a sharp eye, you might realize that the field in the above example seems to depend only on the endpoints of the curve. More specifically, for any point *outside the convex hull of the geometry*, knowledge of the endpoints alone is adequate to compute the field exactly. Jacobson *et al.* use this fact to construct an efficient scheme for exact far-field evaluation, but as I'm particularly interested in a soup of disorganized line segments without clean, well-maintained endpoints, the approximate algorithm of Barill *et al.* seemed preferable.
+
+    The key observation is that a line segment from far away looks like a point. More specifically, the effect of a source or collection of sources approaches in the far field that of a *[dipole](https://en.wikipedia.org/wiki/Dipole)* defined solely by a location, an orientation, and a strength. You can think of a dipole like the limiting behavior of two oppositely charged particles brought infinitesimally close together.
+
+    Adjust the scale of the geometry below and observe that from far away, the structure disappears and the winding number looks identical to that of the single short line segment [shown above](#segmentLength).
+  </script>
+  <script id="1874" type="module">
+    const _reglCanvas2 = reglCanvas(createREGL, {
+      pixelRatio: devicePixelRatio,
+      extensions: ["OES_standard_derivatives"]
+    });
+    const regl2 = _reglCanvas2.value.attachResize(Math.min(640, width), Math.min(640, width) * 0.6);
+    const texture2 = regl2.texture({
+      data: [colorscale],
+      min: "linear",
+      mag: "linear"
+    });
+    regl2.drawField = regl2({
+      vert: `
+      precision highp float;
+      attribute vec2 xy;
+      void main () {
+        gl_Position = vec4(xy, 0, 1);
+      }`,
+      frag: `
+      #extension GL_OES_standard_derivatives : enable
+      precision highp float;
+      uniform vec2 res;
+      uniform float rad;
+      uniform sampler2D colorscale;
+
+      float gridFactor (float parameter, float width, float feather) {
+        float w1 = width - feather * 0.5;
+        float d = length(vec2(dFdx(parameter), dFdy(parameter)));
+        float looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+        return smoothstep(d * (w1 + feather), d * w1, looped);
+      }
+
+      float field (vec2 p1, vec2 p2, vec2 q) {
+        vec2 a = p1 - q;
+        vec2 b = p2 - q;
+        return atan(a.x * b.y - a.y * b.x, dot(a, b)) / (3.14159 * 2.0);
+      }
+
+      const int count = 32;
+      vec2 pt (int i) {
+        float x = float(i) / float(count - 1) * 2.0 - 1.0;
+        return vec2(x, sin(x * 3.14159) * 0.5 + sin(x * 3.14159 * 2.0) * 0.55) * rad;
+      }
+
+      float contrast (float x) {
+        return 0.5 + atan(x * 15.0) / 3.14159;
+      }
+
+      void main () {
+        vec2 q = (gl_FragCoord.xy / res - 0.5) * 2.0 * vec2(res.x / res.y, 1);
+
+        float f = 0.0;
+        vec2 prev;
+        for (int i = 0; i < count; i++) {
+          vec2 next = pt(i);
+          if (i > 0) f += field(prev, next, q);
+          prev = next;
+        }
+        f *= 0.5;
+
+        float contours = 1.0 - gridFactor(10.0 * f / rad, ${(devicePixelRatio / 2).toFixed(1)}, 2.0) * 0.15;
+
+        vec3 color = mix(vec3(0), texture2D(colorscale, vec2(contrast(f), 0.5)).rgb, contours);
+        gl_FragColor = vec4(color, 1);
+      }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        res: (ctx) => [ctx.framebufferWidth, ctx.framebufferHeight],
+        colorscale: texture2,
+        rad: regl2.prop("radius")
+      },
+      count: 3
+    });
+  </script>
+  <script id="1877" type="module">
+    const radius2Input = Inputs.range([0.01, 1], {
+      step: 0.001,
+      value: 0.75,
+      label: "Scale"
+    });
+    const radius2 = view(radius2Input);
+    function drawRegl2() {
+      regl2.poll();
+      regl2.drawField({ radius: radius2Input.value });
+    }
+    radius2Input.addEventListener("input", drawRegl2);
+    drawRegl2();
+  </script>
+  <script id="1874b" type="module">
+    view(html`<figure>
+      ${_reglCanvas2}
+      <figcaption>Adjust the scale and observe that from far away, internal structure disappears and we're left with a dipole.</figcaption>
+    </figure>`);
+  </script>
+  <script id="1757" type="text/markdown">
+    This suggests a hierarchical approximation: nearby, we iterate over all geometry explicitly; far away, we treat the geometry in aggregate. This method of iterating over a tree of clustered geometry is called the [Barnes-Hut](https://en.wikipedia.org/wiki/Barnes%E2%80%93Hut_simulation) approximation. Barnes-Hut can be a somewhat harsh approximation, but with respect to the number of segments ${tex`n`}, its ${tex`\mathcal{O}(\log n)`} performance for a single evaluation is such a speedup compared to the naive ${tex`\mathcal{O}(n^2)`} that we consider ourselves lucky to get so far with relatively little effort.
+
+    (The [Fast Multipole Method](https://en.wikipedia.org/wiki/Fast_multipole_method) (FMM) performs a more careful and accurate expansion, though it's a lot more complicated and I've never tried it. Barill *et al.* mention that it didn't prove advantageous for this particular problem.)
+
+    For a deeper dive into the Barnes-Hut approximation, see Jeffrey Heer's excellent notebook [The Barnes-Hut Approximation](https://observablehq.com/@jheer/the-barnes-hut-approximation).
+  </script>
+  <script id="2396" type="text/markdown">
+    Since we're dealing with oriented dipole-like segments, our case is a bit different than the more typical gravitational simulation. To that end, there's one more improvement worth discussing, and at this point we have no choice but to break out the math. As Barill *et al.* discuss in *[Fast Winding Numbers for Soups and Clouds](https://www.dgp.toronto.edu/projects/fast-winding-numbers/)*, instead of aggregating geometry into single point dipoles, we can perform a Taylor series expansion to account for internal structure of each point cluster. They focus primarily on the 3D case. I found the math a bit tedious and challenging to work through, so I'll offer some details about the 2D case here.
+
+
+
+
+  </script>
+  <script id="2434" type="module">
+    view(md`<details>
+      <summary>Lots of mathematical details</summary>
+      ${md`
+
+    We haven't precisely called it such here, but the [plots above](#regl0) are closely related to the [Green's function](https://en.wikipedia.org/wiki/Green%27s_function) of [Laplace's equation](https://en.wikipedia.org/wiki/Laplace%27s_equation) (think electrostatics). A Green's function in the general sense is the response of a system to an impulse. For electrostatics, the impulse is usually a point charge. In our case, rather than point charges, we're dealing with point dipoles.
+
+    Defining ${tex`\mathbf{r} \equiv \mathbf{q} - \mathbf{p}`} where ${tex`\mathbf{q}`} is the point we're querying and ${tex`\mathbf{p}`} is the location of a source, the Green's function for Laplace's equation in two dimensions is
+
+    ${tex.block`
+    G(\mathbf{q}, \mathbf{p}) = \frac{\ln ||\mathbf{q} - \mathbf{p}||}{2\pi} = \frac{\ln r}{2\pi}.
+    `}
+    The field of a dipole at point ${tex`\mathbf{p}`} with unit normal ${tex`\mathbf{n}`} and strength (corresponding to the segment length) ${tex`a`} is
+
+    ${tex.block`
+    a \hat{\mathbf{n}} \cdot \nabla G(\mathbf{q}, \mathbf{p}).
+    `}
+
+    The field we seek is ultimately just the sum a many such dipoles, positioned along our line segments and oriented normal to them. There's a lot of vector calculus going on here which I won't repeat since if you're still interested you should really just read the above papers which explain it better than I intend to.
+
+    What I will say is that I struggled a bit to evaluate the tensor products in the Taylor series expansion given by Barill *et al.* Specifically,
+
+    ${tex.block`
+    \begin{aligned}
+    w(\mathbf{q}) \approx & \left( \sum_{i=1}^m a_i \hat{\mathbf{n}}_i\right) \cdot \nabla G(\mathbf{q}, \tilde{\mathbf{p}}) \\
+    & + \left( \sum_{i=1}^m a_i (\mathbf{p}_i - \tilde{\mathbf{p}}) \otimes \hat{\mathbf{n}}_i \right) \cdot \nabla^2 G(\mathbf{q}, \tilde{\mathbf{p}}) \\
+    & + \frac{1}{2} \left( \sum_{i=1}^m a_i (\mathbf{p}_i - \tilde{\mathbf{p}}) \otimes (\mathbf{p}_i - \tilde{\mathbf{p}}) \otimes \hat{\mathbf{n}}_i \right) \cdot \nabla^3 G(\mathbf{q}, \tilde{\mathbf{p}})
+    \end{aligned}
+    `}
+
+    The summations represent an aggregation of clustered geometry, and ${tex`G`} is the Green's function representing the effect that cluster has on its surroundings. Thus, ${tex`i`} corresponds to the index of the geometry over which we're summing, ${tex`\tilde{\mathbf{p}}`} represents the area-weighted position of our aggregated geometry. I got a bit confused by the tensor products and gradients and had to fall back on [Einstein summation notation](https://en.wikipedia.org/wiki/Einstein_notation) for their evaluation. So let's compute some gradients.
+
+    First, we compute ${tex`\nabla G`}. We can write this as ${tex`\frac{\partial G}{\partial x_i}`} or use the shorthand ${tex`\partial_i G`}. Then we have
+
+    ${tex.block`
+    \nabla G \equiv \partial_i G = \partial_i \frac{\ln r}{2\pi}
+    `}
+
+    Using ${tex`\mathbf{r} = \mathbf{x} - \mathbf{p}`} and therefore ${tex`r = ||\mathbf{x} - \mathbf{p}||`}, then we seek
+
+    ${tex.block`
+    \partial_i G = \partial_i \frac{\ln r}{2\pi} = \partial_i \frac{\ln \sqrt{r^2}}{2\pi} = \partial_i \frac{\ln \sqrt{r_i r_i}}{2\pi}
+    `}
+    where ${tex`r_i r_i`} uses [Einstein summation notation](https://en.wikipedia.org/wiki/Einstein_notation) and represents the sum ${tex`r^2 = r_i r_i = r_0 r_0 + r_1 r_1 + r_2 r_2`}. Then we compute the gradient
+
+    ${tex.block`
+    \begin{aligned}
+    \partial_i G &= \frac{1}{4\pi} \partial_i (\ln r_j r_j) \\
+    &= \frac{1}{4\pi r^2} \partial_i(r_j r_j) \\
+    &= \frac{1}{4\pi r^2} (\partial_i r_j r_j + r_j \partial_i r_j) \\
+    &= \frac{1}{2\pi r^2} r_j \partial_i r_j \\
+    &= \frac{1}{2\pi r^2} r_j \partial_i (x_j - q_j) \\
+    &= \frac{1}{2\pi r^2} r_j \delta_{ij} \\
+    \partial_i G &= \frac{r_i}{2\pi r^2} \\
+    \end{aligned}
+    `}
+    Here I've used the fact that ${tex`\mathbf{q}`} is constant and that ${tex`\partial_i x_j = \delta_{ij}`}, where ${tex`\delta_{ij}`} is the [Kronecker delta](https://en.wikipedia.org/wiki/Kronecker_delta). Translating back to vector notation, this is just ${tex.block`\nabla G = \frac{\mathbf{r}}{2\pi r^2}.`}
+
+    Next is the second order gradient, ${tex`\partial_{ij} G`}. A similar process yields
+
+    ${tex.block`
+    \begin{aligned}
+    \partial_{ij} G &= \partial_j \left(\frac{r_i}{2\pi r^2}\right) \\
+    &= \frac{1}{2\pi}\left[ \frac{r^2 \delta_{ij} - r_i \partial_j r^2}{r^4} \right] \\
+    &= \frac{1}{2\pi r^2}\left[ \delta_{ij} - \frac{r_i 2 r_j}{r^2} \right] \\
+    \partial_{ij} G &= \frac{\delta_{ij}}{2\pi r^2} - \frac{r_i r_j}{\pi r^4} \\
+    \end{aligned}
+    `}
+    We can translate this into vector (well, tensor) notation as well, yielding
+    ${tex.block`
+    \nabla^2 G = \frac{\mathbf{I}}{2\pi r^2} - \frac{\mathbf{r} \otimes \mathbf{r}}{\pi r^4}.
+    `}
+    (${tex`\nabla^2 G`} denotes the second-order tensor gradient rather than the Laplacian.) The two forms are equivalent, but personally I find tensor notation much harder to reason about, compared to summation notation which directly describes how to compute the values. I probably need to spend more time with tensors.
+
+    Finally, ${tex`\nabla^3 G`}. It's similar again, just more tedious. We differentiate the previous result, yielding
+
+    ${tex.block`
+    \begin{aligned}
+    \partial_{ijk} G = \partial_{k} (\partial_{ij} G) &= \partial_k \left(\frac{\delta_{ij}}{2\pi r^2} - \frac{r_i r_j}{\pi r^4}\right) \\
+    \end{aligned}
+    `}
+    It's tedious and had to do this about four times before finally getting a consistent answer, but when I did, I got the result
+    ${tex.block`
+    \partial_{ijk} G = -\frac{\delta_{ij} r_k + \delta_{ik} r_j + \delta_{jk} r_i}{\pi r^4} + \frac{4 r_i r_j r_k}{\pi r^6}.
+    `}
+
+    Finally, using the superscript ${tex`i`} to denote geometry index and ${tex`j`}, ${tex`k`}, and ${tex`l`} as summation indices, I wrote the correction as
+
+    ${tex.block`
+    \begin{aligned}
+    w(\mathbf{q}) \approx & \left( \sum_{i=1}^m a_i \hat{n}^i_j \right) \partial_j G(\mathbf{q}, \tilde{\mathbf{p}}) \\
+    & + \left( \sum_{i=1}^m a_i (p^i_j - \tilde{p}_j) \hat{n}^i_k \right) \partial_{jk} G(\mathbf{q}, \tilde{\mathbf{p}}) \\
+    & + \frac{1}{2} \left( \sum_{i=1}^m a_i (p^i_j - \tilde{p}_j) (p^i_k - \tilde{p}_k) \hat{n}^i_l \right) \cdot \partial_{jkl} G (\mathbf{q}, \tilde{\mathbf{p}})
+    \end{aligned}
+    `}
+
+    Finally, this is something we can compute! I found that this correction helped, sometimes significantly _until_ I improved my implementation to use the Green's function of a finite-length segment instead of just a point dipole. In the end, I started to think that unless I back up and more correctly compute the gradient of the finite-length segment Green's function, this is all probably a lot of effort for nothing.
+    `}
+    </details>`);
+  </script>
+  <script id="2338" type="text/markdown">
+    Finally, the main feature! The simulation below computes the winding number of a curve using a [Bounding Volume Hierarchy](https://en.wikipedia.org/wiki/Bounding_volume_hierarchy) (BVH) for acceleration. On construction, the segments which make up a leaf node are aggregated into a single dipole. For non-leaf nodes, it combines the two dipoles of the respective child nodes into a single dipole. During evaluation, far-away nodes are accounted for only in the aggregate sense, as a dipole. Nearby nodes are either then recursed into or in the case of a leaf node, their segments treated individually.
+
+    In the end, I'm still not completely content with the Taylor series expansion and small improvements. I think this is because I've sort of combined the Taylor series expansion for a point-dipole cloud with the Green's function of a finite-length segment. The resulting improvements sorta help, but not completely. Fortunately, the end result I seek—a thresholded winding number for loosely-but-not-exactly-watertight geometry—appears quite tolerant to error, such that the unimproved solution seems good enough for a pretty good inside-outside query.
+  </script>
+  <script id="1541" type="module">
+    const lineSimplificationInput = Inputs.range([0, 5], {
+      value: 0,
+      step: 0.1,
+      label: "Line simplification"
+    });
+    const maxItemsPerNodeInput = Inputs.range([5, 100], {
+      label: "Max items per BVH node",
+      value: 10,
+      step: 1,
+      transform: Math.log
+    });
+    const recursionThresholdInput = Inputs.range([0, 1], {
+      label: "Recursion threshold",
+      value: 0.5,
+      step: 0.01
+    });
+    const downsamplingInput = Inputs.range([1, 16], {
+      value: 4,
+      transform: Math.log,
+      step: 0.5,
+      label: "Render downsampling"
+    });
+    const configInput = Inputs.checkbox(
+      [
+        "Debug",
+        "Live update",
+        "Point dipoles for clusters",
+        "1st order correction",
+        "2nd order correction"
+      ],
+      {
+        value: [
+          "Debug",
+          "Live update",
+          "Point dipoles for clusters",
+          "1st order correction"
+        ]
+      }
+    );
+    const thresholdInput = Inputs.radio(
+      ["Color", "Threshold (CCW)", "Threshold (CW)"],
+      { value: "Color" }
+    );
+
+    const controlsForm = Inputs.form({
+      lineSimplification: lineSimplificationInput,
+      maxItemsPerNode: maxItemsPerNodeInput,
+      recursionThreshold: recursionThresholdInput,
+      downsampling: downsamplingInput,
+      config: configInput,
+      threshold: thresholdInput
+    });
+    const controls = view(controlsForm);
+  </script>
+  <script id="1542" type="module">
+    const lineSimplification = controls.lineSimplification;
+    const maxItemsPerNode = controls.maxItemsPerNode;
+    const recursionThreshold = controls.recursionThreshold;
+    const downsampling = controls.downsampling;
+    const config = controls.config;
+    const threshold = controls.threshold;
+  </script>
+  <script id="0" type="module">
+    const ctxCanvas = document.createElement("canvas");
+    const dpi = devicePixelRatio;
+    ctxCanvas.width = shape[0] * dpi;
+    ctxCanvas.height = shape[1] * dpi;
+    ctxCanvas.style.width = shape[0] + "px";
+    ctxCanvas.style.height = shape[1] + "px";
+    const ctx = ctxCanvas.getContext("2d");
+    ctx.scale(dpi, dpi);
+    ctxCanvas.style.position = "relative";
+    ctxCanvas.value = ctx;
+    ctxCanvas.style.cursor = "pointer";
+    ctx.strokeStyle = "black";
+    ctx.lineWidth = 2;
+    view(ctxCanvas);
+  </script>
+  <script id="64" type="module">
+    const resetInput = Inputs.button("Reset");
+    const reset = view(resetInput);
+  </script>
+  <script id="186" type="module">
+    const undoInput = Inputs.button("Undo");
+    const undo = view(undoInput);
+  </script>
+  <script id="1473" type="module">
+    const timing = { render: 0, bvhConstruction: 0 };
+  </script>
+  <script id="2639" type="module">
+    const segmentCount = lines.reduce((a, b) => a + b.length, 0);
+  </script>
+  <script id="2620" type="module">
+    const lines = [];
+  </script>
+  <script id="2621" type="module">
+    const linesReady = (function() {
+      if (lines.length > 0) return true;
+      const initialLines = [
+        [
+          { x: 123, y: 175 },
+          { x: 132, y: 184 },
+          { x: 140, y: 199 },
+          { x: 147, y: 223 },
+          { x: 154, y: 257 },
+          { x: 159, y: 313 },
+          { x: 158, y: 449 }
+        ],
+        [
+          { x: 211, y: 453 },
+          { x: 209, y: 419 },
+          { x: 209, y: 377 },
+          { x: 213, y: 371 },
+          { x: 226, y: 370 },
+          { x: 230, y: 373 },
+          { x: 232, y: 377 },
+          { x: 236, y: 393 },
+          { x: 234, y: 454 }
+        ],
+        [
+          { x: 289, y: 459 },
+          { x: 289, y: 421 },
+          { x: 286, y: 410 },
+          { x: 280, y: 353 },
+          { x: 275, y: 342 },
+          { x: 256, y: 323 },
+          { x: 241, y: 313 },
+          { x: 233, y: 311 },
+          { x: 219, y: 312 },
+          { x: 206, y: 320 },
+          { x: 198, y: 327 },
+          { x: 195, y: 290 },
+          { x: 191, y: 272 },
+          { x: 190, y: 252 },
+          { x: 188, y: 243 },
+          { x: 188, y: 222 },
+          { x: 185, y: 199 },
+          { x: 185, y: 161 }
+        ],
+        [
+          { x: 312, y: 316 },
+          { x: 312, y: 335 },
+          { x: 318, y: 358 },
+          { x: 321, y: 384 },
+          { x: 320, y: 459 },
+          { x: 367, y: 458 },
+          { x: 365, y: 435 },
+          { x: 359, y: 414 },
+          { x: 357, y: 389 },
+          { x: 357, y: 327 },
+          { x: 361, y: 313 }
+        ],
+        [
+          { x: 331, y: 208 },
+          { x: 323, y: 206 },
+          { x: 313, y: 207 },
+          { x: 309, y: 221 },
+          { x: 309, y: 234 },
+          { x: 316, y: 244 },
+          { x: 335, y: 244 },
+          { x: 340, y: 241 },
+          { x: 344, y: 235 },
+          { x: 344, y: 221 },
+          { x: 337, y: 209 },
+          { x: 330, y: 207 }
+        ],
+        [
+          { x: 410, y: 161 },
+          { x: 440, y: 161 },
+          { x: 443, y: 158 },
+          { x: 449, y: 158 },
+          { x: 451, y: 161 },
+          { x: 459, y: 352 },
+          { x: 432, y: 354 },
+          { x: 421, y: 357 },
+          { x: 418, y: 356 },
+          { x: 418, y: 261 },
+          { x: 409, y: 203 },
+          { x: 405, y: 189 },
+          { x: 398, y: 179 },
+          { x: 395, y: 167 },
+          { x: 395, y: 163 },
+          { x: 397, y: 162 },
+          { x: 409, y: 162 }
+        ],
+        [
+          { x: 430, y: 406 },
+          { x: 430, y: 404 },
+          { x: 432, y: 403 },
+          { x: 443, y: 400 },
+          { x: 464, y: 399 },
+          { x: 469, y: 404 },
+          { x: 471, y: 410 },
+          { x: 471, y: 426 },
+          { x: 468, y: 434 },
+          { x: 464, y: 439 },
+          { x: 448, y: 448 },
+          { x: 435, y: 449 },
+          { x: 427, y: 440 },
+          { x: 423, y: 431 },
+          { x: 424, y: 413 }
+        ],
+        []
+      ];
+      for (const line of initialLines) {
+        lines.push(line.map(({ x, y }) => ({ x: x + width / 2 - 300, y })));
+      }
+      return true;
+    })();
+  </script>
+  <script id="334" type="module">
+    function toSegmentCloud(lines) {
+      const segments = [];
+      for (const line of lines) {
+        for (let i = 0; i < line.length - 1; i++) {
+          const dx = line[i].x - line[i + 1].x;
+          const dy = line[i].y - line[i + 1].y;
+          const l2 = dx * dx + dy * dy;
+          if (l2 === 0) continue;
+          segments.push([line[i].x, line[i].y, line[i + 1].x, line[i + 1].y]);
+        }
+      }
+      return new Float64Array(segments.flat());
+    }
+  </script>
+  <script id="408" type="module">
+    function toAabbs(segments) {
+      const aabbs = new Float64Array(segments.length);
+      for (let i = 0; i < segments.length; i += 4) {
+        aabbs[i + 0] = Math.min(segments[i + 0], segments[i + 2]);
+        aabbs[i + 1] = Math.min(segments[i + 1], segments[i + 3]);
+        aabbs[i + 2] = Math.max(segments[i + 0], segments[i + 2]);
+        aabbs[i + 3] = Math.max(segments[i + 1], segments[i + 3]);
+      }
+      return aabbs;
+    }
+  </script>
+  <script id="490" type="module">
+    const BVH = (function() {
+      /**
+       * A node in the BVH structure
+       */
+      function BVHNode(startIndex, endIndex, ctor) {
+        this.aabb = new ctor(4);
+        this.startIndex = startIndex;
+        this.endIndex = endIndex;
+        this.node0 = null;
+        this.node1 = null;
+      }
+
+      /**
+       * Constructor of a BVH tree.
+       */
+      const nodeStack = [];
+      const failed = [];
+      const extentCenters = [];
+      const nodesToIntersect = [];
+
+      class BVH {
+        constructor(aabbs, { epsilon = 1e-6, maxItemsPerNode = 10 } = {}) {
+          this._aabbs = aabbs;
+          const count = this._aabbs.length / 4;
+
+          this._epsilon = epsilon;
+          this._maxItemsPerNode = maxItemsPerNode;
+
+          this._aabbTypeCtor = Float64Array;
+          const indexTypeCtor = Uint32Array;
+
+          // Initialize the ids to a plain sequence
+          this._idArray = new indexTypeCtor(count);
+          for (var i = 0; i < count; i++) {
+            this._idArray[i] = i;
+          }
+          // compute the box root node box (includes all the triangles)
+          this.root = new BVHNode(0, count, this._aabbTypeCtor);
+          this.computeExtents(this.root);
+
+          this._nodeSplitPtr = 0;
+          nodeStack.length = 0;
+          nodeStack[0] = this.root;
+          let iter = 0;
+          while (this._nodeSplitPtr >= 0 && iter++ < 1e6) {
+            this.splitNode(nodeStack[this._nodeSplitPtr--]);
+          }
+          if (iter > 1e6) {
+            throw new Error(
+              "Uh-oh, it seems like BVH construction ran into an infinite loop."
+            );
+          }
+          nodeStack.length = 0;
+        }
+
+        /**
+         * Calculates the extents (i.e the min and max coordinates) of a list of bounding boxes in the bboxArray
+         */
+        computeExtents(node) {
+          const aabb = node.aabb;
+
+          let xmin = Infinity;
+          let ymin = Infinity;
+          let xmax = -Infinity;
+          let ymax = -Infinity;
+
+          for (
+            let i = node.startIndex * 4, end = node.endIndex * 4;
+            i < end;
+            i += 4
+          ) {
+            xmin = Math.min(this._aabbs[i], xmin);
+            ymin = Math.min(this._aabbs[i + 1], ymin);
+            xmax = Math.max(this._aabbs[i + 2], xmax);
+            ymax = Math.max(this._aabbs[i + 3], ymax);
+          }
+
+          // Give it the epsilon tolernace, but just a bit more carefully so that it's not (overly)
+          // dependent upon a hard-coded scale. In other words, if your model is large, adding
+          // and subtracting epsilon from the bounds won't actually add any tolerance at all.
+          const xcen = (xmax + xmin) * 0.5;
+          const ycen = (ymax + ymin) * 0.5;
+          const xrng =
+            Math.max((xmax - xmin) * 0.5, this._epsilon) * (1.0 + this._epsilon);
+          const yrng =
+            Math.max((ymax - ymin) * 0.5, this._epsilon) * (1.0 + this._epsilon);
+
+          aabb[0] = xcen - xrng;
+          aabb[1] = ycen - yrng;
+          aabb[2] = xcen + xrng;
+          aabb[3] = ycen + yrng;
+        }
+
+        /**
+         * Split the given node in 2 distinc nodes.
+         * Severals steps are involved:
+         * 1. compute the size of the given node
+         * 2. sort the bbox(es) of the node. For each bbox,
+         *     - to a LEFT container if its (center) position is lower than the center of the node
+         *     - to a RIGHT container if its (center) position is higher than the center of the node
+         *     - both LEFT and RIGHT have 3 components, one for each dimension
+         * 3. make sure the node is splitable in any of the 3 axis (=there is at least 1 bbox in each octant)
+         * 4. choose the longest axis of the node to split along
+         * 5. reorganize the bbox index (from start to end of the current node) to put first
+         *    all the ones that go LEFT and second, all the ones that go RIGHT
+         * 6. compute the extent (size + EPSILON) of the future node 0 and 1
+         * 7. create the actual sub node 0 and 1 (of 1 level higher than the parent)
+         *    with their reletive sub list of aabbs.
+         * 8. associate the sub node 0 and 1 to the parent and remove the aabbs of the parent
+         *    (since they now belong to the child nodes)
+         * 9. add the 2 child node to the list of node to split, just to prepare the next iterration
+         */
+        splitNode(node) {
+          let j, ptr, ptr2, endPtr, tmp;
+          const startIndex = node.startIndex;
+          const endIndex = node.endIndex;
+
+          // Return early if we shouldn't split
+          const elementCount = endIndex - startIndex;
+          if (elementCount <= this._maxItemsPerNode || elementCount === 0) {
+            return;
+          }
+          const aabbs = this._aabbs;
+          const ids = this._idArray;
+
+          // Compute the box center in each dimension
+          //
+          // Well, this is *twice* the center since we didn't divide by two, but as long as we
+          // only compare it to things similarly doubled within this function, it saves a bit of math.
+          extentCenters[0] = node.aabb[0] + node.aabb[2];
+          extentCenters[1] = node.aabb[1] + node.aabb[3];
+
+          let leftCnt0 = 0;
+          let leftCnt1 = 0;
+          let rightCnt0 = 0;
+          let rightCnt1 = 0;
+
+          // Count up the number of leaf nodes on each side of each split
+          for (
+            ptr = startIndex * 4, endPtr = endIndex * 4;
+            ptr < endPtr;
+            ptr += 4
+          ) {
+            if (aabbs[ptr] + aabbs[ptr + 2] < extentCenters[0]) {
+              leftCnt0++;
+            } else {
+              rightCnt0++;
+            }
+            if (aabbs[ptr + 1] + aabbs[ptr + 3] < extentCenters[1]) {
+              leftCnt1++;
+            } else {
+              rightCnt1++;
+            }
+          }
+
+          // If we can't split along any of the dimensions, return and leave the leaf nodes
+          // in their current state. Otherwise this leads to an infinite loop.
+          failed[0] = leftCnt0 === 0 || rightCnt0 === 0;
+          failed[1] = leftCnt1 === 0 || rightCnt1 === 0;
+          if (failed[0] && failed[1]) return;
+
+          const extentsLength0 = node.aabb[2] - node.aabb[0];
+          const extentsLength1 = node.aabb[3] - node.aabb[1];
+
+          // Sort by the length of each axis and select the longest which didn't fail
+          let splitDim = extentsLength1 > extentsLength0 ? 1 : 0;
+          if (failed[splitDim]) splitDim = 1 - splitDim;
+
+          // Sort the elements in range (startIndex, endIndex) according to which node they fall in.
+          //
+          // To avoid the need for extra storage, we do this in-place, starting at startIndex and
+          // stepping toward endIndex. If the bbox falls in the left node, it's already in the correct
+          // place and we move on. If the bbox falls in the right node, then we swap it with the very
+          // last node in this range. The current position then becomes a node we haven't checked yet
+          // and the last node is in the correct half, so we shift both the current position and the
+          // termination criteria back one step. This reverses the order of the leaf nodes but maybe
+          // we don't care.
+          let bboxPtr, idPtr, bboxPtr2, idPtr2;
+          let lmin0 = Infinity;
+          let lmin1 = Infinity;
+          let lmax0 = -Infinity;
+          let lmax1 = -Infinity;
+          let rmin0 = Infinity;
+          let rmin1 = Infinity;
+          let rmax0 = -Infinity;
+          let rmax1 = -Infinity;
+          const extentCenter = extentCenters[splitDim];
+          for (
+            bboxPtr = startIndex * 4,
+              bboxPtr2 = (endIndex - 1) * 4,
+              idPtr = startIndex,
+              idPtr2 = endIndex - 1;
+            bboxPtr <= bboxPtr2;
+            bboxPtr += 4, idPtr++
+          ) {
+            if (
+              aabbs[bboxPtr + splitDim] + aabbs[bboxPtr + splitDim + 2] >=
+              extentCenter
+            ) {
+              // Swap the id
+              tmp = ids[idPtr];
+              ids[idPtr] = ids[idPtr2];
+              ids[idPtr2] = tmp;
+
+              // Swap em and compute the bounding box as we go so that we don't need another pass
+              tmp = aabbs[bboxPtr];
+              rmin0 = Math.min(rmin0, tmp);
+              aabbs[bboxPtr] = aabbs[bboxPtr2];
+              aabbs[bboxPtr2] = tmp;
+
+              tmp = aabbs[bboxPtr + 1];
+              rmin1 = Math.min(rmin1, tmp);
+              aabbs[bboxPtr + 1] = aabbs[bboxPtr2 + 1];
+              aabbs[bboxPtr2 + 1] = tmp;
+
+              tmp = aabbs[bboxPtr + 2];
+              rmax0 = Math.max(rmax0, tmp);
+              aabbs[bboxPtr + 2] = aabbs[bboxPtr2 + 2];
+              aabbs[bboxPtr2 + 2] = tmp;
+
+              tmp = aabbs[bboxPtr + 3];
+              rmax1 = Math.max(rmax1, tmp);
+              aabbs[bboxPtr + 3] = aabbs[bboxPtr2 + 3];
+              aabbs[bboxPtr2 + 3] = tmp;
+
+              idPtr--;
+              idPtr2--;
+              bboxPtr -= 4;
+              bboxPtr2 -= 4;
+            } else {
+              // Also compute the bounds, but no swap if it's in the lefthand node.
+              lmin0 = Math.min(lmin0, aabbs[bboxPtr]);
+              lmin1 = Math.min(lmin1, aabbs[bboxPtr + 1]);
+              lmax0 = Math.max(lmax0, aabbs[bboxPtr + 2]);
+              lmax1 = Math.max(lmax1, aabbs[bboxPtr + 3]);
+            }
+          }
+
+          // Create two new nodes and set the index range and extents
+          node.startIndex = node.endIndex = -1;
+          const node0 = (node.node0 = new BVHNode(
+            startIndex,
+            idPtr,
+            this._aabbTypeCtor
+          ));
+          const node1 = (node.node1 = new BVHNode(
+            idPtr,
+            endIndex,
+            this._aabbTypeCtor
+          ));
+
+          let cen0, cen1, cen2, rng0, rng1, rng2;
+          const eps = this._epsilon;
+          cen0 = (lmax0 + lmin0) * 0.5;
+          cen1 = (lmax1 + lmin1) * 0.5;
+          rng0 = Math.max((lmax0 - lmin0) * 0.5, eps) * (1.0 + eps);
+          rng1 = Math.max((lmax1 - lmin1) * 0.5, eps) * (1.0 + eps);
+
+          node0.aabb[0] = cen0 - rng0;
+          node0.aabb[1] = cen1 - rng1;
+          node0.aabb[2] = cen0 + rng0;
+          node0.aabb[3] = cen1 + rng1;
+
+          cen0 = (rmax0 + rmin0) * 0.5;
+          cen1 = (rmax1 + rmin1) * 0.5;
+          rng0 = Math.max((rmax0 - rmin0) * 0.5, eps) * (1.0 + eps);
+          rng1 = Math.max((rmax1 - rmin1) * 0.5, eps) * (1.0 + eps);
+
+          node1.aabb[0] = cen0 - rng0;
+          node1.aabb[1] = cen1 - rng1;
+          node1.aabb[2] = cen0 + rng0;
+          node1.aabb[3] = cen1 + rng1;
+
+          // Queue the new nodes for splitting. We can avoid a bunch of splitting we won't need, though
+          // if you profile, that turns out not to matter anyway.
+          if (idPtr - startIndex > this._maxItemsPerNode) {
+            nodeStack[++this._nodeSplitPtr] = node.node0;
+          }
+
+          if (endIndex - idPtr > this._maxItemsPerNode) {
+            nodeStack[++this._nodeSplitPtr] = node.node1;
+          }
+        }
+
+        /**
+         * Generic intersection between the BVH and a shape.
+         */
+        test(bboxIntersectionTest, leafTest) {
+          nodesToIntersect.length = 0;
+          var nodesToIntersectPtr = 0;
+          nodesToIntersect[0] = this.root;
+
+          while (nodesToIntersectPtr >= 0) {
+            var node = nodesToIntersect[nodesToIntersectPtr--];
+            if (bboxIntersectionTest(node.aabb)) {
+              if (node.node0) nodesToIntersect[++nodesToIntersectPtr] = node.node0;
+              if (node.node1) nodesToIntersect[++nodesToIntersectPtr] = node.node1;
+
+              for (var i = node.startIndex; i < node.endIndex; i++) {
+                leafTest(this._idArray[i]);
+              }
+            }
+          }
+          nodesToIntersect.length = 0;
+        }
+
+        traversePreorder(visitor) {
+          const stack = [];
+          let cur = this.root;
+          let i = 0;
+          while (stack.length || cur) {
+            while (cur) {
+              const descend = visitor(cur) !== false;
+              if (descend && cur.node1) stack.push(cur.node1);
+              cur = descend && cur.node0;
+            }
+            if (stack.length) cur = stack.pop();
+          }
+        }
+
+        traverseInorder(visitor) {
+          const stack = [];
+          let cur = this.root;
+          let i = 0;
+          while (cur || stack.length) {
+            while (cur) {
+              stack.push(cur);
+              cur = cur.node0;
+            }
+            cur = stack[stack.length - 1];
+            stack.pop();
+            visitor(cur);
+            cur = cur.node1;
+          }
+        }
+
+        traversePostorder(visitor) {
+          const stack = [this.root];
+          let prev = null;
+          while (stack.length) {
+            const cur = stack[stack.length - 1];
+            if (!prev || prev.node0 === cur || prev.node1 === cur) {
+              if (cur.node0) stack.push(cur.node0);
+              else if (cur.node1) stack.push(cur.node1);
+              else {
+                stack.pop();
+                visitor(cur);
+              }
+            } else if (cur.node0 === prev) {
+              if (cur.node0) {
+                stack.push(cur.node1);
+              } else {
+                stack.pop();
+                visitor(cur);
+              }
+            } else if (cur.node1 === prev) {
+              stack.pop();
+              visitor(cur);
+            }
+            prev = cur;
+          }
+        }
+      }
+
+      return BVH;
+    })();
+  </script>
+  <script id="784" type="module">
+    const createEvaluator = (function() {
+      return function createEvaluator(segments, { maxItemsPerNode = 10 } = {}) {
+        const t0 = performance.now();
+        const bvh = new BVH(toAabbs(segments), { maxItemsPerNode });
+
+        bvh.traversePostorder(function (node) {
+          // If no child nodes, then iterate directly over segments
+          if (!node.node0) {
+            // area
+            let a = 0;
+            // area * normal
+            let an_x = 0;
+            let an_y = 0;
+            // area * position (area-weighted position)
+            let ap_x = 0;
+            let ap_y = 0;
+
+            for (let i = node.startIndex; i < node.endIndex; i++) {
+              const id4 = bvh._idArray[i] * 4;
+              const x1 = segments[id4];
+              const y1 = segments[id4 + 1];
+              const x2 = segments[id4 + 2];
+              const y2 = segments[id4 + 3];
+              // Segment length
+              const ai = Math.hypot(x2 - x1, y2 - y1);
+              a += ai;
+
+              // Use the center of the segment as an approximate position when aggregating
+              ap_x += ai * 0.5 * (x1 + x2);
+              ap_y += ai * 0.5 * (y1 + y2);
+
+              // The subtraction of coordinates *is* the area-weighted (un-normalized) normal
+              an_x += y2 - y1;
+              an_y += x1 - x2;
+            }
+
+            // Not optimal, but just loop back over segments now that we know the centroid
+            const pt_x = ap_x / a;
+            const pt_y = ap_y / a;
+
+            // ai x (pi - pavg) x ni
+            let apn_xx = 0;
+            let apn_xy = 0;
+            let apn_yx = 0;
+            let apn_yy = 0;
+
+            // ai x (pi - pavg) x (pi - pavg) x ni
+            let appn_xxx = 0;
+            let appn_xxy = 0;
+            let appn_xyx = 0;
+            let appn_xyy = 0;
+            let appn_yyx = 0;
+            let appn_yyy = 0;
+            for (let i = node.startIndex; i < node.endIndex; i++) {
+              const id4 = bvh._idArray[i] * 4;
+              const xA = segments[id4];
+              const yA = segments[id4 + 1];
+              const xB = segments[id4 + 2];
+              const yB = segments[id4 + 3];
+              const anxi = yB - yA;
+              const anyi = xA - xB;
+
+              // Segment center relative to the centroid of all segments in this node
+              const pptxi = 0.5 * (xA + xB) - pt_x;
+              const pptyi = 0.5 * (yA + yB) - pt_y;
+
+              // First order expansion terms
+              apn_xx += pptxi * anxi;
+              apn_xy += pptxi * anyi;
+              apn_yx += pptyi * anxi;
+              apn_yy += pptyi * anyi;
+
+              // Second order expansion terms
+              appn_xxx += pptxi * pptxi * anxi; // xxx
+              appn_xxy += pptxi * pptxi * anyi; // xxy
+              appn_xyx += pptxi * pptyi * anxi; // xyx ------+
+              appn_xyy += pptxi * pptyi * anyi; // xyy ---+  |
+              // appn100 += pptyi * pptxi * anxi; // yxx -|--+   <---+-- duplicates
+              // appn101 += pptyi * pptxi * anyi; // yxy -+      <--/
+              appn_yyx += pptyi * pptyi * anxi; // yyx
+              appn_yyy += pptyi * pptyi * anyi; // yyy
+            }
+            node.a = a;
+            node.an_x = an_x;
+            node.an_y = an_y;
+            node.ap_x = ap_x;
+            node.ap_y = ap_y;
+            node.apn_xx = apn_xx;
+            node.apn_xy = apn_xy;
+            node.apn_yx = apn_yx;
+            node.apn_yy = apn_yy;
+            node.appn_xxx = appn_xxx;
+            node.appn_xxy = appn_xxy;
+            node.appn_xyx = appn_xyx;
+            node.appn_xyy = appn_xyy;
+            node.appn_yyx = appn_yyx;
+            node.appn_yyy = appn_yyy;
+          } else {
+            // If child nodes, then aggregate children
+            const {
+              a: a0,
+              an_x: an0_x,
+              an_y: an0_y,
+              ap_x: ap0_x,
+              ap_y: ap0_y
+            } = node.node0;
+            const {
+              a: a1,
+              an_x: an1_x,
+              an_y: an1_y,
+              ap_x: ap1_x,
+              ap_y: ap1_y
+            } = node.node1;
+
+            const a = a0 + a1;
+            const p0_x = ap0_x / a0;
+            const p0_y = ap0_y / a0;
+            const p1_x = ap1_x / a1;
+            const p1_y = ap1_y / a1;
+            const pt_x = (ap0_x + ap1_x) / a;
+            const pt_y = (ap0_y + ap1_y) / a;
+            const p0ptx = p0_x - pt_x;
+            const p0pty = p0_y - pt_y;
+            const p1ptx = p1_x - pt_x;
+            const p1pty = p1_y - pt_y;
+
+            node.a = a0 + a1;
+            node.an_x = an0_x + an1_x;
+            node.an_y = an0_y + an1_y;
+            node.ap_x = ap0_x + ap1_x;
+            node.ap_y = ap0_y + ap1_y;
+            node.apn_xx = p0ptx * an0_x + p1ptx * an1_x;
+            node.apn_xy = p0ptx * an0_y + p1ptx * an1_y;
+            node.apn_yx = p0pty * an0_x + p1pty * an1_x;
+            node.apn_yy = p0pty * an0_y + p1pty * an1_y;
+            node.appn_xxx = p0ptx * p0ptx * an0_x + p1ptx * p1ptx * an1_x; // 0, 0, 0
+            node.appn_xxy = p0ptx * p0ptx * an0_y + p1ptx * p1ptx * an1_y; // 0, 0, 1
+            node.appn_xyx = p0ptx * p0pty * an0_x + p1ptx * p1pty * an1_x; // 0, 1, 0
+            node.appn_xyy = p0ptx * p0pty * an0_y + p1ptx * p1pty * an1_y; // 0, 1, 1
+            // node.appn_yxx = p0pty * p0ptx * an0_x + p1pty * p1ptx * an1_x; // 1, 0, 0
+            // node.appn_yxy = p0pty * p0ptx * an0_y + p1pty * p1ptx * an1_y; // 1, 0, 1
+            node.appn_yyx = p0pty * p0pty * an0_x + p1pty * p1pty * an1_x; // 1, 1, 0
+            node.appn_yyy = p0pty * p0pty * an0_y + p1pty * p1pty * an1_y; // 1, 1, 1
+          }
+        });
+        const t1 = performance.now();
+        timing.bvhConstruction = t1 - t0;
+
+        const f = function (
+          qx,
+          qy,
+          threshold = 2,
+          correct1 = false,
+          correct2 = false,
+          pointDipoles = false
+        ) {
+          let w = 0;
+          // prettier-ignore
+          bvh.traversePreorder(function ({
+            node0, startIndex, endIndex, aabb,
+            a, an_x, an_y, ap_x, ap_y,
+            apn_xx, apn_xy, apn_yx, apn_yy,
+            appn_xxx, appn_xxy, appn_xyx, appn_xyy, appn_yyx, appn_yyy,
+          }) {
+            // Not so much an optimization as an avoidance of divide-by-zero
+            if (a === 0) return 0;
+
+            // Dist from centroid
+            const pqx = ap_x / a - qx;
+            const pqy = ap_y / a - qy;
+            const distance2 = pqx * pqx + pqy * pqy;
+
+            // Size of aabb
+            const dx = aabb[2] - aabb[0];
+            const dy = aabb[3] - aabb[1];
+            const diagRadius2 = 0.25 * (dx * dx + dy * dy);
+
+            // Dist relative to diag
+            const isFarField = diagRadius2 / distance2 < Math.pow(threshold, 2);
+
+
+            if (isFarField) {
+              if (pointDipoles) {
+                // This point dipole approximation is a bit safer:
+                w += (pqx * an_x + pqy * an_y) / (pqx * pqx + pqy * pqy) / (2.0 * Math.PI);
+              } else {
+                // At the cost of a slight risk that the segment might be unreasonably long
+                // in unusual cases, we can take a slight risk and treat it as a finite-length
+                // segment instead of a point dipole. We simply take the area-weighted normal
+                // vector as representing the size and orientation of the segment.
+                const ax = pqx + an_y * 0.5;
+                const ay = pqy - an_x * 0.5;
+                const bx = pqx - an_y * 0.5;
+                const by = pqy + an_x * 0.5;
+                w += Math.atan2(ax * by - ay * bx, ax * bx + ay * by) / (2.0 * Math.PI);
+              }
+
+              const r2 = pqx * pqx + pqy * pqy;
+              const c = 1 / (Math.PI * r2 * r2);
+
+              // First-order correction:
+              if (correct1) {
+                const G00 = (0.5 * r2 - pqx * pqx) * c;
+                const G10 = -pqx * pqy * c;
+                // const G01 = -pqy * pqx * c; // duplicate
+                const G11 = (0.5 * r2 - pqy * pqy) * c;
+                w += G00 * apn_xx + G10 * (apn_xy + apn_yx) + G11 * apn_yy;
+              }
+
+              // Second-order correction:
+              if (correct2) {
+                const d = 4 / r2;
+                const G000 = d * pqx * pqx * pqx - 3 * pqx;
+                const G001 = d * pqx * pqx * pqy - pqy; // -----+
+                // const G010 = d * pqx * pqy * pqx - pqy; // --+
+                const G011 = d * pqx * pqy * pqy - pqx; // -----|--+
+                // const G100 = d * pqy * pqx * pqx - pqy; // --+  |
+                // const G101 = d * pqy * pqx * pqy - pqx; // -----+
+                // const G110 = d * pqy * pqy * pqx - pqx; // -----+
+                const G111 = d * pqy * pqy * pqy - 3 * pqy;
+
+                // This summation uses some deduplicated math. Apologies, I should have skipped
+                // this optimization, for clarity.
+                w += 0.5 * c *
+                  (G000 * appn_xxx +
+                    G001 * (appn_xxy + 2 * appn_xyx) +
+                    G011 * (2 * appn_xyy + appn_yyx) +
+                    G111 * appn_yyy);
+              }
+              return false;
+            } else if (!node0) {
+              // Direct computation in the near field, when no child nodes
+              for (let i = startIndex; i < endIndex; i++) {
+                const id4 = bvh._idArray[i] * 4;
+                const ax = segments[id4] - qx;
+                const ay = segments[id4 + 1] - qy;
+                const bx = segments[id4 + 2] - qx;
+                const by = segments[id4 + 3] - qy;
+                w += Math.atan2(ax * by - ay * bx, ax * bx + ay * by) / (2.0 * Math.PI);
+              }
+            }
+          });
+          return w;
+        };
+        f.bvh = bvh;
+        return f;
+      };
+    })();
+  </script>
+  <script id="187" type="module">
+    const buttonState = { lastUndo: 0, lastReset: 0 };
+  </script>
+  <script id="188" type="module">
+    (function undoHandler() {
+      if (undo === buttonState.lastUndo) return;
+      buttonState.lastUndo = undo;
+      lines.pop();
+      lines.pop();
+      lines.push([]);
+      repaint();
+    })();
+  </script>
+  <script id="66" type="module">
+    (function resetHandler() {
+      if (reset === buttonState.lastReset) return;
+      buttonState.lastReset = reset;
+      lines.length = 0;
+      lines.push([]);
+      repaint();
+    })();
+  </script>
+  <script id="224" type="module">
+    const options = {};
+  </script>
+  <script id="227" type="module">
+    (function updateOptions() {
+      options.threshold = threshold;
+      repaint();
+    })();
+  </script>
+  <script id="20" type="module">
+    (function mouseHandler() {
+      let lineBuffer = [];
+      function onMousedown({ offsetX: x, offsetY: y }) {
+        lineBuffer.push({ x, y });
+        window.addEventListener("mouseup", onMouseup);
+        ctxCanvas.addEventListener("mousemove", onMousemove);
+        ctx.moveTo(x, y);
+      }
+      function onMousemove({ offsetX: x, offsetY: y }) {
+        lineBuffer.push({ x, y });
+        if (~config.indexOf("Live update")) {
+          lines[lines.length - 1] = simplify(
+            lineBuffer,
+            lineSimplification,
+            { highQuality: true }
+          );
+          repaint();
+        } else {
+          ctx.beginPath();
+          ctx.strokeStyle = "red";
+          ctx.moveTo(
+            lineBuffer[lineBuffer.length - 2].x,
+            lineBuffer[lineBuffer.length - 2].y
+          );
+          ctx.lineTo(
+            lineBuffer[lineBuffer.length - 1].x,
+            lineBuffer[lineBuffer.length - 1].y
+          );
+          ctx.stroke();
+        }
+      }
+      function onMouseup() {
+        window.removeEventListener("mouseup", onMouseup);
+        ctxCanvas.removeEventListener("mousemove", onMousemove);
+        if (lineBuffer.length > 1) {
+          lines[lines.length - 1] = simplify(
+            lineBuffer,
+            lineSimplification,
+            { highQuality: true }
+          );
+          lineBuffer = [];
+          lines.push(lineBuffer);
+        } else {
+          lineBuffer.length = 0;
+        }
+        repaint();
+      }
+      ctxCanvas.addEventListener("mousedown", onMousedown);
+      invalidation.then(() => {
+        ctxCanvas.removeEventListener("mousedown", onMousedown);
+      });
+    })();
+  </script>
+  <script id="7" type="module">
+    const shape = (function() {
+      const w = Math.min(640, width);
+      return [width, w];
+    })();
+  </script>
+  <script id="1551" type="module">
+    const renderCtx = (function() {
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.floor(shape[0] / downsampling);
+      canvas.height = Math.floor(shape[1] / downsampling);
+      return canvas.getContext("2d");
+    })();
+  </script>
+  <script id="46" type="module">
+    function repaint() {
+      ctx.clearRect(0, 0, ...shape);
+      let c;
+      const black = [0, 0, 0, 1];
+      const white = [255, 255, 255, 1];
+
+      const evaluate = createEvaluator(toSegmentCloud(lines), { maxItemsPerNode });
+
+      const renderShape = [renderCtx.canvas.width, renderCtx.canvas.height];
+      const img = renderCtx.getImageData(0, 0, ...renderShape);
+      const imgData = img.data;
+      const correct1 = ~config.indexOf("1st order correction");
+      const correct2 = ~config.indexOf("2nd order correction");
+      const pointDipoles = ~config.indexOf("Point dipoles for clusters");
+      const t0 = performance.now();
+      for (let i = 0; i < renderShape[0]; i++) {
+        for (let j = 0; j < renderShape[1]; j++) {
+          let w = evaluate(
+            ((i + 0.5) * shape[0]) / renderShape[0],
+            ((j + 0.5) * shape[1]) / renderShape[1],
+            recursionThreshold,
+            correct1,
+            correct2,
+            pointDipoles
+          );
+          const idx = 4 * (i + j * renderShape[0]);
+          if (options.threshold !== "Color") {
+            const sign = options.threshold === "Threshold (CCW)" ? -1 : 1;
+            c = w * sign > 0.5 ? black : white;
+          } else {
+            c =
+              colorscale[
+                Math.max(
+                  0,
+                  Math.min(
+                    colorscale.length,
+                    Math.floor(
+                      (0.5 - (0.5 * Math.atan(4 * w) * 2) / Math.PI) *
+                        colorscale.length
+                    )
+                  )
+                )
+              ];
+          }
+          imgData[idx] = c[0];
+          imgData[idx + 1] = c[1];
+          imgData[idx + 2] = c[2];
+          imgData[idx + 3] = c[3] * 255;
+        }
+      }
+      const t1 = performance.now();
+      timing.render = t1 - t0;
+
+      renderCtx.putImageData(img, 0, 0);
+      ctx.drawImage(renderCtx.canvas, 0, 0, ...shape);
+
+      if (~config.indexOf("Debug")) {
+        ctx.strokeStyle = "black";
+        ctx.beginPath();
+        evaluate.bvh.traversePostorder(function (node) {
+          const [xmin, ymin, xmax, ymax] = node.aabb;
+          ctx.moveTo(xmin, ymin);
+          ctx.lineTo(xmax, ymin);
+          ctx.lineTo(xmax, ymax);
+          ctx.lineTo(xmin, ymax);
+          ctx.lineTo(xmin, ymin);
+        });
+        ctx.stroke();
+      }
+
+      ctx.strokeStyle = options.threshold === "Color" ? "black" : "red";
+      for (const line of lines) {
+        if (!line.length) continue;
+        ctx.beginPath();
+        ctx.moveTo(line[0].x, line[0].y);
+        for (let i = 1; i < line.length; i++) {
+          ctx.lineTo(line[i].x, line[i].y);
+        }
+        ctx.stroke();
+      }
+
+      if (~config.indexOf("Debug")) {
+        for (const [color, sign] of [
+          ["red", -1],
+          ["blue", 1]
+        ]) {
+          for (const line of lines) {
+            if (!line.length) continue;
+            ctx.beginPath();
+            ctx.moveTo(line[0].x, line[0].y);
+            for (let i = 0; i < line.length; i++) {
+              const im = Math.max(0, i - 1);
+              const ip = Math.min(line.length - 1, i + 1);
+              const { x: p1x, y: p1y } = line[im];
+              const { x: px, y: py } = line[i];
+              const { x: p2x, y: p2y } = line[ip];
+              let dx = p2x - p1x;
+              let dy = p2y - p1y;
+              const l = Math.hypot(dx, dy);
+              dx /= l;
+              dy /= l;
+              ctx.strokeStyle = color;
+              ctx.moveTo(px, py);
+              ctx.lineTo(px + sign * 10 * dy, py - sign * 10 * dx);
+            }
+            ctx.stroke();
+          }
+        }
+      }
+    }
+  </script>
+  <script id="1774" type="text/html">
+    <style>
+      .observablehq figure img {
+        margin-left: auto;
+        margin-right: auto;
+      }
+      .observablehq figure  {
+        text-align: center;
+      }
+      .observablehq figcaption  {
+        text-align: left;
+      }
+      .observablehq details {
+        max-width: 640px;
+      }
+    </style>
+  </script>
+</notebook>
