@@ -109,5 +109,21 @@
     {{/if}}
   </div>
   <footer><div class="footer__attrib">&copy; 2026 Ricky Reusser</div></footer>
+
+  <!-- Debug client (development only) -->
+  <script type="module">
+    // Only load debug client in development
+    if (window.location.hostname === 'localhost' || window.location.hostname.match(/127\.0\.0\.1/)) {
+      // Import the runtime and debug client together
+      import('@observablehq/notebook-kit/runtime').then(({ main }) => {
+        // Expose the main module globally for debug access
+        window.__observableRuntime = main;
+        console.log('[DebugClient] Runtime module exposed as window.__observableRuntime');
+
+        // Now load the debug client
+        import('/lib/debug-client.js');
+      });
+    }
+  </script>
 </body>
 </html>

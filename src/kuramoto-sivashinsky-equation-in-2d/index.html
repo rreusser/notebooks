@@ -1,0 +1,897 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Kuramoto-Sivashinsky Equation in 2D</title>
+  <script id="1" type="application/vnd.observable.javascript">
+    md`# Kuramoto-Sivashinsky Equation in 2D 
+
+    This notebook implements on the GPU a two-dimensional solution of the [Kuramoto-Sivashinsky equation](https://encyclopediaofmath.org/wiki/Kuramoto-Sivashinsky_equation) (KSE), 
+
+    ${tex.block`u_t + \frac{1}{2}|\nabla u|^2 + \nabla^2 u + \nabla^4 u = 0.`}
+
+    The KSE arises in a number of contexts and was rediscovered by Kuramoto while researching diffusion-induced flame front instabilities. ${
+      "" /*To oversimplify a bit, the [Laplacian](https://en.wikipedia.org/wiki/Laplace_operator) and [biharmonic](https://en.wikipedia.org/wiki/Biharmonic_equation) operators dissipate energy, blurring the solution and transferring energy from high frequency to low frequency modes, while the nonlinear gradient term, ${tex`\frac{1}{2} |\nabla u|^2`} works like [Burgers' equation](https://en.wikipedia.org/wiki/Burgers%27_equation), steepening the solution and transferring enery back to high frequency modes.*/
+    }
+
+    The KSE is one of the simplest partial differential equations to show complicated dynamics, displaying chaotic behavior as the size of the domain increases. Observe below that if ${tex`\nu_1`} or ${tex`\nu_2`}, which represent the size of a wavelength relative to the size of the domain, are greater than one, the chaotic behavior disppears along the short dimension and the solution essentially becomes a one-dimensional solution.
+
+    The solution uses an implicit-explicit [Backward Differentiation Formula](https://en.wikipedia.org/wiki/Backward_differentiation_formula) in the spatial frequency domain, as presented extremely helpfully in Appendix F of A. Kalogirou's thesis, [Nonlinear dynamics of surfactant-laden multilayer shear flows and related systems](https://spiral.imperial.ac.uk/bitstream/10044/1/25067/1/Kalogirou-A-2013-PhD-Thesis.pdf). I had trouble managing the stability for slightly suspicious reasons I'm attributing to unecessary use of a single-precision complex FFT for the real-valued solution, but it seems to compute the solution correctly. I've explained the caveats in more detail below.
+
+    This noteboook is implemented as an interesting test problem with which to explore the tools and the medium, so although it displays the expected behavior, I have not rigorously verified the accuracy! I enjoy exploring these things and using them to learn and inspire, but if I were trying to draw conclusions from this, I would first carefully implement a reference solution using more standard, robust, scientifically valid tools like Python and Numpy.
+    `
+  </script>
+  <script id="1878" type="application/vnd.observable.javascript">
+    {
+      if (colorType === 'half float') {
+        return html`<p style="color:#a00">Warning! This simulation is using half-float precision and as a result won't be accurate, if it works at all. Try a device which supports the floating point WebGL textures for better results.</p>`;
+      } else {
+        return html``;
+      }
+    }
+  </script>
+  <script id="5" type="application/vnd.observable.javascript">
+    viewof L = {
+      const L = [Lx, Lx / aspectRatio];
+      const eqn = html`We solve the problem in the doubly periodic domain, ${tex`[0, \,${L[0].toFixed(
+        3
+      )}] \times [0, \,${L[1].toFixed(3)}].`}`;
+      eqn.value = L;
+      return eqn;
+    }
+  </script>
+  <script id="1671" type="application/vnd.observable.javascript">
+    viewof nu = {
+      const nu = [Math.pow(Math.PI / L[0], 2), Math.pow(Math.PI / L[1], 2)];
+      const eqn = md`The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale of the simulation relative to the size of the domain. Chaotic behavior happens when they are very small, while fundamental changes in the type of behavior happen when they are closer to unity.
+
+    ${tex`\begin{aligned}
+      \nu_1 &= (\frac{\pi}{L_x})^2 = ${nu[0].toFixed(6)}, \\
+      \nu_2 &= (\frac{\pi}{L_y})^2 = ${nu[1].toFixed(6)}
+      \end{aligned}`}`;
+      eqn.value = nu;
+      return eqn;
+    }
+  </script>
+  <script id="1562" type="application/vnd.observable.javascript">
+    viewof Lx = slider({
+      min: 1,
+      max: N[0] / 2,
+      step: 0.01,
+      value: 64,
+      description: html`Horizontal domain size, ${tex`L_x`}`
+    })
+  </script>
+  <script id="1614" type="application/vnd.observable.javascript">
+    viewof aspectRatio = slider({
+      min: 0.1,
+      max: 10,
+      step: 0.01,
+      value: 1,
+      description: html`Aspect ratio, ${tex`\frac{L_x}{L_y}`}`
+    })
+  </script>
+  <script id="2251" type="text/x-typescript" pinned="">
+    import { reglCanvas } from './lib/regl-canvas.js';
+  </script>
+  <script id="85" type="text/x-typescript">
+    const regl = reglCanvas({ width: 1, height: 1 })
+  </script>
+  <script id="118" type="application/vnd.observable.javascript">
+    viewof restart = button({ value: 'Restart' })
+  </script>
+  <script id="120" type="text/x-typescript">
+    const simulate = view(Inputs.checkbox(['Simulate'], {value: ['Simulate'] }))
+    const dt = view(Inputs.range([0.001, 0.2], {
+      step: 0.001,
+      value: 0.18,
+      precision: 3,
+      label: html`Time step, ${tex`\frac{\Delta t}{\nu_1}`}`
+    }))
+    const n = view(Inputs.range([1, 8], {
+      step: 1,
+      value: 1,
+      label: 'Initial condition periods, n'
+    }));
+    const N = [256, 256]
+  </script>
+  <script id="136" type="application/vnd.observable.javascript">
+    viewof range = rangeSlider({
+      min: -16,
+      max: 16,
+      value: [-14, 14],
+      description: 'Colorscale threshold'
+    })
+  </script>
+  <script id="1041" type="application/vnd.observable.javascript">
+    viewof colorscaleName = select({
+      options: Object.keys(colorscales),
+      value: 'Magma',
+      description: 'Color scale'
+    })
+  </script>
+  <script id="1510" type="application/vnd.observable.javascript">
+    viewof invert = checkbox({
+      value: 'invert colorscale',
+      options: ['invert colorscale']
+    })
+  </script>
+  <script id="2227" type="application/vnd.observable.javascript">
+    html`
+    ${
+      simulate
+        ? md`Pause simulation to enable rendering to video`
+        : await encodeMP4(
+            Array.from(Array(1500).keys()),
+            function (t) {
+              regl.poll();
+              performIteration({ render: true });
+              performIteration({ render: true });
+              return regl.read();
+            },
+            {
+              disabled: !!simulate,
+              displayOutput: false,
+              beforeStart: performInitialization,
+              quantizationParameter: 10,
+              groupOfPictures: 10,
+              kbps: 8000,
+              frameRate: 60,
+              width: regl._gl.canvas.width,
+              height: regl._gl.canvas.height
+            }
+          )
+    }`
+  </script>
+  <script id="1601" type="application/vnd.observable.javascript">
+    md`## Solution method`
+  </script>
+  <script id="1747" type="application/vnd.observable.javascript">
+    md`After having previously brute-forced the solution using second order Runge-Kutta (with extremely small time steps!), this notebook follows the solution method outlined in [Kalogirou's thesis](https://spiral.imperial.ac.uk/bitstream/10044/1/25067/1/Kalogirou-A-2013-PhD-Thesis.pdf), particular equations (F.8) - (F.10).
+
+    The equation is solved in the spatial frequency domain, with the exception of the nonlinear term ${tex`\frac{1}{2}|\nabla u|^2`} which requires computing the gradient while transforming back to the spatial domain, then squaring, then transforming back to the frequency domain.
+
+    The update equations are reproduced below, but first I'll make just a couple notes:
+
+    - Equation (F.10) seems to be missing a factor of ${tex`dt`} in the biharmonic term.
+    - Since all terms include derivatives, the offset of ${tex`u`} has no effect and can simply removed by zeroing out the mean (zero-wavenumber) component on every update.
+    - The biggest challenge is that since I perform the *complex* fft of real-valued functions, they seem to quickly leak energy into the imaginary component of the solution. As [LucasVB has pointed out](https://twitter.com/LucasVB/status/1331556308911316993), this may be best solved with a real-valued [Hartley Transform](https://en.wikipedia.org/wiki/Hartley_transform) instead of an unnecessarily complex-valued FFT. Instead, I've opted to add an entire second FFT pass in which I extract the real component of the solution. I've looked everything over very carefully, but the need for this step throws the correctness of the entire solution into question.
+    - Since the real vs. complex issue is a bigger source of uncertainty about the correctness, I initialized the multi-step method with the same values for the two previous steps, rather than implementing a special Backward Euler initialization step.
+
+
+    The domain has size ${tex`[0, 2 L_x] \times [0, 2 L_y]`}, but the equation is solved in the domain ${tex`[0, 2\pi] \times [0, 2\pi]`} via the rescaling in Chapter 9 of Kilgarou's thesis,${tex.block`
+    x \rarr \frac{L_x}{\pi} x, \;\;\;
+    y \rarr \frac{L_y}{\pi} y, \;\;\;
+    t \rarr \left(\frac{L_x}{\pi}\right)^2 t.
+    `}
+    along with the factors shown above, ${tex.block`\nu_1 = \left(\frac{\pi}{L_x}\right)^2, \;\;\; \nu_2 = \left(\frac{\pi}{L_y}\right)^2.`}
+
+    From Appendix F on page 227, the full second order spatial frequency domain update equation for solution ${tex`\hat{V}`} at step ${tex`n+2`} as a function of the data from previous steps ${tex`n+1`} and ${tex`n`} is
+
+    ${tex.block`
+    \begin{aligned}
+    \hat{V}^{n + 2}_{k_1, k_2} =& \frac{1}{\xi_{k_1, k_2}} \left[ (2 + 2c\,dt) \hat{V}^{n+1}_{k_1,k_2} - \left(\frac{1}{2} + c\,dt\right) \hat{V}^n_{k_1,k_2} \right. \\
+    & + 2dt \left( \hat{A}^{n+1}_{k_1,k_2} + \frac{\nu_2}{\nu_1} \hat{B}^{n+1}_{k_1,k_2} \right) \\
+    & - \left. dt \left( \hat{A}^{n}_{k_1,k_2} + \frac{\nu_2}{\nu_1} \hat{B}^{n}_{k_1,k_2} \right) \right]
+    \end{aligned}
+    `}
+    where
+    ${tex.block`
+    \begin{aligned}
+    \hat{A}_{k_1,k_2} &= -\mathscr{F}\left(\frac{1}{2}\left(\frac{\partial v}{\partial x}\right)^2\right), \\
+    \hat{B}_{k_1,k_2} &= -\mathscr{F}\left(\frac{1}{2}\left(\frac{\partial v}{\partial y}\right)^2\right)
+    \end{aligned}
+    `}
+    where ${tex`\mathscr{F}(\cdot)`} represents the spatial Fourier Transform and ${tex`v`} is the spatial domain solution. Finally,
+    ${tex.block`
+    \begin{aligned}
+    \xi_{k_1,k_2} =& \frac{3}{2} + c\,dt - dt\left(k_1^2 + \frac{\nu_1}{\nu_2} k_2^2 \right) \\
+    & + \nu_1\,dt\left(k_1^2 + \frac{\nu_2}{\nu_1} k_2^2\right)^2,
+    \end{aligned}
+    `}
+    using the definition ${tex.block`c = 1 + \frac{1}{\nu_1}.`}
+
+    At first this update equation seemed imposing, but then I realized that if ${tex`k_1`} and ${tex`k_2`} refer to a particular wavenumber then the above is a simple algebraic expression for each fragment, independent of all others, of the texture representing the FFT. The only exceptions are the expressions for ${tex`\hat{A}_{k_1,k_2}`} and ${tex`\hat{B}_{k_1,k_2}`}, which represent the solution, differentiated in the frequency domain via multiplication by ${tex`ik_x`} and ${tex`ik_y`}, inverse-FFT'd into the spatial domain, squared, and then FFT'd back into the spatial frequency domain. From there, the rest is tedious but straightforward shuffling of framebuffers.
+    `
+  </script>
+  <script id="167" type="application/vnd.observable.javascript">
+    md`## Framebuffer setup`
+  </script>
+  <script id="159" type="application/vnd.observable.javascript">
+    V = {
+      const fbos = [0, 1].map(() =>
+        regl.framebuffer({
+          color: regl.texture({
+            width: N[0],
+            height: N[1],
+            type: colorType,
+            min: interpType,
+            mag: interpType
+          })
+        })
+      );
+      invalidation.then(() => fbos.forEach(fbo => fbo.destroy()));
+      return fbos;
+    }
+  </script>
+  <script id="60" type="application/vnd.observable.javascript">
+    Vhat = {
+      const fbos = [0, 1, 2].map(() =>
+        regl.framebuffer({
+
+          color: regl.texture({
+            width: N[0],
+            height: N[1],
+            type: colorType,
+            min: 'nearest',
+            mag: 'nearest'
+          })
+        })
+      );
+      invalidation.then(() => fbos.forEach(fbo => fbo.destroy()));
+      return fbos;
+    }
+  </script>
+  <script id="155" type="application/vnd.observable.javascript">
+    ABhat = {
+      const fbos = [0, 1].map(() =>
+        regl.framebuffer({
+
+          color: regl.texture({
+            width: N[0],
+            height: N[1],
+            type: colorType,
+            min: 'nearest',
+            mag: 'nearest'
+          })
+        })
+      );
+      invalidation.then(() => fbos.forEach(fbo => fbo.destroy()));
+      return fbos;
+    }
+  </script>
+  <script id="170" type="application/vnd.observable.javascript">
+    tmp = {
+      const fbos = [0, 1, 2, 3].map(() =>
+        regl.framebuffer({
+          color: regl.texture({
+            width: N[0],
+            height: N[1],
+            type: colorType,
+            min: 'nearest',
+            mag: 'nearest'
+          })
+        })
+      );
+      invalidation.then(() => fbos.forEach(fbo => fbo.destroy()));
+      return fbos;
+    }
+  </script>
+  <script id="313" type="application/vnd.observable.javascript">
+    function cycleFBOs(array) {
+      let tmp = array[0];
+      for (var i = 0; i < array.length - 1; i++) {
+        array[i] = array[i + 1];
+      }
+      array[array.length - 1] = tmp;
+      return array;
+    }
+  </script>
+  <script id="141" type="application/vnd.observable.javascript">
+    md`## Simulation setup`
+  </script>
+  <script id="1631" type="application/vnd.observable.javascript">
+    resizeSimulation = {
+      aspectRatio;
+      const el = regl._gl.canvas;
+      const dpi = canvasSize.pixelRatio;
+      const width = canvasSize.width;
+      const height = canvasSize.height;
+      var w = Math.floor(canvasSize.width);
+      var h = Math.floor(canvasSize.width / aspectRatio);
+      var maxDim = Math.max(w, h);
+      w *= canvasSize.width / maxDim;
+      h *= canvasSize.width / maxDim;
+      el.width = w;
+      el.height = h;
+      el.style.width = `${w}px`;
+      el.style.height = `${h}px`;
+    }
+  </script>
+  <script id="2101" type="application/vnd.observable.javascript">
+    function performInitialization() {
+      regl.poll();
+      blit(() => {
+        configureSimulation({ n }, () => {
+          V.forEach((v, i) => {
+            v.use(() => initialize({ n }));
+            performFFT(forwardFFT, v, Vhat[i]);
+            computeABhat(Vhat[i], V[i], ABhat[i]);
+          });
+        });
+      });
+    }
+  </script>
+  <script id="2108" type="application/vnd.observable.javascript">
+    function performIteration(ctx) {
+      let dirty = true;
+      let isRender = ctx && ctx.render;
+      let tick = 0;
+      blit(() => {
+        configureSimulation({ dt, nu }, () => {
+          if (isRender || simulate) {
+            computeABhat(Vhat[1], V[1], ABhat[1]);
+            bdfUpdate({ Vhat, ABhat, dt });
+            dirty = true;
+          }
+
+          if (dirty) {
+            copyToScreen({
+              V: V[1],
+              range,
+              invert: !!invert,
+              colorscale: colorscales[colorscaleName]
+            });
+            dirty = false;
+          }
+
+          if (isRender || simulate) {
+            cycleFBOs(Vhat);
+            cycleFBOs(V);
+            cycleFBOs(ABhat);
+
+            // This step should be unnecessary! Its only purpose is to remove the imaginary
+            // component from the solution. I tried to do this without an FFT by just enforcing
+            // symmetry/conjugates in the FFT values, but it did not work. A Hartley transform
+            // would be better and would cut the cost of the simulation in half.
+            performFFT(inverseFFT, Vhat[1], tmp[3]);
+            stripImag({ src: tmp[3], dst: tmp[2] });
+            performFFT(forwardFFT, tmp[2], Vhat[1]);
+          }
+        });
+      });
+    }
+  </script>
+  <script id="104" type="application/vnd.observable.javascript">
+    initialization = {
+      restart;
+      Lx;
+
+      performInitialization();
+    }
+  </script>
+  <script id="106" type="application/vnd.observable.javascript" pinned="">
+    simulationLoop = {
+      initialize;
+      restart;
+      const frame = regl.frame(ctx => {
+        try {
+          performIteration(ctx);
+        } catch (e) {
+          console.error(e);
+          frame.cancel();
+          frame = null;
+        }
+      });
+
+      invalidation.then(() => frame && frame.cancel());
+    }
+  </script>
+  <script id="97" type="application/vnd.observable.javascript">
+    forwardFFT = planFFT({
+      forward: true,
+      width: N[0],
+      height: N[1],
+      ping: tmp[0],
+      pong: tmp[1],
+      input: null,
+      output: null,
+      splitNormalization: true
+    })
+  </script>
+  <script id="100" type="application/vnd.observable.javascript">
+    inverseFFT = planFFT({
+      forward: false,
+      width: N[0],
+      height: N[1],
+      ping: tmp[0],
+      pong: tmp[1],
+      input: null,
+      output: null,
+      splitNormalization: true
+    })
+  </script>
+  <script id="152" type="application/vnd.observable.javascript">
+    performFFT = {
+      const fft = createFFTPassCommand(regl);
+      return function(plan, input, output) {
+        plan[0].input = input;
+        plan[plan.length - 1].output = output;
+        return fft(plan);
+      };
+    }
+  </script>
+  <script id="333" type="application/vnd.observable.javascript">
+    configureSimulation = regl({
+      uniforms: {
+        dx: (ctx, props) => [(2.0 * Math.PI) / N[0], (2.0 * Math.PI) / N[1]],
+        dt: (ctx, props) => props.dt * (props.nu ? props.nu[0] : 0),
+        nu: regl.prop('nu')
+      }
+    })
+  </script>
+  <script id="67" type="application/vnd.observable.javascript">
+    blit = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        void main () {
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        uInverseResolution: ctx => [1 / N[0], 1 / N[1]]
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="108" type="application/vnd.observable.javascript">
+    initialize = regl({
+      frag: `
+        precision highp float;
+        uniform vec2 uInverseResolution;
+        uniform float n;
+        #define PI 3.14159265358979
+
+        void main () {
+          vec2 uv = (gl_FragCoord.xy - 0.5) * uInverseResolution;
+          vec2 xy = uv * PI * 2.0;
+
+          // A circular pulse instead:
+          //float r = length(uv - 0.5);
+          //float f = -2.0 * exp(-pow(r / 0.05, 8.0));
+
+          float f = sin(n * (xy.x + xy.y)) + sin(n * xy.x) + sin(n * xy.y); //+ xy.x + xy.y * xy.x;
+          //float f = 10.0 * sin(n * (xy.x)) * cos(n * (xy.y));
+          gl_FragColor = vec4(f, 0, 0, 0);
+        }`,
+      uniforms: {
+        n: regl.prop('n')
+      }
+    })
+  </script>
+  <script id="222" type="application/vnd.observable.javascript">
+    computeABhat = {
+      // Following Eqn (F.9), we differentiate in the frequency domain via multiplication
+      // by i * kx and i * ky, respectively.
+      const differentiateVhat = regl({
+        frag: `
+          precision highp float;
+          uniform sampler2D VhatTex;
+          uniform vec2 uInverseResolution, dx;
+
+          ${glslWavenumber}
+          ${cmul}
+          #define I vec2(0, 1)
+
+          void main () {
+            vec2 uv = gl_FragCoord.xy * uInverseResolution;
+            vec2 Vhat = texture2D(VhatTex, uv).xy;
+
+            vec2 k = wavenumber(uInverseResolution, dx);
+
+            // x-derivative is (i * kx * Vhat)
+            vec2 dVhatdx = cmul(vec2(0, k.x), Vhat);
+
+            // y-derivative is (i * ky * Vhat)
+            vec2 dVhatdy = cmul(vec2(0, k.y), Vhat);
+
+            // We interleave the result as (i kx Vhat) + i * (i ky Vhat) so that
+            // we recover the derivatives in the real domain as the real and
+            // imaginary components. This could be greatly simplified to avoid
+            // multiplications by one and zero.
+            //
+            // We also place Vhat in the final two components so that we recover
+            // V along the way, for plotting!!!
+            gl_FragColor = vec4(Vhat, dVhatdx + cmul(I, dVhatdy));
+          }`,
+        uniforms: {
+          VhatTex: regl.prop('Vhat')
+        },
+        framebuffer: regl.prop('Vhat_VhatxVhaty')
+      });
+
+      // This step transforms A and B from the frequency to the spatial domain.
+      const ABfromVxVy = regl({
+        frag: `
+          precision highp float;
+          uniform sampler2D V_VxVytex;
+          uniform vec2 uInverseResolution;
+
+          void main () {
+            vec2 uv = gl_FragCoord.xy * uInverseResolution;
+            vec2 VxVy = texture2D(V_VxVytex, uv).zw;
+
+            // From Eqn (F.9), Ahat = -F(1/2 Vx^2). Here we compute the pre-FFT 1/2 Vx^2
+            // and swizzle it into the proper components to end up with
+            //   (-1/2 Vx^2, 0)
+            //   (-1/2 Vy^2, 0)
+            gl_FragColor = vec4(
+              -0.5 * (VxVy * VxVy),
+              vec2(0.0)
+            ).xzyw;
+          }`,
+        uniforms: {
+          V_VxVytex: regl.prop('V_VxVy')
+        },
+        framebuffer: regl.prop('AB')
+      });
+
+      /* Compute Ahat and Bhat given current Vhat. Since we have spare channels for the
+       * initial inverse FFT, we place FFT^-1(Vhat) in V along the way.
+       * @param {fbo} Vhat - input FFT(V)
+       * @param {fbo} V - destination into which FFT^-1(V) is written
+       * @param {fbo} ABhat - destination into which Ahat and Bhat are written into the first
+       *                      two and last two channels of ABhat, respectively.
+       */
+      return function computeABhat(Vhat, V, ABhat) {
+        let Vhat_VhatxVhaty = tmp[2];
+        let V_VxVy = V;
+        let AB = tmp[3];
+
+        // Pass Vhat straight through unmodified, and (i kx Vhat) and (i ky Vhat) into the
+        // last two channels, mixed together as [(i kx Vhat) + i * (i ky Vhat)] since for
+        // real-valued V input the derivative remains separable and allows us to FFT them
+        // at the same time.
+        differentiateVhat({ Vhat, Vhat_VhatxVhaty });
+
+        // Inverse-FFT Vhat -> (V, 0) into the first two channels, and derivatives
+        // Vhatx -> Vx and Vhaty -> Vy into the last two channels. This is where the
+        // separation of the mixed real and imaginary parts happens.
+        performFFT(inverseFFT, Vhat_VhatxVhaty, V_VxVy);
+
+        // Use Vx and Vy derivatives from the last two channels of V_VxVy to compute A and
+        // B as -1/2 Vx^2 and -1/2 Vy^2, respectively.
+        ABfromVxVy({ V_VxVy, AB });
+
+        // Finally, transform ABhat <- FFT(AB)
+        performFFT(forwardFFT, AB, ABhat);
+      };
+    }
+  </script>
+  <script id="110" type="application/vnd.observable.javascript">
+    bdfUpdate = regl({
+      // A Backward Differentiation Formula (BDF) update for the frequency domain solution,
+      // from Equation (F.8).
+      frag: `
+        precision highp float;
+
+        uniform sampler2D Vhat0tex, Vhat1tex, ABhat0tex, ABhat1tex;
+        uniform vec2 uInverseResolution, nu;
+        uniform float dt;
+        uniform vec2 dx;
+
+        ${cmul}
+        ${glslWavenumber}
+
+        void main () {
+          vec2 k = wavenumber(uInverseResolution, dx);
+
+          vec2 uv = gl_FragCoord.xy * uInverseResolution;
+          vec2 Vhat0 = texture2D(Vhat0tex, uv).xy;
+          vec2 Vhat1 = texture2D(Vhat1tex, uv).xy;
+
+          // Equation (F.7)
+          float c = 1.0 + 1.0 / nu.x;
+
+          float cdt = c * dt;
+          float nu21 = nu.y / nu.x;
+
+          // Nonlinear terms via Eqn (F.9), as computed in the computeABhat method.
+          vec4 ABhat0 = texture2D(ABhat0tex, uv);
+          vec4 ABhat1 = texture2D(ABhat1tex, uv);
+
+          // Eqn. (F.10). xi may be complex-valued, in general, but since we deal
+          // only in even-numbered derivatives (0th, laplacian, biharmonic), it 
+          // happens to be strictly real. Note the extra factor of dt on the final
+          // term, which seems to be missing in original source.
+          float k1k2_2 = k.x * k.x + nu21 * k.y * k.y;
+          float xi = 1.5 + cdt - dt * k1k2_2 + dt * nu.x * k1k2_2 * k1k2_2;
+
+          // Eqn (F.8) for the update Vhat^{n + 2}.
+          gl_FragColor.xy = (
+            (2.0 + 2.0 * cdt) * Vhat1
+            - (0.5 + cdt) * Vhat0
+            + dt * (2.0 * (ABhat1.xy + nu21 * ABhat1.zw) - (ABhat0.xy + nu21 * ABhat0.zw))
+          ) / xi;
+
+          if (gl_FragCoord.x == 0.5 && gl_FragCoord.y == 0.5) {
+            gl_FragColor.xy = vec2(0);
+          }
+
+          gl_FragColor.zw = vec2(0);
+        }`,
+      uniforms: {
+        Vhat0tex: regl.prop('Vhat[0]'),
+        Vhat1tex: regl.prop('Vhat[1]'),
+        ABhat0tex: regl.prop('ABhat[0]'),
+        ABhat1tex: regl.prop('ABhat[1]')
+      },
+      framebuffer: regl.prop('Vhat[2]')
+    })
+  </script>
+  <script id="1128" type="application/vnd.observable.javascript">
+    stripImag = regl({
+      frag: `
+        precision highp float;
+        uniform sampler2D src;
+        uniform vec2 uInverseResolution;
+        void main () {
+          // Just drop everything except the first component :/
+          gl_FragColor = vec4(texture2D(src, gl_FragCoord.xy * uInverseResolution).x, 0, 0, 0);
+        }`,
+      uniforms: {
+        src: regl.prop('src')
+      },
+      framebuffer: regl.prop('dst')
+    })
+  </script>
+  <script id="112" type="application/vnd.observable.javascript">
+    copyToScreen = regl({
+      frag: `
+        precision highp float;
+        uniform vec2 uInverseResolution, range;
+        uniform float invGamma;
+        uniform sampler2D V, colorscale;
+        uniform bool invert;
+
+        #define PI 3.14159265358979
+
+        float hardstep (float edge0, float edge1, float x) {
+          //return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+          return (x - edge0) / (edge1 - edge0);
+        }
+
+        float ramp (float x) {
+          return 0.5 + atan(PI * (x - 0.5)) / PI;
+        }
+
+        void main () {
+          float V = texture2D(V, gl_FragCoord.xy * uInverseResolution).x;
+          float f = hardstep(range.x, range.y, V);
+          if (invert) f = 1.0 - f;
+          f = ramp(f);
+          vec3 color = texture2D(colorscale, vec2(f, 0.5)).rgb;
+          gl_FragColor = vec4(color, 1.0);
+        }`,
+      uniforms: {
+        uInverseResolution: ctx => [
+          1 / ctx.framebufferWidth,
+          1 / ctx.framebufferHeight
+        ],
+        invert: regl.prop('invert'),
+        range: regl.prop('range'),
+        V: regl.prop('V'),
+        colorscale: regl.prop('colorscale')
+      }
+    })
+  </script>
+  <script id="73" type="application/vnd.observable.javascript">
+    md`## Definitions`
+  </script>
+  <script id="57" type="application/vnd.observable.javascript">
+    colorType = canWriteToFBOOfType(regl, 'float') ? 'float' : 'half float'
+  </script>
+  <script id="2221" type="application/vnd.observable.javascript">
+    interpType = regl.hasExtension(`OES_texture_${colorType}_linear`)
+      ? 'linear'
+      : 'nearest'
+  </script>
+  <script id="1024" type="application/vnd.observable.javascript">
+    colorscales = {
+      function lut(interpolator, n = 256) {
+        return d3.quantize(interpolator, n).map(c => {
+          return (c = d3.rgb(c)), [c.r, c.g, c.b, 1];
+        });
+      }
+      return {
+        RdBu: regl.texture([lut(d3.interpolateRdBu)]),
+        Viridis: regl.texture([lut(d3.interpolateViridis)]),
+        Cividis: regl.texture([lut(d3.interpolateCividis)]),
+        Inferno: regl.texture([lut(d3.interpolateInferno)]),
+        Magma: regl.texture([lut(d3.interpolateMagma)]),
+        Plasma: regl.texture([lut(d3.interpolatePlasma)]),
+        Greys: regl.texture([lut(d3.interpolateGreys)])
+      };
+    }
+  </script>
+  <script id="76" type="application/vnd.observable.javascript">
+    canvasSize = ({
+      width: Math.min(512, width),
+      height: Math.min(512, width),
+      pixelRatio: 1
+    })
+  </script>
+  <script id="64" type="application/vnd.observable.javascript">
+    function createREGLContext(shape) {
+      const canvas = DOM.canvas(N[0], N[1]);
+      const regl = createREGL({
+        canvas,
+        extensions: ['OES_texture_float', 'OES_texture_float_linear'],
+        optionalExtensions: [
+          'OES_texture_half_float',
+          'OES_texture_half_float_linear'
+        ],
+        attributes: {
+          preserveDrawingBuffer: true
+        }
+      });
+      canvas.value = regl;
+      return canvas;
+    }
+  </script>
+  <script id="70" type="application/vnd.observable.javascript">
+    function createConfigureViewCmd(regl) {
+      const view = mat3create();
+      return regl({
+        uniforms: {
+          view: regl.context('view')
+        },
+        context: {
+          view: (ctx, props) => {
+            var aspect = ctx.framebufferWidth / ctx.framebufferHeight;
+            var scale = !props || props.scale === undefined ? 2.0 : props.scale;
+            return mat3ortho(
+              view,
+              -1 / (scale * aspect),
+              1 / (scale * aspect),
+              -1 / scale,
+              1 / scale
+            );
+          }
+        }
+      });
+    }
+  </script>
+  <script id="1691" type="application/vnd.observable.javascript">
+    md`## Unused`
+  </script>
+  <script id="1519" type="application/vnd.observable.javascript">
+    enforceReal = null /*enforceReal = regl({
+      frag: `
+        precision highp float;
+
+        uniform sampler2D src;
+        uniform float dt, decay;
+        uniform vec2 uInverseResolution;
+
+        void main () {
+          vec2 ij = gl_FragCoord.xy;
+          vec2 uv = ij * uInverseResolution;
+
+          vec2 sgn = vec2(1);
+          if (uv.x > 0.5 + uInverseResolution.x) {
+            uv = 1.0 - uv + uInverseResolution;
+            sgn.y = -1.0;
+          }
+          uv = mod(uv, vec2(1));
+          vec4 f = texture2D(src, uv);
+          gl_FragColor = f * sgn.xyxy;
+        }`,
+      uniforms: {
+        src: regl.prop('src')
+      },
+      framebuffer: regl.prop('dst')
+    })*/
+  </script>
+  <script id="1253" type="application/vnd.observable.javascript">
+    copy = regl({
+      frag: `
+        precision highp float;
+        uniform sampler2D src;
+        uniform vec2 uInverseResolution;
+        void main () {
+          gl_FragColor = vec4(texture2D(src, gl_FragCoord.xy * uInverseResolution));
+        }`,
+      uniforms: {
+        src: regl.prop('src')
+      },
+      framebuffer: regl.prop('dst')
+    })
+  </script>
+  <script id="424" type="application/vnd.observable.javascript">
+    function visualize(fbo, idx, range) {
+      const el = document.createElement('canvas');
+      el.width = canvasSize.width;
+      el.height = canvasSize.height;
+      el.style.width = `${canvasSize.width}px`;
+      el.style.height = `${canvasSize.height}px`;
+      const ctx = el.getContext('2d');
+
+      let data;
+      regl.poll();
+      fbo.use(() => {
+        data = regl.read();
+      });
+      function scale(value) {
+        return Math.max(
+          0,
+          Math.min(
+            255,
+            Math.floor(
+              Math.pow((value - range[0]) / (range[1] - range[0]), 1 / 2.2) * 255
+            )
+          )
+        );
+      }
+
+      let tmp = new Float32Array(data.length / 4);
+      let pixels = new Uint8ClampedArray(data.length);
+      for (var i = 0; i < data.length; i += 4) {
+        tmp[i / 4] = data[i + idx];
+        pixels[i] = scale(data[i + idx]);
+        pixels[i + 1] = scale(data[i + idx]);
+        pixels[i + 2] = scale(data[i + idx]);
+        pixels[i + 3] = 255;
+      }
+      for (var i = 0; i < canvasSize.height; i++) {
+        var str = '';
+        for (var j = 0; j < canvasSize.width; j++) {
+          str += tmp[i * canvasSize.height + j].toFixed(7).padStart(10) + ', ';
+        }
+        console.log(str);
+      }
+      let imageData = new ImageData(pixels, canvasSize.width);
+      ctx.putImageData(imageData, 0, 0);
+
+      return el;
+    }
+  </script>
+  <script id="457" type="application/vnd.observable.javascript">
+    function visualizeFFT(fbo, i) {
+      regl.poll();
+      blit(() => performFFT(inverseFFT, fbo, tmp[0]));
+      return visualize(tmp[0], i);
+    }
+  </script>
+  <script id="36" type="application/vnd.observable.javascript">
+    md`## Imports`
+  </script>
+  <script id="1020" type="application/vnd.observable.javascript">
+    d3 = require("d3@5")
+  </script>
+  <script id="41" type="application/vnd.observable.javascript">
+    createREGL = require('regl')
+  </script>
+  <script id="1843" type="application/vnd.observable.javascript">
+    import { canWriteToFBOOfType } from '@rreusser/regl-tools'
+  </script>
+  <script id="44" type="application/vnd.observable.javascript">
+    import {
+      planFFT,
+      glslWavenumber,
+      createFFTPassCommand
+    } from '@rreusser/glsl-fft'
+  </script>
+  <script id="79" type="application/vnd.observable.javascript">
+    import {
+      mat3invert,
+      mat3multiply,
+      mat3create,
+      mat3ortho
+    } from '@rreusser/gl-mat3'
+  </script>
+  <script id="122" type="application/vnd.observable.javascript">
+    import { slider, checkbox, button, select } from '@jashkenas/inputs'
+  </script>
+  <script id="138" type="application/vnd.observable.javascript">
+    import { rangeSlider } from '@mootari/range-slider'
+  </script>
+  <script id="227" type="application/vnd.observable.javascript">
+    import { cmul } from '@rreusser/glsl-complex'
+  </script>
+  <script id="2249" type="application/vnd.observable.javascript">
+    import { encodeMP4 } from "@rreusser/encode-mp4"
+  </script>
+</notebook>

@@ -35,9 +35,14 @@ function createVec4TempBuffer(device: GPUDevice, N: [number, number]): GPUBuffer
 /**
  * Initialize simulation with initial conditions
  */
-export function performInitialization(ctx: ExecutionContext, n: number) {
+export async function performInitialization(ctx: ExecutionContext, n: number) {
   const { device, pipelines, buffers, config } = ctx;
   const [Nx, Ny] = config.N;
+
+  console.log(`[Init] Starting initialization with n=${n}, resolution=${Nx}x${Ny}`);
+  console.log('[Init] Pipeline exists:', !!pipelines.initialize);
+  console.log('[Init] Buffer V[0] exists:', !!buffers.V[0]);
+  console.log('[Init] Buffer V[0] size:', buffers.V[0].size);
 
   // Create uniform buffer for initialization parameters
   const initParamsBuffer = device.createBuffer({
@@ -46,10 +51,23 @@ export function performInitialization(ctx: ExecutionContext, n: number) {
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
-  const initParamsData = new Uint32Array([Nx, Ny]);
-  const initParamsDataF32 = new Float32Array([0, 0, n, 0]);  // resolution (u32×2) + n (f32)
+  // Pack data: vec2<u32> (8 bytes) + f32 (4 bytes) + padding (4 bytes)
+  const initParamsData = new ArrayBuffer(16);
+  const initParamsU32 = new Uint32Array(initParamsData);
+  const initParamsF32 = new Float32Array(initParamsData);
+
+  initParamsU32[0] = Nx;        // resolution.x
+  initParamsU32[1] = Ny;        // resolution.y
+  initParamsF32[2] = n;         // n (at byte offset 8 = u32 index 2 = f32 index 2)
+  // initParamsF32[3] is padding
+
+  console.log('[Init] Uniform buffer data:', {
+    resolution_x: initParamsU32[0],
+    resolution_y: initParamsU32[1],
+    n: initParamsF32[2]
+  });
+
   device.queue.writeBuffer(initParamsBuffer, 0, initParamsData);
-  device.queue.writeBuffer(initParamsBuffer, 8, initParamsDataF32.buffer, 8, 4);
 
   // Create bind group for initialization
   const initBindGroup = device.createBindGroup({
@@ -61,17 +79,32 @@ export function performInitialization(ctx: ExecutionContext, n: number) {
     ]
   });
 
+  console.log('[Init] Bind group created');
+
   // Execute initialization
+  const workgroupsX = Math.ceil(Nx / 16);
+  const workgroupsY = Math.ceil(Ny / 16);
+  console.log(`[Init] Dispatching ${workgroupsX}x${workgroupsY}x1 workgroups (${workgroupsX * workgroupsY * 256} threads total)`);
+
   const commandEncoder = device.createCommandEncoder({ label: 'Initialize encoder' });
   const pass = commandEncoder.beginComputePass({ label: 'Initialize pass' });
   pass.setPipeline(pipelines.initialize);
   pass.setBindGroup(0, initBindGroup);
-  pass.dispatchWorkgroups(Math.ceil(Nx / 16), Math.ceil(Ny / 16), 1);
+  pass.dispatchWorkgroups(workgroupsX, workgroupsY, 1);
   pass.end();
 
-  device.queue.submit([commandEncoder.finish()]);
+  const commandBuffer = commandEncoder.finish();
+  console.log('[Init] Command buffer created');
 
-  // Forward FFT: V[0] -> Vhat[0]
+  device.queue.submit([commandBuffer]);
+  console.log('[Init] Commands submitted to GPU');
+
+  // Wait for GPU to finish before continuing
+  await device.queue.onSubmittedWorkDone();
+  console.log('[Init] GPU work completed');
+
+  // Transform to frequency domain: V[0] -> Vhat[0]
+  console.log('[Init] Performing forward FFT: V[0] -> Vhat[0]');
   executeFFT2D({
     device,
     pipelines: pipelines.fft,
@@ -84,15 +117,21 @@ export function performInitialization(ctx: ExecutionContext, n: number) {
   });
 
   // Compute ABhat[0] from Vhat[0]
+  console.log('[Init] Computing ABhat[0] from Vhat[0]');
   computeABhat(ctx, buffers.Vhat[0], buffers.V[0], buffers.ABhat[0]);
 
-  // Copy to create history for BDF2
-  copyBuffer(device, buffers.V[0], buffers.V[1]);
+  // Copy Vhat[0] -> Vhat[1] and ABhat[0] -> ABhat[1] for BDF2 initialization
+  console.log('[Init] Copying state to previous timestep buffers');
   copyBuffer(device, buffers.Vhat[0], buffers.Vhat[1]);
   copyBuffer(device, buffers.ABhat[0], buffers.ABhat[1]);
 
+  await device.queue.onSubmittedWorkDone();
+  console.log('[Init] All initialization FFTs complete');
+
   // Cleanup
   initParamsBuffer.destroy();
+
+  console.log('[Init] Initialization complete');
 }
 
 /**

@@ -21,20 +21,19 @@ fn initialize(@builtin(global_invocation_id) global_id: vec3<u32>) {
     return;
   }
 
-  // Map to [0, 2π] × [0, 2π]
-  let uv = vec2<f32>(f32(x), f32(y)) / vec2<f32>(resolution);
-  let xy = uv * 2.0 * 3.14159265359;
+  let idx = y * resolution.x + x;
 
-  // Initial condition: sum of sinusoids
+  // Compute UV coordinates in [0, 1] range
+  let uv = vec2<f32>(f32(x), f32(y)) / vec2<f32>(resolution);
+
+  // Map to [0, 2π] domain
+  let PI = 3.14159265359;
+  let xy = uv * 2.0 * PI;
+
+  // Compute initial condition: f(x,y) = sin(n*(x+y)) + sin(n*x) + sin(n*y)
   let n = params.n;
   let f = sin(n * (xy.x + xy.y)) + sin(n * xy.x) + sin(n * xy.y);
 
-  // Alternative: circular pulse (uncomment if desired)
-  // let r = length(uv - vec2<f32>(0.5, 0.5));
-  // let f = -2.0 * exp(-pow(r / 0.05, 8.0));
-
-  let idx = y * resolution.x + x;
-
-  // Store as (real, 0) since initial condition is real-valued
+  // Store as complex number (real part only, imaginary = 0)
   output[idx] = vec2<f32>(f, 0.0);
 }

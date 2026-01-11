@@ -38,11 +38,12 @@ export function createSimulationBuffers(config: SimulationConfig): SimulationBuf
   const spatialSize = Nx * Ny * 2 * Float32Array.BYTES_PER_ELEMENT;  // vec2<f32>
   const frequencySize = Nx * Ny * 2 * Float32Array.BYTES_PER_ELEMENT;  // vec2<f32> (complex)
   const nonlinearSize = Nx * Ny * 4 * Float32Array.BYTES_PER_ELEMENT;  // vec4<f32> (A.xy, B.xy)
+  const vec4Size = Nx * Ny * 4 * Float32Array.BYTES_PER_ELEMENT;  // vec4<f32> for derivatives
 
-  // Create spatial domain buffers (V)
-  const V = [0, 1].map(() =>
+  // Create spatial domain buffers (V) - vec2 for FFT compatibility
+  const V = [0, 1, 2].map((i) =>
     device.createBuffer({
-      label: 'V buffer (spatial domain)',
+      label: `V[${i}] buffer (spatial domain)`,
       size: spatialSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
     })
@@ -66,11 +67,11 @@ export function createSimulationBuffers(config: SimulationConfig): SimulationBuf
     })
   );
 
-  // Create FFT temporary buffers
+  // Create FFT temporary buffers - need vec4 size for derivative transforms
   const fftTemp = [0, 1].map((i) =>
     device.createBuffer({
       label: `FFT temp[${i}] buffer`,
-      size: frequencySize,
+      size: vec4Size,  // Large enough for vec4 operations
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC
     })
   );

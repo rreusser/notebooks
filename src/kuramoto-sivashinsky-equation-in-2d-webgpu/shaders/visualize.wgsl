@@ -39,9 +39,9 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
     u32(uv_clamped.y * f32(resolution.y - 1u))
   );
 
-  // Read value from spatial domain (take real component only)
+  // Read value from spatial domain (V stored as vec2 = (V.real, V.imag))
   let idx = pixel.y * resolution.x + pixel.x;
-  let value = V[idx].x;  // Real component
+  let value = V[idx].x;  // Real component of V
 
   // Clamp to range
   let range = params.range;
@@ -59,7 +59,6 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
   f = clamp(f, 0.0, 1.0);
 
   // Sample colorscale (1D texture, use v=0.5)
-  // This is now in uniform control flow since we removed the early return
   let color = textureSample(colorscale_texture, colorscale_sampler, vec2<f32>(f, 0.5));
 
   return vec4<f32>(color.rgb, 1.0);
