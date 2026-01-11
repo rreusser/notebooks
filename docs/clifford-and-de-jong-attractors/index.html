@@ -3,12 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Of Noise and Neighbors">
-  <meta property="og:title" content="Of Noise and Neighbors">
-  <meta name="twitter:description" content="A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.">
-  <meta name="subject" content="A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.">
-  <meta name="description" content="A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.">
-  <meta property="og:description" content="A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.">
+  <meta name="twitter:title" content="Clifford and de Jong Attractors">
+  <meta property="og:title" content="Clifford and de Jong Attractors">
+  <meta name="twitter:description" content="Visualize the strange attractors of Clifford and de Jong.">
+  <meta name="subject" content="Visualize the strange attractors of Clifford and de Jong.">
+  <meta name="description" content="Visualize the strange attractors of Clifford and de Jong.">
+  <meta property="og:description" content="Visualize the strange attractors of Clifford and de Jong.">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1502,9 +1502,9 @@ main h6 {
   }
 }
   </style>
-  <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Of Noise and Neighbors</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
-  <script type="module" crossorigin src="/notebooks/assets/comments-I77vOiCB.js"></script>
+  
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Clifford and de Jong Attractors</title>  <script type="module" crossorigin src="/notebooks/assets/index-DmSce80R.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1515,13 +1515,20 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Of Noise and Neighbors</h1>
+    <h1>Clifford and de Jong Attractors</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20250929">September 29, 2025</time>
+      <time pubdate="" datetime="20250516">May 16, 2025</time>
     </div>
     <div class="resource-links">
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/of-noise-and-neighbors/index.html" class="resource-link">
+        <a href="https://observablehq.com/@rreusser/clifford-and-de-jong-attractors-revised-coloring" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="white"></circle>
+            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
+          </svg>
+          Live notebook
+        </a>
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/clifford-and-de-jong-attractors/index.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1531,64 +1538,12 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-3" class="observablehq observablehq--cell"><div><p><em>Knock knock knock knock knock.</em></p>
-</div></div><div id="cell-4" class="observablehq observablehq--cell"><div><p>It’s early September 2023. I absentmindedly open the door, and standing in the hallway is a man I don’t recognize.</p>
-</div></div><div id="cell-5" class="observablehq observablehq--cell"><div><p>“<em>What are you doing up here?</em>” He looks at me intently. “<em>I’m downstairs and you’ve been stomping on the floor all night.</em>”</p>
-</div></div><div id="cell-6" class="observablehq observablehq--cell"><div><p>I realize the man lives directly below us. “I’m sorry,” I respond, though I’m not. “I had no idea I was making any noise. Can you describe what you’re hearing?”</p>
-</div></div><div id="cell-7" class="observablehq observablehq--cell"><div><p>“<em>You know what you’re doing up here. You’re stomping on the floor or having a party or something. If you don’t stop, I’ll call the police.</em>”</p>
-</div></div><div id="cell-8" class="observablehq observablehq--cell"><div><p>I feel my face flush. I did retrieve a backpack from the closet a few minutes ago, but I haven’t even been home most of the night. I know he’s mistaken, but he strikes me as legitimately upset. We continue, but the more he insists I know what I’ve done, the more I pull back. The conversation stalls.</p>
-</div></div><div id="cell-9" class="observablehq observablehq--cell"><div><p>“I’m sorry, but I don’t know what you’re talking about,” my voice wavers as I move to retreat into our home. He stops the door with his hand. I push hard; he pushes harder. The struggle lasts only a few seconds. The door latches and I lunge for the deadbolt. The man leaves.</p>
-</div></div><div id="cell-10" class="observablehq observablehq--cell"><div><p>The next morning I leave home for two weeks. The encounter fades. Mistakes happen.</p>
-</div></div><div id="cell-11" class="observablehq observablehq--cell"><div><p>But two days after returning home, late at night, he corners me in the hallway as I return from walking our dog. We repeat the entire script. The first encounter felt like a misunderstanding, but this time his intransigence feels menacing.</p>
-</div></div><div id="cell-12" class="observablehq observablehq--cell"><div><p>I maneuver past him and overpower him a second time to retreat into our home.</p>
-</div></div><div id="cell-13" class="observablehq observablehq--cell"><div><p>“STOP IT AND GO HOME,” I boom, my hands trembling.</p>
-</div></div><div id="cell-43" class="observablehq observablehq--cell"><div><hr>
-</div></div><div id="cell-14" class="observablehq observablehq--cell"><div><p><em>KNOCK KNOCK KNOCK KNOCK KNOCK.</em></p>
-</div></div><div id="cell-15" class="observablehq observablehq--cell"><div><p>As I emerge from sleep, the police identify themselves at our front door. It’s 12:40 AM, late September, four days after the second encounter. My wife and I squint as our eyes adjust to the overhead kitchen light. A disturbance has been reported coming from our unit, an officer informs us, though I detect hesitation as they size us up. We explain the recent encounters; they explain that whatever is going on, it’s a civil matter between us and our neighbor.</p>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>My wife falls back asleep, but I lie awake, rolling the matter over and over in my head. <em>How can we defend ourselves against nothing at all? Why do we need to? Is there no one with the authority to sort this out and put a stop to it?</em></p>
-</div></div><div id="cell-17" class="observablehq observablehq--cell"><div><p>The next morning I visit property management. They’ve been receiving complaints about us all month. A few minutes in, the man from the hallway enters the office. He appears unassuming. If I’ve seen him prior to these encounters, I don’t recognize him. Hopeful we can reset the situation, I extend my hand to properly introduce myself.</p>
-</div></div><div id="cell-18" class="observablehq observablehq--cell"><div><p>We speak for about thirty minutes. I speculate about alternate sources of the noise, but the man accepts no explanation that doesn’t involve malice on my part, even volunteering that he observes me and my wife from the rooftop balcony to figure out what exactly we do inside our home. My legs grow unsteady.</p>
-</div></div><div id="cell-19" class="observablehq observablehq--cell"><div><p>As the conversation spirals, a second property manager intervenes, suggesting we reconvene the next day for an impromptu noise investigation. I consent, hoping he can still be persuaded that no harm has been done to him.</p>
-</div></div><div id="cell-20" class="observablehq observablehq--cell"><div><p>The investigation demonstrates only that jumping as hard as possible on our bedroom floor fails to reproduce the noise he claims we generate constantly. As vindicating as I believe this to be, the investigation yields no formal outcome. But something in me shifts. I can no longer see any room for misunderstanding. My thoughts turn darker, though I’m unable to piece together any coherent explanation for his actions.</p>
-</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><hr>
-</div></div><div id="cell-21" class="observablehq observablehq--cell"><div><p><em>POUND… POUND…&nbsp;POUND…</em></p>
-</div></div><div id="cell-22" class="observablehq observablehq--cell"><div><p>Shortly after the noise investigation, we notice an unusual pattern of noise. Three to five heavy pounds, intermittent, sometimes at 7 PM, sometimes at 3 AM. Noise in a shared living space is perfectly ordinary, but this feels heavy, angry. Once, dishes fall over in the kitchen. Sometimes I’m certain that the pounding is a direct response to our walking across the floor, but most of the time there is no discernible cause. I frequently wake up at night with a pounding in my head, my heart racing. Each time, I hold my breath, waiting for subsequent pounding to confirm I’ve not merely dreamt it.</p>
-</div></div><div id="cell-23" class="observablehq observablehq--cell"><div><p>I begin to dread walking across the floor, understanding that a single misplaced step is sufficient to provoke another night of sleepless retaliation. My wife reminds me that we’ll experience the disturbances regardless, but I’ve collected enough evidence to demonstrate otherwise. When she drops a box of pasta on the floor, I feel a flash of anger at the consequences of her carelessness before quickly, silently reining in my emotions. Visiting friends in their homes, I’m surprised to discover that a heavy footstep or slammed cabinet sends my heart racing. Left with nowhere to escape, I sometimes retire to bed at 7 PM. My work suffers.</p>
-</div></div><div id="cell-24" class="observablehq observablehq--cell"><div><p>I become angry—not at the man downstairs, but at myself, because I’m not strong enough to simply ignore it all, because the only way I can see to fight against the world he’s constructed is first to engage with it, to be pulled further into it. I watch myself looking with suspicion around every corner and fixating on his presence, but I can do nothing to stop it. I wonder if this is how he experiences the world. <em>Folie à deux</em>?</p>
-</div></div><div id="cell-25" class="observablehq observablehq--cell"><div><p>Left with few options, we fill out paperwork for a restraining order. Eventually, continued pounding and another late-night visit from the police cement our determination.</p>
-</div></div><div id="cell-26" class="observablehq observablehq--cell"><div><p>The moment the temporary restraining order is served, the disturbances stop.</p>
-</div></div><div id="cell-27" class="observablehq observablehq--cell"><div><p>The court hearing at the end of November is neither pleasant nor quick. For two hours, the judge sifts through claim and counterclaim. She corners the man, pressing him, “So you confronted him as he returned from walking his dog? How could he have been making noise <em>inside</em> his apartment if he was <em>outside</em> it?"</p>
-</div></div><div id="cell-49" class="observablehq observablehq--cell"><div><p>When the judge finally announces her decision, the release is overwhelming. I accept inclusion of our animals in the protective order and stand my ground in yielding no contact information to the man. We exit the courtroom without looking at him. And yet, even with everything laid bare, we still understand nothing about why he has pursued us for three relentless months.</p>
-</div></div><div id="cell-46" class="observablehq observablehq--cell"><div><hr>
-</div></div><div id="cell-28" class="observablehq observablehq--cell"><div><p><em>Knock knock knock knock.</em></p>
-</div></div><div id="cell-29" class="observablehq observablehq--cell"><div><p>Someone is at our door. My heart pounds, I feel lightheaded, but three weeks after the hearing, I’m still unprepared for the sheriff who now stands in the hallway. “I’m here to serve you a restraining order,” she informs me. I inspect the papers. Indeed, the man has immediately turned around and sought a restraining order against me. The sheriff sympathizes but can offer no help.</p>
-</div></div><div id="cell-30" class="observablehq observablehq--cell"><div><p>I’m stunned that—out of an abundance of caution which I suppose I can’t argue against—this temporary order has been rubber-stamped without more skepticism. Has <em>our</em> restraining order accomplished nothing? Is this some tit-for-tat that will continue forever? I contact potential attorneys.</p>
-</div></div><div id="cell-31" class="observablehq observablehq--cell"><div><p>The court hearing two weeks before Christmas is anti-climactic. My wife and I arrive half an hour early, dressed in our best suits. An hour into the hearing, the judge calls our case—which she then summarily dismisses without prejudice since the man has failed to appear. Incredulous, we’re still discussing the matter with our attorney when the man finally arrives. We nod and silently exit the courthouse as he walks past us into the courtroom.</p>
-</div></div><div id="cell-47" class="observablehq observablehq--cell"><div><hr>
-</div></div><div id="cell-32" class="observablehq observablehq--cell"><div><p><em>POUND… POUND…&nbsp;POUND…</em></p>
-</div></div><div id="cell-33" class="observablehq observablehq--cell"><div><p>My wife and I look at each other. “Is that… <em>him</em>?”</p>
-</div></div><div id="cell-80" class="observablehq observablehq--cell"><div><p>It’s June, and we’ve enjoyed six months of tenuous silence since the last hearing. I still see him now and then, once or twice per month in and around the building. He doesn’t interact with me and I don’t acknowledge him, but each time I think I catch the flicker of a knowing grin and feel his stare lingering on me as I walk away.</p>
-</div></div><div id="cell-79" class="observablehq observablehq--cell"><div><p>Yet the pounding continues, and with each new disturbance, a familiar pattern emerges. My nerves fray as the late-night pounding once again becomes regular.</p>
-</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><p>By October, the disturbances are relentless and disruptive enough that we call the police. As they leave with little more than a shrug, one officer asks where I’m from.</p>
-</div></div><div id="cell-36" class="observablehq observablehq--cell"><div><p>“Wisconsin,” I say, failing to realize this isn’t small talk.</p>
-</div></div><div id="cell-37" class="observablehq observablehq--cell"><div><p>“Well, this is Oakland.”</p>
-</div></div><div id="cell-38" class="observablehq observablehq--cell"><div><p>I reach out to our attorney, but his answer is no better. Pursuing contempt charges will cost us many times any potential fine. Fearing additional fees, I neglect to follow up.</p>
-</div></div><div id="cell-39" class="observablehq observablehq--cell"><div><p>Our neighbors ask if the pounding which keeps them up at night is the same as we hear. We confirm it is and suggest they bring their concerns to the HOA. Despite having kept the HOA up to date on the matter for over a year now, this—at long last—appears to be the secret ingredient. One household complaining about a neighbor is a dispute, but two households complaining is a liability.</p>
-</div></div><div id="cell-40" class="observablehq observablehq--cell"><div><p>In April, many hundreds of documented disturbances later, and after property management posts the second of two notices on the man’s door, the disturbances suddenly stop. With no explanation, we sleep more easily but brace ourselves for the disturbances to return.</p>
-</div></div><div id="cell-48" class="observablehq observablehq--cell"><div><hr>
-</div></div><div id="cell-41" class="observablehq observablehq--cell"><div><p>At last, we find ourselves in the present. It’s September 2025 now, and the man still lives below us; I imagine him ten feet beneath me as I write these words. But even six months after the last disturbance, I haven’t escaped his world. Each time I walk across the room or slide a chair out from the table, it’s a deliberate, considered act of normalcy, always weighed against the chance of renewed conflict.</p>
-</div></div><div id="cell-72" class="observablehq observablehq--cell"><div><p>I want to know the reason he’s pursued us like this, but I doubt one exists. I want a clean ending to this narrative, but I have none to offer.</p>
-</div></div><div id="cell-81" class="observablehq observablehq--cell"><div><p>I want to imagine this ordeal has refined my instincts, stripped away what was unproductive, left me sharper and stronger and better prepared to face such matters, but I’m not sure.</p>
-</div></div><div id="cell-64" class="observablehq observablehq--cell"><div><p>I helped a man with a walker up a set of stairs yesterday—he was late to a meeting and couldn’t spare the long detour to the ramp. Outwardly, it was ordinary kindness. But inwardly, and with bitterness, I offered the act to our neighbor. For every ounce of conflict he’s given me, I mete out only small tokens of goodness. There’s nothing spiteful about it, but it feels the same.</p>
-</div></div><div id="cell-60" class="observablehq observablehq--cell"><div><p>Maybe the disturbances will resume, maybe they won’t. I wish our neighbor only the peace he seeks.</p>
-</div></div></main>
-      <style>
-        #comment-root {
-          margin: auto;
-          max-width: 640px;
-        }
-      </style>
-      <div id="comment-root" data-post-id="115286585449898475"></div>
+    <main><div id="cell-1251" class="observablehq observablehq--cell"><div><p>This notebook visualizes the strange attractors of <a href="http://paulbourke.net/fractals/clifford/">Clifford Pickover</a> and <a href="http://paulbourke.net/fractals/peterdejong/">Peter de Jong</a>. You can pan and zoom with the mouse or a touch screen. Clifford attractors are defined by</p>
+<p>while de Jong attractors are defined by</p>
+<p>A grid of points is randomly offset and iterated many times. The results are accumulated onto a WebGL texture, effectively computing a histogram of the attractor. Single precision isn’t quite adequate, so you can switch to CPU mode for a final render if you’re willing to wait a bit longer for it to converge. Point density is computed using the formula in <a href="https://observablehq.com/@rreusser/selecting-the-right-opacity-for-2d-point-clouds?collection=@rreusser/writeups">this notebook</a>.</p>
+<p>Color comes from the distance traveled by the most recent iteration. Each pixel accumulates both the RGB color and a hit count. Lightness is computed in the <a href="https://en.wikipedia.org/wiki/YUV">YUV color space</a> from the logarithm of the hit count, while the hue comes from the average accumulated color.</p>
+<p>For more on computing attractors in WebGL, Mike Bostock’s <a href="https://observablehq.com/@mbostock/making-webgl-dance">Making WebGL Dance</a> is a great walkthrough. See also his <a href="https://observablehq.com/@mbostock/clifford-attractor">Clifford Attractor</a> series and Yuri Vishnevsky’s <a href="https://observablehq.com/@twitter/strange-attractors">Strange Attractors</a>.</p>
+</div></div><div id="cell-1252" class="observablehq observablehq--cell"></div><div id="cell-365" class="observablehq observablehq--cell"></div><div id="cell-81" class="observablehq observablehq--cell"></div><div id="cell-1253" class="observablehq observablehq--cell"></div><div id="cell-1254" class="observablehq observablehq--cell"></div><div id="cell-649" class="observablehq observablehq--cell"></div><div id="cell-650" class="observablehq observablehq--cell"></div><div id="cell-1753" class="observablehq observablehq--cell"></div><div id="cell-1594" class="observablehq observablehq--cell"></div><div id="cell-162" class="observablehq observablehq--cell"></div><div id="cell-157" class="observablehq observablehq--cell"></div><div id="cell-865" class="observablehq observablehq--cell"></div><div id="cell-1767" class="observablehq observablehq--cell"></div><div id="cell-1702" class="observablehq observablehq--cell"></div><div id="cell-1288" class="observablehq observablehq--cell"></div><div id="cell-1478" class="observablehq observablehq--cell"></div><div id="cell-1485" class="observablehq observablehq--cell"></div><div id="cell-1473" class="observablehq observablehq--cell"></div><div id="cell-1515" class="observablehq observablehq--cell"></div><div id="cell-1496" class="observablehq observablehq--cell"></div><div id="cell-906" class="observablehq observablehq--cell"></div><div id="cell-824" class="observablehq observablehq--cell"></div><div id="cell-41" class="observablehq observablehq--cell"></div><div id="cell-754" class="observablehq observablehq--cell"></div><div id="cell-934" class="observablehq observablehq--cell"></div><div id="cell-875" class="observablehq observablehq--cell"></div><div id="cell-166" class="observablehq observablehq--cell"></div><div id="cell-71" class="observablehq observablehq--cell"></div><div id="cell-1365" class="observablehq observablehq--cell"></div><div id="cell-59" class="observablehq observablehq--cell"></div><div id="cell-90" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-752" class="observablehq observablehq--cell"></div><div id="cell-748" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-790" class="observablehq observablehq--cell"></div><div id="cell-780" class="observablehq observablehq--cell"></div><div id="cell-2118" class="observablehq observablehq--cell"></div><div id="cell-2119" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
