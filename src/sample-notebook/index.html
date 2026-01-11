@@ -2,6 +2,20 @@
 <notebook theme="air">
   <title>Sample notebook</title>
   <script type="module" id="primes" pinned>
-    const value = view(Inputs.range([1, 10], {label: 'value', step: 1, value: 1}));
+    function sieveOfEratosthenes(limit) {
+      const sieve = new Array(limit + 1).fill(true);
+      sieve[0] = sieve[1] = false;
+      for (let i = 2; i * i <= limit; i++) {
+        if (sieve[i]) {
+          for (let j = i * i; j <= limit; j += i) {
+            sieve[j] = false;
+          }
+        }
+      }
+      return sieve.map((isPrime, n) => isPrime ? n : null).filter(n => n !== null);
+    }
+
+    const primes = sieveOfEratosthenes(100);
+    display(primes);
   </script>
 </notebook>

@@ -1,9 +1,8 @@
 {
   "mcpServers": {
     "debug-notebook": {
-      "command": "node",
-      "args": [".claude/mcp-servers/debug-notebook/index.js"],
-      "cwd": "/Users/rreusser/gh/rreusser/notebooks"
+      "command": "mcp-observable-debug",
+      "args": []
     }
   }
 }

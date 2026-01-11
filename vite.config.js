@@ -7,6 +7,8 @@ import yaml from "yaml";
 import { glob } from "glob";
 import { deserialize } from "@observablehq/notebook-kit";
 import { JSDOM } from "jsdom";
+import { debugNotebook } from "@rreusser/mcp-observable-notebookkit-debugger";
+
 const window = new JSDOM().window;
 const parser = new window.DOMParser();
 
@@ -55,40 +57,10 @@ async function computeIndex() {
   return notebooks;
 }
 
-// Plugin to inject console patching before any modules load (dev only)
-function earlyConsolePatchPlugin() {
-  const patchCode = `
-if (window.location.hostname === 'localhost' || window.location.hostname.match(/127\\.0\\.0\\.1/)) {
-  window.__earlyConsoleLogs = [];
-  window.__originalConsole = {};
-  ['log', 'info', 'warn', 'error', 'debug'].forEach(function(level) {
-    window.__originalConsole[level] = console[level];
-    console[level] = function() {
-      var args = Array.prototype.slice.call(arguments);
-      window.__earlyConsoleLogs.push({ level: level, args: args, timestamp: Date.now() });
-      window.__originalConsole[level].apply(console, args);
-    };
-  });
-}`;
-  return {
-    name: 'early-console-patch',
-    enforce: 'pre',
-    transformIndexHtml() {
-      return [
-        {
-          tag: 'script',
-          children: patchCode,
-          injectTo: 'head-prepend'
-        }
-      ];
-    }
-  };
-}
-
 export default defineConfig({
   ...config(),
   plugins: [
-    earlyConsolePatchPlugin(),
+    debugNotebook(),
     observable({
       template: TEMPLATE_PATH,
       transformTemplate: async function (template, { filename, path }) {
