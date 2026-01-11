@@ -3,8 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Visualizing WebGPU Structs">
-  <meta property="og:title" content="Visualizing WebGPU Structs">
+  <meta name="twitter:title" content="Cubic basis vs. Hermite interpolation">
+  <meta property="og:title" content="Cubic basis vs. Hermite interpolation">
+  <meta name="twitter:description" content="Visually compare cubic interpolation using different basis functions.">
+  <meta name="subject" content="Visually compare cubic interpolation using different basis functions.">
+  <meta name="description" content="Visually compare cubic interpolation using different basis functions.">
+  <meta property="og:description" content="Visually compare cubic interpolation using different basis functions.">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1499,7 +1503,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Visualizing WebGPU Structs</title>  <script type="module" crossorigin src="/notebooks/assets/index-DpTAp35B.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Cubic basis vs. Hermite interpolation</title>  <script type="module" crossorigin src="/notebooks/assets/index-6tCaidlL.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1511,20 +1515,20 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Visualizing WebGPU Structs</h1>
+    <h1>Cubic basis vs. Hermite interpolation</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20250812">August 12, 2025</time>
+      <time pubdate="" datetime="20230513">May 13, 2023</time>
     </div>
     <div class="resource-links">
-        <a href="https://observablehq.com/@rreusser/webgpu-utils" class="resource-link">
+        <a href="https://observablehq.com/@rreusser/cubic-basis-vs-hermite-interpolation" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" fill="white"></circle>
             <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
           </svg>
           Live notebook
         </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/visualizing-webgpu-structs/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/cubic-basis-vs-hermite-interpolation/index.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1534,22 +1538,14 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-6" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-variable">visualizeStruct</span>(<span class="tok-string">`</span>
-<span class="tok-string">struct PointLight {</span>
-<span class="tok-string">  position: vec3f,</span>
-<span class="tok-string">  color: vec4f,</span>
-<span class="tok-string">}</span>
-
-<span class="tok-string">struct Uniforms {</span>
-<span class="tok-string">  xyz: vec3u,</span>
-<span class="tok-string">  tileSize: u32,</span>
-<span class="tok-string">  toXY: vec3f,</span>
-<span class="tok-string">  terrainBuffer: u32,</span>
-<span class="tok-string">  terrainSize: vec2u,</span>
-<span class="tok-string">  globalDimension: u32,</span>
-<span class="tok-string">  pixelSize: f32,</span>
-<span class="tok-string">  lights: array&lt;PointLight, 2&gt;,</span>
-<span class="tok-string">}`</span>)</code></pre><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div></main>
+    <main><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"><div><p>The diagram below illustrates three different methods of cubic spline interpolation which in the style of D3 I’ll call cubic basis and Hermite splines. (In addition, I’ve tested out <em>monotone</em> Hermite interpolation.)</p>
+<p>Click to plot the derivatives as well, which provides some interesting insight to just how smooth each method is and how monotone interpolation works.</p>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"><div><p>Cubic basis spline interpolation uses data as spline control points. A simple method for computing it is repeated linear interpolation, referred to as <a href="https://en.wikipedia.org/wiki/De_Casteljau%27s_algorithm">De Casteljau’s algorithm</a>. Since the weight of points in each linear interpolation is in the range , the weight of points in the repeated sequence of linear interpolations must also be in the range . This form lends itself well to efficient interpolation using built-in linear filtering capability of GPU hardware. This method is described in <em><a href="https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering">GPU Gems Chapter 20: Fast Third-Order Texture Filtering</a></em> and tested out in the notebook <a href="https://rreusser.github.io/notebooks/bicubic-texture-interpolation-using-linear-filtering/">Bicubic Texture Interpolation using Linear Filtering</a>.</p>
+</div></div><div id="cell-13" class="observablehq observablehq--cell"><div><p>The four basis function weights in the interval  are</p>
+</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>Hermite interpolation represents a cubic spline with the derivative specified at two endpoints through which it passes. For one-dimensional interpolation, this derivative can be computed as a simple finite difference of adjacent points. This method results in negative contribution of points, which results in overshoot.</p>
+</div></div><div id="cell-17" class="observablehq observablehq--cell"><div><p>The four basis function weights in the interval  are</p>
+</div></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"><div><p>Finally, there’s one more option using the concepts from <a href="https://github.com/d3/d3-shape#curveMonotoneX"><code>curveMonotoneX</code></a> in d3. It’s a Hermite spline (passes through endpoints with a derivative) but clips the slope to ensure that local extrema may only occur at the points. I’m holding out this will be a good balance between cubic basis splines which are too fuzzy and Hermite splines which overshoot the data.</p>
+</div></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 

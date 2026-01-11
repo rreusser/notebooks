@@ -1,0 +1,517 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Cubic basis vs. Hermite interpolation</title>
+
+  <script type="text/markdown">
+    # Cubic basis vs. Hermite interpolation
+  </script>
+
+  <script type="module">
+    import * as d3 from 'npm:d3@7'
+  </script>
+
+  <script type="text/markdown">
+    The diagram below illustrates three different methods of cubic spline interpolation which in the style of D3 I'll call cubic basis and Hermite splines. (In addition, I've tested out _monotone_ Hermite interpolation.)
+
+    Click to plot the derivatives as well, which provides some interesting insight to just how smooth each method is and how monotone interpolation works.
+  </script>
+
+  <script type="module">
+    const points = [
+      [0, 0],
+      [1, 4],
+      [2, 0],
+      [3, 0],
+      [4, 2],
+      [5, 4]
+    ]
+  </script>
+
+  <script type="module">
+    const show = view(Inputs.checkbox(
+      ["Nearest", "B-spline", "Hermite", "Monotonic", "derivatives"],
+      {
+        value: ["Nearest", "B-spline", "Hermite", "Monotonic"]
+      }
+    ))
+  </script>
+
+  <script type="module">
+    const height = 400
+  </script>
+
+  <script type="module">
+    function linspace(a, b, n = 200) {
+      const arr = new Array(n);
+      for (let i = 0; i < n; i++) {
+        arr[i] = a + ((b - a) * i) / (n - 1);
+      }
+      return arr;
+    }
+  </script>
+
+  <script type="module">
+    function bsplineBasis(u) {
+      return [
+        1/6 * (1 - u)**3,
+        1/6 * (3 * u**3 - 6 * u**2 + 4),
+        1/6 * (-3 * u**3 + 3 * u**2 + 3 * u + 1),
+        1/6 * u**3
+      ];
+    }
+  </script>
+
+  <script type="module">
+    function hermiteBasis(u) {
+      return [
+        1/2 * (-(u**3) + 2*u**2 - u),
+        1/2 * (3 * u**3 - 5 * u**2 + 2),
+        1/2 * (-3 * u**3 + 4 * u**2 + u),
+        1/2 * (u**3 - u**2)
+      ];
+    }
+  </script>
+
+  <script type="module">
+    const monotoneCubic = (function() {
+      function sign(x) {
+        return x < 0 ? -1 : 1;
+      }
+      // Calculate the slopes of the tangents (Hermite-type interpolation) based on
+      // the following paper: Steffen, M. 1990. A Simple Method for Monotonic
+      // Interpolation in One Dimension. Astronomy and Astrophysics, Vol. 239, NO.
+      // NOV(II), P. 443, 1990.
+      function slope3(y0, y1, y2) {
+        var s0 = y1 - y0;
+        var s1 = y2 - y1;
+        return (
+          (sign(s0) + sign(s1)) *
+          Math.min(Math.abs(s0), Math.abs(s1), 0.25 * Math.abs(s0 + s1))
+        );
+      }
+      return function monotoneCubic(f0, f1, f2, f3, u) {
+        let d1 = slope3(f0, f1, f2);
+        let d2 = slope3(f1, f2, f3);
+        let D = f2 - f1;
+        return (
+          f1 + d1 * u + (3 * D - 2 * d1 - d2) * u ** 2 + (d1 + d2 - 2 * D) * u ** 3
+        );
+      };
+    })()
+  </script>
+
+  <script type="module">
+    {
+      let selected = points[0];
+
+      const xScale = d3.scaleLinear().domain([-0.5, 5.5]).range([0, width]);
+      const yScale = d3.scaleLinear().domain([-2, 5]).range([height, 0]);
+
+      const svg = d3
+        .create("svg")
+        .attr("viewBox", [-14, 0, width + 28, height])
+        .attr("tabindex", 1)
+        .attr("pointer-events", "all")
+        .call(
+          d3
+            .drag()
+            .subject(dragsubject)
+            .on("start", dragstarted)
+            .on("drag", dragged)
+        );
+
+      svg
+        .append("rect")
+        .attr("fill", "none")
+        .attr("width", width)
+        .attr("height", height);
+
+      svg
+        .append("path")
+        .attr("class", "nearest1")
+        .attr("fill", "none")
+        .attr("stroke", "grey")
+        .attr("stroke-dasharray", "4 4")
+        .attr("stroke-width", 1);
+
+      svg
+        .append("path")
+        .attr("class", "nearest2")
+        .attr("fill", "none")
+        .attr("stroke", "black")
+        .attr("stroke-width", 2);
+
+      svg
+        .append("path")
+        .attr("class", "cubic")
+        .attr("fill", "none")
+        .attr("stroke", "#38f")
+        .attr("stroke-width", 3);
+
+      svg
+        .append("path")
+        .attr("class", "monotone")
+        .attr("fill", "none")
+        .attr("stroke", "#3d8")
+        .attr("stroke-width", 3);
+      svg
+        .append("path")
+        .attr("class", "cubicspline")
+        .attr("fill", "none")
+        .attr("stroke", "#f38")
+        .attr("stroke-width", 3);
+
+      if (~show.indexOf("derivatives")) {
+        svg
+          .append("path")
+          .attr("class", "axis")
+          .attr("fill", "none")
+          .attr("stroke", "gray")
+          .attr("stroke-dasharray", "2 2")
+          .attr("stroke-width", 2)
+          .datum([
+            [-10, 0],
+            [10, 0]
+          ])
+          .attr(
+            "d",
+            d3
+              .line()
+              .x((d) => xScale(d[0]))
+              .y((d) => yScale(d[1]))
+          );
+        svg
+          .append("path")
+          .attr("class", "cubic-slope")
+          .attr("fill", "none")
+          .attr("stroke", "#38f")
+          .attr("stroke-dasharray", "2 2")
+          .attr("stroke-width", 2);
+        svg
+          .append("path")
+          .attr("class", "monotone-slope")
+          .attr("fill", "none")
+          .attr("stroke", "#3d8")
+          .attr("stroke-dasharray", "2 2")
+          .attr("stroke-width", 2);
+        svg
+          .append("path")
+          .attr("class", "cubicspline-slope")
+          .attr("fill", "none")
+          .attr("stroke", "#f38")
+          .attr("stroke-dasharray", "2 2")
+          .attr("stroke-width", 2);
+      }
+
+      update();
+
+      function update() {
+        updateNearest();
+        updateCubic();
+
+        const circle = svg.selectAll("g").data(points);
+
+        circle
+          .enter()
+          .append("g")
+          .call((g) => g.append("circle").attr("r", 30).attr("fill", "none"))
+          .call((g) =>
+            g
+              .append("circle")
+              .attr("r", 0)
+              .attr("stroke", "black")
+              .attr("stroke-width", 1.5)
+              .transition()
+              .duration(750)
+              .ease(d3.easeElastic)
+              .attr("r", 5)
+          )
+          .merge(circle)
+          .attr("transform", (d) => `translate(${xScale(d[0])},${yScale(d[1])})`)
+          .select("circle:last-child")
+          .attr("fill", (d) => (d === selected ? "lightblue" : "black"));
+
+        circle.exit().remove();
+      }
+
+      function updateNearest() {
+        if (~show.indexOf("Nearest")) {
+          svg
+            .select("path.nearest1")
+            .datum(
+              points
+                .map((p) => [
+                  [p[0] - 0.5, p[1]],
+                  [p[0] + 0.5, p[1]]
+                ])
+                .flat()
+            )
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d[0]))
+                .y((d) => yScale(d[1]))
+                .defined((d) => !!d)
+            );
+          svg
+            .select("path.nearest2")
+            .datum(
+              points
+                .map((p) => [
+                  [p[0] - 0.5, p[1]],
+                  [p[0] + 0.5, p[1]]
+                ])
+                .map((seg) => [seg, null])
+                .flat()
+                .flat()
+            )
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d[0]))
+                .y((d) => yScale(d[1]))
+                .defined((d) => !!d)
+            );
+        }
+      }
+
+      function evalCubic(x, basisfunc) {
+        const p = points;
+        const i = [-1, 0, 1, 2].map((i) =>
+          Math.min(Math.max(0, Math.floor(x + i)), points.length - 1)
+        );
+        const basis = basisfunc((x + 1) % 1);
+        return (
+          basis[0] * p[i[0]][1] +
+          basis[1] * p[i[1]][1] +
+          basis[2] * p[i[2]][1] +
+          basis[3] * p[i[3]][1]
+        );
+      }
+
+      function evalMonotone(x, basisfunc) {
+        const p = points;
+        const i = [-1, 0, 1, 2].map((i) =>
+          Math.min(Math.max(0, Math.floor(x + i)), points.length - 1)
+        );
+        return monotoneCubic(
+          p[i[0]][1],
+          p[i[1]][1],
+          p[i[2]][1],
+          p[i[3]][1],
+          (x + 1) % 1
+        );
+      }
+
+      function deriv(f, x, h = 0.01) {
+        return (f(x + h) - f(x - h)) / (2 * h);
+      }
+
+      function updateCubic() {
+        if (~show.indexOf("B-spline")) {
+          svg
+            .select("path.cubicspline")
+            .datum(linspace(...xScale.domain()))
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d))
+                .y((d) => yScale(evalCubic(d, bsplineBasis)))
+            );
+          svg
+            .select("path.cubicspline-slope")
+            .datum(linspace(...xScale.domain()))
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d))
+                .y((d) =>
+                  yScale(deriv((x) => evalCubic(x, bsplineBasis), d))
+                )
+            );
+        }
+        if (~show.indexOf("Monotonic")) {
+          svg
+            .select("path.monotone")
+            .datum(linspace(...xScale.domain()))
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d))
+                .y((d) => yScale(evalMonotone(d)))
+            );
+          svg
+            .select("path.monotone-slope")
+            .datum(linspace(...xScale.domain()))
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d))
+                .y((d) => yScale(deriv((x) => evalMonotone(x), d)))
+            );
+        }
+        if (~show.indexOf("Hermite")) {
+          svg
+            .select("path.cubic")
+            .datum(linspace(...xScale.domain()))
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d))
+                .y((d) => yScale(evalCubic(d, hermiteBasis)))
+            );
+          svg
+            .select("path.cubic-slope")
+            .datum(linspace(...xScale.domain()))
+            .attr(
+              "d",
+              d3
+                .line()
+                .x((d) => xScale(d))
+                .y((d) =>
+                  yScale(deriv((x) => evalCubic(x, hermiteBasis), d))
+                )
+            );
+        }
+      }
+
+      function dragsubject(event) {
+        let subject = event.sourceEvent.target.__data__;
+        return subject;
+      }
+      function dragstarted({ subject }) {
+        selected = subject;
+        update();
+      }
+      function dragged(event) {
+        event.subject[1] = yScale.invert(event.y);
+        update();
+      }
+
+      display(html`
+    <figure style="max-width:100%">
+      ${svg.node()}
+      <figcaption>Three styles of cubic interpolation: <span style="color:#f38">cubic basis</span> which undershoots the data, <span style="color:#38f">Hermite</span> which overshoots the data, and <span style="color:#3d8">monotone cubic</span> which clips the slopes of Hermite interpolation to enforce monotonicity and offer a compromise.</figcaption>
+    </figure>
+    `);
+    }
+  </script>
+
+  <script type="text/markdown">
+    Cubic basis spline interpolation uses data as spline control points. A simple method for computing it is repeated linear interpolation, referred to as [De Casteljau's algorithm](https://en.wikipedia.org/wiki/De_Casteljau%27s_algorithm). Since the weight of points in each linear interpolation is in the range ${tex`[0, 1]`}, the weight of points in the repeated sequence of linear interpolations must also be in the range ${tex`[0, 1]`}. This form lends itself well to efficient interpolation using built-in linear filtering capability of GPU hardware. This method is described in *[GPU Gems Chapter 20: Fast Third-Order Texture Filtering](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering)* and tested out in the notebook [Bicubic Texture Interpolation using Linear Filtering](https://rreusser.github.io/notebooks/bicubic-texture-interpolation-using-linear-filtering/).
+  </script>
+
+  <script type="text/markdown">
+    The four basis function weights in the interval ${tex`[0, 1]`} are
+  </script>
+
+  <script type="module">
+    display(tex.block`f(u) = \frac{1}{6}
+    \begin{bmatrix}
+    (1-u)^3 \\
+    3u^3 - 6u^2 + 4 \\
+    -3u^3 + 3u^2 + 3u + 1 \\
+    u^3
+    \end{bmatrix}`)
+  </script>
+
+  <script type="module">
+    {
+      const data = linspace(0, 1, 101).map(u => {
+        const basis = bsplineBasis(u);
+        return { u, b0: basis[0], b1: basis[1], b2: basis[2], b3: basis[3] };
+      });
+      display(html`<figure>
+      ${Plot.plot({
+        width: 384,
+        height: 256,
+        grid: true,
+        x: { domain: [0, 1] },
+        y: { domain: [-0.1, 1] },
+        marks: [
+          Plot.ruleX([0, 1]),
+          Plot.ruleY([0]),
+          Plot.line(data, { x: "u", y: "b0", stroke: "#d38", strokeWidth: 2 }),
+          Plot.line(data, { x: "u", y: "b1", stroke: "#8d3", strokeWidth: 2 }),
+          Plot.line(data, { x: "u", y: "b2", stroke: "#38d", strokeWidth: 2 }),
+          Plot.line(data, { x: "u", y: "b3", stroke: "#d83", strokeWidth: 2 })
+        ]
+      })}
+      <figcaption>Basis functions for B-spline interpolation. Note the maximum value of 2/3, which results in undershoot.</figcaption>
+      </figure>`);
+    }
+  </script>
+
+  <script type="text/markdown">
+    Hermite interpolation represents a cubic spline with the derivative specified at two endpoints through which it passes. For one-dimensional interpolation, this derivative can be computed as a simple finite difference of adjacent points. This method results in negative contribution of points, which results in overshoot.
+  </script>
+
+  <script type="text/markdown">
+    The four basis function weights in the interval ${tex`[0, 1]`} are
+  </script>
+
+  <script type="module">
+    display(tex`f(u) = \frac{1}{2}
+    \begin{bmatrix}
+    -u^3 + 2u^2 - u \\
+    3u^3 - 5u^2 + 2 \\
+    -3u^3 + 4u^2 + u \\
+    u^3 - u^2
+    \end{bmatrix}`)
+  </script>
+
+  <script type="module">
+    {
+      const data = linspace(0, 1, 101).map(u => {
+        const basis = hermiteBasis(u);
+        return { u, b0: basis[0], b1: basis[1], b2: basis[2], b3: basis[3] };
+      });
+      display(html`<figure>${Plot.plot({
+        width: 384,
+        height: 256,
+        grid: true,
+        x: { domain: [0, 1] },
+        y: { domain: [-0.1, 1] },
+        marks: [
+          Plot.ruleX([0, 1]),
+          Plot.ruleY([0]),
+          Plot.line(data, { x: "u", y: "b0", stroke: "#d38", strokeWidth: 2 }),
+          Plot.line(data, { x: "u", y: "b1", stroke: "#8d3", strokeWidth: 2 }),
+          Plot.line(data, { x: "u", y: "b2", stroke: "#38d", strokeWidth: 2 }),
+          Plot.line(data, { x: "u", y: "b3", stroke: "#d83", strokeWidth: 2 })
+        ]
+      })}
+      <figcaption>Basis functions for Hermite interpolation. Note the slightly negative weights which result in overshoot.</figcaption>
+      </figure>`);
+    }
+  </script>
+
+  <script type="text/markdown">
+    Finally, there's one more option using the concepts from [`curveMonotoneX`](https://github.com/d3/d3-shape#curveMonotoneX) in d3. It's a Hermite spline (passes through endpoints with a derivative) but clips the slope to ensure that local extrema may only occur at the points. I'm holding out this will be a good balance between cubic basis splines which are too fuzzy and Hermite splines which overshoot the data.
+  </script>
+
+  <script type="module">
+    display(tex`
+    \begin{aligned}
+    s_0 &= f_1 - f_0 \\
+    s_1 &= f_2 - f_1 \\
+    f'_1 &= (\operatorname{sign}(s_0) + \operatorname{sign}(s_1))
+    \operatorname{min}\left(\left|s_0\right|, \left|s_1\right|, \left|\frac{s_0 + s_1}{4}\right|\right)
+    \end{aligned}`)
+  </script>
+
+  <script type="module">
+    display(tex`
+    \begin{aligned}
+    \Delta &= f_2 - f_1 \\
+    f(u) &= f_1 + f'_1 u + (3\Delta - 2f'_1 - f'_2) u^2 + (f'_1 + f'_2 - 2\Delta) u^3
+    \end{aligned}`)
+  </script>
+</notebook>
