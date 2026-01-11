@@ -1,0 +1,4 @@
+publishedAt: "September 7, 2022"
+description: "Interactive demonstration of generalized winding numbers in 2D, accelerated using a bounding volume hierarchy (BVH) with dipole approximations for efficient inside-outside queries."
+maxWidth: 640px
+observableUrl: https://observablehq.com/@rreusser/fast-generalized-winding-numbers-in-2d

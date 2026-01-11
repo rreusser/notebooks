@@ -582,112 +582,69 @@
   <script id="2621" type="module">
     const linesReady = (function() {
       if (lines.length > 0) return true;
+
+      // Helper to generate a circle/polygon
+      // CCW (clockwise=false) = positive winding inside (blue)
+      // CW (clockwise=true) = negative winding inside (red)
+      function polygon(cx, cy, r, n, clockwise = false) {
+        const pts = [];
+        const dir = clockwise ? 1 : -1;
+        for (let i = 0; i <= n; i++) {
+          const t = dir * i / n * Math.PI * 2;
+          pts.push({ x: cx + r * Math.cos(t), y: cy + r * Math.sin(t) });
+        }
+        return pts;
+      }
+
+      // Helper to generate a rounded rectangle
+      // CCW = positive winding inside, CW = negative winding inside
+      function roundedRect(cx, cy, w, h, r, clockwise = false) {
+        const pts = [];
+        const n = 8; // points per corner
+        const dir = clockwise ? 1 : -1;
+
+        // For CCW (positive inside): top-right -> bottom-right -> bottom-left -> top-left
+        // We trace edges and corners in order
+        const hw = w / 2, hh = h / 2;
+
+        // Define corners: center of arc, and start/end angles
+        // Going CCW (screen coords, Y-down): right-top, right-bottom, left-bottom, left-top
+        const corners = clockwise ? [
+          { cx: cx + hw - r, cy: cy - hh + r, startAngle: -Math.PI/2, endAngle: 0 },
+          { cx: cx + hw - r, cy: cy + hh - r, startAngle: 0, endAngle: Math.PI/2 },
+          { cx: cx - hw + r, cy: cy + hh - r, startAngle: Math.PI/2, endAngle: Math.PI },
+          { cx: cx - hw + r, cy: cy - hh + r, startAngle: Math.PI, endAngle: Math.PI * 1.5 },
+        ] : [
+          { cx: cx + hw - r, cy: cy - hh + r, startAngle: 0, endAngle: -Math.PI/2 },
+          { cx: cx - hw + r, cy: cy - hh + r, startAngle: -Math.PI/2, endAngle: -Math.PI },
+          { cx: cx - hw + r, cy: cy + hh - r, startAngle: Math.PI, endAngle: Math.PI/2 },
+          { cx: cx + hw - r, cy: cy + hh - r, startAngle: Math.PI/2, endAngle: 0 },
+        ];
+
+        for (const corner of corners) {
+          for (let i = 0; i <= n; i++) {
+            const t = corner.startAngle + (corner.endAngle - corner.startAngle) * i / n;
+            pts.push({ x: corner.cx + r * Math.cos(t), y: corner.cy + r * Math.sin(t) });
+          }
+        }
+        pts.push(pts[0]); // close the path
+        return pts;
+      }
+
       const initialLines = [
-        [
-          { x: 123, y: 175 },
-          { x: 132, y: 184 },
-          { x: 140, y: 199 },
-          { x: 147, y: 223 },
-          { x: 154, y: 257 },
-          { x: 159, y: 313 },
-          { x: 158, y: 449 }
-        ],
-        [
-          { x: 211, y: 453 },
-          { x: 209, y: 419 },
-          { x: 209, y: 377 },
-          { x: 213, y: 371 },
-          { x: 226, y: 370 },
-          { x: 230, y: 373 },
-          { x: 232, y: 377 },
-          { x: 236, y: 393 },
-          { x: 234, y: 454 }
-        ],
-        [
-          { x: 289, y: 459 },
-          { x: 289, y: 421 },
-          { x: 286, y: 410 },
-          { x: 280, y: 353 },
-          { x: 275, y: 342 },
-          { x: 256, y: 323 },
-          { x: 241, y: 313 },
-          { x: 233, y: 311 },
-          { x: 219, y: 312 },
-          { x: 206, y: 320 },
-          { x: 198, y: 327 },
-          { x: 195, y: 290 },
-          { x: 191, y: 272 },
-          { x: 190, y: 252 },
-          { x: 188, y: 243 },
-          { x: 188, y: 222 },
-          { x: 185, y: 199 },
-          { x: 185, y: 161 }
-        ],
-        [
-          { x: 312, y: 316 },
-          { x: 312, y: 335 },
-          { x: 318, y: 358 },
-          { x: 321, y: 384 },
-          { x: 320, y: 459 },
-          { x: 367, y: 458 },
-          { x: 365, y: 435 },
-          { x: 359, y: 414 },
-          { x: 357, y: 389 },
-          { x: 357, y: 327 },
-          { x: 361, y: 313 }
-        ],
-        [
-          { x: 331, y: 208 },
-          { x: 323, y: 206 },
-          { x: 313, y: 207 },
-          { x: 309, y: 221 },
-          { x: 309, y: 234 },
-          { x: 316, y: 244 },
-          { x: 335, y: 244 },
-          { x: 340, y: 241 },
-          { x: 344, y: 235 },
-          { x: 344, y: 221 },
-          { x: 337, y: 209 },
-          { x: 330, y: 207 }
-        ],
-        [
-          { x: 410, y: 161 },
-          { x: 440, y: 161 },
-          { x: 443, y: 158 },
-          { x: 449, y: 158 },
-          { x: 451, y: 161 },
-          { x: 459, y: 352 },
-          { x: 432, y: 354 },
-          { x: 421, y: 357 },
-          { x: 418, y: 356 },
-          { x: 418, y: 261 },
-          { x: 409, y: 203 },
-          { x: 405, y: 189 },
-          { x: 398, y: 179 },
-          { x: 395, y: 167 },
-          { x: 395, y: 163 },
-          { x: 397, y: 162 },
-          { x: 409, y: 162 }
-        ],
-        [
-          { x: 430, y: 406 },
-          { x: 430, y: 404 },
-          { x: 432, y: 403 },
-          { x: 443, y: 400 },
-          { x: 464, y: 399 },
-          { x: 469, y: 404 },
-          { x: 471, y: 410 },
-          { x: 471, y: 426 },
-          { x: 468, y: 434 },
-          { x: 464, y: 439 },
-          { x: 448, y: 448 },
-          { x: 435, y: 449 },
-          { x: 427, y: 440 },
-          { x: 423, y: 431 },
-          { x: 424, y: 413 }
-        ],
+        // Outer CCW rounded rectangle (positive winding inside - blue)
+        roundedRect(200, 300, 280, 340, 40, false),
+        // Inner CW rounded rectangle (creates a hole - cancels to white)
+        roundedRect(200, 300, 140, 180, 20, true),
+        // Separate CCW circle on the right (positive winding - blue)
+        polygon(450, 200, 70, 24, false),
+        // Separate CW circle below (negative winding - red)
+        polygon(450, 400, 50, 20, true),
+        // An open arc/gap to show non-closed geometry
+        polygon(520, 300, 40, 12, false).slice(0, 8),
         []
       ];
+
       for (const line of initialLines) {
         lines.push(line.map(({ x, y }) => ({ x: x + width / 2 - 300, y })));
       }

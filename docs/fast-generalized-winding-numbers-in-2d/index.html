@@ -3,8 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="Fast Generalized Winding Numbers in 2D">
+  <meta property="og:title" content="Fast Generalized Winding Numbers in 2D">
+  <meta name="twitter:description" content="Interactive demonstration of generalized winding numbers in 2D, accelerated using a bounding volume hierarchy (BVH) with dipole approximations for efficient inside-outside queries.">
+  <meta name="subject" content="Interactive demonstration of generalized winding numbers in 2D, accelerated using a bounding volume hierarchy (BVH) with dipole approximations for efficient inside-outside queries.">
+  <meta name="description" content="Interactive demonstration of generalized winding numbers in 2D, accelerated using a bounding volume hierarchy (BVH) with dipole approximations for efficient inside-outside queries.">
+  <meta property="og:description" content="Interactive demonstration of generalized winding numbers in 2D, accelerated using a bounding volume hierarchy (BVH) with dipole approximations for efficient inside-outside queries.">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1498,8 +1502,9 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Fast Generalized Winding Numbers in 2D</title>  <script type="module" crossorigin src="/notebooks/assets/index-uNjAc80E.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1510,153 +1515,63 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Fast Generalized Winding Numbers in 2D</h1>
     <div class="byline">
-      
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20220907">September 7, 2022</time>
     </div>
     <div class="resource-links">
+        <a href="https://observablehq.com/@rreusser/fast-generalized-winding-numbers-in-2d" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="white"></circle>
+            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
+          </svg>
+          Live notebook
+        </a>
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/fast-generalized-winding-numbers-in-2d/index.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="wilcoxon-signed-rank-test/">Wilcoxon Signed-Rank Test for Performance Testing</a></h2>
-            <span class="publishedAt">January 6, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="perfectly-matched-layers-for-the-wave-equation/">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <span class="publishedAt">December 31, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="reflecting-on-two-years-of-yoga/">Reflecting on Two Years of Yoga</a></h2>
-            <span class="publishedAt">December 27, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="of-noise-and-neighbors/">Of Noise and Neighbors</a></h2>
-            <span class="publishedAt">September 29, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="regl-canvas/">REGL in Observable Notebooks 2.0</a></h2>
-            <span class="publishedAt">August 12, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="chaotic-magnetic-pendulum/">Chaotic Magnetic Pendulum</a></h2>
-            <span class="publishedAt">August 7, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="spring-training/">Spring Training on the Treadmill</a></h2>
-            <span class="publishedAt">June 8, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="speed-climbing-world-record-progression/">Speed Climbing World Record Progression</a></h2>
-            <span class="publishedAt">May 3, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/">Series Acceleration with Shanks Transformation</a></h2>
-            <span class="publishedAt">September 23, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="cubic-basis-vs-hermite-interpolation/">Cubic basis vs. Hermite interpolation</a></h2>
-            <span class="publishedAt">May 13, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="bicubic-texture-interpolation-using-linear-filtering/">Bicubic Texture Interpolation using Linear Filtering</a></h2>
-            <span class="publishedAt">January 6, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">November 16, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="fast-generalized-winding-numbers-in-2d/">Fast Generalized Winding Numbers in 2D</a></h2>
-            <span class="publishedAt">September 7, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">May 24, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="double-pendulum-map/">The Double Pendulum Map</a></h2>
-            <span class="publishedAt">May 14, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="malkus-waterwheel/">Malkus Waterwheel</a></h2>
-            <span class="publishedAt">February 13, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="adaptive-contouring-in-fragment-shaders/">Adaptive Contouring in Fragment Shaders</a></h2>
-            <span class="publishedAt">November 21, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="integers-in-single-precision-floating-point/">Visualizing Integers in Floating-Point</a></h2>
-            <span class="publishedAt">February 9, 2020</span>
-          </div>
-          
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-1761" class="observablehq observablehq--cell"></div><div id="cell-1762" class="observablehq observablehq--cell"><div><p>This notebook demonstrates computation of winding numbers in two dimensions based on Jacobson <em>et al.'s</em> <em><a href="https://www.cs.utah.edu/~ladislav/jacobson13robust/jacobson13robust.html">Robust Inside-Outside Segmentation using Generalized Winding Numbers</a></em> as well as the subsequent optimization of Barill <em>et al.</em> in <em><a href="https://www.dgp.toronto.edu/projects/fast-winding-numbers/">Fast Winding Numbers for Soups and Clouds</a></em>.</p>
+<p>The winding number of a curve relative to a point is a straightforward concept. We trace the curve, add up the angle swept out relative to the point—positive for counterclockwise motion and negative for clockwise—and divide by . For any point not on the curve itself, this procedure counts count how many times the curve encircles the point,  for each counterclockwise encircling,  for each clockwise encircling, and  for points entirely outside the curve.</p>
+</div></div><div id="cell-1763" class="observablehq observablehq--cell"></div><div id="cell-240" class="observablehq observablehq--cell"><div><p>Stating this procedure mathematically, we write the winding number relative to point  as the integral</p>
+<p>For a curve comprised of discrete line segments, the integral becomes the summation</p>
+<p>Jacobson <em>et al.</em> offer a formula for computing the angle swept out relative to point  by the line segment with endpoints  and . Defining  and , the angle swept out by the segment is</p>
+<p>The curve does not need to be closed to use the above equation. The figure below plots the winding number induced by a single segment of length . Color represents this generalized winding number. (The contours are scaled by  to better represent the shape of the field.) The winding number is exactly  on one side of the segment,  on the other, and varying shades between as we move around the segment from one side to the other.</p>
+</div></div><div id="cell-2168" class="observablehq observablehq--cell"></div><div id="cell-2172" class="observablehq observablehq--cell"></div><div id="cell-2173" class="observablehq observablehq--cell"></div><div id="cell-2219" class="observablehq observablehq--cell"><div><p>The summation above represents a perfectly adequate means of computing a winding number. We may superimpose the above segment solutions, allowing us to iterate over the segments which make up a curve and directly compute the total winding number relative to a given point.</p>
+<p>The plot below illustrates this summation for a circle made up of 32 segments. Note that when the curve is fully closed, the winding number becomes exactly 0 or 1 everywhere.</p>
+</div></div><div id="cell-1790" class="observablehq observablehq--cell"></div><div id="cell-1829" class="observablehq observablehq--cell"></div><div id="cell-2220" class="observablehq observablehq--cell"></div><div id="cell-1921" class="observablehq observablehq--cell"><div><p>This procedure works great for toy examples, but if we want to visualize an entire field, the global nature of this algorithm presents a major problem: every point depends on all geometry! Imagine we have geometry with 100,000 line segments. A 512 × 512 image contains about 260,000 pixels. Rasterizing such an image requires 26 billion evaluations of the above equation!</p>
+<p>If you have a sharp eye, you might realize that the field in the above example seems to depend only on the endpoints of the curve. More specifically, for any point <em>outside the convex hull of the geometry</em>, knowledge of the endpoints alone is adequate to compute the field exactly. Jacobson <em>et al.</em> use this fact to construct an efficient scheme for exact far-field evaluation, but as I’m particularly interested in a soup of disorganized line segments without clean, well-maintained endpoints, the approximate algorithm of Barill <em>et al.</em> seemed preferable.</p>
+<p>The key observation is that a line segment from far away looks like a point. More specifically, the effect of a source or collection of sources approaches in the far field that of a <em><a href="https://en.wikipedia.org/wiki/Dipole">dipole</a></em> defined solely by a location, an orientation, and a strength. You can think of a dipole like the limiting behavior of two oppositely charged particles brought infinitesimally close together.</p>
+<p>Adjust the scale of the geometry below and observe that from far away, the structure disappears and the winding number looks identical to that of the single short line segment <a href="#segmentLength">shown above</a>.</p>
+</div></div><div id="cell-1874" class="observablehq observablehq--cell"></div><div id="cell-1877" class="observablehq observablehq--cell"></div><div id="cell-2221" class="observablehq observablehq--cell"></div><div id="cell-1757" class="observablehq observablehq--cell"><div><p>This suggests a hierarchical approximation: nearby, we iterate over all geometry explicitly; far away, we treat the geometry in aggregate. This method of iterating over a tree of clustered geometry is called the <a href="https://en.wikipedia.org/wiki/Barnes%E2%80%93Hut_simulation">Barnes-Hut</a> approximation. Barnes-Hut can be a somewhat harsh approximation, but with respect to the number of segments , its  performance for a single evaluation is such a speedup compared to the naive  that we consider ourselves lucky to get so far with relatively little effort.</p>
+<p>(The <a href="https://en.wikipedia.org/wiki/Fast_multipole_method">Fast Multipole Method</a> (FMM) performs a more careful and accurate expansion, though it’s a lot more complicated and I’ve never tried it. Barill <em>et al.</em> mention that it didn’t prove advantageous for this particular problem.)</p>
+<p>For a deeper dive into the Barnes-Hut approximation, see Jeffrey Heer’s excellent notebook <a href="https://observablehq.com/@jheer/the-barnes-hut-approximation">The Barnes-Hut Approximation</a>.</p>
+</div></div><div id="cell-2396" class="observablehq observablehq--cell"><div><p>Since we’re dealing with oriented dipole-like segments, our case is a bit different than the more typical gravitational simulation. To that end, there’s one more improvement worth discussing, and at this point we have no choice but to break out the math. As Barill <em>et al.</em> discuss in <em><a href="https://www.dgp.toronto.edu/projects/fast-winding-numbers/">Fast Winding Numbers for Soups and Clouds</a></em>, instead of aggregating geometry into single point dipoles, we can perform a Taylor series expansion to account for internal structure of each point cluster. They focus primarily on the 3D case. I found the math a bit tedious and challenging to work through, so I’ll offer some details about the 2D case here.</p>
+</div></div><div id="cell-2434" class="observablehq observablehq--cell"></div><div id="cell-2338" class="observablehq observablehq--cell"><div><p>Finally, the main feature! The simulation below computes the winding number of a curve using a <a href="https://en.wikipedia.org/wiki/Bounding_volume_hierarchy">Bounding Volume Hierarchy</a> (BVH) for acceleration. On construction, the segments which make up a leaf node are aggregated into a single dipole. For non-leaf nodes, it combines the two dipoles of the respective child nodes into a single dipole. During evaluation, far-away nodes are accounted for only in the aggregate sense, as a dipole. Nearby nodes are either then recursed into or in the case of a leaf node, their segments treated individually.</p>
+<p>In the end, I’m still not completely content with the Taylor series expansion and small improvements. I think this is because I’ve sort of combined the Taylor series expansion for a point-dipole cloud with the Green’s function of a finite-length segment. The resulting improvements sorta help, but not completely. Fortunately, the end result I seek—a thresholded winding number for loosely-but-not-exactly-watertight geometry—appears quite tolerant to error, such that the unimproved solution seems good enough for a pretty good inside-outside query.</p>
+</div></div><div id="cell-1541" class="observablehq observablehq--cell"></div><div id="cell-1542" class="observablehq observablehq--cell"></div><div id="cell-2435" class="observablehq observablehq--cell"></div><div id="cell-64" class="observablehq observablehq--cell"></div><div id="cell-186" class="observablehq observablehq--cell"></div><div id="cell-1473" class="observablehq observablehq--cell"></div><div id="cell-2639" class="observablehq observablehq--cell"></div><div id="cell-2620" class="observablehq observablehq--cell"></div><div id="cell-2621" class="observablehq observablehq--cell"></div><div id="cell-334" class="observablehq observablehq--cell"></div><div id="cell-408" class="observablehq observablehq--cell"></div><div id="cell-490" class="observablehq observablehq--cell"></div><div id="cell-784" class="observablehq observablehq--cell"></div><div id="cell-187" class="observablehq observablehq--cell"></div><div id="cell-188" class="observablehq observablehq--cell"></div><div id="cell-66" class="observablehq observablehq--cell"></div><div id="cell-224" class="observablehq observablehq--cell"></div><div id="cell-227" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-1551" class="observablehq observablehq--cell"></div><div id="cell-46" class="observablehq observablehq--cell"></div><div id="cell-1774" class="observablehq observablehq--cell"><style>
+  .observablehq figure img {
+    margin-left: auto;
+    margin-right: auto;
+  }
+  .observablehq figure  {
+    text-align: center;
+  }
+  .observablehq figcaption  {
+    text-align: left;
+  }
+  .observablehq details {
+    max-width: 640px;
+  }
+</style></div></main>
+  </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
 
