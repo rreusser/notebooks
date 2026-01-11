@@ -1,0 +1,317 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Bicubic Texture Interpolation using Linear Filtering</title>
+  <script id="136" type="text/markdown">
+    # Bicubic Texture Interpolation using Linear Filtering
+
+    This notebook shows how to implement bicubic texture filtering in GLSL using just four linearly-filtered texture samples. The technique is described in *[GPU Gems 2, Chapter 20](https://developer.nvidia.com/gpugems/gpugems2/part-iii-high-quality-rendering/chapter-20-fast-third-order-texture-filtering)* and implemented based on [this Stack Overflow answer](https://stackoverflow.com/questions/13501081/efficient-bicubic-filtering-code-in-glsl). The function works as a drop-in replacement for `texture2D()`, requiring only an additional `vec2` texture size parameter since WebGL 1 lacks the [textureSize()](https://registry.khronos.org/OpenGL-Refpages/gl4/html/textureSize.xhtml) function.
+
+    The default B-spline basis produces smooth *C²* continuity but doesn't pass through the control points, which can make the result look slightly blurry. The Catmull-Rom basis does pass through control points but requires 16 texture fetches from nearest-neighbor filtering. Try "Grayscale random" with "Contours" enabled to see how bicubic interpolation achieves smooth *C²* continuity compared to linear interpolation's *C⁰* continuity.
+
+    This notebook also includes implementations of linear filtering from nearest-neighbor samples (4 fetches) and bicubic filtering from nearest-neighbor samples (16 fetches) for comparison.
+  </script>
+
+  <script id="0" type="module">
+    import createREGL from 'npm:regl@2.1.1'
+    import { reglCanvas } from './lib/regl-canvas.js'
+  </script>
+
+  <script id="169" type="module">
+    const inputControl = Inputs.radio(["Photo", "Color random", "Grayscale random"], {
+      value: "Photo",
+      label: "Image"
+    })
+    const input = view(inputControl)
+    const contours = view(Inputs.checkbox(["Contours"], { label: 'Display options', value: [] }))
+  </script>
+
+  <script id="12" type="module">
+    const _reglCanvas = reglCanvas(createREGL, {
+      pixelRatio: devicePixelRatio,
+      extensions: ["OES_standard_derivatives"]
+    })
+    const _regl = _reglCanvas.value;
+    view(html`<figure style="text-align:center">
+      ${_reglCanvas}
+      <figcaption>Rendered shader output using selected method.</figcaption>
+    </figure>`);
+  </script>
+
+  <script id="12b" type="module">
+    const regl = _regl.attachResize(Math.min(width, 384), Math.min(width, 384))
+  </script>
+
+  <script id="77" type="module">
+    const interpolationInput = Inputs.radio(
+      [
+        "Nearest",
+        "Linear (1 fetch)",
+        "Linear (4 fetches)",
+        "Bicubic (4 fetches)",
+        "Bicubic (16 fetches)"
+      ],
+      {
+        label: "Interpolation",
+        value: "Bicubic (4 fetches)"
+      }
+    )
+    const interpolation = view(interpolationInput)
+  </script>
+
+  <script id="499" type="module">
+    const basis = view(function () {
+      const isBicubic = interpolation === "Bicubic (4 fetches)" || interpolation === "Bicubic (16 fetches)";
+      const options = interpolation === "Bicubic (16 fetches)" ? ["B-spline", "Catmull-Rom"] : ["B-spline"];
+      return Inputs.radio(options, {
+        label: "Basis",
+        value: "B-spline",
+        disabled: !isBicubic
+      });
+    }())
+  </script>
+
+  <script id="198" type="module">
+    (function() {
+      let explanation = "";
+      let code = "";
+      switch (interpolation) {
+        case "Nearest":
+          explanation = "Uses hardware nearest-neighbor filtering directly with a single texture fetch.";
+          code = "// Hardware nearest-neighbor filtering:\ntexture2D(sampler, texCoord)";
+          break;
+        case "Linear (1 fetch)":
+          explanation = "Uses hardware bilinear filtering directly with a single texture fetch.";
+          code = "// Hardware bilinear filtering:\ntexture2D(sampler, texCoord)";
+          break;
+        case "Linear (4 fetches)":
+          explanation = "Reconstructs bilinear filtering in the shader from a nearest-neighbor sampled texture using 4 texture fetches.";
+          code = glslTextureLinear;
+          break;
+        case "Bicubic (4 fetches)":
+          explanation = "Achieves bicubic filtering using only 4 texture fetches by leveraging hardware linear filtering to blend between sample points. Uses the B-spline basis.";
+          code = glslCubic + "\n\n" + glslTextureBicubic;
+          break;
+        case "Bicubic (16 fetches)":
+          explanation = `Performs bicubic filtering from a nearest-neighbor sampled texture using 16 texture fetches. Uses the ${basis} basis${basis === "Catmull-Rom" ? ", which passes through control points for a sharper appearance" : ""}.`;
+          code = (basis === "Catmull-Rom" ? glslHermite : glslCubic) + "\n" + glslTextureBicubicFromNearest;
+          break;
+      }
+      return md`${explanation}
+
+\`\`\`glsl
+${code}
+\`\`\``;
+    })()
+  </script>
+
+  <script id="17" type="module">
+    const textureShape = { width: 8, height: 8 }
+  </script>
+
+  <script id="88" type="module">
+    const textureData = await (async function() {
+      switch (input) {
+        case "Color random":
+          return new Uint8ClampedArray(
+            Array(textureShape.width * textureShape.height)
+              .fill(0)
+              .map(() => [
+                Math.random() * 256,
+                Math.random() * 256,
+                Math.random() * 256,
+                255
+              ])
+              .flat()
+          );
+        case "Grayscale random":
+          return new Uint8ClampedArray(
+            Array(textureShape.width * textureShape.height)
+              .fill(0)
+              .map(() => {
+                const r = Math.random() * 256;
+                return [r, r, r, 255];
+              })
+              .flat()
+          );
+        case "Photo":
+          return FileAttachment("image@1.jpg").image();
+      }
+    })()
+  </script>
+
+  <script id="102" type="module">
+    const glslCubic = `vec4 cubic (float v) {
+  vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v;
+  vec4 s = n * n * n;
+  float x = s.x;
+  float y = s.y - 4.0 * s.x;
+  float z = s.z - 4.0 * s.y + 6.0 * s.x;
+  float w = 6.0 - x - y - z;
+  return vec4(x, y, z, w) * (1.0 / 6.0);
+}`
+  </script>
+
+  <script id="504" type="module">
+    const glslHermite = `vec4 catmull_rom (float v) {
+  float v2 = v * v;
+  float v3 = v2 * v;
+  return 0.5 * vec4(
+        v * (-v2 + 2.0 * v - 1.0),
+        3.0 * v3 - 5.0 * v2 + 2.0,
+        -3.0 * v3 + 4.0 * v2 + v,
+        v3 - v2);
+}`
+  </script>
+
+  <script id="107" type="module">
+    const glslTextureBicubic = `vec4 textureBicubic(sampler2D sampler, vec2 texCoord, vec2 texResolution) {
+  vec2 invTexSize = 1.0 / texResolution;
+  texCoord = texCoord * texResolution - 0.5;
+  vec2 fxy = fract(texCoord);
+  texCoord -= fxy;
+  vec4 xcubic = cubic(fxy.x);
+  vec4 ycubic = cubic(fxy.y);
+  vec4 c = texCoord.xxyy + vec2(-0.5, 1.5).xyxy;
+  vec4 s = vec4(xcubic.xz + xcubic.yw, ycubic.xz + ycubic.yw);
+  vec4 offset = c + vec4(xcubic.yw, ycubic.yw) / s;
+  offset *= invTexSize.xxyy;
+  vec4 sample0 = texture2D(sampler, offset.xz);
+  vec4 sample1 = texture2D(sampler, offset.yz);
+  vec4 sample2 = texture2D(sampler, offset.xw);
+  vec4 sample3 = texture2D(sampler, offset.yw);
+  float sx = s.x / (s.x + s.y);
+  float sy = s.z / (s.z + s.w);
+  return mix(mix(sample3, sample2, sx), mix(sample1, sample0, sx), sy);
+}`
+  </script>
+
+  <script id="260" type="module">
+    const glslTextureLinear = `vec4 textureLinear(sampler2D sampler, vec2 texCoord, vec2 texResolution) {
+  texCoord = texCoord * texResolution - 0.5;
+  vec2 fxy = fract(texCoord);
+  texCoord -= fxy;
+  vec4 c = (texCoord.xxyy + vec2(1.5, 0.5).xyxy) / texResolution.xxyy;
+  vec4 t00 = texture2D(sampler, c.yz);
+  vec4 t10 = texture2D(sampler, c.xz);
+  vec4 t01 = texture2D(sampler, c.yw);
+  vec4 t11 = texture2D(sampler, c.xw);
+  return mix(mix(t01, t11, fxy.x), mix(t00, t10, fxy.x), fxy.y);
+}`
+  </script>
+
+  <script id="349" type="module">
+    const glslTextureBicubicFromNearest = (function() {
+      const b = basis === "Catmull-Rom" ? "catmull_rom" : "cubic";
+      return `
+vec4 bicubicX(sampler2D sampler, float xOff, vec4 xcub, vec2 uv) {
+  return mat4(
+        texture2D(sampler, vec2(uv.x - xOff, uv.y)),
+        texture2D(sampler, uv),
+        texture2D(sampler, vec2(uv.x + xOff, uv.y)),
+        texture2D(sampler, vec2(uv.x + 2.0 * xOff, uv.y))
+      ) * xcub;
+}
+
+vec4 textureBicubicFromNearest(sampler2D sampler, vec2 texCoord, vec2 texResolution) {
+  vec2 invRes = 1.0 / texResolution;
+  texCoord = texCoord * texResolution - 0.5;
+  vec2 xy = fract(texCoord);
+  texCoord = invRes * (texCoord - xy + 0.5);
+  vec4 xcub = ${b}(xy.x);
+  return mat4(
+        bicubicX(sampler, invRes.x, xcub, vec2(texCoord.x, texCoord.y - invRes.y)),
+        bicubicX(sampler, invRes.x, xcub, texCoord),
+        bicubicX(sampler, invRes.x, xcub, vec2(texCoord.x, texCoord.y + invRes.y)),
+        bicubicX(sampler, invRes.x, xcub, vec2(texCoord.x, texCoord.y + 2.0 * invRes.y))
+      ) * ${b}(xy.y);
+}`;
+    })()
+  </script>
+
+  <script id="191" type="module">
+    const glslGrid = `float grid (float parameter, float width, float feather) {
+  float w1 = width - feather * 0.5;
+  float d = length(vec2(dFdx(parameter), dFdy(parameter)));
+  if (d == 0.0) return 0.0;
+  float looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+  return smoothstep(d * (w1 + feather), d * w1, looped);
+}`
+  </script>
+
+  <script id="15" type="module">
+    const texture = (function() {
+      const useNearest = interpolation === "Nearest" || interpolation === "Linear (4 fetches)" || interpolation === "Bicubic (16 fetches)";
+      const tex = regl.texture({
+        flipY: true,
+        ...textureShape,
+        mag: useNearest ? "nearest" : "linear",
+        min: useNearest ? "nearest" : "linear",
+        data: textureData
+      });
+      invalidation.then(() => tex.destroy());
+      return tex;
+    })()
+  </script>
+
+  <script id="56" type="module">
+    const drawTexture = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        void main () {
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      frag: `
+        #extension GL_OES_standard_derivatives : enable
+        precision highp float;
+        uniform vec2 resolution, texResolution;
+        uniform sampler2D tex;
+
+        ${glslCubic}
+        ${glslHermite}
+        ${glslTextureBicubic}
+        ${glslTextureLinear}
+        ${glslTextureBicubicFromNearest}
+        ${glslGrid}
+
+        void main () {
+          ${
+            interpolation === "Bicubic (4 fetches)"
+              ? `gl_FragColor = textureBicubic(tex, gl_FragCoord.xy / resolution, texResolution);`
+              : interpolation === "Linear (4 fetches)"
+              ? `gl_FragColor = textureLinear(tex, gl_FragCoord.xy / resolution, texResolution);`
+              : interpolation === "Bicubic (16 fetches)"
+              ? `gl_FragColor = textureBicubicFromNearest(tex, gl_FragCoord.xy / resolution, texResolution);`
+              : `gl_FragColor = texture2D(tex, gl_FragCoord.xy / resolution);`
+          }
+
+          ${
+            ~contours.indexOf("Contours")
+              ? `
+gl_FragColor.rgb = vec3(
+  mix(gl_FragColor.r, 1.0, grid(gl_FragColor.r * 10.0, 1.0, 1.0)),
+  mix(gl_FragColor.g, 1.0, grid(gl_FragColor.g * 10.0, 1.0, 1.0)),
+  mix(gl_FragColor.b, 1.0, grid(gl_FragColor.b * 10.0, 1.0, 1.0))
+);
+`
+              : ""
+          }
+        }`,
+      uniforms: {
+        resolution: (ctx) => [ctx.framebufferWidth, ctx.framebufferHeight],
+        texResolution: (ctx, props) => [props.texture.width, props.texture.height],
+        tex: regl.prop("texture")
+      },
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      count: 3,
+      depth: { enable: false }
+    })
+  </script>
+
+  <script id="39" type="module">
+    regl.poll();
+    drawTexture({ texture });
+  </script>
+</notebook>

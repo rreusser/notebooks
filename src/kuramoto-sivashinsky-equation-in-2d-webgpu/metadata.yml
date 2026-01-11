@@ -1,3 +1,4 @@
 publishedAt: "January 10, 2026"
 description: "WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Stockham FFT algorithm for 3-5x performance improvement over WebGL."
 maxWidth: "900px"
+hidden: true

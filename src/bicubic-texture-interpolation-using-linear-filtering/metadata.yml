@@ -1,0 +1,4 @@
+publishedAt: "January 6, 2023"
+description: "Using linear texture sample to implement bicubic texture filtering"
+maxWidth: 640px
+observableUrl: https://observablehq.com/@rreusser/bicubic-texture-interpolation-using-linear-filtering
