@@ -501,7 +501,7 @@
       step: 0.01
     });
     const downsamplingInput = Inputs.range([1, 16], {
-      value: 4,
+      value: 2,
       transform: Math.log,
       step: 0.5,
       label: "Render downsampling"
@@ -516,7 +516,6 @@
       ],
       {
         value: [
-          "Debug",
           "Live update",
           "Point dipoles for clusters",
           "1st order correction"
