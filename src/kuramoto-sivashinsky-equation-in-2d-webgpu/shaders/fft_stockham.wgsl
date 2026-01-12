@@ -1,12 +1,8 @@
-// Stockham FFT Compute Shader
+// Cooley-Tukey Radix-2 DIT FFT Compute Shader
 //
-// Performs 1D FFT on rows using the Stockham algorithm with shared memory.
-// This processes entire rows in parallel instead of one pixel at a time.
-//
-// For N=256, this requires log2(256)=8 butterfly stages per row.
-// Using shared memory, all stages can be computed in a single dispatch.
+// Performs 1D FFT on rows using bit-reversal and butterfly stages.
+// N=256, requires log2(256)=8 stages.
 
-// Complex number operations
 fn cmul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
   return vec2<f32>(
     a.x * b.x - a.y * b.y,
@@ -14,172 +10,168 @@ fn cmul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
   );
 }
 
-// Twiddle factor: exp(-2πi * k / N) for forward FFT
-// or exp(2πi * k / N) for inverse FFT
-fn twiddle(k: u32, N: u32, forward: bool) -> vec2<f32> {
-  let sign = select(1.0, -1.0, forward);
-  let angle = sign * 2.0 * 3.14159265359 * f32(k) / f32(N);
-  return vec2<f32>(cos(angle), sin(angle));
-}
-
-// Uniforms
 struct FFTParams {
-  N: u32,              // FFT size (256)
-  num_rows: u32,       // Number of rows to process
-  forward: u32,        // 1 for forward, 0 for inverse
-  split_norm: u32,     // 1 to split normalization, 0 to normalize on inverse only
+  N: u32,
+  num_rows: u32,
+  forward: u32,
+  split_norm: u32,
 }
 
 @group(0) @binding(0) var<storage, read> input: array<vec2<f32>>;
 @group(0) @binding(1) var<storage, read_write> output: array<vec2<f32>>;
 @group(0) @binding(2) var<uniform> params: FFTParams;
 
-// Shared memory for one row (256 complex numbers = 2KB)
-var<workgroup> shared_data: array<vec2<f32>, 256>;
+var<workgroup> buffer_a: array<vec2<f32>, 256>;
+var<workgroup> buffer_b: array<vec2<f32>, 256>;
 
-@compute @workgroup_size(256, 1, 1)
-fn fft_horizontal(@builtin(global_invocation_id) global_id: vec3<u32>,
-                   @builtin(local_invocation_id) local_id: vec3<u32>,
-                   @builtin(workgroup_id) workgroup_id: vec3<u32>) {
-  let row = workgroup_id.x;
-  let thread_id = local_id.x;
-  let N = params.N;
-
-  // Early exit if out of bounds
-  if (row >= params.num_rows) {
-    return;
-  }
-
-  // Load data from global memory to shared memory
-  let input_idx = row * N + thread_id;
-  shared_data[thread_id] = input[input_idx];
-  workgroupBarrier();
-
-  // Stockham FFT algorithm
-  // Process log2(N) stages
-  let num_stages = 8u;  // log2(256)
-  var is_forward = params.forward != 0u;
-
-  for (var stage = 0u; stage < num_stages; stage++) {
-    let block_size = 1u << (stage + 1u);
-    let half_block = block_size >> 1u;
-    let num_blocks = N / block_size;
-
-    // Determine which block and position within block this thread handles
-    let block_idx = thread_id / half_block;
-    let pos_in_block = thread_id % half_block;
-
-    // Input indices
-    let idx_even = block_idx * block_size + pos_in_block;
-    let idx_odd = idx_even + half_block;
-
-    // Twiddle factor
-    let w = twiddle(pos_in_block, block_size, is_forward);
-
-    // Butterfly operation
-    let even_val = shared_data[idx_even];
-    let odd_val = shared_data[idx_odd];
-    let t = cmul(w, odd_val);
-
-    // Store results (in-place via barrier synchronization)
-    let output_even = even_val + t;
-    let output_odd = even_val - t;
-
-    workgroupBarrier();
-
-    shared_data[idx_even] = output_even;
-    shared_data[idx_odd] = output_odd;
-
-    workgroupBarrier();
-  }
-
-  // Apply normalization if needed
-  var result = shared_data[thread_id];
-
-  if (params.split_norm != 0u) {
-    // Split normalization: divide by sqrt(N) on both forward and inverse
-    result = result / sqrt(f32(N));
-  } else {
-    // Standard normalization: divide by N on inverse only
-    if (!is_forward) {
-      result = result / f32(N);
-    }
-  }
-
-  // Write back to global memory
-  output[input_idx] = result;
+// Bit-reverse an 8-bit number
+fn bitrev8(x: u32) -> u32 {
+  var v = x;
+  v = ((v & 0xF0u) >> 4u) | ((v & 0x0Fu) << 4u);
+  v = ((v & 0xCCu) >> 2u) | ((v & 0x33u) << 2u);
+  v = ((v & 0xAAu) >> 1u) | ((v & 0x55u) << 1u);
+  return v;
 }
 
-// Alternative entry point for processing columns (after transpose)
-// This is identical to horizontal but WGSL doesn't allow calling entry points
 @compute @workgroup_size(256, 1, 1)
-fn fft_vertical(@builtin(global_invocation_id) global_id: vec3<u32>,
-                @builtin(local_invocation_id) local_id: vec3<u32>,
-                @builtin(workgroup_id) workgroup_id: vec3<u32>) {
+fn fft_horizontal(@builtin(local_invocation_id) local_id: vec3<u32>,
+                   @builtin(workgroup_id) workgroup_id: vec3<u32>) {
   let row = workgroup_id.x;
-  let thread_id = local_id.x;
-  let N = params.N;
+  let j = local_id.x;
+  let N = 256u;
 
-  // Early exit if out of bounds
   if (row >= params.num_rows) {
     return;
   }
 
-  // Load data from global memory to shared memory
-  let input_idx = row * N + thread_id;
-  shared_data[thread_id] = input[input_idx];
+  let is_forward = params.forward != 0u;
+  let sign = select(1.0, -1.0, is_forward);
+  let PI = 3.14159265358979;
+
+  // Load with bit-reversal into buffer_a
+  let input_idx = row * N + bitrev8(j);
+  buffer_a[j] = input[input_idx];
   workgroupBarrier();
 
-  // Stockham FFT algorithm
-  let num_stages = 8u;  // log2(256)
-  var is_forward = params.forward != 0u;
+  // 8 stages of butterflies using ping-pong buffers
+  for (var s = 0u; s < 8u; s++) {
+    let m = 1u << (s + 1u);       // butterfly group size: 2, 4, 8, ..., 256
+    let half_m = 1u << s;         // half of group size: 1, 2, 4, ..., 128
 
-  for (var stage = 0u; stage < num_stages; stage++) {
-    let block_size = 1u << (stage + 1u);
-    let half_block = block_size >> 1u;
-    let num_blocks = N / block_size;
+    let group = j / m;            // which group am I in
+    let idx_in_group = j % m;     // position within group
+    let is_first_half = idx_in_group < half_m;
+    let k = select(idx_in_group - half_m, idx_in_group, is_first_half);
+    let base = group * m + k;
 
-    // Determine which block and position within block this thread handles
-    let block_idx = thread_id / half_block;
-    let pos_in_block = thread_id % half_block;
+    // Twiddle factor: exp(sign * 2πi * k / m)
+    let angle = sign * 2.0 * PI * f32(k) / f32(m);
+    let w = vec2<f32>(cos(angle), sin(angle));
 
-    // Input indices
-    let idx_even = block_idx * block_size + pos_in_block;
-    let idx_odd = idx_even + half_block;
+    // Read from source buffer
+    var a: vec2<f32>;
+    var b: vec2<f32>;
+    if ((s & 1u) == 0u) {
+      a = buffer_a[base];
+      b = cmul(w, buffer_a[base + half_m]);
+    } else {
+      a = buffer_b[base];
+      b = cmul(w, buffer_b[base + half_m]);
+    }
 
-    // Twiddle factor
-    let w = twiddle(pos_in_block, block_size, is_forward);
-
-    // Butterfly operation
-    let even_val = shared_data[idx_even];
-    let odd_val = shared_data[idx_odd];
-    let t = cmul(w, odd_val);
-
-    // Store results (in-place via barrier synchronization)
-    let output_even = even_val + t;
-    let output_odd = even_val - t;
+    // Compute butterfly result
+    let result = select(a - b, a + b, is_first_half);
 
     workgroupBarrier();
 
-    shared_data[idx_even] = output_even;
-    shared_data[idx_odd] = output_odd;
+    // Write to destination buffer
+    if ((s & 1u) == 0u) {
+      buffer_b[j] = result;
+    } else {
+      buffer_a[j] = result;
+    }
 
     workgroupBarrier();
   }
 
-  // Apply normalization if needed
-  var result = shared_data[thread_id];
+  // Get result from buffer_a (8 stages: last stage s=7 is odd, writes to buffer_a)
+  var result = buffer_a[j];
+
+  // Normalization
+  if (params.split_norm != 0u) {
+    result = result / sqrt(f32(N));
+  } else if (!is_forward) {
+    result = result / f32(N);
+  }
+
+  // Write output
+  let output_idx = row * N + j;
+  output[output_idx] = result;
+}
+
+@compute @workgroup_size(256, 1, 1)
+fn fft_vertical(@builtin(local_invocation_id) local_id: vec3<u32>,
+                @builtin(workgroup_id) workgroup_id: vec3<u32>) {
+  let row = workgroup_id.x;
+  let j = local_id.x;
+  let N = 256u;
+
+  if (row >= params.num_rows) {
+    return;
+  }
+
+  let is_forward = params.forward != 0u;
+  let sign = select(1.0, -1.0, is_forward);
+  let PI = 3.14159265358979;
+
+  let input_idx = row * N + bitrev8(j);
+  buffer_a[j] = input[input_idx];
+  workgroupBarrier();
+
+  for (var s = 0u; s < 8u; s++) {
+    let m = 1u << (s + 1u);
+    let half_m = 1u << s;
+    let group = j / m;
+    let idx_in_group = j % m;
+    let is_first_half = idx_in_group < half_m;
+    let k = select(idx_in_group - half_m, idx_in_group, is_first_half);
+    let base = group * m + k;
+
+    let angle = sign * 2.0 * PI * f32(k) / f32(m);
+    let w = vec2<f32>(cos(angle), sin(angle));
+
+    var a: vec2<f32>;
+    var b: vec2<f32>;
+    if ((s & 1u) == 0u) {
+      a = buffer_a[base];
+      b = cmul(w, buffer_a[base + half_m]);
+    } else {
+      a = buffer_b[base];
+      b = cmul(w, buffer_b[base + half_m]);
+    }
+
+    let result = select(a - b, a + b, is_first_half);
+
+    workgroupBarrier();
+
+    if ((s & 1u) == 0u) {
+      buffer_b[j] = result;
+    } else {
+      buffer_a[j] = result;
+    }
+
+    workgroupBarrier();
+  }
+
+  // Get result from buffer_a (8 stages: last stage s=7 is odd, writes to buffer_a)
+  var result = buffer_a[j];
 
   if (params.split_norm != 0u) {
-    // Split normalization: divide by sqrt(N) on both forward and inverse
     result = result / sqrt(f32(N));
-  } else {
-    // Standard normalization: divide by N on inverse only
-    if (!is_forward) {
-      result = result / f32(N);
-    }
+  } else if (!is_forward) {
+    result = result / f32(N);
   }
 
-  // Write back to global memory
-  output[input_idx] = result;
+  let output_idx = row * N + j;
+  output[output_idx] = result;
 }

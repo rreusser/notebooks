@@ -258,7 +258,7 @@ export function executeFFT2D(params: FFT2DParams) {
   // Submit commands
   device.queue.submit([commandEncoder.finish()]);
 
-  // Clean up temporary uniform buffers
-  fftParamsBuffer.destroy();
-  transposeParamsBuffer.destroy();
+  // Note: Uniform buffers are NOT destroyed here because the GPU may still be using them.
+  // They will be garbage collected when no longer referenced.
+  // Alternatively, we could return a cleanup function or use a buffer pool.
 }

@@ -34,9 +34,11 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
   // Clamp UV to valid range to avoid out-of-bounds sampling
   let uv_clamped = clamp(input.uv, vec2<f32>(0.0), vec2<f32>(1.0));
 
-  let pixel = vec2<u32>(
-    u32(uv_clamped.x * f32(resolution.x - 1u)),
-    u32(uv_clamped.y * f32(resolution.y - 1u))
+  // Nearest-neighbor sampling: each buffer pixel covers exactly 1/N of UV space
+  // Use min() to clamp the edge case where uv=1.0
+  let pixel = min(
+    vec2<u32>(uv_clamped * vec2<f32>(resolution)),
+    resolution - vec2<u32>(1u, 1u)
   );
 
   // Read value from spatial domain (V stored as vec2 = (V.real, V.imag))
