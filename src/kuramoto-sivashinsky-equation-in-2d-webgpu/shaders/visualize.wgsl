@@ -1,6 +1,7 @@
 // Visualization Fragment Shader
 //
 // Renders the spatial domain solution with color mapping.
+// - Bilinear interpolation for smooth display at any resolution
 // - Clamps values to [range.x, range.y]
 // - Maps through smooth ramp function
 // - Applies colorscale lookup
@@ -12,7 +13,7 @@ struct VertexOutput {
 
 struct VisualizeParams {
   resolution: vec2<u32>,
-  range: vec2<f32>,  // (min, max) for colorscale
+  contrast: f32,     // multiplier for colorscale mapping
   invert: u32,       // 0 or 1
 }
 
@@ -27,27 +28,48 @@ fn ramp(x: f32) -> f32 {
   return 0.5 + atan(PI * (x - 0.5)) / PI;
 }
 
+// Sample V buffer with bounds checking
+fn sampleV(x: i32, y: i32, res: vec2<u32>) -> f32 {
+  // Clamp to valid range
+  let cx = clamp(x, 0, i32(res.x) - 1);
+  let cy = clamp(y, 0, i32(res.y) - 1);
+  let idx = u32(cy) * res.x + u32(cx);
+  return V[idx].x;
+}
+
 @fragment
 fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
   let resolution = params.resolution;
+  let res_f = vec2<f32>(resolution);
 
-  // Clamp UV to valid range to avoid out-of-bounds sampling
+  // Clamp UV to valid range
   let uv_clamped = clamp(input.uv, vec2<f32>(0.0), vec2<f32>(1.0));
 
-  // Nearest-neighbor sampling: each buffer pixel covers exactly 1/N of UV space
-  // Use min() to clamp the edge case where uv=1.0
-  let pixel = min(
-    vec2<u32>(uv_clamped * vec2<f32>(resolution)),
-    resolution - vec2<u32>(1u, 1u)
-  );
+  // Convert to pixel coordinates (centered on pixels)
+  // UV 0 maps to pixel center 0.5, UV 1 maps to pixel center (N-0.5)
+  let pixel_coord = uv_clamped * res_f - vec2<f32>(0.5);
 
-  // Read value from spatial domain (V stored as vec2 = (V.real, V.imag))
-  let idx = pixel.y * resolution.x + pixel.x;
-  let value = V[idx].x;  // Real component of V
+  // Get integer pixel coordinates for the 4 surrounding pixels
+  let x0 = i32(floor(pixel_coord.x));
+  let y0 = i32(floor(pixel_coord.y));
+  let x1 = x0 + 1;
+  let y1 = y0 + 1;
+
+  // Get fractional part for interpolation
+  let fx = fract(pixel_coord.x);
+  let fy = fract(pixel_coord.y);
+
+  // Sample 4 neighboring pixels
+  let v00 = sampleV(x0, y0, resolution);
+  let v10 = sampleV(x1, y0, resolution);
+  let v01 = sampleV(x0, y1, resolution);
+  let v11 = sampleV(x1, y1, resolution);
+
+  // Bilinear interpolation
+  let value = mix(mix(v00, v10, fx), mix(v01, v11, fx), fy);
 
   // Clamp to range
-  let range = params.range;
-  var f = (value - range.x) / (range.y - range.x);
+  var f = 0.5 + 0.07 * value * params.contrast; //(value - range.x) / (range.y - range.x);
 
   // Invert if requested
   if (params.invert != 0u) {

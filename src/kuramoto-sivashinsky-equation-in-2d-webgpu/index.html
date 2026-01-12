@@ -47,21 +47,22 @@
     const N = parseInt(NString.split('×')[0]);
   </script>
   <script id="4" type="module">
-    const LxInput = Inputs.range([1, 128], {
+    // Max domain size scales with grid resolution (N/2)
+    const maxLx = N / 2;
+    const LxInput = Inputs.range([1, maxLx], {
       step: 0.5,
-      value: 64,
+      value: Math.min(64, maxLx),
       label: html`Domain size, ${tex`L_x`}`
     });
     const Lx = view(LxInput);
 
-    const aspectRatioInput = Inputs.range([0.1, 10], {
+    const aspectRatioInput = Inputs.range([1.0, 10], {
       step: 0.01,
       value: 1,
+      transform: Math.log,
       label: html`Aspect ratio, ${tex`L_x / L_y`}`
     });
     const aspectRatio = view(aspectRatioInput);
-  </script>
-  <script id="5" type="module">
     const nInput = Inputs.range([1, 8], {
       step: 1,
       value: 1,
@@ -72,21 +73,25 @@
   <script id="6" type="module">
     const simulateInput = Inputs.toggle({ label: 'Simulate', value: ['Simulate'] });
     const simulate = view(simulateInput);
-    display(html`<button id="restart-btn">Restart</button>`);
+    const restartInput = Inputs.button('Restart');
+    const restart = view(restartInput);
   </script>
   <script id="7" type="module">
-    display(canvas);
+    canvas.style.maxWidth = '100%';
+    canvas.style.height = 'auto';
+    const figure = html`<figure style="display: flex; justify-content: center; margin: 0;">${canvas}</figure>`;
+    display(figure);
   </script>
   <script id="8" type="module">
     display(statusEl);
   </script>
   <script id="9" type="module">
-    const rangeInput = Inputs.range([0.5, 20], {
-      step: 0.5,
-      value: 14,
-      label: 'Colorscale threshold'
+    const contrastInput = Inputs.range([0, 1], {
+      step: 0.01,
+      value: 0.5,
+      label: 'Contrast'
     });
-    const range = view(rangeInput);
+    const contrast = view(contrastInput);
 
     const colorscaleNameInput = Inputs.select(
       ['Viridis', 'Magma', 'Inferno', 'Plasma', 'Cividis', 'Greys'],
@@ -166,7 +171,7 @@
 
     One might hope GPU programming is plug and play. In practice, there's a lot that can go wrong.
 
-    The first hurdle is simply getting the FFT right. WebGPU lacks a built-in FFT library, meaning you must roll your own using compute shaders. This notebook uses the [Stockham FFT](https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm#Data_reordering,_bit_reversal,_and_in-place_algorithms), which avoids the bit-reversal step of the Cooley-Tukey algorithm through data transposition. For grid sizes larger than the device's maximum workgroup size (often 256), a hierarchical four-step FFT decomposes the transform into smaller pieces. Even then, getting the indexing, normalization, and twiddle factors all correct takes real effort. If there's any upside, it's that errors tend to be spectacular; it either works or it clearly doesn't.
+    The first hurdle is simply getting the FFT right. WebGPU lacks a built-in FFT library, meaning you must roll your own using compute shaders. This notebook uses the [Cooley-Tukey](https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm) radix-2 decimation-in-time algorithm, which requires a bit-reversal permutation at the input followed by ${tex`\log_2 N`} stages of butterfly operations. For grid sizes larger than the device's maximum workgroup size (often 256), a hierarchical four-step FFT decomposes the transform into smaller pieces. Even then, getting the indexing, normalization, and twiddle factors all correct takes real effort. If there's any upside, it's that errors tend to be spectacular; it either works or it clearly doesn't.
 
     Once the FFT works, you have to get all the wavenumbers right. Wavenumber layout in a discrete Fourier transform is not intuitive. The first half contains positive frequencies, but the second half contains negative frequencies in reverse order. Miss a sign or an off-by-one error and the derivatives blow up quickly.
 
@@ -345,36 +350,32 @@
     );
   </script>
   <script id="25" type="module">
-    const maxSize = 512;
-
     const canvas = document.createElement('canvas');
-    canvas.width = maxSize;
-    canvas.height = maxSize;
-    canvas.style.width = `${maxSize}px`;
-    canvas.style.height = `${maxSize}px`;
-    canvas.style.imageRendering = 'pixelated';
-
     const gpuContext = canvas.getContext('webgpu');
-    gpuContext.configure({
-      device,
-      format: canvasFormat,
-      alphaMode: 'opaque'
-    });
 
-    // Function to resize canvas without recreating it
-    function resizeCanvas(ar) {
-      let w, h;
+    // Function to resize canvas based on available width and aspect ratio
+    function resizeCanvas(availableWidth, ar) {
+      const dpr = window.devicePixelRatio || 1;
+
+      // CSS size based on available width, respecting aspect ratio
+      let cssW, cssH;
       if (ar >= 1) {
-        w = maxSize;
-        h = Math.floor(maxSize / ar);
+        cssW = availableWidth;
+        cssH = Math.floor(availableWidth / ar);
       } else {
-        h = maxSize;
-        w = Math.floor(maxSize * ar);
+        cssH = availableWidth;
+        cssW = Math.floor(availableWidth * ar);
       }
-      canvas.width = w;
-      canvas.height = h;
-      canvas.style.width = `${w}px`;
-      canvas.style.height = `${h}px`;
+
+      // Physical pixels = CSS pixels * devicePixelRatio
+      const physW = Math.floor(cssW * dpr);
+      const physH = Math.floor(cssH * dpr);
+
+      canvas.width = physW;
+      canvas.height = physH;
+      canvas.style.width = `${cssW}px`;
+      canvas.style.aspectRatio = `${cssW} / ${cssH}`;
+
       gpuContext.configure({
         device,
         format: canvasFormat,
@@ -382,17 +383,19 @@
       });
     }
 
+    // Initial sizing with default aspect ratio (script 26 will update reactively)
+    resizeCanvas(width, 1);
   </script>
   <script id="26" type="module">
-    aspectRatio;
-    resizeCanvas(aspectRatio);
-    if (simState && simState.initialized) render();
+    // Re-render when width or aspectRatio changes
+    width; aspectRatio; initComplete;
+    resizeCanvas(width, aspectRatio);
+    render();
   </script>
   <script id="27" type="module">
     const simState = {
       timeLevel: 0,
-      stepCount: 0,
-      initialized: false
+      stepCount: 0
     };
 
     // Shared params object - updated reactively but read without creating dependencies
@@ -406,11 +409,11 @@
     };
   </script>
   <script id="28" type="module">
-    Lx; aspectRatio; n; range; colorscaleName; invert;
+    Lx; aspectRatio; n; contrast; colorscaleName; invert;
     simParams.Lx = Lx;
     simParams.aspectRatio = aspectRatio;
     simParams.n = n;
-    simParams.range = range;
+    simParams.contrast = contrast;
     simParams.colorscaleName = colorscaleName;
     simParams.invert = invert;
   </script>
@@ -451,10 +454,10 @@
 
     // Update visualization uniforms from simParams
     function updateVisUniforms() {
-      const data = new ArrayBuffer(32);
+      const data = new ArrayBuffer(16);
       new Uint32Array(data, 0, 2).set([N, N]);
-      new Float32Array(data, 8, 2).set([-simParams.range, simParams.range]);
-      new Uint32Array(data, 16, 1).set([simParams.invert ? 1 : 0]);
+      new Float32Array(data, 8, 1).set([simParams.contrast / (1 - simParams.contrast)]);
+      new Uint32Array(data, 12, 1).set([simParams.invert ? 1 : 0]);
       device.queue.writeBuffer(visParamsBuffer, 0, data);
 
       // Update colorscale texture
@@ -471,6 +474,9 @@
 
     // Initialize simulation with given initial condition periods
     async function initialize(icPeriods) {
+      // Wait for any in-flight GPU work to complete before reinitializing buffers
+      await device.queue.onSubmittedWorkDone();
+
       updateUniforms(icPeriods);
 
       const initBindGroup = device.createBindGroup({
@@ -498,7 +504,6 @@
 
       simState.timeLevel = 1;
       simState.stepCount = 0;
-      simState.initialized = true;
     }
 
     // Compute nonlinear terms - GPU only, no CPU readback
@@ -596,8 +601,6 @@
 
     // Run one BDF2 step
     async function step() {
-      if (!simState.initialized) return;
-
       // Update BDF params in case Lx changed
       updateUniforms();
 
@@ -657,8 +660,6 @@
 
     // Render current state
     function render() {
-      if (!simState.initialized) return;
-
       updateVisUniforms();
 
       const currentVhat = Vhat[simState.timeLevel % 3];
@@ -691,23 +692,19 @@
     }
   </script>
   <script id="30" type="module">
-    // Depend on n so we restart when it changes, and pass it directly to initialize
+    // Depend on n and restart so we reinitialize when either changes
+    n; restart;
     await initialize(n);
     render();
 
     // Export a token that changes each time this cell runs
     // Animation loop depends on this to wait for init to complete
-    const initComplete = { n };
-
-    // Setup restart button - use current value of n from simParams
-    document.getElementById('restart-btn').onclick = async () => {
-      await initialize(simParams.n);
-      render();
-    };
+    const initComplete = { n, restart };
   </script>
   <script id="31" type="module">
-    // Depend on step/render (for N changes) and initComplete (for n changes)
-    step; render; initComplete;
+    // Depend on step/render (for N changes), initComplete (for n changes), and restart
+    // restart dependency ensures animation loop stops BEFORE reinitialization starts
+    step; render; initComplete; restart;
 
     let animFrameId = null;
     let hasError = false;
@@ -716,7 +713,7 @@
       if (hasError) return;  // Stop if we encountered an error
 
       try {
-        if (simulate && simState.initialized) {
+        if (simulate) {
           for (let i = 0; i < 2; i++) {
             await step();
           }
@@ -741,8 +738,8 @@
   </script>
   <script id="32" type="module">
     // Re-render when vis params change (params-update already updated simParams)
-    range; colorscaleName; invert;
-    if (simState && simState.initialized) render();
+    contrast; colorscaleName; invert; initComplete;
+    render();
   </script>
   <script id="33" type="module">
     const statusEl = html`<p><em>Step: <span id="step-count">0</span></em></p>`;
