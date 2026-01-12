@@ -6,6 +6,18 @@
 
 import { FFTPipelines, createFFTPipelines } from './fft.js';
 
+// Import shaders as raw strings at build time
+import initializeSource from './shaders/initialize.wgsl?raw';
+import differentiateSource from './shaders/differentiate.wgsl?raw';
+import extractMixedDerivativesSource from './shaders/extract_mixed_derivatives.wgsl?raw';
+import computeABSource from './shaders/compute_ab.wgsl?raw';
+import packABhatSource from './shaders/pack_abhat.wgsl?raw';
+import computeNonlinearSource from './shaders/compute_nonlinear.wgsl?raw';
+import bdfUpdateSource from './shaders/bdf_update.wgsl?raw';
+import extractRealSource from './shaders/extract_real.wgsl?raw';
+import fullscreenSource from './shaders/fullscreen.wgsl?raw';
+import visualizeSource from './shaders/visualize.wgsl?raw';
+
 export interface KSPipelines {
   // FFT pipelines
   fft: FFTPipelines;
@@ -37,16 +49,6 @@ export interface KSPipelines {
   };
 }
 
-/**
- * Load WGSL shader source from file
- */
-async function loadShader(path: string): Promise<string> {
-  const response = await fetch(path);
-  if (!response.ok) {
-    throw new Error(`Failed to load shader: ${path}`);
-  }
-  return response.text();
-}
 
 /**
  * Create all pipelines for the KS equation solver
@@ -58,31 +60,6 @@ export async function createKSPipelines(
 ): Promise<KSPipelines> {
   // Create FFT pipelines
   const fft = createFFTPipelines(device, N);
-
-  // Load all shader sources
-  const [
-    initializeSource,
-    differentiateSource,
-    extractMixedDerivativesSource,
-    computeABSource,
-    packABhatSource,
-    computeNonlinearSource,
-    bdfUpdateSource,
-    extractRealSource,
-    fullscreenSource,
-    visualizeSource
-  ] = await Promise.all([
-    loadShader('./shaders/initialize.wgsl'),
-    loadShader('./shaders/differentiate.wgsl'),
-    loadShader('./shaders/extract_mixed_derivatives.wgsl'),
-    loadShader('./shaders/compute_ab.wgsl'),
-    loadShader('./shaders/pack_abhat.wgsl'),
-    loadShader('./shaders/compute_nonlinear.wgsl'),
-    loadShader('./shaders/bdf_update.wgsl'),
-    loadShader('./shaders/extract_real.wgsl'),
-    loadShader('./shaders/fullscreen.wgsl'),
-    loadShader('./shaders/visualize.wgsl')
-  ]);
 
   // Create shader modules
   const initializeModule = device.createShaderModule({
