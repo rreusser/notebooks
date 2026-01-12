@@ -8,20 +8,18 @@
 
     ${tex.block`u_t + \frac{1}{2}|\nabla u|^2 + \nabla^2 u + \nabla^4 u = 0.`}
 
-    The KSE arises in a number of contexts and was rediscovered by Kuramoto while researching diffusion-induced flame front instabilities.
-  </script>
-  <script id="2" type="text/markdown">
-    The KSE is one of the simplest partial differential equations to show complicated dynamics, displaying chaotic behavior as the size of the domain increases. Observe that if ${tex`\nu_1`} or ${tex`\nu_2`}, which represent the size of a wavelength relative to the size of the domain, are greater than one, the chaotic behavior disappears along the short dimension and the solution essentially becomes a one-dimensional solution.
+    The KSE arises in a number of contexts and was rediscovered by Kuramoto while researching diffusion-induced flame front instabilities. It is one of the simplest partial differential equations exhibiting complicated dynamics, displaying chaotic behavior in large domains.
   </script>
   <script id="10" type="module">
     const L = [Lx, Lx / aspectRatio];
     const nu = [Math.pow(Math.PI / L[0], 2), Math.pow(Math.PI / L[1], 2)];
 
-    display(md`We solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`}.
+    display(md`
 
-    The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale. Chaotic behavior happens when they are very small, while fundamental changes in the type of behavior happen when they are closer to the order of unity.
-    - ${tex`\nu_1 = (\pi/L_x)^2 = ${nu[0].toFixed(6)}`}
-    - ${tex`\nu_2 = (\pi/L_y)^2 = ${nu[1].toFixed(6)}`}`);
+The factors ${tex`\nu_1 = (\pi/L_x)^2`} and ${tex`\nu_2 = (\pi/L_y)^2`} describe the length scale in each dimension. Chaotic behavior occurs when these factors are small. When either factor approaches order unity, the dynamics simplify in that direction, effectively reducing the solution to one dimension.
+
+Based on the config below, we solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`} with ${tex`\nu_1 = ${nu[0].toFixed(6)}`} and ${tex`\nu_2 = ${nu[1].toFixed(6)}.`}
+`);
   </script>
   <script id="3" type="module">
     // With hierarchical FFT, we can support sizes up to maxWorkgroupSize^2
