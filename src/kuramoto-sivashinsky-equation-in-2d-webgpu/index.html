@@ -14,7 +14,7 @@ The KSE is one of the simplest partial differential equations to show complicate
 
   <!-- Controls -->
   <script id="controls" type="module">
-    const simulateInput = Inputs.toggle({ label: 'Simulate', value: true });
+    const simulateInput = Inputs.toggle({ label: 'Simulate', value: false });
     const simulate = view(simulateInput);
     display(html`<button id="restart-btn">Restart</button>`);
   </script>
@@ -84,39 +84,680 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
     invalidation.then(() => device.destroy());
   </script>
 
-  <!-- Constants - no dependencies -->
-  <script id="constants" type="module">
-    const N = 256;
-    const vec2Size = N * N * 2 * 4;
-    const vec4Size = N * N * 4 * 4;
-    const workgroups = Math.ceil(N / 16);
-    const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
-    const dx = [2 * Math.PI / N, 2 * Math.PI / N];
+  <!-- Grid controls - depends on device for limits -->
+  <script id="grid-controls" type="module">
+    // With hierarchical FFT, we can support sizes up to maxWorkgroupSize^2
+    // For N > maxWorkgroupSize, we decompose N = R × C where C ≤ maxWorkgroupSize
+    const maxWorkgroupSize = device.limits.maxComputeWorkgroupSizeX;
+
+    // All sizes we want to support
+    const allSizes = [32, 64, 128, 256, 512, 1024];
+
+    // Filter to sizes that are either:
+    // - ≤ maxWorkgroupSize (handled by simple FFT)
+    // - Decomposable as R × C where C ≤ maxWorkgroupSize and R is power of 2
+    const validSizes = allSizes.filter(n => {
+      if (n <= maxWorkgroupSize) return true;
+      // For large N, check if we can factor it appropriately
+      const C = maxWorkgroupSize;
+      const R = n / C;
+      return Number.isInteger(R) && (R & (R - 1)) === 0;
+    });
+
+    const gridSizes = new Map(
+      validSizes.map(n => [`${n}×${n}`, n])
+    );
+
+    // Default to 512 for testing hierarchical FFT
+    const defaultN = 512;
+
+    const NInput = Inputs.select(gridSizes, {
+      value: defaultN,
+      label: 'Grid size, N'
+    });
+    const N = view(NInput);
   </script>
 
-  <!-- Pipelines - depends only on device -->
-  <script id="pipelines" type="module">
-    import { createKSPipelines } from './pipeline.js';
-    import { createFFTPipelines, executeFFT2D } from './fft.js';
+  <!-- FFT Validation Tests -->
+  <script id="fft-tests" type="module">
+    import { createLargeFFTPipelines, executeLargeFFT2D } from './fft-large.js';
 
-    const pipelines = await createKSPipelines(device, canvasFormat);
-    const fftPipelines = await createFFTPipelines(device);
+    // Test configuration
+    const testN = N;  // Use currently selected N
+    const tolerance = 1e-4;
+
+    // Helper: create a test buffer and fill with data
+    function createTestBuffer(data) {
+      const buffer = device.createBuffer({
+        size: data.byteLength,
+        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+      });
+      device.queue.writeBuffer(buffer, 0, data);
+      return buffer;
+    }
+
+    // Helper: read buffer back to CPU
+    async function readBuffer(buffer, size) {
+      const staging = device.createBuffer({
+        size,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+      const enc = device.createCommandEncoder();
+      enc.copyBufferToBuffer(buffer, 0, staging, 0, size);
+      device.queue.submit([enc.finish()]);
+      await device.queue.onSubmittedWorkDone();
+      await staging.mapAsync(GPUMapMode.READ);
+      const result = new Float32Array(staging.getMappedRange().slice(0));
+      staging.unmap();
+      staging.destroy();
+      return result;
+    }
+
+    // Reference 2D DFT (CPU, for validation)
+    function referenceDFT2D(input, N, forward) {
+      const output = new Float32Array(N * N * 2);
+      const sign = forward ? -1 : 1;
+
+      for (let ky = 0; ky < N; ky++) {
+        for (let kx = 0; kx < N; kx++) {
+          let sumRe = 0, sumIm = 0;
+          for (let ny = 0; ny < N; ny++) {
+            for (let nx = 0; nx < N; nx++) {
+              const idx = (ny * N + nx) * 2;
+              const inRe = input[idx];
+              const inIm = input[idx + 1];
+              const angle = sign * 2 * Math.PI * (kx * nx + ky * ny) / N;
+              const c = Math.cos(angle);
+              const s = Math.sin(angle);
+              sumRe += inRe * c - inIm * s;
+              sumIm += inRe * s + inIm * c;
+            }
+          }
+          const outIdx = (ky * N + kx) * 2;
+          // Split normalization: divide by sqrt(N) for each dimension
+          const norm = 1 / N;  // sqrt(N) * sqrt(N) for 2D with split norm
+          output[outIdx] = sumRe * norm;
+          output[outIdx + 1] = sumIm * norm;
+        }
+      }
+      return output;
+    }
+
+    // Run FFT validation test
+    async function runFFTTest() {
+      const results = { passed: true, errors: [], debug: {} };
+
+      try {
+        // Create test input: two impulses for more thorough testing
+        const inputData = new Float32Array(testN * testN * 2);
+        inputData[0] = 1.0;  // DC component at (0,0)
+        inputData[(Math.floor(testN / 2) * testN + Math.floor(testN / 2)) * 2] = 1.0;  // Center at (N/2, N/2)
+
+        // Create pipelines
+        const pipelines = createLargeFFTPipelines(device, testN);
+
+        // Create buffers
+        const bufferSize = testN * testN * 2 * 4;
+        const inputBuffer = createTestBuffer(inputData);
+        const outputBuffer = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+        const temp0 = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+        const temp1 = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+
+        // Run forward FFT
+        executeLargeFFT2D({
+          device,
+          pipelines,
+          input: inputBuffer,
+          output: outputBuffer,
+          temp: [temp0, temp1],
+          N: testN,
+          forward: true,
+          splitNormalization: true
+        });
+        await device.queue.onSubmittedWorkDone();
+
+        // Read GPU result
+        const gpuForward = await readBuffer(outputBuffer, bufferSize);
+
+        // Debug: capture some key values from forward FFT
+        // For single impulse at (0,0), forward FFT should give 1/N at all positions
+        const expectedForwardVal = 1.0 / testN;  // with split norm for 2D
+        results.debug.forwardAt00 = { re: gpuForward[0], im: gpuForward[1] };
+        results.debug.forwardAt01 = { re: gpuForward[2], im: gpuForward[3] };
+        results.debug.forwardAt10 = { re: gpuForward[testN * 2], im: gpuForward[testN * 2 + 1] };
+        results.debug.expectedForwardVal = expectedForwardVal;
+
+        // Run inverse FFT to get back original
+        executeLargeFFT2D({
+          device,
+          pipelines,
+          input: outputBuffer,
+          output: inputBuffer,
+          temp: [temp0, temp1],
+          N: testN,
+          forward: false,
+          splitNormalization: true
+        });
+        await device.queue.onSubmittedWorkDone();
+
+        // Read roundtrip result
+        const gpuRoundtrip = await readBuffer(inputBuffer, bufferSize);
+
+        // Debug: capture roundtrip values
+        results.debug.roundtripAt00 = { re: gpuRoundtrip[0], im: gpuRoundtrip[1] };
+        results.debug.roundtripAt01 = { re: gpuRoundtrip[2], im: gpuRoundtrip[3] };
+        results.debug.roundtripAt10 = { re: gpuRoundtrip[testN * 2], im: gpuRoundtrip[testN * 2 + 1] };
+        results.debug.inputAt00 = { re: inputData[0], im: inputData[1] };
+
+        // Check roundtrip error
+        let maxRoundtripError = 0;
+        let maxErrorIndex = 0;
+        for (let i = 0; i < inputData.length; i++) {
+          const err = Math.abs(gpuRoundtrip[i] - inputData[i]);
+          if (err > maxRoundtripError) {
+            maxRoundtripError = err;
+            maxErrorIndex = i;
+          }
+        }
+
+        results.debug.maxErrorIndex = maxErrorIndex;
+        results.debug.maxErrorExpected = inputData[maxErrorIndex];
+        results.debug.maxErrorGot = gpuRoundtrip[maxErrorIndex];
+
+        if (maxRoundtripError > tolerance) {
+          results.passed = false;
+          results.errors.push(`Roundtrip error too high: ${maxRoundtripError.toExponential(2)} > ${tolerance}`);
+        }
+
+        // For small N, also compare against reference DFT
+        if (testN <= 64) {
+          const refForward = referenceDFT2D(inputData, testN, true);
+          let maxRefError = 0;
+          for (let i = 0; i < refForward.length; i++) {
+            const err = Math.abs(gpuForward[i] - refForward[i]);
+            maxRefError = Math.max(maxRefError, err);
+          }
+
+          if (maxRefError > tolerance) {
+            results.passed = false;
+            results.errors.push(`Reference comparison error: ${maxRefError.toExponential(2)} > ${tolerance}`);
+          }
+          results.refError = maxRefError;
+        }
+
+        results.roundtripError = maxRoundtripError;
+        results.N = testN;
+        results.isLarge = pipelines.isLarge;
+        results.decomposition = pipelines.isLarge ? `${pipelines.R}×${pipelines.C}` : 'N/A';
+
+        // Cleanup
+        inputBuffer.destroy();
+        outputBuffer.destroy();
+        temp0.destroy();
+        temp1.destroy();
+
+      } catch (e) {
+        results.passed = false;
+        results.errors.push(`Exception: ${e.message}`);
+      }
+
+      return results;
+    }
+
+    // Run 1D FFT test (just horizontal, no transpose/vertical)
+    async function run1DFFTTest() {
+      const results = { debug: {} };
+
+      try {
+        // Test 1D FFT on a single row: sine wave sin(2π * k * x / N)
+        const k = 1;
+        const inputData = new Float32Array(testN * 2);  // Single row
+
+        for (let x = 0; x < testN; x++) {
+          const idx = x * 2;
+          const angle = 2 * Math.PI * k * x / testN;
+          inputData[idx] = Math.sin(angle);
+          inputData[idx + 1] = 0;
+        }
+
+        // Create pipelines
+        const pipelines = createLargeFFTPipelines(device, testN);
+
+        // Create buffers for a single row
+        const bufferSize = testN * 2 * 4;
+        const inputBuffer = createTestBuffer(inputData);
+        const outputBuffer = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+        const temp0 = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+        const temp1 = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+
+        // For 1D FFT, we need to manually run just the horizontal pass
+        const { R, C, isLarge } = pipelines;
+        results.debug.isLarge = isLarge;
+        results.debug.R = R;
+        results.debug.C = C;
+
+        if (!isLarge) {
+          // Simple case - just run the simple FFT
+          const fftParamsBuffer = device.createBuffer({
+            size: 16,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+          });
+          device.queue.writeBuffer(fftParamsBuffer, 0, new Uint32Array([
+            testN, 1, 1, 1  // N, num_rows, forward, split_norm
+          ]));
+
+          const encoder = device.createCommandEncoder();
+          const bindGroup = device.createBindGroup({
+            layout: pipelines.bindGroupLayouts.simpleFFT,
+            entries: [
+              { binding: 0, resource: { buffer: inputBuffer } },
+              { binding: 1, resource: { buffer: outputBuffer } },
+              { binding: 2, resource: { buffer: fftParamsBuffer } }
+            ]
+          });
+          const pass = encoder.beginComputePass();
+          pass.setPipeline(pipelines.simpleFFT);
+          pass.setBindGroup(0, bindGroup);
+          pass.dispatchWorkgroups(1);  // Single row
+          pass.end();
+          device.queue.submit([encoder.finish()]);
+        } else {
+          // Hierarchical case: column FFT -> twiddle -> sub-row FFT
+          const columnParamsBuffer = device.createBuffer({
+            size: 32,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+          });
+          device.queue.writeBuffer(columnParamsBuffer, 0, new Uint32Array([
+            C, R, testN, 1, 1, 1  // C, R, N, num_original_rows, forward, split_norm
+          ]));
+
+          const twiddleParamsBuffer = device.createBuffer({
+            size: 32,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+          });
+          device.queue.writeBuffer(twiddleParamsBuffer, 0, new Uint32Array([
+            C, R, testN, 1, 1  // C, R, N, num_original_rows, forward
+          ]));
+
+          const subRowParamsBuffer = device.createBuffer({
+            size: 32,
+            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+          });
+          device.queue.writeBuffer(subRowParamsBuffer, 0, new Uint32Array([
+            C, R, testN, R, 1, 1  // C, R, N, num_sub_rows, forward, split_norm
+          ]));
+
+          const encoder = device.createCommandEncoder();
+
+          // Step 1: Column FFT (input -> temp0)
+          {
+            const bindGroup = device.createBindGroup({
+              layout: pipelines.bindGroupLayouts.columnFFT,
+              entries: [
+                { binding: 0, resource: { buffer: inputBuffer } },
+                { binding: 1, resource: { buffer: temp0 } },
+                { binding: 2, resource: { buffer: columnParamsBuffer } }
+              ]
+            });
+            const pass = encoder.beginComputePass({ label: '1D Column FFT' });
+            pass.setPipeline(pipelines.columnFFT);
+            pass.setBindGroup(0, bindGroup);
+            if (R <= 8) {
+              pass.dispatchWorkgroups(Math.ceil(C / 256));
+            } else {
+              pass.dispatchWorkgroups(C);
+            }
+            pass.end();
+          }
+
+          // Step 2: Twiddle (temp0 -> temp1)
+          {
+            const bindGroup = device.createBindGroup({
+              layout: pipelines.bindGroupLayouts.twiddle,
+              entries: [
+                { binding: 0, resource: { buffer: temp0 } },
+                { binding: 1, resource: { buffer: temp1 } },
+                { binding: 2, resource: { buffer: twiddleParamsBuffer } }
+              ]
+            });
+            const pass = encoder.beginComputePass({ label: '1D Twiddle' });
+            pass.setPipeline(pipelines.twiddle);
+            pass.setBindGroup(0, bindGroup);
+            pass.dispatchWorkgroups(Math.ceil(C / 16), Math.ceil(R / 16));
+            pass.end();
+          }
+
+          // Step 3: Sub-row FFT (temp1 -> temp0)
+          {
+            const bindGroup = device.createBindGroup({
+              layout: pipelines.bindGroupLayouts.subRowFFT,
+              entries: [
+                { binding: 0, resource: { buffer: temp1 } },
+                { binding: 1, resource: { buffer: temp0 } },
+                { binding: 2, resource: { buffer: subRowParamsBuffer } }
+              ]
+            });
+            const pass = encoder.beginComputePass({ label: '1D Sub-row FFT' });
+            pass.setPipeline(pipelines.subRowFFT);
+            pass.setBindGroup(0, bindGroup);
+            pass.dispatchWorkgroups(R);  // R sub-rows for 1 original row
+            pass.end();
+          }
+
+          // Step 4: Unscramble to natural order (temp0 -> output)
+          {
+            const unscrambleParamsBuffer = device.createBuffer({
+              size: 16,
+              usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+            });
+            device.queue.writeBuffer(unscrambleParamsBuffer, 0, new Uint32Array([
+              C, R, testN, 1  // C, R, N, num_original_rows
+            ]));
+
+            const bindGroup = device.createBindGroup({
+              layout: pipelines.bindGroupLayouts.unscramble,
+              entries: [
+                { binding: 0, resource: { buffer: temp0 } },
+                { binding: 1, resource: { buffer: outputBuffer } },
+                { binding: 2, resource: { buffer: unscrambleParamsBuffer } }
+              ]
+            });
+            const pass = encoder.beginComputePass({ label: '1D Unscramble' });
+            pass.setPipeline(pipelines.unscramble);
+            pass.setBindGroup(0, bindGroup);
+            pass.dispatchWorkgroups(Math.ceil(testN / 256), 1);
+            pass.end();
+          }
+
+          device.queue.submit([encoder.finish()]);
+        }
+
+        await device.queue.onSubmittedWorkDone();
+
+        // Read result
+        const gpuForward = await readBuffer(outputBuffer, bufferSize);
+
+        // For 1D sin(2π * k * x / N) with split norm (divide by sqrt(N)):
+        // DFT of sin gives ±i * N/2 at frequencies ±k
+        // With split norm: ±i * N/2 / sqrt(N) = ±i * sqrt(N)/2
+        // Expected magnitude: sqrt(N)/2 = sqrt(512)/2 ≈ 11.31
+        const posKIdx = k * 2;
+        const negKIdx = (testN - k) * 2;
+
+        results.debug.atPosK = {
+          re: gpuForward[posKIdx],
+          im: gpuForward[posKIdx + 1],
+          mag: Math.sqrt(gpuForward[posKIdx]**2 + gpuForward[posKIdx + 1]**2)
+        };
+        results.debug.atNegK = {
+          re: gpuForward[negKIdx],
+          im: gpuForward[negKIdx + 1],
+          mag: Math.sqrt(gpuForward[negKIdx]**2 + gpuForward[negKIdx + 1]**2)
+        };
+        results.debug.atDC = {
+          re: gpuForward[0],
+          im: gpuForward[1]
+        };
+        results.debug.k = k;
+        results.debug.expectedMag = Math.sqrt(testN) / 2;  // sqrt(N)/2 for 1D split norm
+
+        // Find max magnitude
+        let maxMag = 0;
+        let maxIdx = 0;
+        for (let i = 0; i < testN; i++) {
+          const re = gpuForward[i * 2];
+          const im = gpuForward[i * 2 + 1];
+          const mag = Math.sqrt(re * re + im * im);
+          if (mag > maxMag) {
+            maxMag = mag;
+            maxIdx = i;
+          }
+        }
+        results.debug.maxMag = maxMag;
+        results.debug.maxIdx = maxIdx;
+
+        // Cleanup
+        inputBuffer.destroy();
+        outputBuffer.destroy();
+        temp0.destroy();
+        temp1.destroy();
+
+      } catch (e) {
+        results.error = e.message;
+        console.error('1D FFT test error:', e);
+      }
+
+      return results;
+    }
+
+    // Run sine wave test to diagnose FFT behavior
+    async function runSineWaveTest() {
+      const results = { debug: {} };
+
+      try {
+        // Create test input: sine wave sin(2π * kx * x / N) for a specific frequency
+        const kx = 1;  // Frequency in x direction
+        const ky = 0;  // No y frequency for simplicity
+        const inputData = new Float32Array(testN * testN * 2);
+
+        for (let y = 0; y < testN; y++) {
+          for (let x = 0; x < testN; x++) {
+            const idx = (y * testN + x) * 2;
+            // sin(2π * kx * x / N) = Im(exp(i * 2π * kx * x / N))
+            const angle = 2 * Math.PI * (kx * x + ky * y) / testN;
+            inputData[idx] = Math.sin(angle);  // Real part
+            inputData[idx + 1] = 0;  // Imaginary part
+          }
+        }
+
+        // Create pipelines
+        const pipelines = createLargeFFTPipelines(device, testN);
+
+        // Create buffers
+        const bufferSize = testN * testN * 2 * 4;
+        const inputBuffer = createTestBuffer(inputData);
+        const outputBuffer = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+        const temp0 = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+        const temp1 = device.createBuffer({
+          size: bufferSize,
+          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+        });
+
+        // Run forward FFT
+        executeLargeFFT2D({
+          device,
+          pipelines,
+          input: inputBuffer,
+          output: outputBuffer,
+          temp: [temp0, temp1],
+          N: testN,
+          forward: true,
+          splitNormalization: true
+        });
+        await device.queue.onSubmittedWorkDone();
+
+        // Read GPU result
+        const gpuForward = await readBuffer(outputBuffer, bufferSize);
+
+        // For sin(2π * kx * x / N), expected FFT output (with split norm):
+        // - At frequency +kx: -i * N/2 / N = -i/2 (imaginary part = -0.5)
+        // - At frequency -kx (= N-kx): +i * N/2 / N = +i/2 (imaginary part = +0.5)
+        // - All others: 0
+
+        // Capture values at key frequencies
+        // Frequency (kx, ky) is at index (ky * N + kx)
+        const posKxIdx = (ky * testN + kx) * 2;
+        const negKxIdx = (ky * testN + (testN - kx)) * 2;
+        const dcIdx = 0;
+
+        results.debug.atPosKx = {
+          re: gpuForward[posKxIdx],
+          im: gpuForward[posKxIdx + 1],
+          mag: Math.sqrt(gpuForward[posKxIdx]**2 + gpuForward[posKxIdx + 1]**2)
+        };
+        results.debug.atNegKx = {
+          re: gpuForward[negKxIdx],
+          im: gpuForward[negKxIdx + 1],
+          mag: Math.sqrt(gpuForward[negKxIdx]**2 + gpuForward[negKxIdx + 1]**2)
+        };
+        results.debug.atDC = {
+          re: gpuForward[dcIdx],
+          im: gpuForward[dcIdx + 1]
+        };
+
+        // Expected with split normalization: |F[kx]| = 0.5
+        results.debug.expectedMag = 0.5;
+        results.debug.kx = kx;
+        results.debug.ky = ky;
+
+        // Find max magnitude and its location
+        let maxMag = 0;
+        let maxIdx = 0;
+        for (let i = 0; i < testN * testN; i++) {
+          const re = gpuForward[i * 2];
+          const im = gpuForward[i * 2 + 1];
+          const mag = Math.sqrt(re * re + im * im);
+          if (mag > maxMag) {
+            maxMag = mag;
+            maxIdx = i;
+          }
+        }
+        results.debug.maxMag = maxMag;
+        results.debug.maxIdx = maxIdx;
+        results.debug.maxIdxXY = { x: maxIdx % testN, y: Math.floor(maxIdx / testN) };
+
+        // Cleanup
+        inputBuffer.destroy();
+        outputBuffer.destroy();
+        temp0.destroy();
+        temp1.destroy();
+
+      } catch (e) {
+        results.error = e.message;
+      }
+
+      return results;
+    }
+
+    // Run all tests
+    const test1DResults = await run1DFFTTest();
+    const testResults = await runFFTTest();
+    const sineResults = await runSineWaveTest();
+
+    const statusIcon = testResults.passed ? '✓' : '✗';
+    const statusColor = testResults.passed ? 'green' : 'red';
+
+    const dbg = testResults.debug || {};
+    const sdbg = sineResults.debug || {};
+    const dbg1d = test1DResults.debug || {};
+
+    display(html`<details open>
+      <summary><strong>1D FFT Test (N=${testN}, k=${dbg1d.k})</strong></summary>
+      <ul>
+        <li>Large FFT mode: ${dbg1d.isLarge ? `Yes (${dbg1d.R}×${dbg1d.C})` : 'No'}</li>
+        <li>At +k (freq ${dbg1d.k}): re=${dbg1d.atPosK?.re?.toFixed(4) ?? 'N/A'}, im=${dbg1d.atPosK?.im?.toFixed(4) ?? 'N/A'}, mag=${dbg1d.atPosK?.mag?.toFixed(4) ?? 'N/A'}</li>
+        <li>At -k (freq ${testN - (dbg1d.k || 0)}): re=${dbg1d.atNegK?.re?.toFixed(4) ?? 'N/A'}, im=${dbg1d.atNegK?.im?.toFixed(4) ?? 'N/A'}, mag=${dbg1d.atNegK?.mag?.toFixed(4) ?? 'N/A'}</li>
+        <li>At DC: re=${dbg1d.atDC?.re?.toExponential(2) ?? 'N/A'}, im=${dbg1d.atDC?.im?.toExponential(2) ?? 'N/A'}</li>
+        <li>Expected magnitude at ±k: ${dbg1d.expectedMag?.toFixed(4) ?? 'N/A'}</li>
+        <li>Max magnitude: ${dbg1d.maxMag?.toFixed(4) ?? 'N/A'} at index ${dbg1d.maxIdx}</li>
+        ${test1DResults.error ? `<li style="color: red;">Error: ${test1DResults.error}</li>` : ''}
+      </ul>
+    </details>
+    <details open>
+      <summary style="color: ${statusColor}; cursor: pointer;">
+        <strong>2D FFT Test (N=${testResults.N}): ${statusIcon} ${testResults.passed ? 'PASSED' : 'FAILED'}</strong>
+      </summary>
+      <ul>
+        <li>Large FFT mode: ${testResults.isLarge ? `Yes (${testResults.decomposition})` : 'No'}</li>
+        <li>Roundtrip error: ${testResults.roundtripError?.toExponential(2) ?? 'N/A'}</li>
+        ${testResults.refError !== undefined ? `<li>Reference error: ${testResults.refError.toExponential(2)}</li>` : ''}
+        ${testResults.errors.length > 0 ? `<li style="color: red;">Errors: ${testResults.errors.join(', ')}</li>` : ''}
+        <li>Debug info:
+          <ul>
+            <li>Input[0,0]: ${dbg.inputAt00?.re?.toFixed(4) ?? 'N/A'}</li>
+            <li>Forward[0,0]: ${dbg.forwardAt00?.re?.toExponential(3) ?? 'N/A'} (expected: ${dbg.expectedForwardVal?.toExponential(3) ?? 'N/A'})</li>
+            <li>Forward[0,1]: ${dbg.forwardAt01?.re?.toExponential(3) ?? 'N/A'}</li>
+            <li>Roundtrip[0,0]: ${dbg.roundtripAt00?.re?.toFixed(4) ?? 'N/A'}</li>
+            <li>Max error at index ${dbg.maxErrorIndex}: expected ${dbg.maxErrorExpected?.toFixed(4) ?? 'N/A'}, got ${dbg.maxErrorGot?.toExponential(3) ?? 'N/A'}</li>
+          </ul>
+        </li>
+      </ul>
+    </details>
+    <details open>
+      <summary><strong>2D Sine Wave Test (kx=${sdbg.kx}, ky=${sdbg.ky})</strong></summary>
+      <ul>
+        <li>At +kx (freq ${sdbg.kx}): re=${sdbg.atPosKx?.re?.toFixed(4) ?? 'N/A'}, im=${sdbg.atPosKx?.im?.toFixed(4) ?? 'N/A'}, mag=${sdbg.atPosKx?.mag?.toFixed(4) ?? 'N/A'}</li>
+        <li>At -kx (freq ${testN - (sdbg.kx || 0)}): re=${sdbg.atNegKx?.re?.toFixed(4) ?? 'N/A'}, im=${sdbg.atNegKx?.im?.toFixed(4) ?? 'N/A'}, mag=${sdbg.atNegKx?.mag?.toFixed(4) ?? 'N/A'}</li>
+        <li>At DC: re=${sdbg.atDC?.re?.toExponential(2) ?? 'N/A'}, im=${sdbg.atDC?.im?.toExponential(2) ?? 'N/A'}</li>
+        <li>Expected magnitude at ±kx: ${sdbg.expectedMag?.toFixed(4) ?? 'N/A'}</li>
+        <li>Max magnitude: ${sdbg.maxMag?.toFixed(4) ?? 'N/A'} at index ${sdbg.maxIdx} (x=${sdbg.maxIdxXY?.x}, y=${sdbg.maxIdxXY?.y})</li>
+        ${sineResults.error ? `<li style="color: red;">Error: ${sineResults.error}</li>` : ''}
+      </ul>
+    </details>`);
+  </script>
+
+  <!-- Pipeline imports - no dependencies -->
+  <script id="pipeline-imports" type="module">
+    import { createKSPipelines } from './pipeline.js';
+    import { executeFFT2D } from './fft.js';
+  </script>
+
+  <!-- Constants - depends on N -->
+  <script id="constants" type="module">
+    const gridN = N;
+    const vec2Size = gridN * gridN * 2 * 4;
+    const vec4Size = gridN * gridN * 4 * 4;
+    const workgroups = Math.ceil(gridN / 16);
+    const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+    const dx = [2 * Math.PI / gridN, 2 * Math.PI / gridN];
+  </script>
+
+  <!-- Pipelines - depends on device, constants, and imports -->
+  <script id="pipelines" type="module">
+    // Depend on constants
+    gridN; vec2Size; dx;
+
+    const pipelines = await createKSPipelines(device, canvasFormat, gridN);
 
     function runFFT2D(input, output, tempBuffers, forward) {
       executeFFT2D({
         device,
-        pipelines: fftPipelines,
+        pipelines: pipelines.fft,
         input,
         output,
         temp: tempBuffers,
-        N,
+        N: gridN,
         forward,
         splitNormalization: true
       });
     }
   </script>
 
-  <!-- Buffer allocation - depends only on device and constants -->
+  <!-- Buffer allocation - depends on device and constants -->
   <script id="buffers" type="module">
     // Vhat buffers: 3 time levels for BDF2
     const Vhat = [0, 1, 2].map(i => device.createBuffer({
@@ -142,9 +783,24 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
     const Ahat = device.createBuffer({ label: 'Ahat', size: vec2Size, usage: bufferUsage });
     const Bhat = device.createBuffer({ label: 'Bhat', size: vec2Size, usage: bufferUsage });
     const Vreal = device.createBuffer({ label: 'Vreal', size: vec2Size, usage: bufferUsage });
+
+    // Cleanup buffers on invalidation
+    invalidation.then(() => {
+      Vhat.forEach(b => b.destroy());
+      ABhat.forEach(b => b.destroy());
+      V.destroy();
+      temp.forEach(b => b.destroy());
+      tempVec4.destroy();
+      VxVy.destroy();
+      A.destroy();
+      B.destroy();
+      Ahat.destroy();
+      Bhat.destroy();
+      Vreal.destroy();
+    });
   </script>
 
-  <!-- Uniform buffers - depends only on device -->
+  <!-- Uniform buffers - depends on device and constants -->
   <script id="uniform-buffers" type="module">
     const initParamsBuffer = device.createBuffer({
       size: 16,
@@ -176,6 +832,15 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
     const visParamsBuffer = device.createBuffer({
       size: 32,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    // Cleanup on invalidation
+    invalidation.then(() => {
+      initParamsBuffer.destroy();
+      diffParamsBuffer.destroy();
+      bdfParamsBuffer.destroy();
+      extractRealParamsBuffer.destroy();
+      visParamsBuffer.destroy();
     });
   </script>
 
@@ -311,8 +976,11 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       const Lx = simParams.Lx;
       const L = [Lx, Lx / simParams.aspectRatio];
       const nu = [Math.pow(Math.PI / L[0], 2), Math.pow(Math.PI / L[1], 2)];
-      const dt = 0.18 * nu[0];
-      return { L, nu, dt, n: simParams.n, dx };
+      // Time step scales with grid resolution for stability
+      // Base time step at N=256, scale linearly with dx (inversely with N)
+      const baseN = 256;
+      const dt = 0.18 * nu[0] * (baseN / N);
+      return { L, nu, dt, n: simParams.n, dx, N };
     }
 
     // Update uniform buffers with current params

@@ -6,8 +6,8 @@
  */
 
 export function generateFFTShader(N: number): string {
-  if (N < 2 || (N & (N - 1)) !== 0) {
-    throw new Error(`N must be a power of 2, got ${N}`);
+  if (N == null || !Number.isInteger(N) || N < 2 || (N & (N - 1)) !== 0) {
+    throw new Error(`N must be a power of 2 integer >= 2, got ${N}`);
   }
 
   const log2N = Math.log2(N);
@@ -110,7 +110,9 @@ fn fft_horizontal(@builtin(local_invocation_id) local_id: vec3<u32>,
   }
 
   // Get result from correct buffer (depends on whether log2N is odd or even)
-  var result = select(buffer_b[j], buffer_a[j], ${log2N % 2 === 0 ? 'false' : 'true'});
+  // After log2N stages, result is in buffer_a if last stage (log2N-1) is odd
+  // Last stage is odd when log2N is even
+  var result = select(buffer_b[j], buffer_a[j], ${log2N % 2 === 0 ? 'true' : 'false'});
 
   // Normalization
   if (params.split_norm != 0u) {
@@ -178,7 +180,9 @@ fn fft_vertical(@builtin(local_invocation_id) local_id: vec3<u32>,
     workgroupBarrier();
   }
 
-  var result = select(buffer_b[j], buffer_a[j], ${log2N % 2 === 0 ? 'false' : 'true'});
+  // After log2N stages, result is in buffer_a if last stage (log2N-1) is odd
+  // Last stage is odd when log2N is even
+  var result = select(buffer_b[j], buffer_a[j], ${log2N % 2 === 0 ? 'true' : 'false'});
 
   if (params.split_norm != 0u) {
     result = result / sqrt(f32(N));

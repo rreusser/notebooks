@@ -47,10 +47,11 @@ async function loadShader(path: string): Promise<string> {
  */
 export async function createKSPipelines(
   device: GPUDevice,
-  canvasFormat: GPUTextureFormat
+  canvasFormat: GPUTextureFormat,
+  N: number
 ): Promise<KSPipelines> {
   // Create FFT pipelines
-  const fft = await createFFTPipelines(device);
+  const fft = createFFTPipelines(device, N);
 
   // Load all shader sources
   const [

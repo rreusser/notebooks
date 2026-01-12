@@ -6,23 +6,32 @@
  * 2. Transpose
  * 3. Vertical FFT (columns become rows after transpose)
  * 4. Transpose back
+ *
+ * For N > maxWorkgroupSize, uses hierarchical four-step FFT.
  */
 
 import { generateFFTShader, generateTransposeShader } from './fft-generator.js';
+import { createLargeFFTPipelines, executeLargeFFT2D, LargeFFTPipelines } from './fft-large.js';
 
 export interface FFTPipelines {
-  fftHorizontal: GPUComputePipeline;
-  fftVertical: GPUComputePipeline;
+  // Simple pipelines (for N <= maxWorkgroupSize)
+  fftHorizontal: GPUComputePipeline | null;
+  fftVertical: GPUComputePipeline | null;
   transpose: GPUComputePipeline;
   bindGroupLayouts: {
-    fft: GPUBindGroupLayout;
+    fft: GPUBindGroupLayout | null;
     transpose: GPUBindGroupLayout;
   };
   N: number;
+
+  // Large FFT pipelines (for N > maxWorkgroupSize)
+  largePipelines: LargeFFTPipelines | null;
+  isLarge: boolean;
 }
 
 /**
  * Create all FFT-related compute pipelines for a given size N
+ * Automatically uses hierarchical FFT for N > maxWorkgroupSize
  */
 export function createFFTPipelines(device: GPUDevice, N: number): FFTPipelines {
   if (N < 2 || (N & (N - 1)) !== 0) {
@@ -31,10 +40,27 @@ export function createFFTPipelines(device: GPUDevice, N: number): FFTPipelines {
 
   // Check device limits
   const maxWorkgroupSize = device.limits.maxComputeWorkgroupSizeX;
-  if (N > maxWorkgroupSize) {
-    throw new Error(`N=${N} exceeds device maxComputeWorkgroupSizeX=${maxWorkgroupSize}`);
+  const isLarge = N > maxWorkgroupSize;
+
+  if (isLarge) {
+    // Use hierarchical FFT for large N
+    const largePipelines = createLargeFFTPipelines(device, N);
+
+    return {
+      fftHorizontal: null,
+      fftVertical: null,
+      transpose: largePipelines.transpose,
+      bindGroupLayouts: {
+        fft: null,
+        transpose: largePipelines.bindGroupLayouts.transpose
+      },
+      N,
+      largePipelines,
+      isLarge: true
+    };
   }
 
+  // Simple FFT for N <= maxWorkgroupSize
   // Generate shader code
   const fftCode = generateFFTShader(N);
   const transposeCode = generateTransposeShader();
@@ -140,7 +166,9 @@ export function createFFTPipelines(device: GPUDevice, N: number): FFTPipelines {
       fft: fftBindGroupLayout,
       transpose: transposeBindGroupLayout
     },
-    N
+    N,
+    largePipelines: null,
+    isLarge: false
   };
 }
 
@@ -164,6 +192,8 @@ export interface FFT2DParams {
  * - Vertical FFT (on transposed data)
  * - Transpose back
  *
+ * Automatically uses hierarchical FFT for large N.
+ *
  * @param params FFT parameters
  */
 export function executeFFT2D(params: FFT2DParams) {
@@ -172,6 +202,26 @@ export function executeFFT2D(params: FFT2DParams) {
   // Verify N matches pipeline
   if (N !== pipelines.N) {
     throw new Error(`N=${N} doesn't match pipeline N=${pipelines.N}`);
+  }
+
+  // Use hierarchical FFT for large N
+  if (pipelines.isLarge && pipelines.largePipelines) {
+    executeLargeFFT2D({
+      device,
+      pipelines: pipelines.largePipelines,
+      input,
+      output,
+      temp,
+      N,
+      forward,
+      splitNormalization
+    });
+    return;
+  }
+
+  // Simple FFT for N <= maxWorkgroupSize
+  if (!pipelines.fftHorizontal || !pipelines.fftVertical || !pipelines.bindGroupLayouts.fft) {
+    throw new Error('Simple FFT pipelines not available');
   }
 
   // Create uniform buffers for this FFT
