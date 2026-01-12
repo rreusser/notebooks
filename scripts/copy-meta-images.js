@@ -4,10 +4,11 @@ import { join, dirname, basename, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = join(__dirname, "..");
 
 async function copyMetaImages() {
-  const srcDir = join(__dirname, "src");
-  const metaDir = join(__dirname, "docs", "meta");
+  const srcDir = join(projectRoot, "src");
+  const metaDir = join(projectRoot, "docs", "meta");
 
   // Find all meta image files
   const metaFiles = await glob(join(srcDir, "**", "meta.{png,jpg,webp}"), {
