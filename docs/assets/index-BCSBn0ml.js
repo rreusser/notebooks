@@ -1,5 +1,5 @@
 const __vite__mapDeps=(i,m=__vite__mapDeps,d=(m.f||(m.f=["assets/pipeline-Beycb7Hx.js","assets/fft-CMRdeOur.js"])))=>i.map(i=>d[i]);
-import{d as f,_ as z}from"./index-ByB2dbry.js";f({root:document.getElementById("cell-1"),expanded:[],variables:[]},{id:1,body:(t,e)=>t`
+import{d as f,_ as z}from"./index-ByB2dbry.js";import"./comments-I77vOiCB.js";f({root:document.getElementById("cell-1"),expanded:[],variables:[]},{id:1,body:(t,e)=>t`
 This notebook implements on the GPU a two-dimensional solution of the [Kuramoto-Sivashinsky equation](https://encyclopediaofmath.org/wiki/Kuramoto-Sivashinsky_equation) (KSE),
 
 ${e.block`u_t + \frac{1}{2}|\nabla u|^2 + \nabla^2 u + \nabla^4 u = 0.`}
