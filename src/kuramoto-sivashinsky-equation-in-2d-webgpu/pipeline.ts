@@ -13,6 +13,9 @@ export interface KSPipelines {
   // Physics compute pipelines
   initialize: GPUComputePipeline;
   differentiate: GPUComputePipeline;
+  extractMixedDerivatives: GPUComputePipeline;
+  computeAB: GPUComputePipeline;
+  packABhat: GPUComputePipeline;
   computeNonlinear: GPUComputePipeline;
   bdfUpdate: GPUComputePipeline;
   extractReal: GPUComputePipeline;
@@ -24,6 +27,9 @@ export interface KSPipelines {
   bindGroupLayouts: {
     initialize: GPUBindGroupLayout;
     differentiate: GPUBindGroupLayout;
+    extractMixedDerivatives: GPUBindGroupLayout;
+    computeAB: GPUBindGroupLayout;
+    packABhat: GPUBindGroupLayout;
     computeNonlinear: GPUBindGroupLayout;
     bdfUpdate: GPUBindGroupLayout;
     extractReal: GPUBindGroupLayout;
@@ -57,6 +63,9 @@ export async function createKSPipelines(
   const [
     initializeSource,
     differentiateSource,
+    extractMixedDerivativesSource,
+    computeABSource,
+    packABhatSource,
     computeNonlinearSource,
     bdfUpdateSource,
     extractRealSource,
@@ -65,6 +74,9 @@ export async function createKSPipelines(
   ] = await Promise.all([
     loadShader('./shaders/initialize.wgsl'),
     loadShader('./shaders/differentiate.wgsl'),
+    loadShader('./shaders/extract_mixed_derivatives.wgsl'),
+    loadShader('./shaders/compute_ab.wgsl'),
+    loadShader('./shaders/pack_abhat.wgsl'),
     loadShader('./shaders/compute_nonlinear.wgsl'),
     loadShader('./shaders/bdf_update.wgsl'),
     loadShader('./shaders/extract_real.wgsl'),
@@ -81,6 +93,21 @@ export async function createKSPipelines(
   const differentiateModule = device.createShaderModule({
     label: 'Differentiate shader',
     code: differentiateSource
+  });
+
+  const extractMixedDerivativesModule = device.createShaderModule({
+    label: 'Extract mixed derivatives shader',
+    code: extractMixedDerivativesSource
+  });
+
+  const computeABModule = device.createShaderModule({
+    label: 'Compute AB shader',
+    code: computeABSource
+  });
+
+  const packABhatModule = device.createShaderModule({
+    label: 'Pack ABhat shader',
+    code: packABhatSource
   });
 
   const computeNonlinearModule = device.createShaderModule({
@@ -145,6 +172,82 @@ export async function createKSPipelines(
       },
       {
         binding: 2,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'uniform' as GPUBufferBindingType }
+      }
+    ]
+  });
+
+  // Extract mixed derivatives: vec4 input + vec2 output + params
+  const extractMixedDerivativesBindGroupLayout = device.createBindGroupLayout({
+    label: 'Extract mixed derivatives bind group layout',
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'read-only-storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 2,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'uniform' as GPUBufferBindingType }
+      }
+    ]
+  });
+
+  // Compute AB: VxVy input + A output + B output + params
+  const computeABBindGroupLayout = device.createBindGroupLayout({
+    label: 'Compute AB bind group layout',
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'read-only-storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 2,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 3,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'uniform' as GPUBufferBindingType }
+      }
+    ]
+  });
+
+  // Pack ABhat: Ahat input + Bhat input + ABhat output + params
+  const packABhatBindGroupLayout = device.createBindGroupLayout({
+    label: 'Pack ABhat bind group layout',
+    entries: [
+      {
+        binding: 0,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'read-only-storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 1,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'read-only-storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 2,
+        visibility: GPUShaderStage.COMPUTE,
+        buffer: { type: 'storage' as GPUBufferBindingType }
+      },
+      {
+        binding: 3,
         visibility: GPUShaderStage.COMPUTE,
         buffer: { type: 'uniform' as GPUBufferBindingType }
       }
@@ -273,6 +376,21 @@ export async function createKSPipelines(
     bindGroupLayouts: [differentiateBindGroupLayout]
   });
 
+  const extractMixedDerivativesPipelineLayout = device.createPipelineLayout({
+    label: 'Extract mixed derivatives pipeline layout',
+    bindGroupLayouts: [extractMixedDerivativesBindGroupLayout]
+  });
+
+  const computeABPipelineLayout = device.createPipelineLayout({
+    label: 'Compute AB pipeline layout',
+    bindGroupLayouts: [computeABBindGroupLayout]
+  });
+
+  const packABhatPipelineLayout = device.createPipelineLayout({
+    label: 'Pack ABhat pipeline layout',
+    bindGroupLayouts: [packABhatBindGroupLayout]
+  });
+
   const computeNonlinearPipelineLayout = device.createPipelineLayout({
     label: 'Compute nonlinear pipeline layout',
     bindGroupLayouts: [computeNonlinearBindGroupLayout]
@@ -312,6 +430,33 @@ export async function createKSPipelines(
     compute: {
       module: differentiateModule,
       entryPoint: 'differentiate'
+    }
+  });
+
+  const extractMixedDerivatives = device.createComputePipeline({
+    label: 'Extract mixed derivatives pipeline',
+    layout: extractMixedDerivativesPipelineLayout,
+    compute: {
+      module: extractMixedDerivativesModule,
+      entryPoint: 'extract_mixed_derivatives'
+    }
+  });
+
+  const computeAB = device.createComputePipeline({
+    label: 'Compute AB pipeline',
+    layout: computeABPipelineLayout,
+    compute: {
+      module: computeABModule,
+      entryPoint: 'compute_ab'
+    }
+  });
+
+  const packABhat = device.createComputePipeline({
+    label: 'Pack ABhat pipeline',
+    layout: packABhatPipelineLayout,
+    compute: {
+      module: packABhatModule,
+      entryPoint: 'pack_abhat'
     }
   });
 
@@ -371,6 +516,9 @@ export async function createKSPipelines(
     fft,
     initialize,
     differentiate,
+    extractMixedDerivatives,
+    computeAB,
+    packABhat,
     computeNonlinear,
     bdfUpdate,
     extractReal,
@@ -378,6 +526,9 @@ export async function createKSPipelines(
     bindGroupLayouts: {
       initialize: initializeBindGroupLayout,
       differentiate: differentiateBindGroupLayout,
+      extractMixedDerivatives: extractMixedDerivativesBindGroupLayout,
+      computeAB: computeABBindGroupLayout,
+      packABhat: packABhatBindGroupLayout,
       computeNonlinear: computeNonlinearBindGroupLayout,
       bdfUpdate: bdfUpdateBindGroupLayout,
       extractReal: extractRealBindGroupLayout,

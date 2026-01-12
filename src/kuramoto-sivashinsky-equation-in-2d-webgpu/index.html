@@ -1,91 +1,19 @@
 <!doctype html>
 <notebook theme="air">
   <title>Kuramoto-Sivashinsky Equation in 2D (WebGPU)</title>
+  <script id="1" type="text/markdown">
+    # Kuramoto-Sivashinsky Equation in 2D (WebGPU)
 
-  <script id="intro" type="module">
-    display(md`# Kuramoto-Sivashinsky Equation in 2D (WebGPU)
+    This notebook implements on the GPU a two-dimensional solution of the [Kuramoto-Sivashinsky equation](https://encyclopediaofmath.org/wiki/Kuramoto-Sivashinsky_equation) (KSE),
 
-This notebook implements on the GPU a two-dimensional solution of the [Kuramoto-Sivashinsky equation](https://encyclopediaofmath.org/wiki/Kuramoto-Sivashinsky_equation) (KSE),
+    ${tex.block`u_t + \frac{1}{2}|\nabla u|^2 + \nabla^2 u + \nabla^4 u = 0.`}
 
-${tex.block`u_t + \frac{1}{2}|\nabla u|^2 + \nabla^2 u + \nabla^4 u = 0.`}
-
-The KSE is one of the simplest partial differential equations to show complicated dynamics, displaying chaotic behavior as the size of the domain increases.`);
+    The KSE arises in a number of contexts and was rediscovered by Kuramoto while researching diffusion-induced flame front instabilities.
   </script>
-
-  <!-- Controls -->
-  <script id="controls" type="module">
-    const simulateInput = Inputs.toggle({ label: 'Simulate', value: false });
-    const simulate = view(simulateInput);
-    display(html`<button id="restart-btn">Restart</button>`);
+  <script id="2" type="text/markdown">
+    The KSE is one of the simplest partial differential equations to show complicated dynamics, displaying chaotic behavior as the size of the domain increases. Observe that if ${tex`\nu_1`} or ${tex`\nu_2`}, which represent the size of a wavelength relative to the size of the domain, are greater than one, the chaotic behavior disappears along the short dimension and the solution essentially becomes a one-dimensional solution.
   </script>
-
-  <script id="domain-controls" type="module">
-    const LxInput = Inputs.range([1, 128], {
-      step: 0.5,
-      value: 64,
-      label: html`Domain size, ${tex`L_x`}`
-    });
-    const Lx = view(LxInput);
-
-    const aspectRatioInput = Inputs.range([0.1, 10], {
-      step: 0.01,
-      value: 1,
-      label: html`Aspect ratio, ${tex`L_x / L_y`}`
-    });
-    const aspectRatio = view(aspectRatioInput);
-  </script>
-
-  <script id="ic-controls" type="module">
-    const nInput = Inputs.range([1, 8], {
-      step: 1,
-      value: 1,
-      label: 'Initial condition periods, n'
-    });
-    const n = view(nInput);
-  </script>
-
-  <script id="vis-controls" type="module">
-    const rangeInput = Inputs.range([0.5, 20], {
-      step: 0.5,
-      value: 14,
-      label: 'Colorscale threshold'
-    });
-    const range = view(rangeInput);
-
-    const colorscaleNameInput = Inputs.select(
-      ['Viridis', 'Magma', 'Inferno', 'Plasma', 'Cividis', 'Greys'],
-      { value: 'Magma', label: 'Colorscale' }
-    );
-    const colorscaleName = view(colorscaleNameInput);
-
-    const invertInput = Inputs.toggle({ label: 'Invert colorscale', value: false });
-    const invert = view(invertInput);
-  </script>
-
-  <script id="domain-info" type="module">
-    const L = [Lx, Lx / aspectRatio];
-    const nu = [Math.pow(Math.PI / L[0], 2), Math.pow(Math.PI / L[1], 2)];
-
-    display(md`We solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`}.
-
-The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
-- ${tex`\nu_1 = (\pi/L_x)^2 = ${nu[0].toFixed(6)}`}
-- ${tex`\nu_2 = (\pi/L_y)^2 = ${nu[1].toFixed(6)}`}`);
-  </script>
-
-  <!-- WebGPU Context - runs once -->
-  <script id="webgpu-context" type="module">
-    import { createWebGPUContext } from './webgpu-context.js';
-
-    const context = await createWebGPUContext();
-    const device = context.device;
-    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-
-    invalidation.then(() => device.destroy());
-  </script>
-
-  <!-- Grid controls - depends on device for limits -->
-  <script id="grid-controls" type="module">
+  <script id="3" type="module">
     // With hierarchical FFT, we can support sizes up to maxWorkgroupSize^2
     // For N > maxWorkgroupSize, we decompose N = R × C where C ≤ maxWorkgroupSize
     const maxWorkgroupSize = device.limits.maxComputeWorkgroupSizeX;
@@ -104,630 +32,162 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       return Number.isInteger(R) && (R & (R - 1)) === 0;
     });
 
-    const gridSizes = new Map(
-      validSizes.map(n => [`${n}×${n}`, n])
-    );
+    const gridSizeOptions = validSizes.map(n => `${n}×${n}`);
 
     // Default to 512 for testing hierarchical FFT
     const defaultN = 512;
 
-    const NInput = Inputs.select(gridSizes, {
-      value: defaultN,
+    const NInput = Inputs.select(gridSizeOptions, {
+      value: `${defaultN}×${defaultN}`,
       label: 'Grid size, N'
     });
-    const N = view(NInput);
+    const NString = view(NInput);
   </script>
-
-  <!-- FFT Validation Tests -->
-  <script id="fft-tests" type="module">
-    import { createLargeFFTPipelines, executeLargeFFT2D } from './fft-large.js';
-
-    // Test configuration
-    const testN = N;  // Use currently selected N
-    const tolerance = 1e-4;
-
-    // Helper: create a test buffer and fill with data
-    function createTestBuffer(data) {
-      const buffer = device.createBuffer({
-        size: data.byteLength,
-        usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-      });
-      device.queue.writeBuffer(buffer, 0, data);
-      return buffer;
-    }
-
-    // Helper: read buffer back to CPU
-    async function readBuffer(buffer, size) {
-      const staging = device.createBuffer({
-        size,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-      });
-      const enc = device.createCommandEncoder();
-      enc.copyBufferToBuffer(buffer, 0, staging, 0, size);
-      device.queue.submit([enc.finish()]);
-      await device.queue.onSubmittedWorkDone();
-      await staging.mapAsync(GPUMapMode.READ);
-      const result = new Float32Array(staging.getMappedRange().slice(0));
-      staging.unmap();
-      staging.destroy();
-      return result;
-    }
-
-    // Reference 2D DFT (CPU, for validation)
-    function referenceDFT2D(input, N, forward) {
-      const output = new Float32Array(N * N * 2);
-      const sign = forward ? -1 : 1;
-
-      for (let ky = 0; ky < N; ky++) {
-        for (let kx = 0; kx < N; kx++) {
-          let sumRe = 0, sumIm = 0;
-          for (let ny = 0; ny < N; ny++) {
-            for (let nx = 0; nx < N; nx++) {
-              const idx = (ny * N + nx) * 2;
-              const inRe = input[idx];
-              const inIm = input[idx + 1];
-              const angle = sign * 2 * Math.PI * (kx * nx + ky * ny) / N;
-              const c = Math.cos(angle);
-              const s = Math.sin(angle);
-              sumRe += inRe * c - inIm * s;
-              sumIm += inRe * s + inIm * c;
-            }
-          }
-          const outIdx = (ky * N + kx) * 2;
-          // Split normalization: divide by sqrt(N) for each dimension
-          const norm = 1 / N;  // sqrt(N) * sqrt(N) for 2D with split norm
-          output[outIdx] = sumRe * norm;
-          output[outIdx + 1] = sumIm * norm;
-        }
-      }
-      return output;
-    }
-
-    // Run FFT validation test
-    async function runFFTTest() {
-      const results = { passed: true, errors: [], debug: {} };
-
-      try {
-        // Create test input: two impulses for more thorough testing
-        const inputData = new Float32Array(testN * testN * 2);
-        inputData[0] = 1.0;  // DC component at (0,0)
-        inputData[(Math.floor(testN / 2) * testN + Math.floor(testN / 2)) * 2] = 1.0;  // Center at (N/2, N/2)
-
-        // Create pipelines
-        const pipelines = createLargeFFTPipelines(device, testN);
-
-        // Create buffers
-        const bufferSize = testN * testN * 2 * 4;
-        const inputBuffer = createTestBuffer(inputData);
-        const outputBuffer = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-        const temp0 = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-        const temp1 = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-
-        // Run forward FFT
-        executeLargeFFT2D({
-          device,
-          pipelines,
-          input: inputBuffer,
-          output: outputBuffer,
-          temp: [temp0, temp1],
-          N: testN,
-          forward: true,
-          splitNormalization: true
-        });
-        await device.queue.onSubmittedWorkDone();
-
-        // Read GPU result
-        const gpuForward = await readBuffer(outputBuffer, bufferSize);
-
-        // Debug: capture some key values from forward FFT
-        // For single impulse at (0,0), forward FFT should give 1/N at all positions
-        const expectedForwardVal = 1.0 / testN;  // with split norm for 2D
-        results.debug.forwardAt00 = { re: gpuForward[0], im: gpuForward[1] };
-        results.debug.forwardAt01 = { re: gpuForward[2], im: gpuForward[3] };
-        results.debug.forwardAt10 = { re: gpuForward[testN * 2], im: gpuForward[testN * 2 + 1] };
-        results.debug.expectedForwardVal = expectedForwardVal;
-
-        // Run inverse FFT to get back original
-        executeLargeFFT2D({
-          device,
-          pipelines,
-          input: outputBuffer,
-          output: inputBuffer,
-          temp: [temp0, temp1],
-          N: testN,
-          forward: false,
-          splitNormalization: true
-        });
-        await device.queue.onSubmittedWorkDone();
-
-        // Read roundtrip result
-        const gpuRoundtrip = await readBuffer(inputBuffer, bufferSize);
-
-        // Debug: capture roundtrip values
-        results.debug.roundtripAt00 = { re: gpuRoundtrip[0], im: gpuRoundtrip[1] };
-        results.debug.roundtripAt01 = { re: gpuRoundtrip[2], im: gpuRoundtrip[3] };
-        results.debug.roundtripAt10 = { re: gpuRoundtrip[testN * 2], im: gpuRoundtrip[testN * 2 + 1] };
-        results.debug.inputAt00 = { re: inputData[0], im: inputData[1] };
-
-        // Check roundtrip error
-        let maxRoundtripError = 0;
-        let maxErrorIndex = 0;
-        for (let i = 0; i < inputData.length; i++) {
-          const err = Math.abs(gpuRoundtrip[i] - inputData[i]);
-          if (err > maxRoundtripError) {
-            maxRoundtripError = err;
-            maxErrorIndex = i;
-          }
-        }
-
-        results.debug.maxErrorIndex = maxErrorIndex;
-        results.debug.maxErrorExpected = inputData[maxErrorIndex];
-        results.debug.maxErrorGot = gpuRoundtrip[maxErrorIndex];
-
-        if (maxRoundtripError > tolerance) {
-          results.passed = false;
-          results.errors.push(`Roundtrip error too high: ${maxRoundtripError.toExponential(2)} > ${tolerance}`);
-        }
-
-        // For small N, also compare against reference DFT
-        if (testN <= 64) {
-          const refForward = referenceDFT2D(inputData, testN, true);
-          let maxRefError = 0;
-          for (let i = 0; i < refForward.length; i++) {
-            const err = Math.abs(gpuForward[i] - refForward[i]);
-            maxRefError = Math.max(maxRefError, err);
-          }
-
-          if (maxRefError > tolerance) {
-            results.passed = false;
-            results.errors.push(`Reference comparison error: ${maxRefError.toExponential(2)} > ${tolerance}`);
-          }
-          results.refError = maxRefError;
-        }
-
-        results.roundtripError = maxRoundtripError;
-        results.N = testN;
-        results.isLarge = pipelines.isLarge;
-        results.decomposition = pipelines.isLarge ? `${pipelines.R}×${pipelines.C}` : 'N/A';
-
-        // Cleanup
-        inputBuffer.destroy();
-        outputBuffer.destroy();
-        temp0.destroy();
-        temp1.destroy();
-
-      } catch (e) {
-        results.passed = false;
-        results.errors.push(`Exception: ${e.message}`);
-      }
-
-      return results;
-    }
-
-    // Run 1D FFT test (just horizontal, no transpose/vertical)
-    async function run1DFFTTest() {
-      const results = { debug: {} };
-
-      try {
-        // Test 1D FFT on a single row: sine wave sin(2π * k * x / N)
-        const k = 1;
-        const inputData = new Float32Array(testN * 2);  // Single row
-
-        for (let x = 0; x < testN; x++) {
-          const idx = x * 2;
-          const angle = 2 * Math.PI * k * x / testN;
-          inputData[idx] = Math.sin(angle);
-          inputData[idx + 1] = 0;
-        }
-
-        // Create pipelines
-        const pipelines = createLargeFFTPipelines(device, testN);
-
-        // Create buffers for a single row
-        const bufferSize = testN * 2 * 4;
-        const inputBuffer = createTestBuffer(inputData);
-        const outputBuffer = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-        const temp0 = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-        const temp1 = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-
-        // For 1D FFT, we need to manually run just the horizontal pass
-        const { R, C, isLarge } = pipelines;
-        results.debug.isLarge = isLarge;
-        results.debug.R = R;
-        results.debug.C = C;
-
-        if (!isLarge) {
-          // Simple case - just run the simple FFT
-          const fftParamsBuffer = device.createBuffer({
-            size: 16,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-          });
-          device.queue.writeBuffer(fftParamsBuffer, 0, new Uint32Array([
-            testN, 1, 1, 1  // N, num_rows, forward, split_norm
-          ]));
-
-          const encoder = device.createCommandEncoder();
-          const bindGroup = device.createBindGroup({
-            layout: pipelines.bindGroupLayouts.simpleFFT,
-            entries: [
-              { binding: 0, resource: { buffer: inputBuffer } },
-              { binding: 1, resource: { buffer: outputBuffer } },
-              { binding: 2, resource: { buffer: fftParamsBuffer } }
-            ]
-          });
-          const pass = encoder.beginComputePass();
-          pass.setPipeline(pipelines.simpleFFT);
-          pass.setBindGroup(0, bindGroup);
-          pass.dispatchWorkgroups(1);  // Single row
-          pass.end();
-          device.queue.submit([encoder.finish()]);
-        } else {
-          // Hierarchical case: column FFT -> twiddle -> sub-row FFT
-          const columnParamsBuffer = device.createBuffer({
-            size: 32,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-          });
-          device.queue.writeBuffer(columnParamsBuffer, 0, new Uint32Array([
-            C, R, testN, 1, 1, 1  // C, R, N, num_original_rows, forward, split_norm
-          ]));
-
-          const twiddleParamsBuffer = device.createBuffer({
-            size: 32,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-          });
-          device.queue.writeBuffer(twiddleParamsBuffer, 0, new Uint32Array([
-            C, R, testN, 1, 1  // C, R, N, num_original_rows, forward
-          ]));
-
-          const subRowParamsBuffer = device.createBuffer({
-            size: 32,
-            usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-          });
-          device.queue.writeBuffer(subRowParamsBuffer, 0, new Uint32Array([
-            C, R, testN, R, 1, 1  // C, R, N, num_sub_rows, forward, split_norm
-          ]));
-
-          const encoder = device.createCommandEncoder();
-
-          // Step 1: Column FFT (input -> temp0)
-          {
-            const bindGroup = device.createBindGroup({
-              layout: pipelines.bindGroupLayouts.columnFFT,
-              entries: [
-                { binding: 0, resource: { buffer: inputBuffer } },
-                { binding: 1, resource: { buffer: temp0 } },
-                { binding: 2, resource: { buffer: columnParamsBuffer } }
-              ]
-            });
-            const pass = encoder.beginComputePass({ label: '1D Column FFT' });
-            pass.setPipeline(pipelines.columnFFT);
-            pass.setBindGroup(0, bindGroup);
-            if (R <= 8) {
-              pass.dispatchWorkgroups(Math.ceil(C / 256));
-            } else {
-              pass.dispatchWorkgroups(C);
-            }
-            pass.end();
-          }
-
-          // Step 2: Twiddle (temp0 -> temp1)
-          {
-            const bindGroup = device.createBindGroup({
-              layout: pipelines.bindGroupLayouts.twiddle,
-              entries: [
-                { binding: 0, resource: { buffer: temp0 } },
-                { binding: 1, resource: { buffer: temp1 } },
-                { binding: 2, resource: { buffer: twiddleParamsBuffer } }
-              ]
-            });
-            const pass = encoder.beginComputePass({ label: '1D Twiddle' });
-            pass.setPipeline(pipelines.twiddle);
-            pass.setBindGroup(0, bindGroup);
-            pass.dispatchWorkgroups(Math.ceil(C / 16), Math.ceil(R / 16));
-            pass.end();
-          }
-
-          // Step 3: Sub-row FFT (temp1 -> temp0)
-          {
-            const bindGroup = device.createBindGroup({
-              layout: pipelines.bindGroupLayouts.subRowFFT,
-              entries: [
-                { binding: 0, resource: { buffer: temp1 } },
-                { binding: 1, resource: { buffer: temp0 } },
-                { binding: 2, resource: { buffer: subRowParamsBuffer } }
-              ]
-            });
-            const pass = encoder.beginComputePass({ label: '1D Sub-row FFT' });
-            pass.setPipeline(pipelines.subRowFFT);
-            pass.setBindGroup(0, bindGroup);
-            pass.dispatchWorkgroups(R);  // R sub-rows for 1 original row
-            pass.end();
-          }
-
-          // Step 4: Unscramble to natural order (temp0 -> output)
-          {
-            const unscrambleParamsBuffer = device.createBuffer({
-              size: 16,
-              usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-            });
-            device.queue.writeBuffer(unscrambleParamsBuffer, 0, new Uint32Array([
-              C, R, testN, 1  // C, R, N, num_original_rows
-            ]));
-
-            const bindGroup = device.createBindGroup({
-              layout: pipelines.bindGroupLayouts.unscramble,
-              entries: [
-                { binding: 0, resource: { buffer: temp0 } },
-                { binding: 1, resource: { buffer: outputBuffer } },
-                { binding: 2, resource: { buffer: unscrambleParamsBuffer } }
-              ]
-            });
-            const pass = encoder.beginComputePass({ label: '1D Unscramble' });
-            pass.setPipeline(pipelines.unscramble);
-            pass.setBindGroup(0, bindGroup);
-            pass.dispatchWorkgroups(Math.ceil(testN / 256), 1);
-            pass.end();
-          }
-
-          device.queue.submit([encoder.finish()]);
-        }
-
-        await device.queue.onSubmittedWorkDone();
-
-        // Read result
-        const gpuForward = await readBuffer(outputBuffer, bufferSize);
-
-        // For 1D sin(2π * k * x / N) with split norm (divide by sqrt(N)):
-        // DFT of sin gives ±i * N/2 at frequencies ±k
-        // With split norm: ±i * N/2 / sqrt(N) = ±i * sqrt(N)/2
-        // Expected magnitude: sqrt(N)/2 = sqrt(512)/2 ≈ 11.31
-        const posKIdx = k * 2;
-        const negKIdx = (testN - k) * 2;
-
-        results.debug.atPosK = {
-          re: gpuForward[posKIdx],
-          im: gpuForward[posKIdx + 1],
-          mag: Math.sqrt(gpuForward[posKIdx]**2 + gpuForward[posKIdx + 1]**2)
-        };
-        results.debug.atNegK = {
-          re: gpuForward[negKIdx],
-          im: gpuForward[negKIdx + 1],
-          mag: Math.sqrt(gpuForward[negKIdx]**2 + gpuForward[negKIdx + 1]**2)
-        };
-        results.debug.atDC = {
-          re: gpuForward[0],
-          im: gpuForward[1]
-        };
-        results.debug.k = k;
-        results.debug.expectedMag = Math.sqrt(testN) / 2;  // sqrt(N)/2 for 1D split norm
-
-        // Find max magnitude
-        let maxMag = 0;
-        let maxIdx = 0;
-        for (let i = 0; i < testN; i++) {
-          const re = gpuForward[i * 2];
-          const im = gpuForward[i * 2 + 1];
-          const mag = Math.sqrt(re * re + im * im);
-          if (mag > maxMag) {
-            maxMag = mag;
-            maxIdx = i;
-          }
-        }
-        results.debug.maxMag = maxMag;
-        results.debug.maxIdx = maxIdx;
-
-        // Cleanup
-        inputBuffer.destroy();
-        outputBuffer.destroy();
-        temp0.destroy();
-        temp1.destroy();
-
-      } catch (e) {
-        results.error = e.message;
-        console.error('1D FFT test error:', e);
-      }
-
-      return results;
-    }
-
-    // Run sine wave test to diagnose FFT behavior
-    async function runSineWaveTest() {
-      const results = { debug: {} };
-
-      try {
-        // Create test input: sine wave sin(2π * kx * x / N) for a specific frequency
-        const kx = 1;  // Frequency in x direction
-        const ky = 0;  // No y frequency for simplicity
-        const inputData = new Float32Array(testN * testN * 2);
-
-        for (let y = 0; y < testN; y++) {
-          for (let x = 0; x < testN; x++) {
-            const idx = (y * testN + x) * 2;
-            // sin(2π * kx * x / N) = Im(exp(i * 2π * kx * x / N))
-            const angle = 2 * Math.PI * (kx * x + ky * y) / testN;
-            inputData[idx] = Math.sin(angle);  // Real part
-            inputData[idx + 1] = 0;  // Imaginary part
-          }
-        }
-
-        // Create pipelines
-        const pipelines = createLargeFFTPipelines(device, testN);
-
-        // Create buffers
-        const bufferSize = testN * testN * 2 * 4;
-        const inputBuffer = createTestBuffer(inputData);
-        const outputBuffer = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-        const temp0 = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-        const temp1 = device.createBuffer({
-          size: bufferSize,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
-        });
-
-        // Run forward FFT
-        executeLargeFFT2D({
-          device,
-          pipelines,
-          input: inputBuffer,
-          output: outputBuffer,
-          temp: [temp0, temp1],
-          N: testN,
-          forward: true,
-          splitNormalization: true
-        });
-        await device.queue.onSubmittedWorkDone();
-
-        // Read GPU result
-        const gpuForward = await readBuffer(outputBuffer, bufferSize);
-
-        // For sin(2π * kx * x / N), expected FFT output (with split norm):
-        // - At frequency +kx: -i * N/2 / N = -i/2 (imaginary part = -0.5)
-        // - At frequency -kx (= N-kx): +i * N/2 / N = +i/2 (imaginary part = +0.5)
-        // - All others: 0
-
-        // Capture values at key frequencies
-        // Frequency (kx, ky) is at index (ky * N + kx)
-        const posKxIdx = (ky * testN + kx) * 2;
-        const negKxIdx = (ky * testN + (testN - kx)) * 2;
-        const dcIdx = 0;
-
-        results.debug.atPosKx = {
-          re: gpuForward[posKxIdx],
-          im: gpuForward[posKxIdx + 1],
-          mag: Math.sqrt(gpuForward[posKxIdx]**2 + gpuForward[posKxIdx + 1]**2)
-        };
-        results.debug.atNegKx = {
-          re: gpuForward[negKxIdx],
-          im: gpuForward[negKxIdx + 1],
-          mag: Math.sqrt(gpuForward[negKxIdx]**2 + gpuForward[negKxIdx + 1]**2)
-        };
-        results.debug.atDC = {
-          re: gpuForward[dcIdx],
-          im: gpuForward[dcIdx + 1]
-        };
-
-        // Expected with split normalization: |F[kx]| = 0.5
-        results.debug.expectedMag = 0.5;
-        results.debug.kx = kx;
-        results.debug.ky = ky;
-
-        // Find max magnitude and its location
-        let maxMag = 0;
-        let maxIdx = 0;
-        for (let i = 0; i < testN * testN; i++) {
-          const re = gpuForward[i * 2];
-          const im = gpuForward[i * 2 + 1];
-          const mag = Math.sqrt(re * re + im * im);
-          if (mag > maxMag) {
-            maxMag = mag;
-            maxIdx = i;
-          }
-        }
-        results.debug.maxMag = maxMag;
-        results.debug.maxIdx = maxIdx;
-        results.debug.maxIdxXY = { x: maxIdx % testN, y: Math.floor(maxIdx / testN) };
-
-        // Cleanup
-        inputBuffer.destroy();
-        outputBuffer.destroy();
-        temp0.destroy();
-        temp1.destroy();
-
-      } catch (e) {
-        results.error = e.message;
-      }
-
-      return results;
-    }
-
-    // Run all tests
-    const test1DResults = await run1DFFTTest();
-    const testResults = await runFFTTest();
-    const sineResults = await runSineWaveTest();
-
-    const statusIcon = testResults.passed ? '✓' : '✗';
-    const statusColor = testResults.passed ? 'green' : 'red';
-
-    const dbg = testResults.debug || {};
-    const sdbg = sineResults.debug || {};
-    const dbg1d = test1DResults.debug || {};
-
-    display(html`<details open>
-      <summary><strong>1D FFT Test (N=${testN}, k=${dbg1d.k})</strong></summary>
-      <ul>
-        <li>Large FFT mode: ${dbg1d.isLarge ? `Yes (${dbg1d.R}×${dbg1d.C})` : 'No'}</li>
-        <li>At +k (freq ${dbg1d.k}): re=${dbg1d.atPosK?.re?.toFixed(4) ?? 'N/A'}, im=${dbg1d.atPosK?.im?.toFixed(4) ?? 'N/A'}, mag=${dbg1d.atPosK?.mag?.toFixed(4) ?? 'N/A'}</li>
-        <li>At -k (freq ${testN - (dbg1d.k || 0)}): re=${dbg1d.atNegK?.re?.toFixed(4) ?? 'N/A'}, im=${dbg1d.atNegK?.im?.toFixed(4) ?? 'N/A'}, mag=${dbg1d.atNegK?.mag?.toFixed(4) ?? 'N/A'}</li>
-        <li>At DC: re=${dbg1d.atDC?.re?.toExponential(2) ?? 'N/A'}, im=${dbg1d.atDC?.im?.toExponential(2) ?? 'N/A'}</li>
-        <li>Expected magnitude at ±k: ${dbg1d.expectedMag?.toFixed(4) ?? 'N/A'}</li>
-        <li>Max magnitude: ${dbg1d.maxMag?.toFixed(4) ?? 'N/A'} at index ${dbg1d.maxIdx}</li>
-        ${test1DResults.error ? `<li style="color: red;">Error: ${test1DResults.error}</li>` : ''}
-      </ul>
-    </details>
-    <details open>
-      <summary style="color: ${statusColor}; cursor: pointer;">
-        <strong>2D FFT Test (N=${testResults.N}): ${statusIcon} ${testResults.passed ? 'PASSED' : 'FAILED'}</strong>
-      </summary>
-      <ul>
-        <li>Large FFT mode: ${testResults.isLarge ? `Yes (${testResults.decomposition})` : 'No'}</li>
-        <li>Roundtrip error: ${testResults.roundtripError?.toExponential(2) ?? 'N/A'}</li>
-        ${testResults.refError !== undefined ? `<li>Reference error: ${testResults.refError.toExponential(2)}</li>` : ''}
-        ${testResults.errors.length > 0 ? `<li style="color: red;">Errors: ${testResults.errors.join(', ')}</li>` : ''}
-        <li>Debug info:
-          <ul>
-            <li>Input[0,0]: ${dbg.inputAt00?.re?.toFixed(4) ?? 'N/A'}</li>
-            <li>Forward[0,0]: ${dbg.forwardAt00?.re?.toExponential(3) ?? 'N/A'} (expected: ${dbg.expectedForwardVal?.toExponential(3) ?? 'N/A'})</li>
-            <li>Forward[0,1]: ${dbg.forwardAt01?.re?.toExponential(3) ?? 'N/A'}</li>
-            <li>Roundtrip[0,0]: ${dbg.roundtripAt00?.re?.toFixed(4) ?? 'N/A'}</li>
-            <li>Max error at index ${dbg.maxErrorIndex}: expected ${dbg.maxErrorExpected?.toFixed(4) ?? 'N/A'}, got ${dbg.maxErrorGot?.toExponential(3) ?? 'N/A'}</li>
-          </ul>
-        </li>
-      </ul>
-    </details>
-    <details open>
-      <summary><strong>2D Sine Wave Test (kx=${sdbg.kx}, ky=${sdbg.ky})</strong></summary>
-      <ul>
-        <li>At +kx (freq ${sdbg.kx}): re=${sdbg.atPosKx?.re?.toFixed(4) ?? 'N/A'}, im=${sdbg.atPosKx?.im?.toFixed(4) ?? 'N/A'}, mag=${sdbg.atPosKx?.mag?.toFixed(4) ?? 'N/A'}</li>
-        <li>At -kx (freq ${testN - (sdbg.kx || 0)}): re=${sdbg.atNegKx?.re?.toFixed(4) ?? 'N/A'}, im=${sdbg.atNegKx?.im?.toFixed(4) ?? 'N/A'}, mag=${sdbg.atNegKx?.mag?.toFixed(4) ?? 'N/A'}</li>
-        <li>At DC: re=${sdbg.atDC?.re?.toExponential(2) ?? 'N/A'}, im=${sdbg.atDC?.im?.toExponential(2) ?? 'N/A'}</li>
-        <li>Expected magnitude at ±kx: ${sdbg.expectedMag?.toFixed(4) ?? 'N/A'}</li>
-        <li>Max magnitude: ${sdbg.maxMag?.toFixed(4) ?? 'N/A'} at index ${sdbg.maxIdx} (x=${sdbg.maxIdxXY?.x}, y=${sdbg.maxIdxXY?.y})</li>
-        ${sineResults.error ? `<li style="color: red;">Error: ${sineResults.error}</li>` : ''}
-      </ul>
-    </details>`);
+  <script id="3b" type="module">
+    const N = parseInt(NString.split('×')[0]);
   </script>
+  <script id="4" type="module">
+    const LxInput = Inputs.range([1, 128], {
+      step: 0.5,
+      value: 64,
+      label: html`Domain size, ${tex`L_x`}`
+    });
+    const Lx = view(LxInput);
 
-  <!-- Pipeline imports - no dependencies -->
-  <script id="pipeline-imports" type="module">
+    const aspectRatioInput = Inputs.range([0.1, 10], {
+      step: 0.01,
+      value: 1,
+      label: html`Aspect ratio, ${tex`L_x / L_y`}`
+    });
+    const aspectRatio = view(aspectRatioInput);
+  </script>
+  <script id="5" type="module">
+    const nInput = Inputs.range([1, 8], {
+      step: 1,
+      value: 1,
+      label: 'Initial condition periods, n'
+    });
+    const n = view(nInput);
+  </script>
+  <script id="6" type="module">
+    const simulateInput = Inputs.toggle({ label: 'Simulate', value: ['Simulate'] });
+    const simulate = view(simulateInput);
+    display(html`<button id="restart-btn">Restart</button>`);
+  </script>
+  <script id="7" type="module">
+    display(canvas);
+  </script>
+  <script id="8" type="module">
+    display(statusEl);
+  </script>
+  <script id="9" type="module">
+    const rangeInput = Inputs.range([0.5, 20], {
+      step: 0.5,
+      value: 14,
+      label: 'Colorscale threshold'
+    });
+    const range = view(rangeInput);
+
+    const colorscaleNameInput = Inputs.select(
+      ['Viridis', 'Magma', 'Inferno', 'Plasma', 'Cividis', 'Greys'],
+      { value: 'Magma', label: 'Colorscale' }
+    );
+    const colorscaleName = view(colorscaleNameInput);
+
+    const invertInput = Inputs.toggle({ label: 'Invert colorscale', value: true });
+    const invert = view(invertInput);
+  </script>
+  <script id="10" type="module">
+    const L = [Lx, Lx / aspectRatio];
+    const nu = [Math.pow(Math.PI / L[0], 2), Math.pow(Math.PI / L[1], 2)];
+
+    display(md`We solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`}.
+
+    The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale. Chaotic behavior happens when they are very small, while fundamental changes in the type of behavior happen when they are closer to unity.
+    - ${tex`\nu_1 = (\pi/L_x)^2 = ${nu[0].toFixed(6)}`}
+    - ${tex`\nu_2 = (\pi/L_y)^2 = ${nu[1].toFixed(6)}`}`);
+  </script>
+  <script id="11" type="text/markdown">
+    ## Solution method
+
+    This notebook follows the solution method outlined in [Kalogirou's thesis](https://spiral.imperial.ac.uk/bitstream/10044/1/25067/1/Kalogirou-A-2013-PhD-Thesis.pdf), particularly equations (F.8) - (F.10). The solution uses an implicit-explicit [Backward Differentiation Formula](https://en.wikipedia.org/wiki/Backward_differentiation_formula) in the spatial frequency domain.
+  </script>
+  <script id="12" type="text/markdown">
+    The equation is solved in the spatial frequency domain, with the exception of the nonlinear term ${tex`\frac{1}{2}|\nabla u|^2`} which requires computing the gradient while transforming back to the spatial domain, then squaring, then transforming back to the frequency domain.
+  </script>
+  <script id="13" type="text/markdown">
+    A few implementation notes:
+
+    - Equation (F.10) seems to be missing a factor of ${tex`dt`} in the biharmonic term.
+    - Since all terms include derivatives, the offset of ${tex`u`} has no effect and can simply be removed by zeroing out the mean (zero-wavenumber) component on every update.
+    - Since we perform the *complex* FFT of real-valued functions, they can leak energy into the imaginary component of the solution. A real-valued [Hartley Transform](https://en.wikipedia.org/wiki/Hartley_transform) would be better. Instead, we add an extra FFT pass to extract the real component of the solution.
+    - The multi-step method is initialized with the same values for both previous steps, rather than implementing a special Backward Euler initialization step.
+  </script>
+  <script id="14" type="text/markdown">
+    The domain has size ${tex`[0, 2 L_x] \times [0, 2 L_y]`}, but the equation is solved in the domain ${tex`[0, 2\pi] \times [0, 2\pi]`} via the rescaling in Chapter 9 of Kalogirou's thesis,
+
+    ${tex.block`x \rarr \frac{L_x}{\pi} x, \;\;\; y \rarr \frac{L_y}{\pi} y, \;\;\; t \rarr \left(\frac{L_x}{\pi}\right)^2 t.`}
+
+    along with the factors ${tex`\nu_1 = \left(\frac{\pi}{L_x}\right)^2`} and ${tex`\nu_2 = \left(\frac{\pi}{L_y}\right)^2`}.
+  </script>
+  <script id="15" type="text/markdown">
+    From Appendix F on page 227, the full second order spatial frequency domain update equation for solution ${tex`\hat{V}`} at step ${tex`n+2`} as a function of the data from previous steps ${tex`n+1`} and ${tex`n`} is
+
+    ${tex.block`\begin{aligned}
+    \hat{V}^{n + 2}_{k_1, k_2} =& \frac{1}{\xi_{k_1, k_2}} \left[ (2 + 2c\,dt) \hat{V}^{n+1}_{k_1,k_2} - \left(\frac{1}{2} + c\,dt\right) \hat{V}^n_{k_1,k_2} \right. \\
+    & + 2dt \left( \hat{A}^{n+1}_{k_1,k_2} + \frac{\nu_2}{\nu_1} \hat{B}^{n+1}_{k_1,k_2} \right) \\
+    & - \left. dt \left( \hat{A}^{n}_{k_1,k_2} + \frac{\nu_2}{\nu_1} \hat{B}^{n}_{k_1,k_2} \right) \right]
+    \end{aligned}`}
+
+    where
+
+    ${tex.block`\begin{aligned}
+    \hat{A}_{k_1,k_2} &= -\mathscr{F}\left(\frac{1}{2}\left(\frac{\partial v}{\partial x}\right)^2\right), \\
+    \hat{B}_{k_1,k_2} &= -\mathscr{F}\left(\frac{1}{2}\left(\frac{\partial v}{\partial y}\right)^2\right)
+    \end{aligned}`}
+
+    where ${tex`\mathscr{F}(\cdot)`} represents the spatial Fourier Transform and ${tex`v`} is the spatial domain solution.
+  </script>
+  <script id="16" type="text/markdown">
+    Finally,
+
+    ${tex.block`\begin{aligned}
+    \xi_{k_1,k_2} =& \frac{3}{2} + c\,dt - dt\left(k_1^2 + \frac{\nu_1}{\nu_2} k_2^2 \right) \\
+    & + \nu_1\,dt\left(k_1^2 + \frac{\nu_2}{\nu_1} k_2^2\right)^2,
+    \end{aligned}`}
+
+    using the definition ${tex`c = 1 + \frac{1}{\nu_1}`}.
+  </script>
+  <script id="17" type="text/markdown">
+    At first this update equation seems imposing, but if ${tex`k_1`} and ${tex`k_2`} refer to a particular wavenumber then the above is a simple algebraic expression for each grid point, independent of all others. The only exceptions are the expressions for ${tex`\hat{A}_{k_1,k_2}`} and ${tex`\hat{B}_{k_1,k_2}`}, which represent the solution, differentiated in the frequency domain via multiplication by ${tex`ik_x`} and ${tex`ik_y`}, inverse-FFT'd into the spatial domain, squared, and then FFT'd back into the spatial frequency domain. From there, the rest is tedious but straightforward shuffling of buffers.
+  </script>
+  <script id="17b" type="text/markdown">
+    ## WebGPU implementation
+
+    One might hope GPU programming is plug and play. In practice, there's a lot that can go wrong.
+
+    The first hurdle is simply getting the FFT right. WebGPU lacks a built-in FFT library, meaning you must roll your own using compute shaders. This notebook uses the [Stockham FFT](https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm#Data_reordering,_bit_reversal,_and_in-place_algorithms), which avoids the bit-reversal step of the Cooley-Tukey algorithm through data transposition. For grid sizes larger than the device's maximum workgroup size (often 256), a hierarchical four-step FFT decomposes the transform into smaller pieces. Even then, getting the indexing, normalization, and twiddle factors all correct takes real effort. If there's any upside, it's that errors tend to be spectacular; it either works or it clearly doesn't.
+
+    Once the FFT works, you have to get all the wavenumbers right. Wavenumber layout in a discrete Fourier transform is not intuitive. The first half contains positive frequencies, but the second half contains negative frequencies in reverse order. Miss a sign or an off-by-one error and the derivatives blow up quickly.
+
+    Another subtle issue is that taking the complex FFT of real-valued data introduces numerical drift. The imaginary part should be exactly zero, but floating point errors slowly leak energy into it. Left unchecked, this can cause the solution to diverge. The workaround is to add an extra pass after each time step that extracts just the real part before transforming back. It adds cost, but it stabilizes the simulation. A properly-implemented real-valued transform like the Hartley transform would avoid this issue entirely.
+
+    Finally, this simulation relies on a healthy dose of *not overthinking it*. The BDF2 method technically requires a special first-order initialization step, but reusing the initial condition for both previous time levels works fine. The uniform buffer management could be more careful about GPU resource lifetimes, but letting them garbage collect naturally is simpler and hasn't caused problems. Sometimes the pragmatic solution is the right one.
+  </script>
+  <script id="18" type="module">
+    import { createWebGPUContext } from './webgpu-context.js';
+
+    const context = await createWebGPUContext();
+    const device = context.device;
+    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    invalidation.then(() => device.destroy());
+  </script>
+  <script id="19" type="module">
     import { createKSPipelines } from './pipeline.js';
     import { executeFFT2D } from './fft.js';
   </script>
-
-  <!-- Constants - depends on N -->
-  <script id="constants" type="module">
+  <script id="20" type="module">
     const gridN = N;
     const vec2Size = gridN * gridN * 2 * 4;
     const vec4Size = gridN * gridN * 4 * 4;
@@ -735,9 +195,7 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
     const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     const dx = [2 * Math.PI / gridN, 2 * Math.PI / gridN];
   </script>
-
-  <!-- Pipelines - depends on device, constants, and imports -->
-  <script id="pipelines" type="module">
+  <script id="21" type="module">
     // Depend on constants
     gridN; vec2Size; dx;
 
@@ -756,9 +214,7 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       });
     }
   </script>
-
-  <!-- Buffer allocation - depends on device and constants -->
-  <script id="buffers" type="module">
+  <script id="22" type="module">
     // Vhat buffers: 3 time levels for BDF2
     const Vhat = [0, 1, 2].map(i => device.createBuffer({
       label: `Vhat[${i}]`,
@@ -785,23 +241,11 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
     const Vreal = device.createBuffer({ label: 'Vreal', size: vec2Size, usage: bufferUsage });
 
     // Cleanup buffers on invalidation
-    invalidation.then(() => {
-      Vhat.forEach(b => b.destroy());
-      ABhat.forEach(b => b.destroy());
-      V.destroy();
-      temp.forEach(b => b.destroy());
-      tempVec4.destroy();
-      VxVy.destroy();
-      A.destroy();
-      B.destroy();
-      Ahat.destroy();
-      Bhat.destroy();
-      Vreal.destroy();
-    });
+    // Note: We don't explicitly destroy buffers here because the animation loop
+    // may still have pending callbacks that reference them. WebGPU will garbage
+    // collect the buffers when there are no more references.
   </script>
-
-  <!-- Uniform buffers - depends on device and constants -->
-  <script id="uniform-buffers" type="module">
+  <script id="23" type="module">
     const initParamsBuffer = device.createBuffer({
       size: 16,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -829,23 +273,36 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
     });
     device.queue.writeBuffer(extractRealParamsBuffer, 0, new Uint32Array([N, N]));
 
+    // New GPU-only nonlinear computation uniform buffers
+    const extractMixedDerivativesParamsBuffer = device.createBuffer({
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(extractMixedDerivativesParamsBuffer, 0, new Uint32Array([N, N]));
+
+    const computeABParamsBuffer = device.createBuffer({
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(computeABParamsBuffer, 0, new Uint32Array([N, N]));
+
+    const packABhatParamsBuffer = device.createBuffer({
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(packABhatParamsBuffer, 0, new Uint32Array([N, N]));
+
     const visParamsBuffer = device.createBuffer({
       size: 32,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
     // Cleanup on invalidation
-    invalidation.then(() => {
-      initParamsBuffer.destroy();
-      diffParamsBuffer.destroy();
-      bdfParamsBuffer.destroy();
-      extractRealParamsBuffer.destroy();
-      visParamsBuffer.destroy();
-    });
+    // Note: We don't explicitly destroy buffers here because the animation loop
+    // may still have pending callbacks that reference them. WebGPU will garbage
+    // collect the buffers when there are no more references.
   </script>
-
-  <!-- Colorscale data - depends only on device -->
-  <script id="colorscale-data" type="module">
+  <script id="24" type="module">
     function generateColorscale(interpolator) {
       const data = new Uint8Array(256 * 4);
       for (let i = 0; i < 256; i++) {
@@ -887,9 +344,7 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       [256, 1]
     );
   </script>
-
-  <!-- Canvas - created once, no aspectRatio dependency -->
-  <script id="canvas" type="module">
+  <script id="25" type="module">
     const maxSize = 512;
 
     const canvas = document.createElement('canvas');
@@ -927,18 +382,13 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       });
     }
 
-    display(canvas);
   </script>
-
-  <!-- Canvas resize on aspect ratio change - doesn't restart simulation -->
-  <script id="canvas-resize" type="module">
+  <script id="26" type="module">
     aspectRatio;
     resizeCanvas(aspectRatio);
     if (simState && simState.initialized) render();
   </script>
-
-  <!-- Simulation state and params - mutable, not reactive -->
-  <script id="sim-state" type="module">
+  <script id="27" type="module">
     const simState = {
       timeLevel: 0,
       stepCount: 0,
@@ -955,9 +405,7 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       invert: false
     };
   </script>
-
-  <!-- Update simParams when inputs change - this cell depends on inputs but sim-functions doesn't -->
-  <script id="params-update" type="module">
+  <script id="28" type="module">
     Lx; aspectRatio; n; range; colorscaleName; invert;
     simParams.Lx = Lx;
     simParams.aspectRatio = aspectRatio;
@@ -966,11 +414,7 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
     simParams.colorscaleName = colorscaleName;
     simParams.invert = invert;
   </script>
-
-  <!-- Simulation functions - reads from simParams, no direct input dependencies -->
-  <script id="sim-functions" type="module">
-    import { readComplexBuffer2D } from './debug.js';
-
+  <script id="29" type="module">
     // Get current simulation parameters from simParams
     function getParams() {
       const Lx = simParams.Lx;
@@ -979,19 +423,22 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       // Time step scales with grid resolution for stability
       // Base time step at N=256, scale linearly with dx (inversely with N)
       const baseN = 256;
-      const dt = 0.18 * nu[0] * (baseN / N);
-      return { L, nu, dt, n: simParams.n, dx, N };
+      const dt = 0.18 * nu[0];// * (baseN / N) ** 0.125;
+      return { L, nu, dt, dx, N };
     }
 
     // Update uniform buffers with current params
-    function updateUniforms() {
-      const { nu, dt, n } = getParams();
+    // icPeriods is optional - only needed for initialization
+    function updateUniforms(icPeriods) {
+      const { nu, dt } = getParams();
 
-      // Init params
-      const initData = new ArrayBuffer(16);
-      new Uint32Array(initData, 0, 2).set([N, N]);
-      new Float32Array(initData, 8, 1).set([n]);
-      device.queue.writeBuffer(initParamsBuffer, 0, initData);
+      // Init params - only write if icPeriods provided (during initialization)
+      if (icPeriods !== undefined) {
+        const initData = new ArrayBuffer(16);
+        new Uint32Array(initData, 0, 2).set([N, N]);
+        new Float32Array(initData, 8, 1).set([icPeriods]);
+        device.queue.writeBuffer(initParamsBuffer, 0, initData);
+      }
 
       // BDF params
       const bdfData = new ArrayBuffer(32);
@@ -1022,9 +469,9 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       }
     }
 
-    // Initialize simulation
-    async function initialize() {
-      updateUniforms();
+    // Initialize simulation with given initial condition periods
+    async function initialize(icPeriods) {
+      updateUniforms(icPeriods);
 
       const initBindGroup = device.createBindGroup({
         layout: pipelines.bindGroupLayouts.initialize,
@@ -1054,11 +501,13 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       simState.initialized = true;
     }
 
-    // Compute nonlinear terms
-    async function computeNonlinearTo(vhatIdx, abhatIdx) {
+    // Compute nonlinear terms - GPU only, no CPU readback
+    function computeNonlinearTo(vhatIdx, abhatIdx) {
       const VhatIn = Vhat[vhatIdx];
       const ABhatOut = ABhat[abhatIdx];
 
+      // Step 1: Differentiate in frequency domain
+      // Vhat -> tempVec4 (contains Vhat and mixed derivatives)
       const diffBindGroup = device.createBindGroup({
         layout: pipelines.bindGroupLayouts.differentiate,
         entries: [
@@ -1075,86 +524,74 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       pass.dispatchWorkgroups(workgroups, workgroups);
       pass.end();
       device.queue.submit([enc.finish()]);
-      await device.queue.onSubmittedWorkDone();
 
-      const staging = device.createBuffer({
-        size: vec4Size,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      // Step 2: Extract mixed derivatives from vec4 to vec2
+      // tempVec4.zw -> VxVy
+      const extractBindGroup = device.createBindGroup({
+        layout: pipelines.bindGroupLayouts.extractMixedDerivatives,
+        entries: [
+          { binding: 0, resource: { buffer: tempVec4 } },
+          { binding: 1, resource: { buffer: VxVy } },
+          { binding: 2, resource: { buffer: extractMixedDerivativesParamsBuffer } }
+        ]
       });
+
       enc = device.createCommandEncoder();
-      enc.copyBufferToBuffer(tempVec4, 0, staging, 0, vec4Size);
+      pass = enc.beginComputePass();
+      pass.setPipeline(pipelines.extractMixedDerivatives);
+      pass.setBindGroup(0, extractBindGroup);
+      pass.dispatchWorkgroups(workgroups, workgroups);
+      pass.end();
       device.queue.submit([enc.finish()]);
-      await device.queue.onSubmittedWorkDone();
-      await staging.mapAsync(GPUMapMode.READ);
 
-      const tempVec4Data = new Float32Array(staging.getMappedRange().slice(0));
-      staging.unmap();
-      staging.destroy();
-
-      const mixedVec2 = new Float32Array(N * N * 2);
-      for (let i = 0; i < N * N; i++) {
-        mixedVec2[i * 2] = tempVec4Data[i * 4 + 2];
-        mixedVec2[i * 2 + 1] = tempVec4Data[i * 4 + 3];
-      }
-      device.queue.writeBuffer(VxVy, 0, mixedVec2);
-
+      // Step 3: Inverse FFT to get spatial derivatives
+      // VxVy (frequency) -> VxVy (spatial: real=Vx, imag=Vy)
       runFFT2D(VxVy, VxVy, temp, false);
-      await device.queue.onSubmittedWorkDone();
 
-      const stagingVxVy = device.createBuffer({
-        size: vec2Size,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      // Step 4: Compute A and B from spatial derivatives
+      // VxVy -> A, B (A = -0.5*Vx^2, B = -0.5*Vy^2)
+      const computeABBindGroup = device.createBindGroup({
+        layout: pipelines.bindGroupLayouts.computeAB,
+        entries: [
+          { binding: 0, resource: { buffer: VxVy } },
+          { binding: 1, resource: { buffer: A } },
+          { binding: 2, resource: { buffer: B } },
+          { binding: 3, resource: { buffer: computeABParamsBuffer } }
+        ]
       });
+
       enc = device.createCommandEncoder();
-      enc.copyBufferToBuffer(VxVy, 0, stagingVxVy, 0, vec2Size);
+      pass = enc.beginComputePass();
+      pass.setPipeline(pipelines.computeAB);
+      pass.setBindGroup(0, computeABBindGroup);
+      pass.dispatchWorkgroups(workgroups, workgroups);
+      pass.end();
       device.queue.submit([enc.finish()]);
-      await device.queue.onSubmittedWorkDone();
-      await stagingVxVy.mapAsync(GPUMapMode.READ);
 
-      const VxVyData = new Float32Array(stagingVxVy.getMappedRange().slice(0));
-      stagingVxVy.unmap();
-      stagingVxVy.destroy();
-
-      const A_data = new Float32Array(N * N * 2);
-      const B_data = new Float32Array(N * N * 2);
-      for (let i = 0; i < N * N; i++) {
-        const Vx = VxVyData[i * 2];
-        const Vy = VxVyData[i * 2 + 1];
-        A_data[i * 2] = -0.5 * Vx * Vx;
-        B_data[i * 2] = -0.5 * Vy * Vy;
-      }
-      device.queue.writeBuffer(A, 0, A_data);
-      device.queue.writeBuffer(B, 0, B_data);
-
+      // Step 5: Forward FFT to get frequency domain
+      // A -> Ahat, B -> Bhat
       runFFT2D(A, Ahat, temp, true);
       runFFT2D(B, Bhat, temp, true);
-      await device.queue.onSubmittedWorkDone();
 
-      const stagingA = device.createBuffer({ size: vec2Size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
-      const stagingB = device.createBuffer({ size: vec2Size, usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST });
+      // Step 6: Pack Ahat and Bhat into ABhat
+      // Ahat, Bhat -> ABhat
+      const packBindGroup = device.createBindGroup({
+        layout: pipelines.bindGroupLayouts.packABhat,
+        entries: [
+          { binding: 0, resource: { buffer: Ahat } },
+          { binding: 1, resource: { buffer: Bhat } },
+          { binding: 2, resource: { buffer: ABhatOut } },
+          { binding: 3, resource: { buffer: packABhatParamsBuffer } }
+        ]
+      });
+
       enc = device.createCommandEncoder();
-      enc.copyBufferToBuffer(Ahat, 0, stagingA, 0, vec2Size);
-      enc.copyBufferToBuffer(Bhat, 0, stagingB, 0, vec2Size);
+      pass = enc.beginComputePass();
+      pass.setPipeline(pipelines.packABhat);
+      pass.setBindGroup(0, packBindGroup);
+      pass.dispatchWorkgroups(workgroups, workgroups);
+      pass.end();
       device.queue.submit([enc.finish()]);
-      await device.queue.onSubmittedWorkDone();
-
-      await stagingA.mapAsync(GPUMapMode.READ);
-      await stagingB.mapAsync(GPUMapMode.READ);
-      const AhatData = new Float32Array(stagingA.getMappedRange().slice(0));
-      const BhatData = new Float32Array(stagingB.getMappedRange().slice(0));
-      stagingA.unmap();
-      stagingB.unmap();
-      stagingA.destroy();
-      stagingB.destroy();
-
-      const ABhat_data = new Float32Array(N * N * 4);
-      for (let i = 0; i < N * N; i++) {
-        ABhat_data[i * 4] = AhatData[i * 2];
-        ABhat_data[i * 4 + 1] = AhatData[i * 2 + 1];
-        ABhat_data[i * 4 + 2] = BhatData[i * 2];
-        ABhat_data[i * 4 + 3] = BhatData[i * 2 + 1];
-      }
-      device.queue.writeBuffer(ABhatOut, 0, ABhat_data);
     }
 
     // Run one BDF2 step
@@ -1168,8 +605,8 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       const idx1 = simState.timeLevel % 3;
       const idx2 = (simState.timeLevel + 1) % 3;
 
-      await computeNonlinearTo(idx0, 0);
-      await computeNonlinearTo(idx1, 1);
+      computeNonlinearTo(idx0, 0);
+      computeNonlinearTo(idx1, 1);
 
       const bdfBindGroup = device.createBindGroup({
         layout: pipelines.bindGroupLayouts.bdfUpdate,
@@ -1253,67 +690,78 @@ The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale:
       device.queue.submit([enc.finish()]);
     }
   </script>
-
-  <!-- Initial run -->
-  <script id="init-run" type="module">
-    await initialize();
+  <script id="30" type="module">
+    // Depend on n so we restart when it changes, and pass it directly to initialize
+    await initialize(n);
     render();
 
-    // Setup restart button
+    // Export a token that changes each time this cell runs
+    // Animation loop depends on this to wait for init to complete
+    const initComplete = { n };
+
+    // Setup restart button - use current value of n from simParams
     document.getElementById('restart-btn').onclick = async () => {
-      await initialize();
+      await initialize(simParams.n);
       render();
     };
   </script>
+  <script id="31" type="module">
+    // Depend on step/render (for N changes) and initComplete (for n changes)
+    step; render; initComplete;
 
-  <!-- Animation loop -->
-  <script id="animation" type="module">
-    let animRunning = true;
+    let animFrameId = null;
+    let hasError = false;
 
     async function animationLoop() {
-      if (!animRunning) return;
+      if (hasError) return;  // Stop if we encountered an error
 
-      if (simulate && simState.initialized) {
-        for (let i = 0; i < 2; i++) {
-          await step();
+      try {
+        if (simulate && simState.initialized) {
+          for (let i = 0; i < 2; i++) {
+            await step();
+          }
+          render();
         }
-        render();
+        animFrameId = requestAnimationFrame(animationLoop);
+      } catch (e) {
+        hasError = true;
+        console.error('Animation loop error:', e);
       }
-      requestAnimationFrame(animationLoop);
     }
 
-    animationLoop();
+    animFrameId = requestAnimationFrame(animationLoop);
 
     invalidation.then(() => {
-      animRunning = false;
+      hasError = true;  // Signal the loop to stop
+      if (animFrameId !== null) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
     });
   </script>
-
-  <!-- Reactive render on vis param changes -->
-  <script id="vis-reactive" type="module">
+  <script id="32" type="module">
     // Re-render when vis params change (params-update already updated simParams)
     range; colorscaleName; invert;
     if (simState && simState.initialized) render();
   </script>
-
-  <!-- Status display with requestAnimationFrame -->
-  <script id="status" type="module">
+  <script id="33" type="module">
     const statusEl = html`<p><em>Step: <span id="step-count">0</span></em></p>`;
-    display(statusEl);
 
-    let statusRunning = true;
+    let statusFrameId = null;
 
     function updateStatus() {
-      if (!statusRunning) return;
       const el = document.getElementById('step-count');
       if (el) el.textContent = simState.stepCount;
-      requestAnimationFrame(updateStatus);
+      statusFrameId = requestAnimationFrame(updateStatus);
     }
 
-    updateStatus();
+    statusFrameId = requestAnimationFrame(updateStatus);
 
     invalidation.then(() => {
-      statusRunning = false;
+      if (statusFrameId !== null) {
+        cancelAnimationFrame(statusFrameId);
+        statusFrameId = null;
+      }
     });
   </script>
 </notebook>
