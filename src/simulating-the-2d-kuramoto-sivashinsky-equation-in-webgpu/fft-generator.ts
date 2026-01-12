@@ -14,7 +14,7 @@ export function generateFFTShader(N: number): string {
 
   return `
 // Generated FFT Shader for N=${N}
-// Cooley-Tukey Radix-2 DIT FFT using Stockham algorithm
+// Cooley-Tukey Radix-2 DIT FFT with bit-reversal permutation
 
 fn cmul(a: vec2<f32>, b: vec2<f32>) -> vec2<f32> {
   return vec2<f32>(

@@ -1,5 +1,5 @@
 /**
- * 2D FFT implementation using Stockham algorithm with compute shaders
+ * 2D FFT implementation using Cooley-Tukey radix-2 DIT with compute shaders
  *
  * This performs 2D FFT in 4 passes:
  * 1. Horizontal FFT (all rows in parallel)
@@ -67,7 +67,7 @@ export function createFFTPipelines(device: GPUDevice, N: number): FFTPipelines {
 
   // Create shader modules
   const fftShaderModule = device.createShaderModule({
-    label: `FFT Stockham shader N=${N}`,
+    label: `FFT Cooley-Tukey shader N=${N}`,
     code: fftCode
   });
 

@@ -1,8 +1,8 @@
 <!doctype html>
 <notebook theme="air">
-  <title>Kuramoto-Sivashinsky Equation in 2D (WebGPU)</title>
+  <title>Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU</title>
   <script id="1" type="text/markdown">
-    # Kuramoto-Sivashinsky Equation in 2D (WebGPU)
+    # Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU
 
     This notebook implements on the GPU a two-dimensional solution of the [Kuramoto-Sivashinsky equation](https://encyclopediaofmath.org/wiki/Kuramoto-Sivashinsky_equation) (KSE),
 
@@ -186,7 +186,7 @@
     Finally,
 
     ${tex.block`\begin{aligned}
-    \xi_{k_1,k_2} =& \frac{3}{2} + c\,dt - dt\left(k_1^2 + \frac{\nu_1}{\nu_2} k_2^2 \right) \\
+    \xi_{k_1,k_2} =& \frac{3}{2} + c\,dt - dt\left(k_1^2 + \frac{\nu_2}{\nu_1} k_2^2 \right) \\
     & + \nu_1\,dt\left(k_1^2 + \frac{\nu_2}{\nu_1} k_2^2\right)^2,
     \end{aligned}`}
 
@@ -198,15 +198,11 @@
   <script id="17b" type="text/markdown">
     ## WebGPU implementation
 
-    One might hope GPU programming is plug and play. In practice, there's a lot that can go wrong.
+    WebGPU has no built-in FFT, so this notebook implements [Cooley-Tukey](https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm) radix-2 in compute shaders: bit-reversal at the input, then ${tex`\log_2 N`} butterfly stages. For grids larger than the maximum workgroup size (256 on most devices), a hierarchical four-step FFT breaks the transform into smaller pieces. Getting the indexing, normalization, and twiddle factors right is tedious, but at least FFT bugs are obvious.
 
-    The first hurdle is simply getting the FFT right. WebGPU lacks a built-in FFT library, meaning you must roll your own using compute shaders. This notebook uses the [Cooley-Tukey](https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm) radix-2 decimation-in-time algorithm, which requires a bit-reversal permutation at the input followed by ${tex`\log_2 N`} stages of butterfly operations. For grid sizes larger than the device's maximum workgroup size (often 256), a hierarchical four-step FFT decomposes the transform into smaller pieces. Even then, getting the indexing, normalization, and twiddle factors all correct takes real effort. If there's any upside, it's that errors tend to be spectacular; it either works or it clearly doesn't.
+    Wavenumber layout in DFTs is also error-prone. The first half of the output contains positive frequencies; the second half contains negative frequencies in reverse order. A wrong sign or off-by-one index makes derivatives blow up fast.
 
-    Once the FFT works, you have to get all the wavenumbers right. Wavenumber layout in a discrete Fourier transform is not intuitive. The first half contains positive frequencies, but the second half contains negative frequencies in reverse order. Miss a sign or an off-by-one error and the derivatives blow up quickly.
-
-    Another subtle issue is that taking the complex FFT of real-valued data introduces numerical drift. The imaginary part should be exactly zero, but floating point errors slowly leak energy into it. Left unchecked, this can cause the solution to diverge. The workaround is to add an extra pass after each time step that extracts just the real part before transforming back. It adds cost, but it stabilizes the simulation. A properly-implemented real-valued transform like the Hartley transform would avoid this issue entirely.
-
-    Finally, this simulation relies on a healthy dose of *not overthinking it*. The BDF2 method technically requires a special first-order initialization step, but reusing the initial condition for both previous time levels works fine. The uniform buffer management could be more careful about GPU resource lifetimes, but letting them garbage collect naturally is simpler and hasn't caused problems. Sometimes the pragmatic solution is the right one.
+    Taking the complex FFT of real data causes numerical drift. The imaginary part should stay zero, but floating point errors leak energy into it over time, eventually destabilizing the solution. The fix is an extra pass per time step to extract the real part before transforming back. A real-valued [Hartley transform](https://en.wikipedia.org/wiki/Hartley_transform) would avoid this.
   </script>
   <script id="18" type="module">
     import { createWebGPUContext } from './webgpu-context.js';
