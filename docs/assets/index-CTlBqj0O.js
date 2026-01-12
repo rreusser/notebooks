@@ -4,7 +4,7 @@ This notebook implements on the GPU a two-dimensional solution of the [Kuramoto-
 
 ${e.block`u_t + \frac{1}{2}|\nabla u|^2 + \nabla^2 u + \nabla^4 u = 0.`}
 
-The KSE arises in a number of contexts and was rediscovered by Kuramoto while researching diffusion-induced flame front instabilities. It is one of the simplest partial differential equations exhibiting complicated dynamics, displaying chaotic behavior in large domains.
+The KSE arises in a number of contexts and was [dervied by Yoshiki Kuramoto and Gregory Sivashinsky](https://en.wikipedia.org/wiki/Kuramoto%E2%80%93Sivashinsky_equation) while researching laminar flame front instabilities. It is one of the simplest partial differential equations exhibiting complicated dynamics, displaying chaotic behavior in large domains.
 
 For the fully immersive version, see [the WebGL visualization here](https://rreusser.github.io/kuramoto-sivashinsky/). This page explores modernization to WebGPU and [Observable Notebook Kit](https://observablehq.com/notebook-kit/kit), as well as adding cleanup like plot axes (at last!).`,inputs:["md","tex"],outputs:[],output:void 0,assets:void 0,autodisplay:!0,autoview:!1,automutable:void 0});f({root:document.getElementById("cell-10"),expanded:[],variables:[]},{id:10,body:(t,e,a,n,i)=>{const o=[t,t/e],r=[Math.pow(Math.PI/o[0],2),Math.pow(Math.PI/o[1],2)];return a(n`
 
