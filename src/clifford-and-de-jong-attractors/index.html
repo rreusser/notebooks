@@ -27,6 +27,7 @@
   </script>
   <script id="1252" type="text/x-typescript">
     import { reglCanvas } from './lib/regl-canvas.js'
+    import FineRange from '../lib/fine-range.js'
     import createREGL from 'npm:regl@2.1.1'
     import * as d3 from 'npm:d3@7'
   </script>
@@ -42,25 +43,29 @@
       label: "Type",
       value: parsedURL.has("type") ? parsedURL.get("type") : "Clifford"
     }));
-    const a = view(Inputs.range([-2.5, 2.5], {
+    const a = view(FineRange(Inputs.range, [-2.5, 2.5], {
       value: parsedURL.has("a") ? +parsedURL.get("a") : -1.85,
       label: "a",
-      step: 0.001
+      step: 0.001,
+      width: 400
     }));
-    const b = view(Inputs.range([-2.5, 2.5], {
+    const b = view(FineRange(Inputs.range, [-2.5, 2.5], {
       value: parsedURL.has("b") ? +parsedURL.get("b") : -2.5,
       label: "b",
-      step: 0.001
+      step: 0.001,
+      width: 400
     }));
-    const c = view(Inputs.range([-2.5, 2.5], {
+    const c = view(FineRange(Inputs.range, [-2.5, 2.5], {
       value: parsedURL.has("c") ? +parsedURL.get("c") : -1.05,
       label: "c",
-      step: 0.001
+      step: 0.001,
+      width: 400
     }));
-    const d = view(Inputs.range([-2.5, 2.5], {
+    const d = view(FineRange(Inputs.range, [-2.5, 2.5], {
       value: parsedURL.has("d") ? +parsedURL.get("d") : 0.585,
       label: "d",
-      step: 0.001
+      step: 0.001,
+      width: 400
     }));
     const simulate = view(Inputs.checkbox(["Simulate"], { value: ["Simulate"] }));
   </script>
@@ -77,11 +82,14 @@
   <script id="1254" type="text/x-typescript">
     const regl = (function() {
       const canvas = _regl._gl.canvas;
+      const regl = _regl.attachResize(viewport.width, viewport.height);
+      // Apply styles AFTER attachResize, since it sets explicit width/height
       canvas.style.maxWidth = "100%";
       canvas.style.height = "auto";
+      canvas.style.aspectRatio = `${viewport.width} / ${viewport.height}`;
       canvas.style.cursor = "move";
       canvas.style.border = "1px solid #ccc";
-      return _regl.attachResize(viewport.width, viewport.height);
+      return regl;
     })();
   </script>
   <script id="649" type="text/x-typescript">
@@ -138,10 +146,11 @@
       label: "AA Jitter (pixels)",
       step: 0.1
     }));
-    const size = view(Inputs.select(
+    const sizeInput = Inputs.select(
       ["256 × 256", "512 × 512", "1024 × 1024", "2048 × 2048", "1680 × 1050", "page width"],
       { value: "page width", label: `Size (dpi = ${window.devicePixelRatio})` }
-    ));
+    );
+    const size = view(sizeInput);
     const mode = view(Inputs.radio(["cpu", "gpu"], {
       value: "gpu",
       label: "Computation mode"
