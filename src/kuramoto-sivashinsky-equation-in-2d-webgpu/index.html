@@ -13,6 +13,16 @@
   <script id="2" type="text/markdown">
     The KSE is one of the simplest partial differential equations to show complicated dynamics, displaying chaotic behavior as the size of the domain increases. Observe that if ${tex`\nu_1`} or ${tex`\nu_2`}, which represent the size of a wavelength relative to the size of the domain, are greater than one, the chaotic behavior disappears along the short dimension and the solution essentially becomes a one-dimensional solution.
   </script>
+  <script id="10" type="module">
+    const L = [Lx, Lx / aspectRatio];
+    const nu = [Math.pow(Math.PI / L[0], 2), Math.pow(Math.PI / L[1], 2)];
+
+    display(md`We solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`}.
+
+    The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale. Chaotic behavior happens when they are very small, while fundamental changes in the type of behavior happen when they are closer to the order of unity.
+    - ${tex`\nu_1 = (\pi/L_x)^2 = ${nu[0].toFixed(6)}`}
+    - ${tex`\nu_2 = (\pi/L_y)^2 = ${nu[1].toFixed(6)}`}`);
+  </script>
   <script id="3" type="module">
     // With hierarchical FFT, we can support sizes up to maxWorkgroupSize^2
     // For N > maxWorkgroupSize, we decompose N = R × C where C ≤ maxWorkgroupSize
@@ -50,7 +60,8 @@
     // Max domain size scales with grid resolution (N/2)
     const maxLx = N / 2;
     const LxInput = Inputs.range([1, maxLx], {
-      step: 0.5,
+      step: 0.1,
+      transform: Math.log,
       value: Math.min(64, maxLx),
       label: html`Domain size, ${tex`L_x`}`
     });
@@ -77,9 +88,38 @@
     const restart = view(restartInput);
   </script>
   <script id="7" type="module">
-    canvas.style.maxWidth = '100%';
-    canvas.style.height = 'auto';
-    const figure = html`<figure style="display: flex; justify-content: center; margin: 0;">${canvas}</figure>`;
+    // Create plot overlay with axes (updated reactively in script 26)
+    function createPlotOverlay(dims) {
+      const { totalW, totalH, Lx, Ly } = dims;
+      const plot = Plot.plot({
+        width: totalW,
+        height: totalH,
+        marginTop: margins.top,
+        marginRight: margins.right,
+        marginBottom: margins.bottom,
+        marginLeft: margins.left,
+        style: { background: 'transparent' },
+        x: { domain: [0, Lx], label: 'x' },
+        y: { domain: [0, Ly], label: 'y' },
+        marks: []
+      });
+      plot.style.position = 'absolute';
+      plot.style.left = '0';
+      plot.style.top = '0';
+      plot.style.pointerEvents = 'none';
+      return plot;
+    }
+
+    let plotOverlay = createPlotOverlay(resizeCanvas(width, 1, 64));
+    container.appendChild(plotOverlay);
+
+    function updatePlotOverlay(dims) {
+      const newPlot = createPlotOverlay(dims);
+      plotOverlay.replaceWith(newPlot);
+      plotOverlay = newPlot;
+    }
+
+    const figure = html`<figure style="display: flex; justify-content: center; margin: 0;">${container}</figure>`;
     display(figure);
   </script>
   <script id="8" type="module">
@@ -102,16 +142,6 @@
     const invertInput = Inputs.toggle({ label: 'Invert colorscale', value: true });
     const invert = view(invertInput);
   </script>
-  <script id="10" type="module">
-    const L = [Lx, Lx / aspectRatio];
-    const nu = [Math.pow(Math.PI / L[0], 2), Math.pow(Math.PI / L[1], 2)];
-
-    display(md`We solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`}.
-
-    The factors ${tex`\nu_1`} and ${tex`\nu_2`} describe the length scale. Chaotic behavior happens when they are very small, while fundamental changes in the type of behavior happen when they are closer to unity.
-    - ${tex`\nu_1 = (\pi/L_x)^2 = ${nu[0].toFixed(6)}`}
-    - ${tex`\nu_2 = (\pi/L_y)^2 = ${nu[1].toFixed(6)}`}`);
-  </script>
   <script id="11" type="text/markdown">
     ## Solution method
 
@@ -125,7 +155,6 @@
 
     - Equation (F.10) seems to be missing a factor of ${tex`dt`} in the biharmonic term.
     - Since all terms include derivatives, the offset of ${tex`u`} has no effect and can simply be removed by zeroing out the mean (zero-wavenumber) component on every update.
-    - Since we perform the *complex* FFT of real-valued functions, they can leak energy into the imaginary component of the solution. A real-valued [Hartley Transform](https://en.wikipedia.org/wiki/Hartley_transform) would be better. Instead, we add an extra FFT pass to extract the real component of the solution.
     - The multi-step method is initialized with the same values for both previous steps, rather than implementing a special Backward Euler initialization step.
   </script>
   <script id="14" type="text/markdown">
@@ -350,51 +379,81 @@
     );
   </script>
   <script id="25" type="module">
+    // Plot margins - canvas will be positioned inside these
+    const margins = { top: 5, right: 5, bottom: 25, left: 35 };
+
+    // Container for stacking canvas and plot
+    const container = html`<div style="position: relative;"></div>`;
+
+    // WebGPU canvas - will be positioned absolutely within container
+    // Hidden initially until initialization completes
     const canvas = document.createElement('canvas');
+    canvas.style.position = 'absolute';
+    canvas.style.visibility = 'hidden';
     const gpuContext = canvas.getContext('webgpu');
 
-    // Function to resize canvas based on available width and aspect ratio
-    function resizeCanvas(availableWidth, ar) {
+    // Function to resize canvas and container based on available width and aspect ratio
+    // Returns the plot dimensions for creating the overlay
+    function resizeCanvas(availableWidth, ar, Lx) {
       const dpr = window.devicePixelRatio || 1;
+      const Ly = Lx / ar;
 
-      // CSS size based on available width, respecting aspect ratio
-      let cssW, cssH;
+      // Total container size (plot area + margins)
+      // Canvas area dimensions (inside margins)
+      let canvasW, canvasH;
+      const maxCanvasW = availableWidth - margins.left - margins.right;
+
       if (ar >= 1) {
-        cssW = availableWidth;
-        cssH = Math.floor(availableWidth / ar);
+        canvasW = maxCanvasW;
+        canvasH = Math.floor(maxCanvasW / ar);
       } else {
-        cssH = availableWidth;
-        cssW = Math.floor(availableWidth * ar);
+        canvasH = maxCanvasW;
+        canvasW = Math.floor(maxCanvasW * ar);
       }
 
-      // Physical pixels = CSS pixels * devicePixelRatio
-      const physW = Math.floor(cssW * dpr);
-      const physH = Math.floor(cssH * dpr);
+      const totalW = canvasW + margins.left + margins.right;
+      const totalH = canvasH + margins.top + margins.bottom;
 
-      canvas.width = physW;
-      canvas.height = physH;
-      canvas.style.width = `${cssW}px`;
-      canvas.style.aspectRatio = `${cssW} / ${cssH}`;
+      // Size container
+      container.style.width = `${totalW}px`;
+      container.style.height = `${totalH}px`;
+
+      // Position and size canvas within container
+      canvas.style.left = `${margins.left}px`;
+      canvas.style.top = `${margins.top}px`;
+      canvas.style.width = `${canvasW}px`;
+      canvas.style.height = `${canvasH}px`;
+
+      // Physical pixels for WebGPU
+      canvas.width = Math.floor(canvasW * dpr);
+      canvas.height = Math.floor(canvasH * dpr);
 
       gpuContext.configure({
         device,
         format: canvasFormat,
         alphaMode: 'opaque'
       });
+
+      return { totalW, totalH, canvasW, canvasH, Lx, Ly };
     }
 
-    // Initial sizing with default aspect ratio (script 26 will update reactively)
-    resizeCanvas(width, 1);
+    // Initial sizing
+    resizeCanvas(width, 1, 64);
+    container.appendChild(canvas);
   </script>
   <script id="26" type="module">
-    // Re-render when width or aspectRatio changes
-    width; aspectRatio; initComplete;
-    resizeCanvas(width, aspectRatio);
+    // Re-render when width, aspectRatio, or Lx changes
+    // Also show canvas after initialization completes
+    width; aspectRatio; Lx; initComplete;
+    const dims = resizeCanvas(width, aspectRatio, Lx);
+    updatePlotOverlay(dims);
     render();
+    canvas.style.visibility = 'visible';
   </script>
   <script id="27" type="module">
     const simState = {
       timeLevel: 0,
+      time: 0,
       stepCount: 0
     };
 
@@ -503,6 +562,7 @@
       await device.queue.onSubmittedWorkDone();
 
       simState.timeLevel = 1;
+      simState.time = 0;
       simState.stepCount = 0;
     }
 
@@ -655,6 +715,7 @@
       await device.queue.onSubmittedWorkDone();
 
       simState.timeLevel = (simState.timeLevel + 1) % 3;
+      simState.time += getParams().dt;
       simState.stepCount++;
     }
 
@@ -702,9 +763,9 @@
     const initComplete = { n, restart };
   </script>
   <script id="31" type="module">
-    // Depend on step/render (for N changes), initComplete (for n changes), and restart
-    // restart dependency ensures animation loop stops BEFORE reinitialization starts
-    step; render; initComplete; restart;
+    // Depend on step/render (for N changes) and initComplete (for n/restart changes)
+    // initComplete changes when restart changes, so no direct restart dependency needed
+    step; render; initComplete;
 
     let animFrameId = null;
     let hasError = false;
@@ -742,13 +803,15 @@
     render();
   </script>
   <script id="33" type="module">
-    const statusEl = html`<p><em>Step: <span id="step-count">0</span></em></p>`;
+    const statusEl = html`<p><em>t = <span id="sim-time">0</span>, step = <span id="sim-step">0</span></em></p>`;
 
     let statusFrameId = null;
 
     function updateStatus() {
-      const el = document.getElementById('step-count');
-      if (el) el.textContent = simState.stepCount;
+      const timeEl = document.getElementById('sim-time');
+      const stepEl = document.getElementById('sim-step');
+      if (timeEl) timeEl.textContent = simState.time.toFixed(4);
+      if (stepEl) stepEl.textContent = simState.stepCount;
       statusFrameId = requestAnimationFrame(updateStatus);
     }
 

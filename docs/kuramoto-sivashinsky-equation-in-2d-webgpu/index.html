@@ -3,8 +3,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="WebGPU Simple Visualization Test">
-  <meta property="og:title" content="WebGPU Simple Visualization Test">
+  <meta name="twitter:title" content="Kuramoto-Sivashinsky Equation in 2D (WebGPU)">
+  <meta property="og:title" content="Kuramoto-Sivashinsky Equation in 2D (WebGPU)">
   <meta name="twitter:description" content="WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Stockham FFT algorithm for 3-5x performance improvement over WebGL.">
   <meta name="subject" content="WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Stockham FFT algorithm for 3-5x performance improvement over WebGL.">
   <meta name="description" content="WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Stockham FFT algorithm for 3-5x performance improvement over WebGL.">
@@ -1502,8 +1502,8 @@ main h6 {
   }
 }
   </style>
-  <style> main { max-width: 900px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Simple Visualization Test</title>  <script type="module" crossorigin src="/notebooks/assets/index-PtBLBkO9.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Kuramoto-Sivashinsky Equation in 2D (WebGPU)</title>  <script type="module" crossorigin src="/notebooks/assets/index-DExfZJXB.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1515,7 +1515,7 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>WebGPU Simple Visualization Test</h1>
+    <h1>Kuramoto-Sivashinsky Equation in 2D (WebGPU)</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
       <time pubdate="" datetime="20260110">January 10, 2026</time>
@@ -1531,8 +1531,33 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Single cell that does everything in order.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div></main>
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This notebook implements on the GPU a two-dimensional solution of the <a href="https://encyclopediaofmath.org/wiki/Kuramoto-Sivashinsky_equation">Kuramoto-Sivashinsky equation</a> (KSE),</p>
+<p>The KSE arises in a number of contexts and was rediscovered by Kuramoto while researching diffusion-induced flame front instabilities.</p>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"><div><p>The KSE is one of the simplest partial differential equations to show complicated dynamics, displaying chaotic behavior as the size of the domain increases. Observe that if  or , which represent the size of a wavelength relative to the size of the domain, are greater than one, the chaotic behavior disappears along the short dimension and the solution essentially becomes a one-dimensional solution.</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"><div><h2 id="solution-method" tabindex="-1"><a href="#solution-method">Solution method</a></h2>
+<p>This notebook follows the solution method outlined in <a href="https://spiral.imperial.ac.uk/bitstream/10044/1/25067/1/Kalogirou-A-2013-PhD-Thesis.pdf">Kalogirou’s thesis</a>, particularly equations (F.8) - (F.10). The solution uses an implicit-explicit <a href="https://en.wikipedia.org/wiki/Backward_differentiation_formula">Backward Differentiation Formula</a> in the spatial frequency domain.</p>
+</div></div><div id="cell-13" class="observablehq observablehq--cell"><div><p>The equation is solved in the spatial frequency domain, with the exception of the nonlinear term  which requires computing the gradient while transforming back to the spatial domain, then squaring, then transforming back to the frequency domain.</p>
+</div></div><div id="cell-14" class="observablehq observablehq--cell"><div><p>A few implementation notes:</p>
+<ul>
+<li>Equation (F.10) seems to be missing a factor of  in the biharmonic term.</li>
+<li>Since all terms include derivatives, the offset of  has no effect and can simply be removed by zeroing out the mean (zero-wavenumber) component on every update.</li>
+<li>The multi-step method is initialized with the same values for both previous steps, rather than implementing a special Backward Euler initialization step.</li>
+</ul>
+</div></div><div id="cell-15" class="observablehq observablehq--cell"><div><p>The domain has size , but the equation is solved in the domain  via the rescaling in Chapter 9 of Kalogirou’s thesis,</p>
+<p>along with the factors  and .</p>
+</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>From Appendix F on page 227, the full second order spatial frequency domain update equation for solution  at step  as a function of the data from previous steps  and  is</p>
+<p>where</p>
+<p>where  represents the spatial Fourier Transform and  is the spatial domain solution.</p>
+</div></div><div id="cell-17" class="observablehq observablehq--cell"><div><p>Finally,</p>
+<p>using the definition .</p>
+</div></div><div id="cell-18" class="observablehq observablehq--cell"><div><p>At first this update equation seems imposing, but if  and  refer to a particular wavenumber then the above is a simple algebraic expression for each grid point, independent of all others. The only exceptions are the expressions for  and , which represent the solution, differentiated in the frequency domain via multiplication by  and , inverse-FFT’d into the spatial domain, squared, and then FFT’d back into the spatial frequency domain. From there, the rest is tedious but straightforward shuffling of buffers.</p>
+</div></div><div id="cell-19" class="observablehq observablehq--cell"><div><h2 id="web-gpu-implementation" tabindex="-1"><a href="#web-gpu-implementation">WebGPU implementation</a></h2>
+<p>One might hope GPU programming is plug and play. In practice, there’s a lot that can go wrong.</p>
+<p>The first hurdle is simply getting the FFT right. WebGPU lacks a built-in FFT library, meaning you must roll your own using compute shaders. This notebook uses the <a href="https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm">Cooley-Tukey</a> radix-2 decimation-in-time algorithm, which requires a bit-reversal permutation at the input followed by  stages of butterfly operations. For grid sizes larger than the device’s maximum workgroup size (often 256), a hierarchical four-step FFT decomposes the transform into smaller pieces. Even then, getting the indexing, normalization, and twiddle factors all correct takes real effort. If there’s any upside, it’s that errors tend to be spectacular; it either works or it clearly doesn’t.</p>
+<p>Once the FFT works, you have to get all the wavenumbers right. Wavenumber layout in a discrete Fourier transform is not intuitive. The first half contains positive frequencies, but the second half contains negative frequencies in reverse order. Miss a sign or an off-by-one error and the derivatives blow up quickly.</p>
+<p>Another subtle issue is that taking the complex FFT of real-valued data introduces numerical drift. The imaginary part should be exactly zero, but floating point errors slowly leak energy into it. Left unchecked, this can cause the solution to diverge. The workaround is to add an extra pass after each time step that extracts just the real part before transforming back. It adds cost, but it stabilizes the simulation. A properly-implemented real-valued transform like the Hartley transform would avoid this issue entirely.</p>
+<p>Finally, this simulation relies on a healthy dose of <em>not overthinking it</em>. The BDF2 method technically requires a special first-order initialization step, but reusing the initial condition for both previous time levels works fine. The uniform buffer management could be more careful about GPU resource lifetimes, but letting them garbage collect naturally is simpler and hasn’t caused problems. Sometimes the pragmatic solution is the right one.</p>
+</div></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-23" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-25" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-28" class="observablehq observablehq--cell"></div><div id="cell-29" class="observablehq observablehq--cell"></div><div id="cell-30" class="observablehq observablehq--cell"></div><div id="cell-31" class="observablehq observablehq--cell"></div><div id="cell-32" class="observablehq observablehq--cell"></div><div id="cell-33" class="observablehq observablehq--cell"></div><div id="cell-34" class="observablehq observablehq--cell"></div><div id="cell-35" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
