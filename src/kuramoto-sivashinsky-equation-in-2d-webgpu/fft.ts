@@ -8,6 +8,8 @@
  * 4. Transpose back
  */
 
+import { generateFFTShader, generateTransposeShader } from './fft-generator.js';
+
 export interface FFTPipelines {
   fftHorizontal: GPUComputePipeline;
   fftVertical: GPUComputePipeline;
@@ -16,21 +18,36 @@ export interface FFTPipelines {
     fft: GPUBindGroupLayout;
     transpose: GPUBindGroupLayout;
   };
+  N: number;
 }
 
 /**
- * Create all FFT-related compute pipelines
+ * Create all FFT-related compute pipelines for a given size N
  */
-export async function createFFTPipelines(device: GPUDevice): Promise<FFTPipelines> {
-  // Load shader modules
+export function createFFTPipelines(device: GPUDevice, N: number): FFTPipelines {
+  if (N < 2 || (N & (N - 1)) !== 0) {
+    throw new Error(`N must be a power of 2, got ${N}`);
+  }
+
+  // Check device limits
+  const maxWorkgroupSize = device.limits.maxComputeWorkgroupSizeX;
+  if (N > maxWorkgroupSize) {
+    throw new Error(`N=${N} exceeds device maxComputeWorkgroupSizeX=${maxWorkgroupSize}`);
+  }
+
+  // Generate shader code
+  const fftCode = generateFFTShader(N);
+  const transposeCode = generateTransposeShader();
+
+  // Create shader modules
   const fftShaderModule = device.createShaderModule({
-    label: 'FFT Stockham shader',
-    code: await fetch('./shaders/fft_stockham.wgsl').then(r => r.text())
+    label: `FFT Stockham shader N=${N}`,
+    code: fftCode
   });
 
   const transposeShaderModule = device.createShaderModule({
     label: 'Transpose shader',
-    code: await fetch('./shaders/transpose.wgsl').then(r => r.text())
+    code: transposeCode
   });
 
   // Create bind group layouts
@@ -89,7 +106,7 @@ export async function createFFTPipelines(device: GPUDevice): Promise<FFTPipeline
 
   // Create compute pipelines
   const fftHorizontal = device.createComputePipeline({
-    label: 'FFT horizontal pipeline',
+    label: `FFT horizontal pipeline N=${N}`,
     layout: fftPipelineLayout,
     compute: {
       module: fftShaderModule,
@@ -98,7 +115,7 @@ export async function createFFTPipelines(device: GPUDevice): Promise<FFTPipeline
   });
 
   const fftVertical = device.createComputePipeline({
-    label: 'FFT vertical pipeline',
+    label: `FFT vertical pipeline N=${N}`,
     layout: fftPipelineLayout,
     compute: {
       module: fftShaderModule,
@@ -122,7 +139,8 @@ export async function createFFTPipelines(device: GPUDevice): Promise<FFTPipeline
     bindGroupLayouts: {
       fft: fftBindGroupLayout,
       transpose: transposeBindGroupLayout
-    }
+    },
+    N
   };
 }
 
@@ -150,6 +168,11 @@ export interface FFT2DParams {
  */
 export function executeFFT2D(params: FFT2DParams) {
   const { device, pipelines, input, output, temp, N, forward, splitNormalization } = params;
+
+  // Verify N matches pipeline
+  if (N !== pipelines.N) {
+    throw new Error(`N=${N} doesn't match pipeline N=${pipelines.N}`);
+  }
 
   // Create uniform buffers for this FFT
   const fftParamsBuffer = device.createBuffer({
@@ -260,5 +283,4 @@ export function executeFFT2D(params: FFT2DParams) {
 
   // Note: Uniform buffers are NOT destroyed here because the GPU may still be using them.
   // They will be garbage collected when no longer referenced.
-  // Alternatively, we could return a cleanup function or use a buffer pool.
 }
