@@ -145,7 +145,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
   <script id="11" type="text/markdown">
     ## Solution method
 
-    This notebook follows the solution method outlined in [Kalogirou's thesis](https://spiral.imperial.ac.uk/bitstream/10044/1/25067/1/Kalogirou-A-2013-PhD-Thesis.pdf), particularly equations (F.8) - (F.10). The solution uses an implicit-explicit [Backward Differentiation Formula](https://en.wikipedia.org/wiki/Backward_differentiation_formula) in the spatial frequency domain.
+    This notebook follows the solution method outlined in A. Kalogirou's thesis, [Nonlinear dynamics of surfactant-laden multilayer shear flows and related systems](https://spiral.imperial.ac.uk/entities/publication/fad83337-01c0-44c0-b7e4-b80be9b75a0f), particularly equations (F.8) - (F.10). The solution uses an implicit-explicit [Backward Differentiation Formula](https://en.wikipedia.org/wiki/Backward_differentiation_formula) in the spatial frequency domain.
   </script>
   <script id="12" type="text/markdown">
     The equation is solved in the spatial frequency domain, with the exception of the nonlinear term ${tex`\frac{1}{2}|\nabla u|^2`} which requires computing the gradient while transforming back to the spatial domain, then squaring, then transforming back to the frequency domain.
