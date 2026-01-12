@@ -10,7 +10,7 @@
 
     The KSE arises in a number of contexts and was rediscovered by Kuramoto while researching diffusion-induced flame front instabilities. It is one of the simplest partial differential equations exhibiting complicated dynamics, displaying chaotic behavior in large domains.
 
-    For the fully immersive version, see [the WebGL visualization here](https://rreusser.github.io/kuramoto-sivashinsky/). This page explores modernization to WebGPU and [Observable Notebook Kit](https://observablehq.com/notebook-kit/kit), as well as adding cleanup like plot axes (at last!). Also, you may or may not like this, I might lose followers, etc., but I converted this notebook from WebGL 1 in part way of Claude Code, using my experimental [MCP server for Observable Notebook Kit](https://github.com/rreusser/mcp-observable-notebookkit-debug). It implements a small server which controls an in-browser dev preview over a WebSocket, querying runtime outputs, modifying control inputs, analyzing the variable dependency graph, and even analyzing image output. I'm not religious about AI, and that's that.
+    For the fully immersive version, see [the WebGL visualization here](https://rreusser.github.io/kuramoto-sivashinsky/). This page explores modernization to WebGPU and [Observable Notebook Kit](https://observablehq.com/notebook-kit/kit), as well as adding cleanup like plot axes (at last!).
   </script>
   <script id="10" type="module">
     const L = [Lx, Lx / aspectRatio];
@@ -203,6 +203,9 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     Wavenumber layout in DFTs is also error-prone. The first half of the output contains positive frequencies; the second half contains negative frequencies in reverse order. A wrong sign or off-by-one index makes derivatives blow up fast.
 
     Taking the complex FFT of real data causes numerical drift. The imaginary part should stay zero, but floating point errors leak energy into it over time, eventually destabilizing the solution. The fix is an extra pass per time step to extract the real part before transforming back. A real-valued [Hartley transform](https://en.wikipedia.org/wiki/Hartley_transform) would avoid this.
+
+    Finally, you may or may not like this, I might lose followers, etc., but I converted this notebook from WebGL 1 in part way of Claude Code, using my experimental [MCP server for Observable Notebook Kit](https://github.com/rreusser/mcp-observable-notebookkit-debug). It implements a small server which controls an in-browser dev preview over a WebSocket, querying runtime outputs, modifying control inputs, analyzing the variable dependency graph, and even analyzing image output. I'm not religious about AI in either direction. It's good at what it's good at. It's evil where it's used badly, and that's that.
+
   </script>
   <script id="18" type="module">
     import { createWebGPUContext } from './webgpu-context.js';
