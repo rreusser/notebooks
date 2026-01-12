@@ -1,5 +1,0 @@
-publishedAt: "December 1, 2020"
-description: "Iterating the two-dimensional Kuramoto-Sivashinsky equation in WebGPU"
-maxWidth: 640px
-observableUrl: https://observablehq.com/@rreusser/kuramoto-sivashinsky-equation-in-2d
-hidden: true
