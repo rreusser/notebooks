@@ -555,8 +555,11 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
 
       runFFT2D(V, Vhat[0], temp, true);
 
+      // Initialize ALL Vhat buffers to ensure deterministic restart
+      // even if there's a race condition with timeLevel
       const enc2 = device.createCommandEncoder();
       enc2.copyBufferToBuffer(Vhat[0], 0, Vhat[1], 0, vec2Size);
+      enc2.copyBufferToBuffer(Vhat[0], 0, Vhat[2], 0, vec2Size);
       device.queue.submit([enc2.finish()]);
       await device.queue.onSubmittedWorkDone();
 
