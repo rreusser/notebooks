@@ -305,7 +305,7 @@
     const xScale = stack.plot.scale("x");
     const yScale = stack.plot.scale("y");
     const svg = d3.select(stack.svg).style("cursor", "crosshair");
-    d3.selectAll("circle").remove();
+    svg.selectAll("circle").remove();
     svg.on("mousemove", (event) => {
       updateTrajectory(computeTrajectory([
         xScale.invert(event.offsetX),
