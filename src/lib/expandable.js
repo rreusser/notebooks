@@ -28,9 +28,25 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
   contentWrapper.style.cssText = `
     position: relative;
     display: inline-block;
-    transition: box-shadow 0.3s ease, background 0.3s ease;
     z-index: 1;
   `;
+
+  // Overlay backdrop for expanded state
+  const overlay = document.createElement('div');
+  overlay.className = 'expandable-overlay';
+  overlay.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease;
+    z-index: 9998;
+  `;
+  overlay.addEventListener('click', () => collapse());
 
   // Toggle button
   const toggleBtn = document.createElement('button');
@@ -113,6 +129,10 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     toggleBtn.style.top = `${-toggleOffset[1]}px`;
     toggleBtn.style.right = `${-toggleOffset[0]}px`;
 
+    // Hide overlay
+    overlay.style.opacity = '0';
+    overlay.style.pointerEvents = 'none';
+
     // Reset container height
     container.style.height = '';
 
@@ -180,6 +200,13 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     toggleBtn.style.top = '8px';
     toggleBtn.style.right = '8px';
 
+    // Show overlay
+    if (!overlay.parentNode) {
+      document.body.appendChild(overlay);
+    }
+    overlay.style.opacity = '1';
+    overlay.style.pointerEvents = 'auto';
+
     // Lock container height to preserve document flow
     // Use measured height or fall back to calculating
     if (collapsedHeight) {
@@ -221,6 +248,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     if (!document.contains(container)) {
       document.removeEventListener('keydown', handleKeydown);
       window.removeEventListener('resize', handleResize);
+      if (overlay.parentNode) overlay.remove();
       observer.disconnect();
     }
   });

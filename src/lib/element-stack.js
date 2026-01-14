@@ -6,7 +6,7 @@
  * @param {HTMLElement} [options.container] - Container element (created if not provided)
  * @param {number} [options.width=100] - Initial width
  * @param {number} [options.height=100] - Initial height
- * @param {Array<{name: string, element: Function}>} [options.layers=[]] - Layer definitions in render order
+ * @param {Array<{id: string, element: Function}>} [options.layers=[]] - Layer definitions in render order
  */
 export function createElementStack({
   container = document.createElement("div"),
@@ -21,8 +21,8 @@ export function createElementStack({
   // Store state on container for reuse across reactive updates
   container._width = width;
   container._height = height;
-  container._layerOrder = layers.map(l => l.name);
-  container._layerDefs = Object.fromEntries(layers.map(l => [l.name, l.element]));
+  container._layerOrder = layers.map(l => l.id);
+  container._layerDefs = Object.fromEntries(layers.map(l => [l.id, l.element]));
   container._elements = container._elements || {};
 
   const _elements = container._elements;
@@ -66,11 +66,10 @@ export function createElementStack({
       // Access layer elements
       get elements() { return _elements; },
 
-      // Update specific layers with new props
-      update(layerUpdates) {
-        for (const [name, props] of Object.entries(layerUpdates)) {
-          const extraProps = typeof props === "object" && props !== null ? props : {};
-          renderLayer(name, extraProps);
+      // Re-render specific layers
+      update(...names) {
+        for (const name of names) {
+          renderLayer(name);
         }
         container.dispatchEvent(new CustomEvent("update"));
         return container._stack;
@@ -98,8 +97,8 @@ export function createElementStack({
     };
   } else {
     // Update existing stack's layer definitions and re-render
-    container._layerOrder = layers.map(l => l.name);
-    container._layerDefs = Object.fromEntries(layers.map(l => [l.name, l.element]));
+    container._layerOrder = layers.map(l => l.id);
+    container._layerDefs = Object.fromEntries(layers.map(l => [l.id, l.element]));
     for (const name of container._layerOrder) {
       renderLayer(name);
     }

@@ -23,7 +23,7 @@
     display(expandable(figure, {
       width: Math.min(width, 640),
       height: Math.min(480, width),
-      toggleOffset: [-10 + 4, -37 + 4],
+      toggleOffset: [-6, -33],
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
@@ -35,7 +35,31 @@
     }));
   </script>
   <script id="16" type="text/markdown">
-    The code above performs final display of the figure we develop below. The focus here is managing the expandable section, in particular instantiating the content and managing what happens when resized.
+    The code above performs final display of the figure, wrapping it in an expandable container.
+  </script>
+  <script id="19" type="text/markdown">
+    We'll work top-down, drilling down on the particular element implementations. Next is to instantiate the stack container. This is a persistent container that will hold the plot. This awful statefulness is critical when using WebGL, because a cell dependency on the page `width` would trigger reinsantiation of the WebGL context, which inevitably leads to lost WebGL contexts and much gnashing of teeth.
+  </script>
+  <script id="7" type="text/x-typescript" pinned="">
+    const stack = createElementStack({
+      layers: [{
+        id: 'regl',
+        element: reglElement(createREGL, {
+          extensions: ['OES_standard_derivatives'],
+          attributes: { depthStencil: false, preserveDrawingBuffer: true }
+        })
+      }, {
+        id: 'plot',
+        element: ({ width, height }) => createPlot(width, height)
+      }, {
+        id: 'svg',
+        element: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg"))
+            .attr("width", width)
+            .attr("height", height)
+            .node()
+      }]
+    });
   </script>
   <script id="5" type="text/x-typescript">
     import * as d3 from 'npm:d3'
@@ -47,49 +71,33 @@
     import { collapseCodeBlocks } from './lib/collapsible-code.js'
     import { expandable } from './lib/expandable.js'
   </script>
-  <script id="19" type="text/markdown">
-    The first major step is to instantiate the stack container. This is a persistent container that will hold the plot. This awful statefulness is critical when using WebGL, because a cell dependency on the page `width` would trigger reinsantiation of the WebGL context, which inevitably leads to lost WebGL contexts and much gnashing of teeth.
-  </script>
   <script id="20" type="text/markdown">
     Next, we configure the stack. The `reglElement` helper returns a function which receives the current regl element as an argument, thus preventing reinstantiation.
   </script>
-  <script id="7" type="text/x-typescript" pinned="">
-    const stack = createElementStack({
-      layers: [
-        {
-          name: 'regl',
-          element: reglElement(createREGL, {
-            extensions: ['OES_standard_derivatives'],
-            attributes: { depthStencil: false, preserveDrawingBuffer: true }
-          })},
-        {
-          name: 'plot',
-          element: ({ width, height, xDomain=[-2, 2], yDomain=[-2, 2] }) =>
-            Plot.plot({
-              width,
-              height,
-              marginTop: 20,
-              marginRight: 10,
-              marginLeft: 40,
-              marginBottom: 20,
-              style: { backgroundColor: "transparent", maxWidth: "none" },
-              x: { domain: xDomain, tickSpacing: 100 },
-              y: { domain: yDomain, tickSpacing: 100 },
-              marks: [
-                Plot.ruleX([0], { stroke: "#0002" }),
-                Plot.ruleY([0], { stroke: "#0002" })
-              ]
-            })},
-        {
-          name: 'svg',
-          element: ({ current, width, height }) =>
-            (current ? d3.select(current) : d3.create("svg"))
-              .attr("width", width)
-              .attr("height", height)
-              .node()
-        }
-      ]
-    });
+  <script id="22" type="text/markdown">
+    Next, we provide a function to instantiate the [Observable Plot](https://observablehq.com/plot/). Since we don’t reuse it, we don’t have to be too careful. The only part we do reuse is the x and y domains, so we need to be careful to pass that back in for reuse.
+  </script>
+  <script id="21" type="text/x-typescript" pinned="">
+    function createPlot(width, height, xDomain = [-2, 2], yDomain = [-2, 2]) {
+      return Plot.plot({
+        width,
+        height,
+        marginTop: 20,
+        marginRight: 10,
+        marginLeft: 40,
+        marginBottom: 20,
+        style: { backgroundColor: "transparent", maxWidth: "none", position: "absolute" },
+        x: { domain: xDomain, tickSpacing: 100 },
+        y: { domain: yDomain, tickSpacing: 100 },
+        marks: [
+          Plot.ruleX([0], { stroke: "#0002" }),
+          Plot.ruleY([0], { stroke: "#0002" })
+        ]
+      });
+    }
+  </script>
+  <script id="23" type="text/markdown">
+    We’ll choose to use the x- and y-axes instances from the Observable Plot as our scale instances. It feels circular, but we’ll set it up so that when the axes change, we replace the plot instance while re-injecting the previous x and y extents.
   </script>
   <script id="8" type="text/x-typescript" pinned="">
     const axes = createZoomableAxes({
@@ -100,83 +108,31 @@
       aspectRatio: 1,
       onChange: ({ xDomain, yDomain }) => {
         regl.dirty = true;
-        stack.update({ plot: { xDomain, yDomain } });
+        const newPlot = createPlot(stack.width, stack.height, xDomain, yDomain);
+        stack.elements.plot.replaceWith(newPlot);
+        stack.elements.plot = newPlot;
+        stack.dispatchEvent(new CustomEvent('update'));
       }
     });
   </script>
   <script id="9" type="text/markdown">
-    As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation. The function maps complex numbers according to
+    Next, we wire up some actual math. As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation. The function maps complex numbers according to
 
     ${tex.block`f(z) = \frac{(z - a)(b - m)}{(z - b)(a - m)}`}
 
-    where ${tex`a`}, ${tex`m`}, and ${tex`b`} are control points you can drag to explore the transformation. By construction, ${tex`f(a) = 0`}, ${tex`f(b) = \infty`}, and ${tex`f(m) = 1`}. Möbius transformations are conformal (angle-preserving) and map circles to circles, though some of those circles may have infinite radius (i.e., lines).
+    where ${tex`a`}, ${tex`m`}, and ${tex`b`} are control points you can drag to explore the transformation. By construction, ${tex`f(a) = 0`}, ${tex`f(b) = \infty`}, and ${tex`f(m) = 1`}. Möbius transformations are conformal (angle-preserving) and map circles to circles. Neat!
   </script>
   <script id="10" type="text/x-typescript" pinned="">
-    // Control points for the complex function f(z) = (z - a)(b - m) / (z - b)(a - m)
     const controlPoints = {
       a: { x: -1, y: 0.5 },
       m: { x: 0, y: 0 },
       b: { x: 1, y: -0.5 }
     };
   </script>
-  <script id="11" type="text/x-typescript" pinned="">
-    const regl = stack.elements.regl.value;
-    regl.dirty = true;
+  <script id="26" type="text/markdown">
+    Next, we wire up some D3 controls.
   </script>
-  <script id="12" type="text/x-typescript" pinned="">
-    const drawGradient = regl({
-      vert: `
-        precision highp float;
-        attribute vec2 uv;
-        varying vec2 z;
-        uniform mat4 viewInverse;
-        void main () {
-          z = (viewInverse * vec4(uv, 0, 1)).xy;
-          gl_Position = vec4(uv, 0, 1);
-        }`,
-      frag: `
-        #extension GL_OES_standard_derivatives : enable
-        precision highp float;
-        varying vec2 z;
-        uniform vec2 a, m, b;
-        uniform float pixelRatio;
-
-        vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
-        vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }
-        vec2 f(vec2 z) { return cdiv(cmul(z - a, b - m), cmul(z - b, a - m)); }
-
-        ${createPolarDomainColoringShader()}
-
-        void main () {
-          vec2 w = f(z);
-
-          gl_FragColor = domainColoring(
-            vec4(w, fwidth(w) * pixelRatio),
-            vec2(2.0, 2.0),    // steps
-            vec2(0.1),         // scale
-            vec2(0.1, 0.1),    // gridOpacity
-            vec2(0.35, 0.15),  // shadingOpacity
-            0.25,              // lineWidth
-            0.4,               // lineFeather
-            vec3(0),           // gridColor
-            4.0                // contrastPower
-          );
-        }`,
-      uniforms: {
-        viewInverse: regl.prop('viewInverse'),
-        pixelRatio: regl.context('pixelRatio'),
-        a: regl.prop('a'),
-        m: regl.prop('m'),
-        b: regl.prop('b'),
-      },
-      attributes: { uv: [-4, -4, 4, -4, 0, 4] },
-      depth: { enable: false },
-      scissor: { enable: true, box: reglAxesViewport(axes) },
-      viewport: reglAxesViewport(axes),
-      count: 3,
-    });
-  </script>
-  <script id="13" type="text/x-typescript" pinned="">
+  <script id="25" type="text/x-typescript" pinned="">
     // Create SVG circles for draggable control points
     {
       const svg = d3.select(stack.elements.svg);
@@ -232,7 +188,70 @@
       stack.addEventListener('update', updatePositions);
     }
   </script>
+  <script id="27" type="text/markdown">
+    Finally, we’ll use the [regl](https://github.com/regl-project/regl/blob/main/API.md) library to plot the complex field with some nice [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring).
+  </script>
+  <script id="11" type="text/x-typescript" pinned="">
+    const regl = stack.elements.regl.value;
+  </script>
+  <script id="12" type="text/x-typescript" pinned="">
+    const drawGradient = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        varying vec2 z;
+        uniform mat4 viewInverse;
+        void main () {
+          z = (viewInverse * vec4(uv, 0, 1)).xy;
+          gl_Position = vec4(uv, 0, 1);
+        }`,
+      frag: `
+        #extension GL_OES_standard_derivatives : enable
+        precision highp float;
+        varying vec2 z;
+        uniform vec2 a, m, b;
+        uniform float pixelRatio;
+
+        vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+        vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }
+        vec2 f(vec2 z) { return cdiv(cmul(z - a, b - m), cmul(z - b, a - m)); }
+
+        ${createPolarDomainColoringShader()}
+
+        void main () {
+          vec2 w = f(z);
+
+          gl_FragColor = domainColoring(
+            vec4(w, fwidth(w) * pixelRatio),
+            vec2(2.0, 2.0),    // steps
+            vec2(0.1),         // scale
+            vec2(0.1, 0.1),    // gridOpacity
+            vec2(0.35, 0.15),  // shadingOpacity
+            0.25,              // lineWidth
+            0.4,               // lineFeather
+            vec3(0),           // gridColor
+            4.0                // contrastPower
+          );
+        }`,
+      uniforms: {
+        viewInverse: regl.prop('viewInverse'),
+        pixelRatio: regl.context('pixelRatio'),
+        a: regl.prop('a'),
+        m: regl.prop('m'),
+        b: regl.prop('b'),
+      },
+      attributes: { uv: [-4, -4, 4, -4, 0, 4] },
+      depth: { enable: false },
+      scissor: { enable: true, box: reglAxesViewport(axes) },
+      viewport: reglAxesViewport(axes),
+      count: 3,
+    });
+  </script>
+  <script id="28" type="text/markdown">
+    Our regl loop is a bit tacky. We just tack on a mutable `dirty` flag and try to render the plot at 60fps *always*. But this is a no-op unless something has mutated the flag to `dirty = true`. Good enough!
+  </script>
   <script id="14" type="text/x-typescript" pinned="">
+    regl.dirty = true;
     let loop = regl.frame(() => {
       try {
         if (!regl.dirty) return;
@@ -244,16 +263,19 @@
         });
         regl.dirty = false;
       } catch (e) {
-        loop.cancel();
+        loop?.cancel();
         loop = undefined;
       }
     });
 
     invalidation.then(() => loop?.cancel());
   </script>
+  <script id="32" type="text/markdown">
+    Is this good? Bad? Overwrought? I’m not sure. It’s as bit of code, and the full source includes a few more helper function used above. What I am sure of is that the output seems, to me, humbly, *really good*. These things are very tedious to get right, and I’m happy so far with how this looks. It could certainly be wrapped up a bit more for convenience, at least when the full flexibility of the above system is not needed.
+  </script>
   <script id="15" type="text/x-typescript">
     collapseCodeBlocks({
-      maxHeight: 700
+      maxHeight: 600
     });
   </script>
 </notebook>

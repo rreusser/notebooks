@@ -111,15 +111,14 @@ export function createZoomableAxes({
     get viewInverse() { return viewInverse; },
     get xScale() { return xScaleD3.copy().domain(xDomain); },
     get yScale() { return yScaleD3.copy().domain(yDomain); },
-    // Update the external scales (for resize)
+    // Update the external scales (for resize) - preserves current zoom level
     updateScales(newXScale, newYScale) {
       xScale = newXScale;
       yScale = newYScale;
       syncRanges();
-      // Reset to initial domains and enforce aspect ratio with new pixel dimensions
-      [xDomain, yDomain] = enforceAspectRatio([...initialXDomain], [...initialYDomain]);
+      // Re-enforce aspect ratio with new pixel dimensions, preserving current view
+      [xDomain, yDomain] = enforceAspectRatio(xDomain, yDomain);
       // Update base d3 scale domains and reset zoom transform
-      // This ensures zooming after resize uses the correct base domains
       xScaleD3.domain(xDomain);
       yScaleD3.domain(yDomain);
       selection.call(zoom.transform, d3.zoomIdentity);
