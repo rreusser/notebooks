@@ -4,12 +4,18 @@
   <script id="1" type="text/markdown">
     # Plot with Zoom
 
-    This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (here a regl canvas, an Observable Plot, and an SVG) so that zoom and pan stay in sync across all of them. The layers and content are just one example. The point is to wire up the plumbing.
+    This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (a regl canvas, an Observable Plot, and an SVG) so that zoom and pan stay in sync across all of them. The layers and content are just one example. The point is to wire up the plumbing.
+
+    The key components are:
+
+    - **Element stack**: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and preserves expensive resources like WebGL contexts across reactive updates.
+    - **Zoomable axes**: A rendering-agnostic zoom controller built on d3.zoom. It tracks the current view as orthographic matrices and exposes d3 scales for coordinate conversion. When the view changes, it notifies listeners so each layer can update accordingly.
+    - **Expandable wrapper**: The plot can be expanded to fill most of the viewport by clicking the toggle button in the corner. This is useful for exploring detail without leaving the page.
   </script>
   <script id="2" type="text/x-typescript">
     import * as d3 from 'npm:d3'
     import createREGL from 'npm:regl'
-    import { initializeElementStack, createElementStack } from './lib/element-stack.js'
+    import { createElementStack } from './lib/element-stack.js'
     import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
     import { createZoomableAxes } from './lib/zoomable-axes.js'
     import { createPolarDomainColoringShader } from './domain-coloring.js'
@@ -17,118 +23,88 @@
     import { expandable } from './lib/expandable.js'
   </script>
   <script id="3" type="text/x-typescript">
-    const stackEl = initializeElementStack();
+    // Stable container - no dependencies, persists across reactive updates
+    // This allows WebGL contexts and other expensive resources to be reused
+    const stackContainer = document.createElement('div');
   </script>
   <script id="4" type="text/x-typescript" pinned="">
     const plotWidth = Math.min(width, 640);
     const plotHeight = Math.min(480, width);
 
-    // Plot configuration
-    const plotConfig = {
-      marginTop: 0,
-      marginRight: 5,
-      marginLeft: 40,
-      marginBottom: 20,
-      style: { backgroundColor: "transparent", maxWidth: "none" }
-    };
-
-    // Helper to create Plot with given domains
-    function createPlot({width, height, xDomain=[-2, 2], yDomain=[-2, 2]}) {
-      return Plot.plot({
-        width,
-        height,
-        ...plotConfig,
-        x: { domain: xDomain, tickSpacing: 100 },
-        y: { domain: yDomain, tickSpacing: 100 },
-        marks: [
-          Plot.ruleX([0], { stroke: "#0002" }),
-          Plot.ruleY([0], { stroke: "#0002" })
-        ]
-      });
-    }
-
-    // Define layer functions once
-    const layers = {
-      regl: reglElement(createREGL, {
-        extensions: ['OES_standard_derivatives'],
-        attributes: { depthStencil: false, preserveDrawingBuffer: true }
-      }),
-      plot: ({ width, height, xDomain, yDomain }) => createPlot({ width, height, xDomain, yDomain }),
-      svg: ({ current, width, height }) =>
-        (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
-    };
-
-    // Create element stack
-    const el = createElementStack({
-      container: stackEl,
+    // Create element stack with layer definitions
+    // Pass stackContainer to reuse existing elements (especially WebGL context)
+    const stack = createElementStack({
+      container: stackContainer,
       width: plotWidth,
       height: plotHeight,
-      layers
+      layers: {
+        regl: reglElement(createREGL, {
+          extensions: ['OES_standard_derivatives'],
+          attributes: { depthStencil: false, preserveDrawingBuffer: true }
+        }),
+        plot: ({ width, height, xDomain=[-2, 2], yDomain=[-2, 2] }) => 
+          Plot.plot({
+            width,
+            height,
+            marginTop: 0,
+            marginRight: 10,
+            marginLeft: 40,
+            marginBottom: 20,
+            style: { backgroundColor: "transparent", maxWidth: "none" },
+            x: { domain: xDomain, tickSpacing: 100 },
+            y: { domain: yDomain, tickSpacing: 100 },
+            marks: [
+              Plot.ruleX([0], { stroke: "#0002" }),
+              Plot.ruleY([0], { stroke: "#0002" })
+            ]
+          }),
+        svg: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
+      }
     });
-    const stack = el.value;
-    const regl = stack.regl.value;
+
+    const regl = stack.elements.regl.value;
     regl.dirty = true;
 
     const axes = createZoomableAxes({
       d3,
-      element: stack.svg,
-      xScale: stack.plot.scale("x"),
-      yScale: stack.plot.scale("y"),
+      element: stack.elements.svg,
+      xScale: stack.elements.plot.scale("x"),
+      yScale: stack.elements.plot.scale("y"),
       aspectRatio: 1,
       onChange: ({ xDomain, yDomain }) => {
         regl.dirty = true;
-        stackEl.update({ plot: { layer: layers.plot, xDomain, yDomain } });
+        stack.update({ plot: { xDomain, yDomain } });
       }
     });
 
-    // Helper to resize the element stack
-    function resizeStack(newWidth, newHeight) {
-      stackEl._width = newWidth;
-      stackEl._height = newHeight;
-      stackEl.style.width = `${newWidth}px`;
-      stackEl.style.height = `${newHeight}px`;
-
-      // Update figure max-width to allow larger content
-      const figure = stackEl.closest('figure');
-      if (figure) {
-        figure.style.maxWidth = `${newWidth}px`;
-      }
-
-      // Get current domains from axes
-      const xDomain = axes.xScale.domain();
-      const yDomain = axes.yScale.domain();
-
-      // Update all layers with new dimensions
-      stackEl.update({
-        regl: layers.regl,
-        plot: { layer: layers.plot, xDomain, yDomain },
-        svg: layers.svg
-      });
-
-      // Update axes with new scales - this re-enforces aspect ratio and triggers onChange
-      // which will update the plot again with corrected domains
-      axes.updateScales(stackEl.value.plot.scale("x"), stackEl.value.plot.scale("y"));
-      regl.dirty = true;
-
-      // Dispatch update event for position recalculation with correct scales
-      stackEl.dispatchEvent(new CustomEvent("update"));
-    }
-
     display(expandable((plotWidth, plotHeight) => {
       return html`<figure>
-        ${el}
+        ${stack.element}
         <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
       </figure>`;
     }, {
       width: plotWidth,
       height: plotHeight,
-      onResize: (newWidth, newHeight, expanded) => {
-        resizeStack(newWidth, newHeight);
+      onResize: function resizeStack(w, h) {
+        // Update figure max-width to allow larger content
+        const figure = stack.element.closest('figure');
+        if (figure) figure.style.maxWidth = `${w}px`;
+        stack.resize(w, h);
+        axes.updateScales(
+          stack.elements.plot.scale("x"),
+          stack.elements.plot.scale("y")
+        );
+        regl.dirty = true;
       }
     }));
   </script>
   <script id="4b" type="text/markdown">
-    As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation with three draggable control points.
+    As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation. The function maps complex numbers according to
+
+    ${tex.block`f(z) = \frac{(z - a)(b - m)}{(z - b)(a - m)}`}
+
+    where ${tex`a`}, ${tex`m`}, and ${tex`b`} are control points you can drag to explore the transformation. By construction, ${tex`f(a) = 0`}, ${tex`f(b) = \infty`}, and ${tex`f(m) = 1`}. Möbius transformations are conformal (angle-preserving) and map circles to circles, though some of those circles may have infinite radius (i.e., lines).
   </script>
   <script id="5" type="text/x-typescript" pinned="">
     // Control points for the complex function f(z) = (z - a)(b - m) / (z - b)(a - m)
@@ -194,7 +170,7 @@
   <script id="5c" type="text/x-typescript" pinned="">
     // Create SVG circles for draggable control points
     {
-      const svg = d3.select(stack.svg);
+      const svg = d3.select(stack.elements.svg);
 
       const circleData = [
         { id: 'a', point: controlPoints.a, color: 'rgb(51, 85, 238)', label: 'a' },
@@ -231,12 +207,7 @@
         .attr('font-size', '14px')
         .attr('font-style', 'italic')
         .attr('fill', '#333')
-        .style('text-shadow', [
-          [-1, 0, 1.5],
-          [1, 0, 1.5],
-          [0, 1, 1.5],
-          [0, -1, 1.5]
-        ].map(([i, j, sh]) => `${i}px ${j}px ${sh}px white`).join(', '))
+        .style('text-shadow', [[-1, 0, 1.5], [1, 0, 1.5], [0, 1, 1.5], [0, -1, 1.5]].map(([i, j, sh]) => `${i}px ${j}px ${sh}px white`).join(', '))
         .text(d => d.label);
 
       function updatePositions() {
@@ -249,7 +220,7 @@
       }
 
       updatePositions();
-      stackEl.addEventListener('update', updatePositions);
+      stack.addEventListener('update', updatePositions);
     }
   </script>
   <script id="6" type="text/x-typescript" pinned="">

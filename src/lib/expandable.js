@@ -27,7 +27,7 @@ export function expandable(renderFn, { width, height, onResize }) {
   contentWrapper.style.cssText = `
     position: relative;
     display: inline-block;
-    transition: all 0.3s ease;
+    transition: box-shadow 0.3s ease, background 0.3s ease;
     z-index: 1;
   `;
 
@@ -52,7 +52,7 @@ export function expandable(renderFn, { width, height, onResize }) {
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    box-shadow: 0 1px 3px rgba(0,0,0,0.6);
     transition: all 0.2s ease;
   `;
   toggleBtn.addEventListener('mouseenter', () => {
@@ -109,12 +109,17 @@ export function expandable(renderFn, { width, height, onResize }) {
     contentWrapper.style.position = 'relative';
     contentWrapper.style.top = '';
     contentWrapper.style.left = '';
+    contentWrapper.style.transform = '';
     contentWrapper.style.width = '';
     contentWrapper.style.background = '';
     contentWrapper.style.boxShadow = '';
     contentWrapper.style.padding = '';
     contentWrapper.style.borderRadius = '';
     contentWrapper.style.zIndex = '1';
+
+    // Restore figure margin
+    const figure = contentWrapper.querySelector('figure');
+    if (figure) figure.style.margin = '';
 
     setDimensions(width, height);
 
@@ -136,23 +141,24 @@ export function expandable(renderFn, { width, height, onResize }) {
     const expandedHeight = Math.min(viewportHeight * 0.8, 900) - padding * 2;
 
     const outerWidth = expandedWidth + padding * 2;
-    const outerHeight = expandedHeight + padding * 2;
 
-    // Calculate position to center in viewport
-    const targetLeft = (viewportWidth - outerWidth) / 2;
-    const targetTop = (viewportHeight - outerHeight) / 2;
-
-    // Position content wrapper
+    // Position content wrapper using CSS centering (avoids measurement timing issues)
     contentWrapper.style.position = 'fixed';
-    contentWrapper.style.top = `${targetTop}px`;
-    contentWrapper.style.left = `${targetLeft}px`;
     contentWrapper.style.width = `${outerWidth}px`;
+    contentWrapper.style.top = '50%';
+    contentWrapper.style.left = '50%';
+    contentWrapper.style.transform = 'translate(-50%, -50%)';
     contentWrapper.style.background = 'white';
     contentWrapper.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
     contentWrapper.style.padding = `${padding}px`;
     contentWrapper.style.borderRadius = '8px';
     contentWrapper.style.zIndex = '9999';
 
+    // Reset margins on inner content for proper centering
+    const figure = contentWrapper.querySelector('figure');
+    if (figure) figure.style.margin = '0';
+
+    // Trigger resize callback to size content
     setDimensions(expandedWidth, expandedHeight);
   }
 

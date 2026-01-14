@@ -118,6 +118,11 @@ export function createZoomableAxes({
       syncRanges();
       // Re-enforce aspect ratio with new pixel dimensions
       [xDomain, yDomain] = enforceAspectRatio(xDomain, yDomain);
+      // Update base d3 scale domains and reset zoom transform
+      // This ensures zooming after resize uses the correct base domains
+      xScaleD3.domain(xDomain);
+      yScaleD3.domain(yDomain);
+      selection.call(zoom.transform, d3.zoomIdentity);
       // Recompute matrices with updated domains
       updateMatrices();
       // Notify listeners of the domain change
