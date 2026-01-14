@@ -40,8 +40,9 @@ export function createElementStack({
 
       for (const [label, props] of Object.entries(newLayers)) {
         const layer = typeof props === "function" ? props : props.layer;
+        const extraProps = typeof props === "function" ? {} : props;
         const current = container.querySelector(`[data-layer="${label}"]`);
-        const newEl = layer({ current, width: w, height: h });
+        const newEl = layer({ current, width: w, height: h, ...extraProps });
         newEl.setAttribute("data-layer", label);
         if (!newEl.style.position) newEl.style.position = "absolute";
         stack[label] = newEl;

@@ -47,17 +47,23 @@
       });
     }
 
+    // Define layer functions once
+    const layers = {
+      regl: reglElement(createREGL, {
+        extensions: ['OES_standard_derivatives'],
+        attributes: { depthStencil: false, preserveDrawingBuffer: true }
+      }),
+      plot: ({ width, height, xDomain, yDomain }) => createPlot({ width, height, xDomain, yDomain }),
+      svg: ({ current, width, height }) =>
+        (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
+    };
+
     // Create element stack
     const el = createElementStack({
       container: stackEl,
       width: plotWidth,
       height: plotHeight,
-      layers: {
-        regl: reglElement(createREGL, {extensions: ['OES_standard_derivatives'], attributes: { depthStencil: false, preserveDrawingBuffer: true }}),
-        plot: ({ width, height }) => createPlot({width, height}),
-        svg: ({ current, width, height }) =>
-          (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
-      }
+      layers
     });
     const stack = el.value;
     const regl = stack.regl.value;
@@ -71,9 +77,7 @@
       aspectRatio: 1,
       onChange: ({ xDomain, yDomain }) => {
         regl.dirty = true;
-        stackEl.update({
-          plot: ({ width, height }) => createPlot({width, height, xDomain, yDomain})
-        });
+        stackEl.update({ plot: { layer: layers.plot, xDomain, yDomain } });
       }
     });
 
@@ -94,12 +98,11 @@
       const xDomain = axes.xScale.domain();
       const yDomain = axes.yScale.domain();
 
-      // First pass: update layers with current domains to get new scales
+      // Update all layers with new dimensions
       stackEl.update({
-        regl: reglElement(createREGL, {extensions: ['OES_standard_derivatives'], attributes: { depthStencil: false, preserveDrawingBuffer: true }}),
-        plot: ({ width, height }) => createPlot({width, height, xDomain, yDomain}),
-        svg: ({ current, width, height }) =>
-          (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
+        regl: layers.regl,
+        plot: { layer: layers.plot, xDomain, yDomain },
+        svg: layers.svg
       });
 
       // Update axes with new scales - this re-enforces aspect ratio and triggers onChange
