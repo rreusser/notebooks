@@ -54,7 +54,6 @@
     });
     const stack = el.value;
     const regl = stack.regl.value;
-
     regl.dirty = true;
 
     const axes = createZoomableAxes({
@@ -113,9 +112,14 @@
   </script>
   <script id="6" type="text/x-typescript" pinned="">
     let loop = regl.frame(() => {
-      if (!regl.dirty) return;
-      drawGradient({ viewInverse: axes.viewInverse });
-      regl.dirty = false;
+      try {
+        if (!regl.dirty) return;
+        drawGradient({ viewInverse: axes.viewInverse });
+        regl.dirty = false;
+      } catch (e) {
+        loop.cancel();
+        loop = undefined;
+      }
     });
 
     invalidation.then(() => loop?.cancel());

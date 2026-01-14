@@ -62,9 +62,9 @@ export function createZoomableAxes({
   // Initialize matrices
   updateMatrices();
 
-  // D3 scales for zoom transform (ranges synced on each zoom event)
-  const xScaleD3 = d3.scaleLinear().domain(initialXDomain).range(getXRange());
-  const yScaleD3 = d3.scaleLinear().domain(initialYDomain).range(getYRange());
+  // D3 scales for zoom transform - use corrected domains so pan/zoom works correctly
+  const xScaleD3 = d3.scaleLinear().domain(xDomain).range(getXRange());
+  const yScaleD3 = d3.scaleLinear().domain(yDomain).range(getYRange());
 
   // Sync internal d3 scale ranges with external scales
   function syncRanges() {
@@ -89,9 +89,8 @@ export function createZoomableAxes({
     .on("end", () => selection.style("cursor", "grab"))
     .on("zoom", (event) => {
       syncRanges();  // Keep internal scales in sync with external scale ranges
-      const newXDomain = event.transform.rescaleX(xScaleD3).domain();
-      const newYDomain = event.transform.rescaleY(yScaleD3).domain();
-      [xDomain, yDomain] = enforceAspectRatio(newXDomain, newYDomain);
+      xDomain = event.transform.rescaleX(xScaleD3).domain();
+      yDomain = event.transform.rescaleY(yScaleD3).domain();
       updateMatrices();
       onChange({ xDomain, yDomain, xRange: getXRange(), yRange: getYRange() });
     });
