@@ -55,30 +55,40 @@
   </script>
   <script id="7" type="text/x-typescript" pinned="">
     const stack = createElementStack({
-      layers: {
-        regl: reglElement(createREGL, {
-          extensions: ['OES_standard_derivatives'],
-          attributes: { depthStencil: false, preserveDrawingBuffer: true }
-        }),
-        plot: ({ width, height, xDomain=[-2, 2], yDomain=[-2, 2] }) =>
-          Plot.plot({
-            width,
-            height,
-            marginTop: 20,
-            marginRight: 10,
-            marginLeft: 40,
-            marginBottom: 20,
-            style: { backgroundColor: "transparent", maxWidth: "none" },
-            x: { domain: xDomain, tickSpacing: 100 },
-            y: { domain: yDomain, tickSpacing: 100 },
-            marks: [
-              Plot.ruleX([0], { stroke: "#0002" }),
-              Plot.ruleY([0], { stroke: "#0002" })
-            ]
-          }),
-        svg: ({ current, width, height }) =>
-          (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
-      }
+      layers: [
+        {
+          name: 'regl',
+          element: reglElement(createREGL, {
+            extensions: ['OES_standard_derivatives'],
+            attributes: { depthStencil: false, preserveDrawingBuffer: true }
+          })},
+        {
+          name: 'plot',
+          element: ({ width, height, xDomain=[-2, 2], yDomain=[-2, 2] }) =>
+            Plot.plot({
+              width,
+              height,
+              marginTop: 20,
+              marginRight: 10,
+              marginLeft: 40,
+              marginBottom: 20,
+              style: { backgroundColor: "transparent", maxWidth: "none" },
+              x: { domain: xDomain, tickSpacing: 100 },
+              y: { domain: yDomain, tickSpacing: 100 },
+              marks: [
+                Plot.ruleX([0], { stroke: "#0002" }),
+                Plot.ruleY([0], { stroke: "#0002" })
+              ]
+            })},
+        {
+          name: 'svg',
+          element: ({ current, width, height }) =>
+            (current ? d3.select(current) : d3.create("svg"))
+              .attr("width", width)
+              .attr("height", height)
+              .node()
+        }
+      ]
     });
   </script>
   <script id="8" type="text/x-typescript" pinned="">
@@ -243,7 +253,7 @@
   </script>
   <script id="15" type="text/x-typescript">
     collapseCodeBlocks({
-      maxHeight: 500
+      maxHeight: 700
     });
   </script>
 </notebook>

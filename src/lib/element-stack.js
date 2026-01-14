@@ -1,12 +1,18 @@
 /**
  * Creates an element stack that manages multiple layered elements.
  * Supports two-phase initialization: pass an existing container to reuse elements.
+ *
+ * @param {Object} options
+ * @param {HTMLElement} [options.container] - Container element (created if not provided)
+ * @param {number} [options.width=100] - Initial width
+ * @param {number} [options.height=100] - Initial height
+ * @param {Array<{name: string, element: Function}>} [options.layers=[]] - Layer definitions in render order
  */
 export function createElementStack({
   container = document.createElement("div"),
   width = 100,
   height = 100,
-  layers = {}
+  layers = []
 } = {}) {
   container.style.position = "relative";
   container.style.width = `${width}px`;
@@ -15,21 +21,21 @@ export function createElementStack({
   // Store state on container for reuse across reactive updates
   container._width = width;
   container._height = height;
-  container._layerDefs = { ...layers };
+  container._layerOrder = layers.map(l => l.name);
+  container._layerDefs = Object.fromEntries(layers.map(l => [l.name, l.element]));
   container._elements = container._elements || {};
 
   const _elements = container._elements;
 
   // Render a layer, reusing existing element if available
-  function renderLayer(label, extraProps = {}) {
-    const layerDef = container._layerDefs[label];
-    if (!layerDef) return null;
+  function renderLayer(name, extraProps = {}) {
+    const layerFn = container._layerDefs[name];
+    if (!layerFn) return null;
 
-    const layer = typeof layerDef === "function" ? layerDef : layerDef.layer;
-    const current = _elements[label] || null;
-    const newEl = layer({ current, width: container._width, height: container._height, ...extraProps });
+    const current = _elements[name] || null;
+    const newEl = layerFn({ current, width: container._width, height: container._height, ...extraProps });
 
-    newEl.setAttribute("data-layer", label);
+    newEl.setAttribute("data-layer", name);
     if (!newEl.style.position) newEl.style.position = "absolute";
 
     if (current && current !== newEl) {
@@ -38,13 +44,13 @@ export function createElementStack({
       container.appendChild(newEl);
     }
 
-    _elements[label] = newEl;
+    _elements[name] = newEl;
     return newEl;
   }
 
-  // Initial render of all layers
-  for (const label of Object.keys(container._layerDefs)) {
-    renderLayer(label);
+  // Initial render of all layers in order
+  for (const name of container._layerOrder) {
+    renderLayer(name);
   }
 
   // Create or update stack instance on container
@@ -62,9 +68,9 @@ export function createElementStack({
 
       // Update specific layers with new props
       update(layerUpdates) {
-        for (const [label, props] of Object.entries(layerUpdates)) {
+        for (const [name, props] of Object.entries(layerUpdates)) {
           const extraProps = typeof props === "object" && props !== null ? props : {};
-          renderLayer(label, extraProps);
+          renderLayer(name, extraProps);
         }
         container.dispatchEvent(new CustomEvent("update"));
         return container._stack;
@@ -77,9 +83,9 @@ export function createElementStack({
         container.style.width = `${newWidth}px`;
         container.style.height = `${newHeight}px`;
 
-        // Render all layers at new size
-        for (const label of Object.keys(container._layerDefs)) {
-          renderLayer(label);
+        // Render all layers at new size in order
+        for (const name of container._layerOrder) {
+          renderLayer(name);
         }
         container.dispatchEvent(new CustomEvent("update"));
         return container._stack;
@@ -92,9 +98,10 @@ export function createElementStack({
     };
   } else {
     // Update existing stack's layer definitions and re-render
-    container._layerDefs = { ...layers };
-    for (const label of Object.keys(container._layerDefs)) {
-      renderLayer(label);
+    container._layerOrder = layers.map(l => l.name);
+    container._layerDefs = Object.fromEntries(layers.map(l => [l.name, l.element]));
+    for (const name of container._layerOrder) {
+      renderLayer(name);
     }
   }
 
