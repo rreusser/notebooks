@@ -3,16 +3,11 @@
  * Supports two-phase initialization: pass an existing container to reuse elements.
  */
 export function createElementStack({
-  container = null,  // Optional: existing container to reuse
-  width = 1,
-  height = 1,
+  container = document.createElement("div"),
+  width = 100,
+  height = 100,
   layers = {}
 } = {}) {
-  // Create or reuse container
-  const isNewContainer = !container;
-  if (!container) {
-    container = document.createElement("div");
-  }
   container.style.position = "relative";
   container.style.width = `${width}px`;
   container.style.height = `${height}px`;

@@ -23,6 +23,7 @@
     display(expandable(figure, {
       width: Math.min(width, 640),
       height: Math.min(480, width),
+      toggleOffset: [-10 + 4, -37 + 4],
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
@@ -49,15 +50,11 @@
   <script id="19" type="text/markdown">
     The first major step is to instantiate the stack container. This is a persistent container that will hold the plot. This awful statefulness is critical when using WebGL, because a cell dependency on the page `width` would trigger reinsantiation of the WebGL context, which inevitably leads to lost WebGL contexts and much gnashing of teeth.
   </script>
-  <script id="18" type="text/x-typescript" pinned="">
-    const stackContainer = document.createElement('div');
-  </script>
   <script id="20" type="text/markdown">
     Next, we configure the stack. The `reglElement` helper returns a function which receives the current regl element as an argument, thus preventing reinstantiation.
   </script>
   <script id="7" type="text/x-typescript" pinned="">
     const stack = createElementStack({
-      container: stackContainer,
       layers: {
         regl: reglElement(createREGL, {
           extensions: ['OES_standard_derivatives'],

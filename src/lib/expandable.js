@@ -5,10 +5,11 @@
  * @param {Object} options - Configuration options
  * @param {number} options.width - Default width when collapsed
  * @param {number} options.height - Default height when collapsed
+ * @param {number[]} [options.toggleOffset=[8,8]] - Offset [right, top] for the toggle button
  * @param {Function} [options.onResize] - Optional callback when dimensions change: (content, width, height, expanded) => void
  * @returns {HTMLElement} The expandable container
  */
-export function expandable(content, { width, height, onResize }) {
+export function expandable(content, { width, height, toggleOffset = [8, 8], onResize }) {
   let expanded = false;
   let currentWidth = width;
   let currentHeight = height;
@@ -38,8 +39,8 @@ export function expandable(content, { width, height, onResize }) {
   toggleBtn.title = 'Expand';
   toggleBtn.style.cssText = `
     position: absolute;
-    top: 8px;
-    right: 8px;
+    top: ${-toggleOffset[1]}px;
+    right: ${-toggleOffset[0]}px;
     width: 28px;
     height: 28px;
     border: none;
@@ -53,7 +54,7 @@ export function expandable(content, { width, height, onResize }) {
     align-items: center;
     justify-content: center;
     box-shadow: 0 1px 3px rgba(0,0,0,0.6);
-    transition: all 0.2s ease;
+    transition: background 0.2s ease, box-shadow 0.2s ease;
   `;
   toggleBtn.addEventListener('mouseenter', () => {
     toggleBtn.style.background = 'rgba(255, 255, 255, 1)';
@@ -109,6 +110,8 @@ export function expandable(content, { width, height, onResize }) {
     expanded = false;
     toggleBtn.innerHTML = '⤢';
     toggleBtn.title = 'Expand';
+    toggleBtn.style.top = `${-toggleOffset[1]}px`;
+    toggleBtn.style.right = `${-toggleOffset[0]}px`;
 
     // Reset container height
     container.style.height = '';
@@ -174,6 +177,8 @@ export function expandable(content, { width, height, onResize }) {
     expanded = true;
     toggleBtn.innerHTML = '✕';
     toggleBtn.title = 'Collapse';
+    toggleBtn.style.top = '8px';
+    toggleBtn.style.right = '8px';
 
     // Lock container height to preserve document flow
     // Use measured height or fall back to calculating

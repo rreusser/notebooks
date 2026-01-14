@@ -32,6 +32,7 @@ export function reglElement(createREGL, {
 }={}) {
   return function ({current, width, height}) {
     if (!current) {
+      console.log('instantiate regl');
       current = reglCanvas(createREGL, {
         extensions,
         optionalExtensions,
