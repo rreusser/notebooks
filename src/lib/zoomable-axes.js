@@ -6,6 +6,7 @@ export function createZoomableAxes({
   element,
   xScale,  // Required: scale object (d3 scale or Plot scale descriptor)
   yScale,  // Required: scale object (d3 scale or Plot scale descriptor)
+  aspectRatio = null,  // If set, enforce this aspect ratio (1 = square, height/width in data units per pixel)
   scaleExtent = [0.1, 100],
   onChange = () => {}
 }) {
@@ -17,10 +18,6 @@ export function createZoomableAxes({
   const initialXDomain = getDomain(xScale);
   const initialYDomain = getDomain(yScale);
 
-  // State
-  let xDomain = [...initialXDomain];
-  let yDomain = [...initialYDomain];
-
   // Dynamic range getters (always read from scales)
   function getXRange() {
     return getRange(xScale);
@@ -28,6 +25,29 @@ export function createZoomableAxes({
   function getYRange() {
     return getRange(yScale);
   }
+
+  // Enforce aspect ratio on domains (adjusts yDomain to match xDomain)
+  function enforceAspectRatio(xd, yd) {
+    if (aspectRatio == null) return [xd, yd];
+
+    const xr = getXRange();
+    const yr = getYRange();
+    const pixelWidth = Math.abs(xr[1] - xr[0]);
+    const pixelHeight = Math.abs(yr[1] - yr[0]);
+
+    // Calculate what yDomain height should be for the given xDomain
+    const xDataWidth = xd[1] - xd[0];
+    const targetYDataHeight = (xDataWidth * pixelHeight) / (pixelWidth * aspectRatio);
+
+    // Center the new yDomain around the current center
+    const yCenter = (yd[0] + yd[1]) / 2;
+    const newYDomain = [yCenter - targetYDataHeight / 2, yCenter + targetYDataHeight / 2];
+
+    return [xd, newYDomain];
+  }
+
+  // State (apply aspect ratio to initial domains)
+  let [xDomain, yDomain] = enforceAspectRatio([...initialXDomain], [...initialYDomain]);
 
   // Pre-allocated matrices (reused to avoid GC)
   const view = new Float32Array(16);
@@ -69,8 +89,9 @@ export function createZoomableAxes({
     .on("end", () => selection.style("cursor", "grab"))
     .on("zoom", (event) => {
       syncRanges();  // Keep internal scales in sync with external scale ranges
-      xDomain = event.transform.rescaleX(xScaleD3).domain();
-      yDomain = event.transform.rescaleY(yScaleD3).domain();
+      const newXDomain = event.transform.rescaleX(xScaleD3).domain();
+      const newYDomain = event.transform.rescaleY(yScaleD3).domain();
+      [xDomain, yDomain] = enforceAspectRatio(newXDomain, newYDomain);
       updateMatrices();
       onChange({ xDomain, yDomain, xRange: getXRange(), yRange: getYRange() });
     });

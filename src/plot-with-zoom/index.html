@@ -62,6 +62,7 @@
       element: stack.svg,
       xScale: stack.plot.scale("x"),
       yScale: stack.plot.scale("y"),
+      aspectRatio: 1,
       onChange: ({ xDomain, yDomain }) => {
         regl.dirty = true;
         stackEl.update({
