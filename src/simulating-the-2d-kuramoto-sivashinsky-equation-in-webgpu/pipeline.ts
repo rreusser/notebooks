@@ -312,7 +312,7 @@ export async function createKSPipelines(
     ]
   });
 
-  // Visualize: V buffer + params + colorscale texture + sampler
+  // Visualize: V buffer + params + colorscale texture + sampler + viewInverse
   const visualizeBindGroupLayout = device.createBindGroupLayout({
     label: 'Visualize bind group layout',
     entries: [
@@ -335,6 +335,11 @@ export async function createKSPipelines(
         binding: 3,
         visibility: GPUShaderStage.FRAGMENT,
         sampler: { type: 'filtering' as GPUSamplerBindingType }
+      },
+      {
+        binding: 4,
+        visibility: GPUShaderStage.FRAGMENT,
+        buffer: { type: 'uniform' as GPUBufferBindingType }
       }
     ]
   });

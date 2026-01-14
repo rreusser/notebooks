@@ -88,39 +88,45 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     const restart = view(restartInput);
   </script>
   <script id="7" type="module">
-    // Create plot overlay with axes (updated reactively in script 26)
-    function createPlotOverlay(dims) {
-      const { totalW, totalH, Lx, Ly } = dims;
-      const plot = Plot.plot({
-        width: totalW,
-        height: totalH,
-        marginTop: margins.top,
-        marginRight: margins.right,
-        marginBottom: margins.bottom,
-        marginLeft: margins.left,
-        style: { background: 'transparent' },
-        x: { domain: [0, Lx], label: 'x' },
-        y: { domain: [0, Ly], label: 'y' },
-        marks: []
-      });
-      plot.style.position = 'absolute';
-      plot.style.left = '0';
-      plot.style.top = '0';
-      plot.style.pointerEvents = 'none';
-      return plot;
-    }
+    // Set up zoomable axes using the plot's scales
+    // Bind to the SVG layer (on top) for capturing mouse events
+    const axes = createZoomableAxes({
+      d3,
+      element: stack.elements.svg,
+      xScale: stack.elements.plot.scale('x'),
+      yScale: stack.elements.plot.scale('y'),
+      aspectRatio: 1,
+      onChange: ({ xDomain, yDomain }) => {
+        // Render with new view when zoom/pan changes
+        simState.dirty = true;
+        // Update the plot with new domains
+        const newPlot = createPlotElement(stack.width, stack.height, xDomain, yDomain, simParams.Lx, simParams.Lx / simParams.aspectRatio);
+        stack.elements.plot.replaceWith(newPlot);
+        stack.elements.plot = newPlot;
+        stack.dispatchEvent(new CustomEvent('update'));
+      }
+    });
 
-    let plotOverlay = createPlotOverlay(resizeCanvas(width, 1, 64));
-    container.appendChild(plotOverlay);
+    // Track whether we need to re-render
+    stack.addEventListener('update', () => { simState.dirty = true; });
 
-    function updatePlotOverlay(dims) {
-      const newPlot = createPlotOverlay(dims);
-      plotOverlay.replaceWith(newPlot);
-      plotOverlay = newPlot;
-    }
+    // Create the expandable figure wrapper
+    const figure = html`<figure style="margin: 0;">${stack.element}</figure>`;
 
-    const figure = html`<figure style="display: flex; justify-content: center; margin: 0;">${container}</figure>`;
-    display(figure);
+    display(expandable(figure, {
+      width: Math.min(width, 640),
+      height: Math.min(480, width),
+      toggleOffset: [-6, -15],
+      onResize(el, w, h) {
+        const dims = computeDimensions(w, simParams.aspectRatio, simParams.Lx);
+        stack.resize(dims.totalW, dims.totalH);
+        axes.updateScales(
+          stack.elements.plot.scale('x'),
+          stack.elements.plot.scale('y')
+        );
+        simState.dirty = true;
+      }
+    }));
   </script>
   <script id="8" type="module">
     display(statusEl);
@@ -219,6 +225,9 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
   <script id="19" type="module">
     import { createKSPipelines } from './pipeline.js';
     import { executeFFT2D } from './fft.js';
+    import { createElementStack } from './lib/element-stack.js';
+    import { createZoomableAxes } from './lib/zoomable-axes.js';
+    import { expandable } from './lib/expandable.js';
   </script>
   <script id="20" type="module">
     const gridN = N;
@@ -330,6 +339,12 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    // View inverse matrix buffer for zoom/pan
+    const viewInverseBuffer = device.createBuffer({
+      size: 64, // 4x4 matrix of f32
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
     // Cleanup on invalidation
     // Note: We don't explicitly destroy buffers here because the animation loop
     // may still have pending callbacks that reference them. WebGPU will garbage
@@ -379,73 +394,125 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
   </script>
   <script id="25" type="module">
     // Plot margins - canvas will be positioned inside these
-    const margins = { top: 5, right: 5, bottom: 25, left: 35 };
+    const margins = { top: 20, right: 10, bottom: 20, left: 40 };
 
-    // Container for stacking canvas and plot
-    const container = html`<div style="position: relative;"></div>`;
+    // Create the WebGPU canvas element and context
+    // This will be managed by the element stack but we need the context reference
+    let canvas = null;
+    let gpuContext = null;
 
-    // WebGPU canvas - will be positioned absolutely within container
-    // Hidden initially until initialization completes
-    const canvas = document.createElement('canvas');
-    canvas.style.position = 'absolute';
-    canvas.style.visibility = 'hidden';
-    const gpuContext = canvas.getContext('webgpu');
-
-    // Function to resize canvas and container based on available width and aspect ratio
-    // Returns the plot dimensions for creating the overlay
-    function resizeCanvas(availableWidth, ar, Lx) {
+    // Helper to create the WebGPU canvas layer
+    function webgpuCanvasElement({ current, width, height }) {
       const dpr = window.devicePixelRatio || 1;
-      const Ly = Lx / ar;
-
-      // Total container size (plot area + margins)
-      // Canvas area dimensions (inside margins)
-      let canvasW, canvasH;
-      const maxCanvasW = availableWidth - margins.left - margins.right;
-
-      if (ar >= 1) {
-        canvasW = maxCanvasW;
-        canvasH = Math.floor(maxCanvasW / ar);
+      if (current) {
+        canvas = current;
       } else {
-        canvasH = maxCanvasW;
-        canvasW = Math.floor(maxCanvasW * ar);
+        canvas = document.createElement('canvas');
+        canvas.style.position = 'absolute';
+        gpuContext = canvas.getContext('webgpu');
+        gpuContext.configure({
+          device,
+          format: canvasFormat,
+          alphaMode: 'opaque'
+        });
       }
 
-      const totalW = canvasW + margins.left + margins.right;
-      const totalH = canvasH + margins.top + margins.bottom;
+      // Compute canvas size from stack size minus margins
+      const canvasW = width - margins.left - margins.right;
+      const canvasH = height - margins.top - margins.bottom;
 
-      // Size container
-      container.style.width = `${totalW}px`;
-      container.style.height = `${totalH}px`;
-
-      // Position and size canvas within container
       canvas.style.left = `${margins.left}px`;
       canvas.style.top = `${margins.top}px`;
       canvas.style.width = `${canvasW}px`;
       canvas.style.height = `${canvasH}px`;
-
-      // Physical pixels for WebGPU
       canvas.width = Math.floor(canvasW * dpr);
       canvas.height = Math.floor(canvasH * dpr);
 
-      gpuContext.configure({
-        device,
-        format: canvasFormat,
-        alphaMode: 'opaque'
-      });
+      // Reconfigure on resize
+      if (gpuContext) {
+        gpuContext.configure({
+          device,
+          format: canvasFormat,
+          alphaMode: 'opaque'
+        });
+      }
 
-      return { totalW, totalH, canvasW, canvasH, Lx, Ly };
+      return canvas;
     }
 
-    // Initial sizing
-    resizeCanvas(width, 1, 64);
-    container.appendChild(canvas);
+    // Helper to create the Observable Plot layer
+    function createPlotElement(width, height, xDomain = [0, 1], yDomain = [0, 1], domainLx, domainLy) {
+      return Plot.plot({
+        width,
+        height,
+        marginTop: margins.top,
+        marginRight: margins.right,
+        marginBottom: margins.bottom,
+        marginLeft: margins.left,
+        style: { backgroundColor: 'transparent', maxWidth: 'none', position: 'absolute' },
+        x: { domain: xDomain, tickSpacing: 80, label: 'x' },
+        y: { domain: yDomain, tickSpacing: 80, label: 'y' },
+        marks: [
+          // Show fundamental domain boundary
+          Plot.rect([{ x1: 0, y1: 0, x2: domainLx, y2: domainLy }], {
+            x1: 'x1', y1: 'y1', x2: 'x2', y2: 'y2',
+            stroke: 'rgba(255,255,255,0.5)', strokeWidth: 2, fill: 'none'
+          })
+        ]
+      });
+    }
+
+    // Compute initial dimensions (always square canvas)
+    function computeDimensions(availableWidth, ar, domainLx) {
+      const Ly = domainLx / ar;
+      const maxCanvasW = availableWidth - margins.left - margins.right;
+      const canvasW = maxCanvasW;
+      const canvasH = maxCanvasW; // Always square
+
+      const totalW = canvasW + margins.left + margins.right;
+      const totalH = canvasH + margins.top + margins.bottom;
+      return { totalW, totalH, Lx: domainLx, Ly };
+    }
+
+    // Create element stack with WebGPU canvas, Plot, and SVG (for zoom) layers
+    const initialDims = computeDimensions(Math.min(width, 640), 1, 64);
+    const stack = createElementStack({
+      width: initialDims.totalW,
+      height: initialDims.totalH,
+      layers: [
+        { id: 'canvas', element: webgpuCanvasElement },
+        {
+          id: 'plot',
+          element: ({ width, height }) =>
+            createPlotElement(width, height, [0, initialDims.Lx], [0, initialDims.Ly], initialDims.Lx, initialDims.Ly)
+        },
+        {
+          id: 'svg',
+          element: ({ current, width, height }) =>
+            (current ? d3.select(current) : d3.create("svg"))
+              .attr("width", width)
+              .attr("height", height)
+              .style("position", "absolute")
+              .node()
+        }
+      ]
+    });
   </script>
   <script id="26" type="module">
     // Re-render when width, aspectRatio, or Lx changes
     // Also show canvas after initialization completes
     width; aspectRatio; Lx; initComplete;
-    const dims = resizeCanvas(width, aspectRatio, Lx);
-    updatePlotOverlay(dims);
+    const dims = computeDimensions(Math.min(width, 640), aspectRatio, Lx);
+    stack.resize(dims.totalW, dims.totalH);
+    // Update plot with new domains
+    const newPlot = createPlotElement(stack.width, stack.height, axes.xDomain, axes.yDomain, Lx, Lx / aspectRatio);
+    stack.elements.plot.replaceWith(newPlot);
+    stack.elements.plot = newPlot;
+    axes.updateScales(
+      stack.elements.plot.scale('x'),
+      stack.elements.plot.scale('y')
+    );
+    simState.dirty = true;
     render();
     canvas.style.visibility = 'visible';
   </script>
@@ -453,7 +520,8 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     const simState = {
       timeLevel: 0,
       time: 0,
-      stepCount: 0
+      stepCount: 0,
+      dirty: true
     };
 
     // Shared params object - updated reactively but read without creating dependencies
@@ -512,10 +580,12 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
 
     // Update visualization uniforms from simParams
     function updateVisUniforms() {
-      const data = new ArrayBuffer(16);
+      const Ly = simParams.Lx / simParams.aspectRatio;
+      const data = new ArrayBuffer(24);
       new Uint32Array(data, 0, 2).set([N, N]);
       new Float32Array(data, 8, 1).set([simParams.contrast / (1 - simParams.contrast)]);
       new Uint32Array(data, 12, 1).set([simParams.invert ? 1 : 0]);
+      new Float32Array(data, 16, 2).set([simParams.Lx, Ly]); // domainSize
       device.queue.writeBuffer(visParamsBuffer, 0, data);
 
       // Update colorscale texture
@@ -725,6 +795,9 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     function render() {
       updateVisUniforms();
 
+      // Update viewInverse buffer from axes
+      device.queue.writeBuffer(viewInverseBuffer, 0, axes.viewInverse);
+
       const currentVhat = Vhat[simState.timeLevel % 3];
       runFFT2D(currentVhat, V, temp, false);
 
@@ -734,7 +807,8 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
           { binding: 0, resource: { buffer: V } },
           { binding: 1, resource: { buffer: visParamsBuffer } },
           { binding: 2, resource: colorscaleTexture.createView() },
-          { binding: 3, resource: colorscaleSampler }
+          { binding: 3, resource: colorscaleSampler },
+          { binding: 4, resource: { buffer: viewInverseBuffer } }
         ]
       });
 
@@ -781,6 +855,11 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
             await step();
           }
           render();
+          simState.dirty = false;
+        } else if (simState.dirty) {
+          // Re-render when dirty (e.g., after zoom/pan while paused)
+          render();
+          simState.dirty = false;
         }
         animFrameId = requestAnimationFrame(animationLoop);
       } catch (e) {

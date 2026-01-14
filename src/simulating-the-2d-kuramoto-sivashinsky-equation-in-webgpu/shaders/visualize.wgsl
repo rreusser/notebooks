@@ -5,6 +5,7 @@
 // - Clamps values to [range.x, range.y]
 // - Maps through smooth ramp function
 // - Applies colorscale lookup
+// - Supports zoom/pan via viewInverse matrix with periodic wrapping
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -15,12 +16,14 @@ struct VisualizeParams {
   resolution: vec2<u32>,
   contrast: f32,     // multiplier for colorscale mapping
   invert: u32,       // 0 or 1
+  domainSize: vec2<f32>, // Lx, Ly for normalizing data coords to UV
 }
 
 @group(0) @binding(0) var<storage, read> V: array<vec2<f32>>;
 @group(0) @binding(1) var<uniform> params: VisualizeParams;
 @group(0) @binding(2) var colorscale_texture: texture_2d<f32>;
 @group(0) @binding(3) var colorscale_sampler: sampler;
+@group(0) @binding(4) var<uniform> viewInverse: mat4x4<f32>;
 
 // Smooth ramp function
 fn ramp(x: f32) -> f32 {
@@ -28,12 +31,14 @@ fn ramp(x: f32) -> f32 {
   return 0.5 + atan(PI * (x - 0.5)) / PI;
 }
 
-// Sample V buffer with bounds checking
+// Sample V buffer with periodic wrapping
 fn sampleV(x: i32, y: i32, res: vec2<u32>) -> f32 {
-  // Clamp to valid range
-  let cx = clamp(x, 0, i32(res.x) - 1);
-  let cy = clamp(y, 0, i32(res.y) - 1);
-  let idx = u32(cy) * res.x + u32(cx);
+  // Wrap coordinates periodically
+  var wx = x % i32(res.x);
+  var wy = y % i32(res.y);
+  if (wx < 0) { wx += i32(res.x); }
+  if (wy < 0) { wy += i32(res.y); }
+  let idx = u32(wy) * res.x + u32(wx);
   return V[idx].x;
 }
 
@@ -42,12 +47,17 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
   let resolution = params.resolution;
   let res_f = vec2<f32>(resolution);
 
-  // Clamp UV to valid range
-  let uv_clamped = clamp(input.uv, vec2<f32>(0.0), vec2<f32>(1.0));
+  // Transform UV through viewInverse for zoom/pan
+  // UV [0,1] -> clip space [-1,1] -> data space [0,Lx]×[0,Ly] via viewInverse -> UV [0,1]
+  let clip = vec4<f32>(input.uv * 2.0 - 1.0, 0.0, 1.0);
+  let data = viewInverse * clip;
+
+  // Normalize data coordinates to UV [0,1] by dividing by domain size
+  let uv_transformed = data.xy / params.domainSize;
 
   // Convert to pixel coordinates (centered on pixels)
   // UV 0 maps to pixel center 0.5, UV 1 maps to pixel center (N-0.5)
-  let pixel_coord = uv_clamped * res_f - vec2<f32>(0.5);
+  let pixel_coord = uv_transformed * res_f - vec2<f32>(0.5);
 
   // Get integer pixel coordinates for the 4 surrounding pixels
   let x0 = i32(floor(pixel_coord.x));

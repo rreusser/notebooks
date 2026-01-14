@@ -1,4 +1,4 @@
-import{createFFTPipelines as R}from"./fft-CMRdeOur.js";const q=`// Initialize Shader
+import{createFFTPipelines as N}from"./fft-CMRdeOur.js";const R=`// Initialize Shader
 //
 // Creates initial conditions for the Kuramoto-Sivashinsky equation.
 // Default: f(x,y) = sin(n*(x+y)) + sin(n*x) + sin(n*y)
@@ -37,7 +37,7 @@ fn initialize(@builtin(global_invocation_id) global_id: vec3<u32>) {
   // Store as complex number (real part only, imaginary = 0)
   output[idx] = vec2<f32>(f, 0.0);
 }
-`,N=`// Differentiation in Frequency Domain
+`,q=`// Differentiation in Frequency Domain
 //
 // Computes spatial derivatives via multiplication by i·k in frequency domain:
 // - ∂V/∂x = IFFT(i·kx·Vhat)
@@ -453,6 +453,7 @@ fn fullscreen(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 // - Clamps values to [range.x, range.y]
 // - Maps through smooth ramp function
 // - Applies colorscale lookup
+// - Supports zoom/pan via viewInverse matrix with periodic wrapping
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
@@ -463,12 +464,14 @@ struct VisualizeParams {
   resolution: vec2<u32>,
   contrast: f32,     // multiplier for colorscale mapping
   invert: u32,       // 0 or 1
+  domainSize: vec2<f32>, // Lx, Ly for normalizing data coords to UV
 }
 
 @group(0) @binding(0) var<storage, read> V: array<vec2<f32>>;
 @group(0) @binding(1) var<uniform> params: VisualizeParams;
 @group(0) @binding(2) var colorscale_texture: texture_2d<f32>;
 @group(0) @binding(3) var colorscale_sampler: sampler;
+@group(0) @binding(4) var<uniform> viewInverse: mat4x4<f32>;
 
 // Smooth ramp function
 fn ramp(x: f32) -> f32 {
@@ -476,12 +479,14 @@ fn ramp(x: f32) -> f32 {
   return 0.5 + atan(PI * (x - 0.5)) / PI;
 }
 
-// Sample V buffer with bounds checking
+// Sample V buffer with periodic wrapping
 fn sampleV(x: i32, y: i32, res: vec2<u32>) -> f32 {
-  // Clamp to valid range
-  let cx = clamp(x, 0, i32(res.x) - 1);
-  let cy = clamp(y, 0, i32(res.y) - 1);
-  let idx = u32(cy) * res.x + u32(cx);
+  // Wrap coordinates periodically
+  var wx = x % i32(res.x);
+  var wy = y % i32(res.y);
+  if (wx < 0) { wx += i32(res.x); }
+  if (wy < 0) { wy += i32(res.y); }
+  let idx = u32(wy) * res.x + u32(wx);
   return V[idx].x;
 }
 
@@ -490,12 +495,17 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
   let resolution = params.resolution;
   let res_f = vec2<f32>(resolution);
 
-  // Clamp UV to valid range
-  let uv_clamped = clamp(input.uv, vec2<f32>(0.0), vec2<f32>(1.0));
+  // Transform UV through viewInverse for zoom/pan
+  // UV [0,1] -> clip space [-1,1] -> data space [0,Lx]×[0,Ly] via viewInverse -> UV [0,1]
+  let clip = vec4<f32>(input.uv * 2.0 - 1.0, 0.0, 1.0);
+  let data = viewInverse * clip;
+
+  // Normalize data coordinates to UV [0,1] by dividing by domain size
+  let uv_transformed = data.xy / params.domainSize;
 
   // Convert to pixel coordinates (centered on pixels)
   // UV 0 maps to pixel center 0.5, UV 1 maps to pixel center (N-0.5)
-  let pixel_coord = uv_clamped * res_f - vec2<f32>(0.5);
+  let pixel_coord = uv_transformed * res_f - vec2<f32>(0.5);
 
   // Get integer pixel coordinates for the 4 surrounding pixels
   let x0 = i32(floor(pixel_coord.x));
@@ -535,4 +545,4 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
 
   return vec4<f32>(color.rgb, 1.0);
 }
-`;async function $(e,d,p){const c=R(e,p),f=e.createShaderModule({label:"Initialize shader",code:q}),y=e.createShaderModule({label:"Differentiate shader",code:N}),x=e.createShaderModule({label:"Extract mixed derivatives shader",code:K}),m=e.createShaderModule({label:"Compute AB shader",code:W}),v=e.createShaderModule({label:"Pack ABhat shader",code:j}),g=e.createShaderModule({label:"Compute nonlinear shader",code:H}),b=e.createShaderModule({label:"BDF update shader",code:Y}),h=e.createShaderModule({label:"Extract real shader",code:Z}),_=e.createShaderModule({label:"Fullscreen vertex shader",code:J}),P=e.createShaderModule({label:"Visualize shader",code:Q}),n=e.createBindGroupLayout({label:"Initialize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),t=e.createBindGroupLayout({label:"Differentiate bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=e.createBindGroupLayout({label:"Extract mixed derivatives bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),i=e.createBindGroupLayout({label:"Compute AB bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),r=e.createBindGroupLayout({label:"Pack ABhat bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),o=e.createBindGroupLayout({label:"Compute nonlinear bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),l=e.createBindGroupLayout({label:"BDF update bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:4,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:5,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),u=e.createBindGroupLayout({label:"Extract real bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),s=e.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:"float"}},{binding:3,visibility:GPUShaderStage.FRAGMENT,sampler:{type:"filtering"}}]}),V=e.createPipelineLayout({label:"Initialize pipeline layout",bindGroupLayouts:[n]}),B=e.createPipelineLayout({label:"Differentiate pipeline layout",bindGroupLayouts:[t]}),S=e.createPipelineLayout({label:"Extract mixed derivatives pipeline layout",bindGroupLayouts:[a]}),A=e.createPipelineLayout({label:"Compute AB pipeline layout",bindGroupLayouts:[i]}),C=e.createPipelineLayout({label:"Pack ABhat pipeline layout",bindGroupLayouts:[r]}),U=e.createPipelineLayout({label:"Compute nonlinear pipeline layout",bindGroupLayouts:[o]}),k=e.createPipelineLayout({label:"BDF update pipeline layout",bindGroupLayouts:[l]}),G=e.createPipelineLayout({label:"Extract real pipeline layout",bindGroupLayouts:[u]}),M=e.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[s]}),F=e.createComputePipeline({label:"Initialize pipeline",layout:V,compute:{module:f,entryPoint:"initialize"}}),E=e.createComputePipeline({label:"Differentiate pipeline",layout:B,compute:{module:y,entryPoint:"differentiate"}}),T=e.createComputePipeline({label:"Extract mixed derivatives pipeline",layout:S,compute:{module:x,entryPoint:"extract_mixed_derivatives"}}),z=e.createComputePipeline({label:"Compute AB pipeline",layout:A,compute:{module:m,entryPoint:"compute_ab"}}),w=e.createComputePipeline({label:"Pack ABhat pipeline",layout:C,compute:{module:v,entryPoint:"pack_abhat"}}),L=e.createComputePipeline({label:"Compute nonlinear pipeline",layout:U,compute:{module:g,entryPoint:"compute_nonlinear"}}),O=e.createComputePipeline({label:"BDF update pipeline",layout:k,compute:{module:b,entryPoint:"bdf_update"}}),D=e.createComputePipeline({label:"Extract real pipeline",layout:G,compute:{module:h,entryPoint:"extract_real"}}),I=e.createRenderPipeline({label:"Visualize pipeline",layout:M,vertex:{module:_,entryPoint:"fullscreen"},fragment:{module:P,entryPoint:"visualize",targets:[{format:d}]},primitive:{topology:"triangle-list"}});return{fft:c,initialize:F,differentiate:E,extractMixedDerivatives:T,computeAB:z,packABhat:w,computeNonlinear:L,bdfUpdate:O,extractReal:D,visualize:I,bindGroupLayouts:{initialize:n,differentiate:t,extractMixedDerivatives:a,computeAB:i,packABhat:r,computeNonlinear:o,bdfUpdate:l,extractReal:u,visualize:s}}}export{$ as createKSPipelines};
+`;async function $(e,d,p){const c=N(e,p),f=e.createShaderModule({label:"Initialize shader",code:R}),y=e.createShaderModule({label:"Differentiate shader",code:q}),x=e.createShaderModule({label:"Extract mixed derivatives shader",code:K}),m=e.createShaderModule({label:"Compute AB shader",code:W}),v=e.createShaderModule({label:"Pack ABhat shader",code:j}),g=e.createShaderModule({label:"Compute nonlinear shader",code:H}),b=e.createShaderModule({label:"BDF update shader",code:Y}),h=e.createShaderModule({label:"Extract real shader",code:Z}),_=e.createShaderModule({label:"Fullscreen vertex shader",code:J}),P=e.createShaderModule({label:"Visualize shader",code:Q}),n=e.createBindGroupLayout({label:"Initialize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),t=e.createBindGroupLayout({label:"Differentiate bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=e.createBindGroupLayout({label:"Extract mixed derivatives bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),i=e.createBindGroupLayout({label:"Compute AB bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),r=e.createBindGroupLayout({label:"Pack ABhat bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),o=e.createBindGroupLayout({label:"Compute nonlinear bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),l=e.createBindGroupLayout({label:"BDF update bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:4,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:5,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),u=e.createBindGroupLayout({label:"Extract real bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),s=e.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,texture:{sampleType:"float"}},{binding:3,visibility:GPUShaderStage.FRAGMENT,sampler:{type:"filtering"}},{binding:4,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),V=e.createPipelineLayout({label:"Initialize pipeline layout",bindGroupLayouts:[n]}),B=e.createPipelineLayout({label:"Differentiate pipeline layout",bindGroupLayouts:[t]}),S=e.createPipelineLayout({label:"Extract mixed derivatives pipeline layout",bindGroupLayouts:[a]}),A=e.createPipelineLayout({label:"Compute AB pipeline layout",bindGroupLayouts:[i]}),U=e.createPipelineLayout({label:"Pack ABhat pipeline layout",bindGroupLayouts:[r]}),k=e.createPipelineLayout({label:"Compute nonlinear pipeline layout",bindGroupLayouts:[o]}),C=e.createPipelineLayout({label:"BDF update pipeline layout",bindGroupLayouts:[l]}),G=e.createPipelineLayout({label:"Extract real pipeline layout",bindGroupLayouts:[u]}),w=e.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[s]}),M=e.createComputePipeline({label:"Initialize pipeline",layout:V,compute:{module:f,entryPoint:"initialize"}}),F=e.createComputePipeline({label:"Differentiate pipeline",layout:B,compute:{module:y,entryPoint:"differentiate"}}),z=e.createComputePipeline({label:"Extract mixed derivatives pipeline",layout:S,compute:{module:x,entryPoint:"extract_mixed_derivatives"}}),E=e.createComputePipeline({label:"Compute AB pipeline",layout:A,compute:{module:m,entryPoint:"compute_ab"}}),T=e.createComputePipeline({label:"Pack ABhat pipeline",layout:U,compute:{module:v,entryPoint:"pack_abhat"}}),L=e.createComputePipeline({label:"Compute nonlinear pipeline",layout:k,compute:{module:g,entryPoint:"compute_nonlinear"}}),O=e.createComputePipeline({label:"BDF update pipeline",layout:C,compute:{module:b,entryPoint:"bdf_update"}}),D=e.createComputePipeline({label:"Extract real pipeline",layout:G,compute:{module:h,entryPoint:"extract_real"}}),I=e.createRenderPipeline({label:"Visualize pipeline",layout:w,vertex:{module:_,entryPoint:"fullscreen"},fragment:{module:P,entryPoint:"visualize",targets:[{format:d}]},primitive:{topology:"triangle-list"}});return{fft:c,initialize:M,differentiate:F,extractMixedDerivatives:z,computeAB:E,packABhat:T,computeNonlinear:L,bdfUpdate:O,extractReal:D,visualize:I,bindGroupLayouts:{initialize:n,differentiate:t,extractMixedDerivatives:a,computeAB:i,packABhat:r,computeNonlinear:o,bdfUpdate:l,extractReal:u,visualize:s}}}export{$ as createKSPipelines};
