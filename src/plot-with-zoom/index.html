@@ -55,20 +55,17 @@
     const stack = el.value;
     const regl = stack.regl.value;
 
-    // Create zoomable axes (rendering-agnostic)
+    regl.dirty = true;
+
     const axes = createZoomableAxes({
       d3,
       element: stack.svg,
       xScale: stack.plot.scale("x"),
       yScale: stack.plot.scale("y"),
       onChange: ({ xDomain, yDomain }) => {
-        createElementStack({
-          container: stackEl,
-          width: plotWidth,
-          height: plotHeight,
-          layers: {
-            plot: ({ width, height }) => createPlot({width, height, xDomain, yDomain})
-          }
+        regl.dirty = true;
+        stackEl.update({
+          plot: ({ width, height }) => createPlot({width, height, xDomain, yDomain})
         });
       }
     });
@@ -115,9 +112,9 @@
   </script>
   <script id="6" type="text/x-typescript" pinned="">
     let loop = regl.frame(() => {
-      if (!axes.dirty) return;
+      if (!regl.dirty) return;
       drawGradient({ viewInverse: axes.viewInverse });
-      axes.dirty = false;
+      regl.dirty = false;
     });
 
     invalidation.then(() => loop?.cancel());

@@ -10,9 +10,14 @@ export function createElementStack({
   height = null,
   layers = {},
   onResize = null
-} = {}
-) {
+} = {}) {
   container = container ?? initializeElementStack();
+
+  // Store dimensions for later updates
+  if (width != null) container._width = width;
+  if (height != null) container._height = height;
+
+  // Set up resize observer once
   const handler = container.getAttribute('data-on-resize');
   if (onResize && !handler) {
     const observer = new ResizeObserver(([{ contentRect }]) => {
@@ -22,25 +27,42 @@ export function createElementStack({
     observer.observe(container);
     container.setAttribute('data-on-resize', onResize);
   }
-  const stack = {};
-  let defaultZindex = 0;
-  for (const [label, props] of Object.entries(layers)) {
-    const layer = typeof props === "function" ? props : props.layer;
-    const id = `element-stack-layer-${label}`;
-    const current = container.querySelector(`#${id}`);
-    const newEl = layer({ current, width, height });
-    newEl.setAttribute("id", id);
-    if (!newEl.style.position) newEl.style.position = "absolute";
-    stack[label] = newEl;
-    if (current) {
-      current.replaceWith(newEl);
-    } else {
-      container.appendChild(newEl);
-    }
+
+  // Initialize stack if needed
+  container.value = container.value || {};
+
+  // Add update method
+  if (!container.update) {
+    container.update = function(newLayers) {
+      const w = container._width;
+      const h = container._height;
+      const stack = container.value;
+
+      for (const [label, props] of Object.entries(newLayers)) {
+        const layer = typeof props === "function" ? props : props.layer;
+        const id = `element-stack-layer-${label}`;
+        const current = container.querySelector(`#${id}`);
+        const newEl = layer({ current, width: w, height: h });
+        newEl.setAttribute("id", id);
+        if (!newEl.style.position) newEl.style.position = "absolute";
+        stack[label] = newEl;
+        if (current) {
+          current.replaceWith(newEl);
+        } else {
+          container.appendChild(newEl);
+        }
+      }
+      return stack;
+    };
   }
+
+  // Apply initial layers
+  container.update(layers);
+
+  // Set container dimensions
   if (width) container.style.width = `${width}px`;
   if (height) container.style.height = `${height}px`;
-  container.value = stack;
+
   return container;
 }
 

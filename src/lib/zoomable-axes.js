@@ -18,7 +18,6 @@ export function createZoomableAxes({
   const initialYDomain = getDomain(yScale);
 
   // State
-  let dirty = true;
   let xDomain = [...initialXDomain];
   let yDomain = [...initialYDomain];
 
@@ -73,7 +72,6 @@ export function createZoomableAxes({
       xDomain = event.transform.rescaleX(xScaleD3).domain();
       yDomain = event.transform.rescaleY(yScaleD3).domain();
       updateMatrices();
-      dirty = true;
       onChange({ xDomain, yDomain, xRange: getXRange(), yRange: getYRange() });
     });
 
@@ -83,8 +81,6 @@ export function createZoomableAxes({
 
   // Return the axes object
   const axes = {
-    get dirty() { return dirty; },
-    set dirty(v) { dirty = v; },
     get xDomain() { return xDomain; },
     get yDomain() { return yDomain; },
     get xRange() { return getXRange(); },
