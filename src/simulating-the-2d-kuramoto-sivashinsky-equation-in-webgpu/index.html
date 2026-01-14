@@ -115,11 +115,10 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
 
     display(expandable(figure, {
       width: Math.min(width, 640),
-      height: Math.min(480, width),
+      height: Math.min(width, 640),
       toggleOffset: [-6, -15],
       onResize(el, w, h) {
-        const dims = computeDimensions(w, simParams.aspectRatio, simParams.Lx);
-        stack.resize(dims.totalW, dims.totalH);
+        stack.resize(w, h);
         axes.updateScales(
           stack.elements.plot.scale('x'),
           stack.elements.plot.scale('y')
@@ -394,7 +393,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
   </script>
   <script id="25" type="module">
     // Plot margins - canvas will be positioned inside these
-    const margins = { top: 20, right: 10, bottom: 20, left: 40 };
+    const margins = { top: 20, right: 10, bottom: 30, left: 40 };
 
     // Create the WebGPU canvas element and context
     // This will be managed by the element stack but we need the context reference
@@ -462,12 +461,26 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       });
     }
 
-    // Compute initial dimensions (always square canvas)
-    function computeDimensions(availableWidth, ar, domainLx) {
+    // Compute dimensions based on aspect ratio, optionally constrained by max height
+    function computeDimensions(availableWidth, ar, domainLx, availableHeight = Infinity) {
       const Ly = domainLx / ar;
       const maxCanvasW = availableWidth - margins.left - margins.right;
-      const canvasW = maxCanvasW;
-      const canvasH = maxCanvasW; // Always square
+      const maxCanvasH = availableHeight - margins.top - margins.bottom;
+      let canvasW, canvasH;
+
+      if (ar >= 1) {
+        canvasW = maxCanvasW;
+        canvasH = Math.floor(maxCanvasW / ar);
+      } else {
+        canvasH = maxCanvasW;
+        canvasW = Math.floor(maxCanvasW * ar);
+      }
+
+      // If height exceeds available, scale down to fit
+      if (canvasH > maxCanvasH) {
+        canvasH = maxCanvasH;
+        canvasW = Math.floor(maxCanvasH * ar);
+      }
 
       const totalW = canvasW + margins.left + margins.right;
       const totalH = canvasH + margins.top + margins.bottom;
@@ -475,16 +488,21 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     }
 
     // Create element stack with WebGPU canvas, Plot, and SVG (for zoom) layers
-    const initialDims = computeDimensions(Math.min(width, 640), 1, 64);
+    // Default domain: Lx=64, Ly=64 (aspectRatio=1)
+    const initialSize = Math.min(width, 640);
+    const initialW = initialSize;
+    const initialH = initialSize;
+    const initialLx = 64;
+    const initialLy = 64;
     const stack = createElementStack({
-      width: initialDims.totalW,
-      height: initialDims.totalH,
+      width: initialW,
+      height: initialH,
       layers: [
         { id: 'canvas', element: webgpuCanvasElement },
         {
           id: 'plot',
           element: ({ width, height }) =>
-            createPlotElement(width, height, [0, initialDims.Lx], [0, initialDims.Ly], initialDims.Lx, initialDims.Ly)
+            createPlotElement(width, height, [0, initialLx], [0, initialLy], initialLx, initialLy)
         },
         {
           id: 'svg',
@@ -502,8 +520,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     // Re-render when width, aspectRatio, or Lx changes
     // Also show canvas after initialization completes
     width; aspectRatio; Lx; initComplete;
-    const dims = computeDimensions(Math.min(width, 640), aspectRatio, Lx);
-    stack.resize(dims.totalW, dims.totalH);
+    stack.resize(Math.min(width, 640), Math.min(width, 640));
     // Update plot with new domains
     const newPlot = createPlotElement(stack.width, stack.height, axes.xDomain, axes.yDomain, Lx, Lx / aspectRatio);
     stack.elements.plot.replaceWith(newPlot);

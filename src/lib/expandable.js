@@ -150,7 +150,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
 
     // Restore figure margin
     const figure = contentWrapper.querySelector('figure');
-    if (figure) figure.style.margin = '';
+    if (figure) figure.style.margin = figure._savedMargin ?? '';
 
     setDimensions(width, height);
 
@@ -167,9 +167,11 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     const viewportHeight = window.innerHeight;
     const padding = 16;
 
-    // Use available space - plot axes will handle their own aspect ratio
-    const expandedWidth = Math.min(viewportWidth * 0.9, 1200) - padding * 2;
-    const expandedHeight = Math.min(viewportHeight * 0.8, 900) - padding * 2;
+    // Use available space with fixed insets rather than proportional
+    const horizontalInset = 48;  // Fixed inset on each side
+    const verticalInset = 48;    // Fixed inset on each side
+    const expandedWidth = viewportWidth - horizontalInset * 2 - padding * 2;
+    const expandedHeight = viewportHeight - verticalInset * 2 - padding * 2;
 
     const outerWidth = expandedWidth + padding * 2;
 
@@ -187,7 +189,10 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
 
     // Reset margins on inner content for proper centering
     const figure = contentWrapper.querySelector('figure');
-    if (figure) figure.style.margin = '0';
+    if (figure) {
+      figure._savedMargin = figure._savedMargin ?? figure.style.margin;
+      figure.style.margin = '0';
+    }
 
     // Trigger resize callback to size content
     setDimensions(expandedWidth, expandedHeight);
