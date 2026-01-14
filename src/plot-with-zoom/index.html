@@ -2,7 +2,7 @@
 <notebook theme="air">
   <title>Plot with Zoom</title>
   <script id="1" type="text/markdown">
-    # Plot with Zoom
+    # Zoomable Multi-Layer Plots in Notebook Kit
   </script>
   <script id="2" type="text/markdown">
     This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (a [regl](https://github.com/regl-project/regl) WebGL  canvas, an [Observable Plot](https://observablehq.com/plot/), and an SVG) so that zoom and pan stay in sync across all of them. The goal is to generalize it to other interactive figures in a similar manner.
@@ -12,12 +12,12 @@
 
     - **Element stack**: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and persists resources like WebGL contexts across reactive updates.
     - **Zoomable axes**: A rendering-agnostic zoom controller built on d3.zoom. It tracks the current view as orthographic matrices and exposes d3 scales for coordinate conversion. When the view changes, it notifies listeners so each layer can update accordingly.
-    - **Expandable wrapper**: The plot can be expanded to fill most of the viewport by clicking the toggle button in the corner. This is useful for exploring detail without leaving the page.
+    - **Expandable wrapper**: The plot can be expanded to fill most of the viewport by clicking the toggle button in the corner.
   </script>
   <script id="4" type="text/x-typescript" pinned="">
     const figure = html`<figure>
       ${stack.element}
-      <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
+      <figcaption>Drag points to adjust values. Use mouse wheel to zoom, drag to pan.</figcaption>
     </figure>`;
 
     display(expandable(figure, {
@@ -36,6 +36,22 @@
   </script>
   <script id="16" type="text/markdown">
     The code above performs final display of the figure, wrapping it in an expandable container.
+  </script>
+  <script id="40" type="text/markdown">
+    ## Implementation
+  </script>
+  <script id="41" type="text/markdown">
+    The rest of this notebook walks through the configuration. This notebook doesn’t contain all of the code. The imports below pull in some modules and helper code used throughout.
+  </script>
+  <script id="39" type="text/x-typescript" pinned="">
+    import createREGL from 'npm:regl@2.1.1'
+    import { createElementStack } from './lib/element-stack.js'
+    import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
+    import { createZoomableAxes } from './lib/zoomable-axes.js'
+    import { expandable } from './lib/expandable.js'
+  </script>
+  <script id="38" type="text/markdown">
+    ### Element stack configuration
   </script>
   <script id="19" type="text/markdown">
     We'll work top-down, drilling down on the particular element implementations. Next is to instantiate the stack container. This is a persistent container that will hold the plot. This awful statefulness is critical when using WebGL, because a cell dependency on the page `width` would trigger reinsantiation of the WebGL context, which inevitably leads to lost WebGL contexts and much gnashing of teeth.
@@ -61,18 +77,11 @@
       }]
     });
   </script>
-  <script id="5" type="text/x-typescript">
-    import * as d3 from 'npm:d3'
-    import createREGL from 'npm:regl'
-    import { createElementStack } from './lib/element-stack.js'
-    import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
-    import { createZoomableAxes } from './lib/zoomable-axes.js'
-    import { createPolarDomainColoringShader } from './domain-coloring.js'
-    import { collapseCodeBlocks } from './lib/collapsible-code.js'
-    import { expandable } from './lib/expandable.js'
-  </script>
   <script id="20" type="text/markdown">
-    Next, we configure the stack. The `reglElement` helper returns a function which receives the current regl element as an argument, thus preventing reinstantiation.
+    Now, we configure the stack. The `reglElement` helper returns a function which receives the current regl element as an argument, thus preventing reinstantiation.
+  </script>
+  <script id="35" type="text/markdown">
+    ### Observable Plot
   </script>
   <script id="22" type="text/markdown">
     Next, we provide a function to instantiate the [Observable Plot](https://observablehq.com/plot/). Since we don’t reuse it, we don’t have to be too careful. The only part we do reuse is the x and y domains, so we need to be careful to pass that back in for reuse.
@@ -129,72 +138,103 @@
       b: { x: 1, y: -0.5 }
     };
   </script>
+  <script id="33" type="text/markdown">
+    ### SVG
+  </script>
   <script id="26" type="text/markdown">
-    Next, we wire up some D3 controls.
+    Next, we wire up some D3 controls. This one will get layered on top of everything else for interactivity.
   </script>
   <script id="25" type="text/x-typescript" pinned="">
-    // Create SVG circles for draggable control points
-    {
-      const svg = d3.select(stack.elements.svg);
+    const svg = d3.select(stack.elements.svg);
 
-      const circleData = [
-        { id: 'a', point: controlPoints.a, color: 'rgb(51, 85, 238)', label: 'a' },
-        { id: 'm', point: controlPoints.m, color: 'rgb(51, 85, 238)', label: 'm' },
-        { id: 'b', point: controlPoints.b, color: 'rgb(51, 85, 238)', label: 'b' }
-      ];
+    // Add clipPath for viewport
+    const defs = svg.selectAll('defs').data([0]).join('defs');
+    const clipRect = defs.selectAll('clipPath#viewport-clip')
+      .data([0])
+      .join('clipPath')
+      .attr('id', 'viewport-clip')
+      .selectAll('rect')
+      .data([0])
+      .join('rect');
 
-      const circles = svg.selectAll('circle.control')
-        .data(circleData, d => d.id)
-        .join('circle')
-        .attr('class', 'control')
-        .attr('r', 6)
-        .attr('fill', d => d.color)
-        .attr('stroke', '#fff')
-        .attr('stroke-width', 2)
-        .attr('cursor', 'move')
-        .call(d3.drag()
-          .on('start', function() { d3.select(this).attr('cursor', 'grabbing'); })
-          .on('drag', function(event, d) {
-            d.point.x = axes.xScale.invert(event.x);
-            d.point.y = axes.yScale.invert(event.y);
-            updatePositions();
-            regl.dirty = true;
-          })
-          .on('end', function() { d3.select(this).attr('cursor', 'move'); })
-        );
+    // Clipped group for control points
+    const clippedGroup = svg.selectAll('g.clipped')
+      .data([0])
+      .join('g')
+      .attr('class', 'clipped')
+      .attr('clip-path', 'url(#viewport-clip)');
 
-      const labels = svg.selectAll('text.label')
-        .data(circleData, d => d.id)
-        .join('text')
-        .attr('class', 'label')
-        .attr('text-anchor', 'middle')
-        .attr('font-family', 'serif')
-        .attr('font-size', '18px')
-        .attr('font-style', 'italic')
-        .attr('fill', '#333')
-        .style('text-shadow', [[-1, 0, 2.5], [1, 0, 2.5], [0, 1, 2.5], [0, -1, 2.5]].map(([i, j, sh]) => `${i}px ${j}px ${sh}px white`).join(', '))
-        .text(d => d.label);
+    const circleData = [
+      { id: 'a', point: controlPoints.a, color: 'rgb(51, 85, 238)', label: 'a' },
+      { id: 'm', point: controlPoints.m, color: 'rgb(51, 85, 238)', label: 'm' },
+      { id: 'b', point: controlPoints.b, color: 'rgb(51, 85, 238)', label: 'b' }
+    ];
 
-      function updatePositions() {
-        circles
-          .attr('cx', d => axes.xScale(d.point.x))
-          .attr('cy', d => axes.yScale(d.point.y));
-        labels
-          .attr('x', d => axes.xScale(d.point.x) + 8)
-          .attr('y', d => axes.yScale(d.point.y) + 18);
-      }
+    const circles = clippedGroup.selectAll('circle.control')
+      .data(circleData, d => d.id)
+      .join('circle')
+      .attr('class', 'control')
+      .attr('r', 6)
+      .attr('fill', d => d.color)
+      .attr('stroke', '#fff')
+      .attr('stroke-width', 2)
+      .attr('cursor', 'move')
+      .call(d3.drag()
+        .on('start', function() { d3.select(this).attr('cursor', 'grabbing'); })
+        .on('drag', function(event, d) {
+          d.point.x = axes.xScale.invert(event.x);
+          d.point.y = axes.yScale.invert(event.y);
+          updatePositions();
+          regl.dirty = true;
+        })
+        .on('end', function() { d3.select(this).attr('cursor', 'move'); })
+      );
 
-      updatePositions();
-      stack.addEventListener('update', updatePositions);
+    const labels = clippedGroup.selectAll('text.label')
+      .data(circleData, d => d.id)
+      .join('text')
+      .attr('class', 'label')
+      .attr('text-anchor', 'middle')
+      .attr('font-family', 'serif')
+      .attr('font-size', '18px')
+      .attr('font-style', 'italic')
+      .attr('fill', '#333')
+      .style('text-shadow', [[-1, 0, 2.5], [1, 0, 2.5], [0, 1, 2.5], [0, -1, 2.5]].map(([i, j, sh]) => `${i}px ${j}px ${sh}px white`).join(', '))
+      .text(d => d.label);
+
+    function updatePositions() {
+      // Update clip rect to match viewport
+      const [x0, x1] = axes.xRange;
+      const [y0, y1] = axes.yRange;
+      clipRect
+        .attr('x', Math.min(x0, x1))
+        .attr('y', Math.min(y0, y1))
+        .attr('width', Math.abs(x1 - x0))
+        .attr('height', Math.abs(y1 - y0));
+
+      circles
+        .attr('cx', d => axes.xScale(d.point.x))
+        .attr('cy', d => axes.yScale(d.point.y));
+      labels
+        .attr('x', d => axes.xScale(d.point.x) + 8)
+        .attr('y', d => axes.yScale(d.point.y) + 18);
     }
+
+    updatePositions();
+    stack.addEventListener('update', updatePositions);
+  </script>
+  <script id="36" type="text/markdown">
+    ### WebGL via `regl`
   </script>
   <script id="27" type="text/markdown">
-    Finally, we’ll use the [regl](https://github.com/regl-project/regl/blob/main/API.md) library to plot the complex field with some nice [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring).
+    Finally, we use the [regl](https://github.com/regl-project/regl/blob/main/API.md) library to plot the complex field with some nice [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring).
   </script>
   <script id="11" type="text/x-typescript" pinned="">
     const regl = stack.elements.regl.value;
   </script>
   <script id="12" type="text/x-typescript" pinned="">
+    import { createPolarDomainColoringShader } from './domain-coloring.js'
+
     const drawGradient = regl({
       vert: `
         precision highp float;
@@ -248,7 +288,7 @@
     });
   </script>
   <script id="28" type="text/markdown">
-    Our regl loop is a bit tacky. We just tack on a mutable `dirty` flag and try to render the plot at 60fps *always*. But this is a no-op unless something has mutated the flag to `dirty = true`. Good enough!
+    Our regl loop is a bit lazy. We just tack on a mutable `dirty` property to the HTML element, call the render function at 60fps, and exit early if `dirty` is `false`. Good enough!
   </script>
   <script id="14" type="text/x-typescript" pinned="">
     regl.dirty = true;
@@ -270,10 +310,14 @@
 
     invalidation.then(() => loop?.cancel());
   </script>
+  <script id="37" type="text/markdown">
+    ## Conclusions
+  </script>
   <script id="32" type="text/markdown">
-    Is this good? Bad? Overwrought? I’m not sure. It’s as bit of code, and the full source includes a few more helper function used above. What I am sure of is that the output seems, to me, humbly, *really good*. These things are very tedious to get right, and I’m happy so far with how this looks. It could certainly be wrapped up a bit more for convenience, at least when the full flexibility of the above system is not needed.
+    Is this good? Bad? Overwrought? I’m not sure. It's a lot. But then, it layers WebGL, Observable Plot, and SVG into a single interactive plot with some nice conveniences. And there's no reason you couldn't add any additional technology you please. It’s as bit of code, and the full source includes a few more helper function used above. What I am sure of is that the output seems, to me, humbly, *really good*. These things are very tedious to get right, and I’m happy so far with how this looks. It could certainly be wrapped up a bit more for convenience, at least when the full flexibility of the above system is not needed. But I might try to give this a go in a place or two.
   </script>
   <script id="15" type="text/x-typescript">
+    import { collapseCodeBlocks } from './lib/collapsible-code.js'
     collapseCodeBlocks({
       maxHeight: 600
     });

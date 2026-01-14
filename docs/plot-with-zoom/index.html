@@ -1257,6 +1257,7 @@ main h6 {
   -webkit-font-smoothing: auto;
 }
     main figure {
+  max-width: 100%;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -1506,7 +1507,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Plot with Zoom</title>  <script type="module" crossorigin src="/notebooks/assets/index-DLfPz_2Q.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Plot with Zoom</title>  <script type="module" crossorigin src="/notebooks/assets/index-Bk2rP35L.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1534,25 +1535,69 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (here a regl canvas, an Observable Plot, and an SVG) so that zoom and pan stay in sync across all of them. The layers and content are just one example. The point is to wire up the plumbing.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">plotWidth</span> = <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-variable">width</span>, <span class="tok-literal">640</span>);
-<span class="tok-keyword">const</span> <span class="tok-definition">plotHeight</span> = <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-literal">480</span>, <span class="tok-variable">width</span>);
+    <main><div id="cell-2" class="observablehq observablehq--cell"><div><p>This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (a <a href="https://github.com/regl-project/regl">regl</a> WebGL  canvas, an <a href="https://observablehq.com/plot/">Observable Plot</a>, and an SVG) so that zoom and pan stay in sync across all of them. The goal is to generalize it to other interactive figures in a similar manner.</p>
+</div></div><div id="cell-3" class="observablehq observablehq--cell"><div><p>The key components are:</p>
+<ul>
+<li><strong>Element stack</strong>: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and persists resources like WebGL contexts across reactive updates.</li>
+<li><strong>Zoomable axes</strong>: A rendering-agnostic zoom controller built on d3.zoom. It tracks the current view as orthographic matrices and exposes d3 scales for coordinate conversion. When the view changes, it notifies listeners so each layer can update accordingly.</li>
+<li><strong>Expandable wrapper</strong>: The plot can be expanded to fill most of the viewport by clicking the toggle button in the corner.</li>
+</ul>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">figure</span> = <span class="tok-variable">html</span><span class="tok-string">`&lt;figure&gt;</span>
+<span class="tok-string">  </span>${<span class="tok-variable">stack</span>.<span class="tok-definition">element</span>}
+<span class="tok-string">  &lt;figcaption&gt;Drag points to adjust values. Use mouse wheel to zoom, drag to pan.&lt;/figcaption&gt;</span>
+<span class="tok-string">&lt;/figure&gt;`</span>;
 
-<span class="tok-comment">// Plot configuration</span>
-<span class="tok-keyword">const</span> <span class="tok-definition">plotConfig</span> = {
-  <span class="tok-definition">marginTop</span>: <span class="tok-literal">0</span>,
-  <span class="tok-definition">marginRight</span>: <span class="tok-literal">5</span>,
-  <span class="tok-definition">marginLeft</span>: <span class="tok-literal">40</span>,
-  <span class="tok-definition">marginBottom</span>: <span class="tok-literal">20</span>,
-  <span class="tok-definition">style</span>: { <span class="tok-definition">backgroundColor</span>: <span class="tok-string">"transparent"</span>, <span class="tok-definition">maxWidth</span>: <span class="tok-string">"none"</span> }
-};
-
-<span class="tok-comment">// Helper to create Plot with given domains</span>
-<span class="tok-keyword">function</span> <span class="tok-definition">createPlot</span>({<span class="tok-definition">width</span>, <span class="tok-definition">height</span>, <span class="tok-definition">xDomain</span>=[-<span class="tok-literal">2</span>, <span class="tok-literal">2</span>], <span class="tok-definition">yDomain</span>=[-<span class="tok-literal">2</span>, <span class="tok-literal">2</span>]}) {
+<span class="tok-variable">display</span>(<span class="tok-variable">expandable</span>(<span class="tok-variable">figure</span>, {
+  <span class="tok-definition">width</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-variable">width</span>, <span class="tok-literal">640</span>),
+  <span class="tok-definition">height</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-literal">480</span>, <span class="tok-variable">width</span>),
+  <span class="tok-definition">toggleOffset</span>: [-<span class="tok-literal">6</span>, -<span class="tok-literal">33</span>],
+  <span class="tok-definition">onResize</span>(<span class="tok-definition">el</span>, <span class="tok-definition">w</span>, <span class="tok-definition">h</span>) {
+    <span class="tok-variable">stack</span>.<span class="tok-definition">resize</span>(<span class="tok-variable">w</span>, <span class="tok-variable">h</span>);
+    <span class="tok-variable">axes</span>.<span class="tok-definition">updateScales</span>(
+      <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">plot</span>.<span class="tok-definition">scale</span>(<span class="tok-string">"x"</span>),
+      <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">plot</span>.<span class="tok-definition">scale</span>(<span class="tok-string">"y"</span>)
+    );
+    <span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+  }
+}));</code></pre><div id="cell-16" class="observablehq observablehq--cell"><div><p>The code above performs final display of the figure, wrapping it in an expandable container.</p>
+</div></div><div id="cell-40" class="observablehq observablehq--cell"><div><h2 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h2>
+</div></div><div id="cell-41" class="observablehq observablehq--cell"><div><p>The rest of this notebook walks through the configuration. This notebook doesn’t contain all of the code. The imports below pull in some modules and helper code used throughout.</p>
+</div></div><div id="cell-39" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">import</span> <span class="tok-definition">createREGL</span> <span class="tok-keyword">from</span> <span class="tok-string">'npm:regl@2.1.1'</span>
+<span class="tok-keyword">import</span> { <span class="tok-definition">createElementStack</span> } <span class="tok-keyword">from</span> <span class="tok-string">'./lib/element-stack.js'</span>
+<span class="tok-keyword">import</span> { <span class="tok-definition">reglElement</span>, <span class="tok-definition">reglAxesViewport</span> } <span class="tok-keyword">from</span> <span class="tok-string">'./lib/regl-canvas.js'</span>
+<span class="tok-keyword">import</span> { <span class="tok-definition">createZoomableAxes</span> } <span class="tok-keyword">from</span> <span class="tok-string">'./lib/zoomable-axes.js'</span>
+<span class="tok-keyword">import</span> { <span class="tok-definition">expandable</span> } <span class="tok-keyword">from</span> <span class="tok-string">'./lib/expandable.js'</span></code></pre><div id="cell-38" class="observablehq observablehq--cell"><div><h3 id="element-stack-configuration" tabindex="-1"><a href="#element-stack-configuration">Element stack configuration</a></h3>
+</div></div><div id="cell-19" class="observablehq observablehq--cell"><div><p>We’ll work top-down, drilling down on the particular element implementations. Next is to instantiate the stack container. This is a persistent container that will hold the plot. This awful statefulness is critical when using WebGL, because a cell dependency on the page <code>width</code> would trigger reinsantiation of the WebGL context, which inevitably leads to lost WebGL contexts and much gnashing of teeth.</p>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">stack</span> = <span class="tok-variable">createElementStack</span>({
+  <span class="tok-definition">layers</span>: [{
+    <span class="tok-definition">id</span>: <span class="tok-string">'regl'</span>,
+    <span class="tok-definition">element</span>: <span class="tok-variable">reglElement</span>(<span class="tok-variable">createREGL</span>, {
+      <span class="tok-definition">extensions</span>: [<span class="tok-string">'OES_standard_derivatives'</span>],
+      <span class="tok-definition">attributes</span>: { <span class="tok-definition">depthStencil</span>: <span class="tok-literal">false</span>, <span class="tok-definition">preserveDrawingBuffer</span>: <span class="tok-literal">true</span> }
+    })
+  }, {
+    <span class="tok-definition">id</span>: <span class="tok-string">'plot'</span>,
+    <span class="tok-definition">element</span>: ({ <span class="tok-definition">width</span>, <span class="tok-definition">height</span> }) =&gt; <span class="tok-variable">createPlot</span>(<span class="tok-variable">width</span>, <span class="tok-variable">height</span>)
+  }, {
+    <span class="tok-definition">id</span>: <span class="tok-string">'svg'</span>,
+    <span class="tok-definition">element</span>: ({ <span class="tok-definition">current</span>, <span class="tok-definition">width</span>, <span class="tok-definition">height</span> }) =&gt;
+      (<span class="tok-variable">current</span> ? <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-variable">current</span>) : <span class="tok-variable">d3</span>.<span class="tok-definition">create</span>(<span class="tok-string">"svg"</span>))
+        .<span class="tok-definition">attr</span>(<span class="tok-string">"width"</span>, <span class="tok-variable">width</span>)
+        .<span class="tok-definition">attr</span>(<span class="tok-string">"height"</span>, <span class="tok-variable">height</span>)
+        .<span class="tok-definition">node</span>()
+  }]
+});</code></pre><div id="cell-20" class="observablehq observablehq--cell"><div><p>Now, we configure the stack. The <code>reglElement</code> helper returns a function which receives the current regl element as an argument, thus preventing reinstantiation.</p>
+</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><h3 id="observable-plot" tabindex="-1"><a href="#observable-plot">Observable Plot</a></h3>
+</div></div><div id="cell-22" class="observablehq observablehq--cell"><div><p>Next, we provide a function to instantiate the <a href="https://observablehq.com/plot/">Observable Plot</a>. Since we don’t reuse it, we don’t have to be too careful. The only part we do reuse is the x and y domains, so we need to be careful to pass that back in for reuse.</p>
+</div></div><div id="cell-21" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">function</span> <span class="tok-definition">createPlot</span>(<span class="tok-definition">width</span>, <span class="tok-definition">height</span>, <span class="tok-definition">xDomain</span> = [-<span class="tok-literal">2</span>, <span class="tok-literal">2</span>], <span class="tok-definition">yDomain</span> = [-<span class="tok-literal">2</span>, <span class="tok-literal">2</span>]) {
   <span class="tok-keyword">return</span> <span class="tok-variable">Plot</span>.<span class="tok-definition">plot</span>({
     <span class="tok-definition">width</span>,
     <span class="tok-definition">height</span>,
-    ...<span class="tok-variable">plotConfig</span>,
+    <span class="tok-definition">marginTop</span>: <span class="tok-literal">20</span>,
+    <span class="tok-definition">marginRight</span>: <span class="tok-literal">10</span>,
+    <span class="tok-definition">marginLeft</span>: <span class="tok-literal">40</span>,
+    <span class="tok-definition">marginBottom</span>: <span class="tok-literal">20</span>,
+    <span class="tok-definition">style</span>: { <span class="tok-definition">backgroundColor</span>: <span class="tok-string">"transparent"</span>, <span class="tok-definition">maxWidth</span>: <span class="tok-string">"none"</span>, <span class="tok-definition">position</span>: <span class="tok-string">"absolute"</span> },
     <span class="tok-definition">x</span>: { <span class="tok-definition">domain</span>: <span class="tok-variable">xDomain</span>, <span class="tok-definition">tickSpacing</span>: <span class="tok-literal">100</span> },
     <span class="tok-definition">y</span>: { <span class="tok-definition">domain</span>: <span class="tok-variable">yDomain</span>, <span class="tok-definition">tickSpacing</span>: <span class="tok-literal">100</span> },
     <span class="tok-definition">marks</span>: [
@@ -1560,48 +1605,109 @@ main h6 {
       <span class="tok-variable">Plot</span>.<span class="tok-definition">ruleY</span>([<span class="tok-literal">0</span>], { <span class="tok-definition">stroke</span>: <span class="tok-string">"#0002"</span> })
     ]
   });
-}
-
-<span class="tok-comment">// Create element stack</span>
-<span class="tok-keyword">const</span> <span class="tok-definition">el</span> = <span class="tok-variable">createElementStack</span>({
-  <span class="tok-definition">container</span>: <span class="tok-variable">stackEl</span>,
-  <span class="tok-definition">width</span>: <span class="tok-variable">plotWidth</span>,
-  <span class="tok-definition">height</span>: <span class="tok-variable">plotHeight</span>,
-  <span class="tok-definition">layers</span>: {
-    <span class="tok-definition">regl</span>: <span class="tok-variable">reglElement</span>(<span class="tok-variable">createREGL</span>, {<span class="tok-definition">extensions</span>: [<span class="tok-string">'OES_standard_derivatives'</span>], <span class="tok-definition">attributes</span>: { <span class="tok-definition">depthStencil</span>: <span class="tok-literal">false</span>, <span class="tok-definition">preserveDrawingBuffer</span>: <span class="tok-literal">true</span> }}),
-    <span class="tok-definition">plot</span>: ({ <span class="tok-definition">width</span>, <span class="tok-definition">height</span> }) =&gt; <span class="tok-variable">createPlot</span>({<span class="tok-definition">width</span>, <span class="tok-definition">height</span>}),
-    <span class="tok-definition">svg</span>: ({ <span class="tok-definition">current</span>, <span class="tok-definition">width</span>, <span class="tok-definition">height</span> }) =&gt;
-      (<span class="tok-variable">current</span> ? <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-variable">current</span>) : <span class="tok-variable">d3</span>.<span class="tok-definition">create</span>(<span class="tok-string">"svg"</span>)).<span class="tok-definition">attr</span>(<span class="tok-string">"width"</span>, <span class="tok-variable">width</span>).<span class="tok-definition">attr</span>(<span class="tok-string">"height"</span>, <span class="tok-variable">height</span>).<span class="tok-definition">node</span>()
-  }
-});
-<span class="tok-keyword">const</span> <span class="tok-definition">stack</span> = <span class="tok-variable">el</span>.<span class="tok-definition">value</span>;
-<span class="tok-keyword">const</span> <span class="tok-definition">regl</span> = <span class="tok-variable">stack</span>.<span class="tok-definition">regl</span>.<span class="tok-definition">value</span>;
-<span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
-
-<span class="tok-keyword">const</span> <span class="tok-definition">axes</span> = <span class="tok-variable">createZoomableAxes</span>({
+}</code></pre><div id="cell-23" class="observablehq observablehq--cell"><div><p>We’ll choose to use the x- and y-axes instances from the Observable Plot as our scale instances. It feels circular, but we’ll set it up so that when the axes change, we replace the plot instance while re-injecting the previous x and y extents.</p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">axes</span> = <span class="tok-variable">createZoomableAxes</span>({
   <span class="tok-definition">d3</span>,
-  <span class="tok-definition">element</span>: <span class="tok-variable">stack</span>.<span class="tok-definition">svg</span>,
-  <span class="tok-definition">xScale</span>: <span class="tok-variable">stack</span>.<span class="tok-definition">plot</span>.<span class="tok-definition">scale</span>(<span class="tok-string">"x"</span>),
-  <span class="tok-definition">yScale</span>: <span class="tok-variable">stack</span>.<span class="tok-definition">plot</span>.<span class="tok-definition">scale</span>(<span class="tok-string">"y"</span>),
+  <span class="tok-definition">element</span>: <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">svg</span>,
+  <span class="tok-definition">xScale</span>: <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">plot</span>.<span class="tok-definition">scale</span>(<span class="tok-string">"x"</span>),
+  <span class="tok-definition">yScale</span>: <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">plot</span>.<span class="tok-definition">scale</span>(<span class="tok-string">"y"</span>),
   <span class="tok-definition">aspectRatio</span>: <span class="tok-literal">1</span>,
   <span class="tok-definition">onChange</span>: ({ <span class="tok-definition">xDomain</span>, <span class="tok-definition">yDomain</span> }) =&gt; {
     <span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
-    <span class="tok-variable">stackEl</span>.<span class="tok-definition">update</span>({
-      <span class="tok-definition">plot</span>: ({ <span class="tok-definition">width</span>, <span class="tok-definition">height</span> }) =&gt; <span class="tok-variable">createPlot</span>({<span class="tok-definition">width</span>, <span class="tok-definition">height</span>, <span class="tok-definition">xDomain</span>, <span class="tok-definition">yDomain</span>})
-    });
+    <span class="tok-keyword">const</span> <span class="tok-definition">newPlot</span> = <span class="tok-variable">createPlot</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">width</span>, <span class="tok-variable">stack</span>.<span class="tok-definition">height</span>, <span class="tok-variable">xDomain</span>, <span class="tok-variable">yDomain</span>);
+    <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">plot</span>.<span class="tok-definition">replaceWith</span>(<span class="tok-variable">newPlot</span>);
+    <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">plot</span> = <span class="tok-variable">newPlot</span>;
+    <span class="tok-variable">stack</span>.<span class="tok-definition">dispatchEvent</span>(<span class="tok-keyword">new</span> <span class="tok-definition">CustomEvent</span>(<span class="tok-string">'update'</span>));
   }
-});
-
-<span class="tok-variable">display</span>(<span class="tok-variable">html</span><span class="tok-string">`&lt;figure&gt;</span>
-<span class="tok-string">  </span>${<span class="tok-variable">el</span>}
-<span class="tok-string">  &lt;figcaption&gt;Use mouse wheel to zoom, drag to pan.&lt;/figcaption&gt;</span>
-<span class="tok-string">&lt;/figure&gt;`</span>);</code></pre><div id="cell-5" class="observablehq observablehq--cell"><div><p>As a test case, we render a <a href="https://en.wikipedia.org/wiki/Domain_coloring">domain coloring</a> of a Möbius transformation with three draggable control points.</p>
-</div></div><div id="cell-6" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-comment">// Control points for the complex function f(z) = (z - a)(b - m) / (z - b)(a - m)</span>
-<span class="tok-keyword">const</span> <span class="tok-definition">controlPoints</span> = {
+});</code></pre><div id="cell-9" class="observablehq observablehq--cell"><div><p>Next, we wire up some actual math. As a test case, we render a <a href="https://en.wikipedia.org/wiki/Domain_coloring">domain coloring</a> of a Möbius transformation. The function maps complex numbers according to</p>
+<p>where , , and  are control points you can drag to explore the transformation. By construction, , , and . Möbius transformations are conformal (angle-preserving) and map circles to circles. Neat!</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">controlPoints</span> = {
   <span class="tok-definition">a</span>: { <span class="tok-definition">x</span>: -<span class="tok-literal">1</span>, <span class="tok-definition">y</span>: <span class="tok-literal">0.5</span> },
   <span class="tok-definition">m</span>: { <span class="tok-definition">x</span>: <span class="tok-literal">0</span>, <span class="tok-definition">y</span>: <span class="tok-literal">0</span> },
   <span class="tok-definition">b</span>: { <span class="tok-definition">x</span>: <span class="tok-literal">1</span>, <span class="tok-definition">y</span>: -<span class="tok-literal">0.5</span> }
-};</code></pre><div id="cell-7" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">drawGradient</span> = <span class="tok-variable">regl</span>({
+};</code></pre><div id="cell-33" class="observablehq observablehq--cell"><div><h3 id="svg" tabindex="-1"><a href="#svg">SVG</a></h3>
+</div></div><div id="cell-26" class="observablehq observablehq--cell"><div><p>Next, we wire up some D3 controls. This one will get layered on top of everything else for interactivity.</p>
+</div></div><div id="cell-25" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">svg</span> = <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">svg</span>);
+
+<span class="tok-comment">// Add clipPath for viewport</span>
+<span class="tok-keyword">const</span> <span class="tok-definition">defs</span> = <span class="tok-variable">svg</span>.<span class="tok-definition">selectAll</span>(<span class="tok-string">'defs'</span>).<span class="tok-definition">data</span>([<span class="tok-literal">0</span>]).<span class="tok-definition">join</span>(<span class="tok-string">'defs'</span>);
+<span class="tok-keyword">const</span> <span class="tok-definition">clipRect</span> = <span class="tok-variable">defs</span>.<span class="tok-definition">selectAll</span>(<span class="tok-string">'clipPath#viewport-clip'</span>)
+  .<span class="tok-definition">data</span>([<span class="tok-literal">0</span>])
+  .<span class="tok-definition">join</span>(<span class="tok-string">'clipPath'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'id'</span>, <span class="tok-string">'viewport-clip'</span>)
+  .<span class="tok-definition">selectAll</span>(<span class="tok-string">'rect'</span>)
+  .<span class="tok-definition">data</span>([<span class="tok-literal">0</span>])
+  .<span class="tok-definition">join</span>(<span class="tok-string">'rect'</span>);
+
+<span class="tok-comment">// Clipped group for control points</span>
+<span class="tok-keyword">const</span> <span class="tok-definition">clippedGroup</span> = <span class="tok-variable">svg</span>.<span class="tok-definition">selectAll</span>(<span class="tok-string">'g.clipped'</span>)
+  .<span class="tok-definition">data</span>([<span class="tok-literal">0</span>])
+  .<span class="tok-definition">join</span>(<span class="tok-string">'g'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'class'</span>, <span class="tok-string">'clipped'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'clip-path'</span>, <span class="tok-string">'url(#viewport-clip)'</span>);
+
+<span class="tok-keyword">const</span> <span class="tok-definition">circleData</span> = [
+  { <span class="tok-definition">id</span>: <span class="tok-string">'a'</span>, <span class="tok-definition">point</span>: <span class="tok-variable">controlPoints</span>.<span class="tok-definition">a</span>, <span class="tok-definition">color</span>: <span class="tok-string">'rgb(51, 85, 238)'</span>, <span class="tok-definition">label</span>: <span class="tok-string">'a'</span> },
+  { <span class="tok-definition">id</span>: <span class="tok-string">'m'</span>, <span class="tok-definition">point</span>: <span class="tok-variable">controlPoints</span>.<span class="tok-definition">m</span>, <span class="tok-definition">color</span>: <span class="tok-string">'rgb(51, 85, 238)'</span>, <span class="tok-definition">label</span>: <span class="tok-string">'m'</span> },
+  { <span class="tok-definition">id</span>: <span class="tok-string">'b'</span>, <span class="tok-definition">point</span>: <span class="tok-variable">controlPoints</span>.<span class="tok-definition">b</span>, <span class="tok-definition">color</span>: <span class="tok-string">'rgb(51, 85, 238)'</span>, <span class="tok-definition">label</span>: <span class="tok-string">'b'</span> }
+];
+
+<span class="tok-keyword">const</span> <span class="tok-definition">circles</span> = <span class="tok-variable">clippedGroup</span>.<span class="tok-definition">selectAll</span>(<span class="tok-string">'circle.control'</span>)
+  .<span class="tok-definition">data</span>(<span class="tok-variable">circleData</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">id</span>)
+  .<span class="tok-definition">join</span>(<span class="tok-string">'circle'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'class'</span>, <span class="tok-string">'control'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'r'</span>, <span class="tok-literal">6</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'fill'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">color</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'stroke'</span>, <span class="tok-string">'#fff'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'stroke-width'</span>, <span class="tok-literal">2</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'cursor'</span>, <span class="tok-string">'move'</span>)
+  .<span class="tok-definition">call</span>(<span class="tok-variable">d3</span>.<span class="tok-definition">drag</span>()
+    .<span class="tok-definition">on</span>(<span class="tok-string">'start'</span>, <span class="tok-keyword">function</span>() { <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-keyword">this</span>).<span class="tok-definition">attr</span>(<span class="tok-string">'cursor'</span>, <span class="tok-string">'grabbing'</span>); })
+    .<span class="tok-definition">on</span>(<span class="tok-string">'drag'</span>, <span class="tok-keyword">function</span>(<span class="tok-definition">event</span>, <span class="tok-definition">d</span>) {
+      <span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">x</span> = <span class="tok-variable">axes</span>.<span class="tok-definition">xScale</span>.<span class="tok-definition">invert</span>(<span class="tok-variable">event</span>.<span class="tok-definition">x</span>);
+      <span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">y</span> = <span class="tok-variable">axes</span>.<span class="tok-definition">yScale</span>.<span class="tok-definition">invert</span>(<span class="tok-variable">event</span>.<span class="tok-definition">y</span>);
+      <span class="tok-variable">updatePositions</span>();
+      <span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+    })
+    .<span class="tok-definition">on</span>(<span class="tok-string">'end'</span>, <span class="tok-keyword">function</span>() { <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-keyword">this</span>).<span class="tok-definition">attr</span>(<span class="tok-string">'cursor'</span>, <span class="tok-string">'move'</span>); })
+  );
+
+<span class="tok-keyword">const</span> <span class="tok-definition">labels</span> = <span class="tok-variable">clippedGroup</span>.<span class="tok-definition">selectAll</span>(<span class="tok-string">'text.label'</span>)
+  .<span class="tok-definition">data</span>(<span class="tok-variable">circleData</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">id</span>)
+  .<span class="tok-definition">join</span>(<span class="tok-string">'text'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'class'</span>, <span class="tok-string">'label'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'text-anchor'</span>, <span class="tok-string">'middle'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'font-family'</span>, <span class="tok-string">'serif'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'font-size'</span>, <span class="tok-string">'18px'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'font-style'</span>, <span class="tok-string">'italic'</span>)
+  .<span class="tok-definition">attr</span>(<span class="tok-string">'fill'</span>, <span class="tok-string">'#333'</span>)
+  .<span class="tok-definition">style</span>(<span class="tok-string">'text-shadow'</span>, [[-<span class="tok-literal">1</span>, <span class="tok-literal">0</span>, <span class="tok-literal">2.5</span>], [<span class="tok-literal">1</span>, <span class="tok-literal">0</span>, <span class="tok-literal">2.5</span>], [<span class="tok-literal">0</span>, <span class="tok-literal">1</span>, <span class="tok-literal">2.5</span>], [<span class="tok-literal">0</span>, -<span class="tok-literal">1</span>, <span class="tok-literal">2.5</span>]].<span class="tok-definition">map</span>(([<span class="tok-definition">i</span>, <span class="tok-definition">j</span>, <span class="tok-definition">sh</span>]) =&gt; <span class="tok-string">`</span>${<span class="tok-variable">i</span>}<span class="tok-string">px </span>${<span class="tok-variable">j</span>}<span class="tok-string">px </span>${<span class="tok-variable">sh</span>}<span class="tok-string">px white`</span>).<span class="tok-definition">join</span>(<span class="tok-string">', '</span>))
+  .<span class="tok-definition">text</span>(<span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">label</span>);
+
+<span class="tok-keyword">function</span> <span class="tok-definition">updatePositions</span>() {
+  <span class="tok-comment">// Update clip rect to match viewport</span>
+  <span class="tok-keyword">const</span> [<span class="tok-definition">x0</span>, <span class="tok-definition">x1</span>] = <span class="tok-variable">axes</span>.<span class="tok-definition">xRange</span>;
+  <span class="tok-keyword">const</span> [<span class="tok-definition">y0</span>, <span class="tok-definition">y1</span>] = <span class="tok-variable">axes</span>.<span class="tok-definition">yRange</span>;
+  <span class="tok-variable">clipRect</span>
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'x'</span>, <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-variable">x0</span>, <span class="tok-variable">x1</span>))
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'y'</span>, <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-variable">y0</span>, <span class="tok-variable">y1</span>))
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'width'</span>, <span class="tok-variable">Math</span>.<span class="tok-definition">abs</span>(<span class="tok-variable">x1</span> - <span class="tok-variable">x0</span>))
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'height'</span>, <span class="tok-variable">Math</span>.<span class="tok-definition">abs</span>(<span class="tok-variable">y1</span> - <span class="tok-variable">y0</span>));
+
+  <span class="tok-variable">circles</span>
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'cx'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">xScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">x</span>))
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'cy'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">yScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">y</span>));
+  <span class="tok-variable">labels</span>
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'x'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">xScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">x</span>) + <span class="tok-literal">8</span>)
+    .<span class="tok-definition">attr</span>(<span class="tok-string">'y'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">yScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">y</span>) + <span class="tok-literal">18</span>);
+}
+
+<span class="tok-variable">updatePositions</span>();
+<span class="tok-variable">stack</span>.<span class="tok-definition">addEventListener</span>(<span class="tok-string">'update'</span>, <span class="tok-variable">updatePositions</span>);</code></pre><div id="cell-36" class="observablehq observablehq--cell"><div><h3 id="web-gl-via-regl" tabindex="-1"><a href="#web-gl-via-regl">WebGL via <code>regl</code></a></h3>
+</div></div><div id="cell-27" class="observablehq observablehq--cell"><div><p>Finally, we use the <a href="https://github.com/regl-project/regl/blob/main/API.md">regl</a> library to plot the complex field with some nice <a href="https://en.wikipedia.org/wiki/Domain_coloring">domain coloring</a>.</p>
+</div></div><div id="cell-11" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">regl</span> = <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">regl</span>.<span class="tok-definition">value</span>;</code></pre><div id="cell-12" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">import</span> { <span class="tok-definition">createPolarDomainColoringShader</span> } <span class="tok-keyword">from</span> <span class="tok-string">'./domain-coloring.js'</span>
+
+<span class="tok-keyword">const</span> <span class="tok-definition">drawGradient</span> = <span class="tok-variable">regl</span>({
   <span class="tok-definition">vert</span>: <span class="tok-string">`</span>
 <span class="tok-string">    precision highp float;</span>
 <span class="tok-string">    attribute vec2 uv;</span>
@@ -1651,65 +1757,9 @@ main h6 {
   <span class="tok-definition">scissor</span>: { <span class="tok-definition">enable</span>: <span class="tok-literal">true</span>, <span class="tok-definition">box</span>: <span class="tok-variable">reglAxesViewport</span>(<span class="tok-variable">axes</span>) },
   <span class="tok-definition">viewport</span>: <span class="tok-variable">reglAxesViewport</span>(<span class="tok-variable">axes</span>),
   <span class="tok-definition">count</span>: <span class="tok-literal">3</span>,
-});</code></pre><div id="cell-8" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-comment">// Create SVG circles for draggable control points</span>
-{
-  <span class="tok-keyword">const</span> <span class="tok-definition">svg</span> = <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">svg</span>);
-
-  <span class="tok-keyword">const</span> <span class="tok-definition">circleData</span> = [
-    { <span class="tok-definition">id</span>: <span class="tok-string">'a'</span>, <span class="tok-definition">point</span>: <span class="tok-variable">controlPoints</span>.<span class="tok-definition">a</span>, <span class="tok-definition">color</span>: <span class="tok-string">'rgb(51, 85, 238)'</span>, <span class="tok-definition">label</span>: <span class="tok-string">'a'</span> },
-    { <span class="tok-definition">id</span>: <span class="tok-string">'m'</span>, <span class="tok-definition">point</span>: <span class="tok-variable">controlPoints</span>.<span class="tok-definition">m</span>, <span class="tok-definition">color</span>: <span class="tok-string">'rgb(51, 85, 238)'</span>, <span class="tok-definition">label</span>: <span class="tok-string">'m'</span> },
-    { <span class="tok-definition">id</span>: <span class="tok-string">'b'</span>, <span class="tok-definition">point</span>: <span class="tok-variable">controlPoints</span>.<span class="tok-definition">b</span>, <span class="tok-definition">color</span>: <span class="tok-string">'rgb(51, 85, 238)'</span>, <span class="tok-definition">label</span>: <span class="tok-string">'b'</span> }
-  ];
-
-  <span class="tok-keyword">const</span> <span class="tok-definition">circles</span> = <span class="tok-variable">svg</span>.<span class="tok-definition">selectAll</span>(<span class="tok-string">'circle.control'</span>)
-    .<span class="tok-definition">data</span>(<span class="tok-variable">circleData</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">id</span>)
-    .<span class="tok-definition">join</span>(<span class="tok-string">'circle'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'class'</span>, <span class="tok-string">'control'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'r'</span>, <span class="tok-literal">6</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'fill'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">color</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'stroke'</span>, <span class="tok-string">'#fff'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'stroke-width'</span>, <span class="tok-literal">2</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'cursor'</span>, <span class="tok-string">'move'</span>)
-    .<span class="tok-definition">call</span>(<span class="tok-variable">d3</span>.<span class="tok-definition">drag</span>()
-      .<span class="tok-definition">on</span>(<span class="tok-string">'start'</span>, <span class="tok-keyword">function</span>() { <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-keyword">this</span>).<span class="tok-definition">attr</span>(<span class="tok-string">'cursor'</span>, <span class="tok-string">'grabbing'</span>); })
-      .<span class="tok-definition">on</span>(<span class="tok-string">'drag'</span>, <span class="tok-keyword">function</span>(<span class="tok-definition">event</span>, <span class="tok-definition">d</span>) {
-        <span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">x</span> = <span class="tok-variable">axes</span>.<span class="tok-definition">xScale</span>.<span class="tok-definition">invert</span>(<span class="tok-variable">event</span>.<span class="tok-definition">x</span>);
-        <span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">y</span> = <span class="tok-variable">axes</span>.<span class="tok-definition">yScale</span>.<span class="tok-definition">invert</span>(<span class="tok-variable">event</span>.<span class="tok-definition">y</span>);
-        <span class="tok-variable">updatePositions</span>();
-        <span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
-      })
-      .<span class="tok-definition">on</span>(<span class="tok-string">'end'</span>, <span class="tok-keyword">function</span>() { <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-keyword">this</span>).<span class="tok-definition">attr</span>(<span class="tok-string">'cursor'</span>, <span class="tok-string">'move'</span>); })
-    );
-
-  <span class="tok-keyword">const</span> <span class="tok-definition">labels</span> = <span class="tok-variable">svg</span>.<span class="tok-definition">selectAll</span>(<span class="tok-string">'text.label'</span>)
-    .<span class="tok-definition">data</span>(<span class="tok-variable">circleData</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">id</span>)
-    .<span class="tok-definition">join</span>(<span class="tok-string">'text'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'class'</span>, <span class="tok-string">'label'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'text-anchor'</span>, <span class="tok-string">'middle'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'font-family'</span>, <span class="tok-string">'sans-serif'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'font-size'</span>, <span class="tok-string">'14px'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'font-style'</span>, <span class="tok-string">'italic'</span>)
-    .<span class="tok-definition">attr</span>(<span class="tok-string">'fill'</span>, <span class="tok-string">'#333'</span>)
-    .<span class="tok-definition">style</span>(<span class="tok-string">'text-shadow'</span>, [
-      [-<span class="tok-literal">1</span>, <span class="tok-literal">0</span>, <span class="tok-literal">1.5</span>],
-      [<span class="tok-literal">1</span>, <span class="tok-literal">0</span>, <span class="tok-literal">1.5</span>],
-      [<span class="tok-literal">0</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1.5</span>],
-      [<span class="tok-literal">0</span>, -<span class="tok-literal">1</span>, <span class="tok-literal">1.5</span>]
-    ].<span class="tok-definition">map</span>(([<span class="tok-definition">i</span>, <span class="tok-definition">j</span>, <span class="tok-definition">sh</span>]) =&gt; <span class="tok-string">`</span>${<span class="tok-variable">i</span>}<span class="tok-string">px </span>${<span class="tok-variable">j</span>}<span class="tok-string">px </span>${<span class="tok-variable">sh</span>}<span class="tok-string">px white`</span>).<span class="tok-definition">join</span>(<span class="tok-string">', '</span>))
-    .<span class="tok-definition">text</span>(<span class="tok-definition">d</span> =&gt; <span class="tok-variable">d</span>.<span class="tok-definition">label</span>);
-
-  <span class="tok-keyword">function</span> <span class="tok-definition">updatePositions</span>() {
-    <span class="tok-variable">circles</span>
-      .<span class="tok-definition">attr</span>(<span class="tok-string">'cx'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">xScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">x</span>))
-      .<span class="tok-definition">attr</span>(<span class="tok-string">'cy'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">yScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">y</span>));
-    <span class="tok-variable">labels</span>
-      .<span class="tok-definition">attr</span>(<span class="tok-string">'x'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">xScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">x</span>) + <span class="tok-literal">8</span>)
-      .<span class="tok-definition">attr</span>(<span class="tok-string">'y'</span>, <span class="tok-definition">d</span> =&gt; <span class="tok-variable">axes</span>.<span class="tok-definition">yScale</span>(<span class="tok-variable">d</span>.<span class="tok-definition">point</span>.<span class="tok-definition">y</span>) + <span class="tok-literal">18</span>);
-  }
-
-  <span class="tok-variable">updatePositions</span>();
-  <span class="tok-variable">stackEl</span>.<span class="tok-definition">addEventListener</span>(<span class="tok-string">'update'</span>, <span class="tok-variable">updatePositions</span>);
-}</code></pre><div id="cell-9" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">let</span> <span class="tok-definition">loop</span> = <span class="tok-variable">regl</span>.<span class="tok-definition">frame</span>(() =&gt; {
+});</code></pre><div id="cell-28" class="observablehq observablehq--cell"><div><p>Our regl loop is a bit lazy. We just tack on a mutable <code>dirty</code> property to the HTML element, call the render function at 60fps, and exit early if <code>dirty</code> is <code>false</code>. Good enough!</p>
+</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+<span class="tok-keyword">let</span> <span class="tok-definition">loop</span> = <span class="tok-variable">regl</span>.<span class="tok-definition">frame</span>(() =&gt; {
   <span class="tok-keyword">try</span> {
     <span class="tok-keyword">if</span> (!<span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span>) <span class="tok-keyword">return</span>;
     <span class="tok-variable">drawGradient</span>({
@@ -1720,12 +1770,14 @@ main h6 {
     });
     <span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">false</span>;
   } <span class="tok-keyword">catch</span> (<span class="tok-definition">e</span>) {
-    <span class="tok-variable">loop</span>.<span class="tok-definition">cancel</span>();
+    <span class="tok-variable">loop</span>?.<span class="tok-definition">cancel</span>();
     <span class="tok-variable">loop</span> = <span class="tok-variable">undefined</span>;
   }
 });
 
-<span class="tok-variable">invalidation</span>.<span class="tok-definition">then</span>(() =&gt; <span class="tok-variable">loop</span>?.<span class="tok-definition">cancel</span>());</code></pre><div id="cell-10" class="observablehq observablehq--cell"></div></main>
+<span class="tok-variable">invalidation</span>.<span class="tok-definition">then</span>(() =&gt; <span class="tok-variable">loop</span>?.<span class="tok-definition">cancel</span>());</code></pre><div id="cell-37" class="observablehq observablehq--cell"><div><h2 id="conclusions" tabindex="-1"><a href="#conclusions">Conclusions</a></h2>
+</div></div><div id="cell-32" class="observablehq observablehq--cell"><div><p>Is this good? Bad? Overwrought? I’m not sure. It’s a lot. But then, it layers WebGL, Observable Plot, and SVG into a single interactive plot with some nice conveniences. And there’s no reason you couldn’t add any additional technology you please. It’s as bit of code, and the full source includes a few more helper function used above. What I am sure of is that the output seems, to me, humbly, <em>really good</em>. These things are very tedious to get right, and I’m happy so far with how this looks. It could certainly be wrapped up a bit more for convenience, at least when the full flexibility of the above system is not needed. But I might try to give this a go in a place or two.</p>
+</div></div><div id="cell-15" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
