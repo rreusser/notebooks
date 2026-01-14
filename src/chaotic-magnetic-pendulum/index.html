@@ -424,6 +424,7 @@
                     d.x = axes.xScale.invert(event.x);
                     d.y = axes.yScale.invert(event.y);
                     updatePositions();
+                    updateTrajectory([]);
                     regl.dirty = true;
                   })
                   .on('end', function() { d3.select(this).attr('cursor', 'move'); })
