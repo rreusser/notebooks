@@ -111,6 +111,18 @@ export function createZoomableAxes({
     get viewInverse() { return viewInverse; },
     get xScale() { return xScaleD3.copy().domain(xDomain); },
     get yScale() { return yScaleD3.copy().domain(yDomain); },
+    // Update the external scales (for resize)
+    updateScales(newXScale, newYScale) {
+      xScale = newXScale;
+      yScale = newYScale;
+      syncRanges();
+      // Re-enforce aspect ratio with new pixel dimensions
+      [xDomain, yDomain] = enforceAspectRatio(xDomain, yDomain);
+      // Recompute matrices with updated domains
+      updateMatrices();
+      // Notify listeners of the domain change
+      onChange({ xDomain, yDomain, xRange: getXRange(), yRange: getYRange() });
+    }
   };
 
   return axes;

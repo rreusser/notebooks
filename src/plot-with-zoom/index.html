@@ -14,6 +14,7 @@
     import { createZoomableAxes } from './lib/zoomable-axes.js'
     import { createPolarDomainColoringShader } from './domain-coloring.js'
     import { collapseCodeBlocks } from './lib/collapsible-code.js'
+    import { expandable } from './lib/expandable.js'
   </script>
   <script id="3" type="text/x-typescript">
     const stackEl = initializeElementStack();
@@ -76,10 +77,52 @@
       }
     });
 
-    display(html`<figure>
-      ${el}
-      <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
-    </figure>`);
+    // Helper to resize the element stack
+    function resizeStack(newWidth, newHeight) {
+      stackEl._width = newWidth;
+      stackEl._height = newHeight;
+      stackEl.style.width = `${newWidth}px`;
+      stackEl.style.height = `${newHeight}px`;
+
+      // Update figure max-width to allow larger content
+      const figure = stackEl.closest('figure');
+      if (figure) {
+        figure.style.maxWidth = `${newWidth}px`;
+      }
+
+      // Get current domains from axes
+      const xDomain = axes.xScale.domain();
+      const yDomain = axes.yScale.domain();
+
+      // First pass: update layers with current domains to get new scales
+      stackEl.update({
+        regl: reglElement(createREGL, {extensions: ['OES_standard_derivatives'], attributes: { depthStencil: false, preserveDrawingBuffer: true }}),
+        plot: ({ width, height }) => createPlot({width, height, xDomain, yDomain}),
+        svg: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
+      });
+
+      // Update axes with new scales - this re-enforces aspect ratio and triggers onChange
+      // which will update the plot again with corrected domains
+      axes.updateScales(stackEl.value.plot.scale("x"), stackEl.value.plot.scale("y"));
+      regl.dirty = true;
+
+      // Dispatch update event for position recalculation with correct scales
+      stackEl.dispatchEvent(new CustomEvent("update"));
+    }
+
+    display(expandable((plotWidth, plotHeight) => {
+      return html`<figure>
+        ${el}
+        <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
+      </figure>`;
+    }, {
+      width: plotWidth,
+      height: plotHeight,
+      onResize: (newWidth, newHeight, expanded) => {
+        resizeStack(newWidth, newHeight);
+      }
+    }));
   </script>
   <script id="4b" type="text/markdown">
     As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation with three draggable control points.

@@ -1,0 +1,39 @@
+import{d as u,_ as f}from"./index-ByB2dbry.js";u({root:document.getElementById("cell-2"),expanded:[],variables:[]},{id:2,body:async()=>{const[e,{default:o},{initializeElementStack:i,createElementStack:n},{reglElement:d,reglAxesViewport:r},{createZoomableAxes:l},{createPolarDomainColoringShader:m},{collapseCodeBlocks:x}]=await Promise.all([f(()=>import("https://cdn.jsdelivr.net/npm/d3/+esm"),[]),f(()=>import("https://cdn.jsdelivr.net/npm/regl/+esm"),[]).then(t=>{if(!("default"in t))throw new SyntaxError("export 'default' not found");return t}),f(()=>import("./element-stack-BnIsoxP-.js"),[]).then(t=>{if(!("initializeElementStack"in t))throw new SyntaxError("export 'initializeElementStack' not found");if(!("createElementStack"in t))throw new SyntaxError("export 'createElementStack' not found");return t}),f(()=>import("./regl-canvas-D7hs0xnk.js"),[]).then(t=>{if(!("reglElement"in t))throw new SyntaxError("export 'reglElement' not found");if(!("reglAxesViewport"in t))throw new SyntaxError("export 'reglAxesViewport' not found");return t}),f(()=>import("./zoomable-axes-BpI4oQUD.js"),[]).then(t=>{if(!("createZoomableAxes"in t))throw new SyntaxError("export 'createZoomableAxes' not found");return t}),f(()=>import("./domain-coloring-tVXqCKP-.js"),[]).then(t=>{if(!("createPolarDomainColoringShader"in t))throw new SyntaxError("export 'createPolarDomainColoringShader' not found");return t}),f(()=>import("./collapsible-code-B4YhJ-0K.js"),[]).then(t=>{if(!("collapseCodeBlocks"in t))throw new SyntaxError("export 'collapseCodeBlocks' not found");return t})]);return{d3:e,createREGL:o,initializeElementStack:i,createElementStack:n,reglElement:d,reglAxesViewport:r,createZoomableAxes:l,createPolarDomainColoringShader:m,collapseCodeBlocks:x}},inputs:[],outputs:["d3","createREGL","initializeElementStack","createElementStack","reglElement","reglAxesViewport","createZoomableAxes","createPolarDomainColoringShader","collapseCodeBlocks"],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});u({root:document.getElementById("cell-3"),expanded:[],variables:[]},{id:3,body:e=>({stackEl:e()}),inputs:["initializeElementStack"],outputs:["stackEl"],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});u({root:document.getElementById("cell-4"),expanded:[],variables:[]},{id:4,body:(e,o,i,n,d,r,l,m,x,t)=>{const v=Math.min(e,640),a=Math.min(480,e),c={marginTop:0,marginRight:5,marginLeft:40,marginBottom:20,style:{backgroundColor:"transparent",maxWidth:"none"}};function y({width:s,height:p,xDomain:g=[-2,2],yDomain:w=[-2,2]}){return o.plot({width:s,height:p,...c,x:{domain:g,tickSpacing:100},y:{domain:w,tickSpacing:100},marks:[o.ruleX([0],{stroke:"#0002"}),o.ruleY([0],{stroke:"#0002"})]})}const h=i({container:n,width:v,height:a,layers:{regl:d(r,{extensions:["OES_standard_derivatives"],attributes:{depthStencil:!1,preserveDrawingBuffer:!0}}),plot:({width:s,height:p})=>y({width:s,height:p}),svg:({current:s,width:p,height:g})=>(s?l.select(s):l.create("svg")).attr("width",p).attr("height",g).node()}}),b=h.value,E=b.regl.value;E.dirty=!0;const _=m({d3:l,element:b.svg,xScale:b.plot.scale("x"),yScale:b.plot.scale("y"),aspectRatio:1,onChange:({xDomain:s,yDomain:p})=>{E.dirty=!0,n.update({plot:({width:g,height:w})=>y({width:g,height:w,xDomain:s,yDomain:p})})}});return x(t`<figure>
+  ${h}
+  <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
+</figure>`),{plotWidth:v,plotHeight:a,plotConfig:c,createPlot:y,el:h,stack:b,regl:E,axes:_}},inputs:["width","Plot","createElementStack","stackEl","reglElement","createREGL","d3","createZoomableAxes","display","html"],outputs:["plotWidth","plotHeight","plotConfig","createPlot","el","stack","regl","axes"],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});u({root:document.getElementById("cell-6"),expanded:[],variables:[]},{id:6,body:()=>({controlPoints:{a:{x:-1,y:.5},m:{x:0,y:0},b:{x:1,y:-.5}}}),inputs:[],outputs:["controlPoints"],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});u({root:document.getElementById("cell-7"),expanded:[],variables:[]},{id:7,body:(e,o,i,n)=>({drawGradient:e({vert:`
+    precision highp float;
+    attribute vec2 uv;
+    varying vec2 z;
+    uniform mat4 viewInverse;
+    void main () {
+      z = (viewInverse * vec4(uv, 0, 1)).xy;
+      gl_Position = vec4(uv, 0, 1);
+    }`,frag:`
+    #extension GL_OES_standard_derivatives : enable
+    precision highp float;
+    varying vec2 z;
+    uniform vec2 a, m, b;
+    uniform float pixelRatio;
+
+    vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+    vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }
+    vec2 f(vec2 z) { return cdiv(cmul(z - a, b - m), cmul(z - b, a - m)); }
+
+    ${o()}
+
+    void main () {
+      vec2 w = f(z);
+
+      gl_FragColor = domainColoring(
+        vec4(w, fwidth(w) * pixelRatio),
+        vec2(2.0, 2.0),    // steps
+        vec2(0.1),         // scale
+        vec2(0.1, 0.1),    // gridOpacity
+        vec2(0.35, 0.15),  // shadingOpacity
+        0.25,              // lineWidth
+        0.4,               // lineFeather
+        vec3(0),           // gridColor
+        4.0                // contrastPower
+      );
+    }`,uniforms:{viewInverse:e.prop("viewInverse"),pixelRatio:e.context("pixelRatio"),a:e.prop("a"),m:e.prop("m"),b:e.prop("b")},attributes:{uv:[-4,-4,4,-4,0,4]},depth:{enable:!1},scissor:{enable:!0,box:i(n)},viewport:i(n),count:3})}),inputs:["regl","createPolarDomainColoringShader","reglAxesViewport","axes"],outputs:["drawGradient"],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});u({root:document.getElementById("cell-8"),expanded:[],variables:[]},{id:8,body:(e,o,i,n,d,r)=>{{let v=function(){x.attr("cx",a=>n.xScale(a.point.x)).attr("cy",a=>n.yScale(a.point.y)),t.attr("x",a=>n.xScale(a.point.x)+8).attr("y",a=>n.yScale(a.point.y)+18)};const l=e.select(o.svg),m=[{id:"a",point:i.a,color:"rgb(51, 85, 238)",label:"a"},{id:"m",point:i.m,color:"rgb(51, 85, 238)",label:"m"},{id:"b",point:i.b,color:"rgb(51, 85, 238)",label:"b"}],x=l.selectAll("circle.control").data(m,a=>a.id).join("circle").attr("class","control").attr("r",6).attr("fill",a=>a.color).attr("stroke","#fff").attr("stroke-width",2).attr("cursor","move").call(e.drag().on("start",function(){e.select(this).attr("cursor","grabbing")}).on("drag",function(a,c){c.point.x=n.xScale.invert(a.x),c.point.y=n.yScale.invert(a.y),v(),d.dirty=!0}).on("end",function(){e.select(this).attr("cursor","move")})),t=l.selectAll("text.label").data(m,a=>a.id).join("text").attr("class","label").attr("text-anchor","middle").attr("font-family","sans-serif").attr("font-size","14px").attr("font-style","italic").attr("fill","#333").style("text-shadow",[[-1,0,1.5],[1,0,1.5],[0,1,1.5],[0,-1,1.5]].map(([a,c,y])=>`${a}px ${c}px ${y}px white`).join(", ")).text(a=>a.label);v(),r.addEventListener("update",v)}},inputs:["d3","stack","controlPoints","axes","regl","stackEl"],outputs:[],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});u({root:document.getElementById("cell-9"),expanded:[],variables:[]},{id:9,body:(e,o,i,n,d)=>{let r=e.frame(()=>{try{if(!e.dirty)return;o({viewInverse:i.viewInverse,a:[n.a.x,n.a.y],m:[n.m.x,n.m.y],b:[n.b.x,n.b.y]}),e.dirty=!1}catch{r.cancel(),r=void 0}});return d.then(()=>r?.cancel()),{loop:r}},inputs:["regl","drawGradient","axes","controlPoints","invalidation"],outputs:["loop"],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});u({root:document.getElementById("cell-10"),expanded:[],variables:[]},{id:10,body:e=>{e({maxHeight:400})},inputs:["collapseCodeBlocks"],outputs:[],output:void 0,assets:void 0,autodisplay:!1,autoview:void 0,automutable:void 0});
