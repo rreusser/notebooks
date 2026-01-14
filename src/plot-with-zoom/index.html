@@ -1,0 +1,222 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Plot with Zoom</title>
+  <script id="1" type="text/markdown">
+    # Plot with Zoom
+
+    A template for 2D plots with mouse wheel zooming using d3.zoom.
+  </script>
+  <script id="2" type="text/x-typescript">
+    import { mat4 } from 'npm:gl-matrix'
+    import createREGL from 'npm:regl'
+  </script>
+  <script id="3" type="text/x-typescript">
+    import { initializeElementStack, createElementStack, createAxisConfiguration } from './lib/element-stack.js'
+    import { reglCanvas } from './lib/regl-canvas.js'
+  </script>
+  <script id="4" type="text/x-typescript">
+    const stackEl = initializeElementStack();
+  </script>
+  <script id="5" type="text/x-typescript">
+    const plotWidth = Math.min(width, 640);
+    const plotHeight = Math.min(640, width);
+
+    const el = createElementStack({
+      container: stackEl,
+      width: plotWidth,
+      height: plotHeight,
+      layers: {
+        regl: ({ current, width, height }) => {
+          const pixelRatio = devicePixelRatio;
+          current = current || reglCanvas(createREGL, {
+            attributes: { depthStencil: false },
+            pixelRatio,
+          });
+          current.style.width = `${width}px`;
+          current.style.height = `${height}px`;
+          current.width = width * pixelRatio;
+          current.height = height * pixelRatio;
+          return current;
+        },
+        plot: ({ width, height }) =>
+          Plot.plot({
+            width,
+            height,
+            aspectRatio: 1,
+            marginTop: 0,
+            marginRight: 5,
+            marginLeft: 22,
+            marginBottom: 20,
+            style: { backgroundColor: "transparent", maxWidth: "none" },
+            x: { domain: [-3, 3], grid: true, tickSpacing: 100 },
+            y: { domain: [-3, 3], grid: true, tickSpacing: 100 }
+          }),
+        svg: ({ width, height }) =>
+          d3.create("svg").attr("width", width).attr("height", height).node()
+      }
+    });
+    const stack = el.value;
+    display(html`<figure>
+      ${el}
+      <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
+    </figure>`);
+  </script>
+  <script id="6" type="text/x-typescript">
+    const regl = stack.regl.value;
+    const state = {
+      dirty: true,
+      xDomain: [-3, 3],
+      yDomain: [-3, 3]
+    };
+  </script>
+  <script id="7" type="text/x-typescript">
+    const configureAxes = createAxisConfiguration(mat4, regl)
+  </script>
+  <script id="8" type="text/x-typescript">
+    // Set up d3.zoom on the SVG layer
+    const svgSelection = d3.select(stack.svg).style("cursor", "grab");
+
+    // Original/initial domain
+    const initialXDomain = [-3, 3];
+    const initialYDomain = [-3, 3];
+
+    // Get the plot scales for pixel-to-data conversion
+    const xScale = stack.plot.scale("x");
+    const yScale = stack.plot.scale("y");
+
+    // Create d3 scales for converting between pixel and data coordinates
+    const xScaleD3 = d3.scaleLinear()
+      .domain(initialXDomain)
+      .range(xScale.range);
+
+    const yScaleD3 = d3.scaleLinear()
+      .domain(initialYDomain)
+      .range(yScale.range);
+
+    // Define the extent of the zoom area (the plot region)
+    const extent = [
+      [xScale.range[0], yScale.range[1]],  // top-left of plot area
+      [xScale.range[1], yScale.range[0]]   // bottom-right of plot area
+    ];
+
+    // Function to update the Plot with new domains
+    function updatePlot(xDomain, yDomain) {
+      createElementStack({
+        container: stackEl,
+        width: plotWidth,
+        height: plotHeight,
+        layers: {
+          plot: ({ width, height }) =>
+            Plot.plot({
+              width,
+              height,
+              aspectRatio: 1,
+              marginTop: 0,
+              marginRight: 5,
+              marginLeft: 22,
+              marginBottom: 20,
+              style: { backgroundColor: "transparent", maxWidth: "none" },
+              x: { domain: xDomain, grid: true, tickSpacing: 100 },
+              y: { domain: yDomain, grid: true, tickSpacing: 100 }
+            })
+        }
+      });
+    }
+
+    const zoom = d3.zoom()
+      .scaleExtent([0.1, 100])
+      .extent(extent)
+      .on("start", () => {
+        svgSelection.style("cursor", "grabbing");
+      })
+      .on("end", () => {
+        svgSelection.style("cursor", "grab");
+      })
+      .on("zoom", (event) => {
+        const { transform } = event;
+
+        // Apply transform to get new domains
+        const newXScale = transform.rescaleX(xScaleD3);
+        const newYScale = transform.rescaleY(yScaleD3);
+
+        state.xDomain = newXScale.domain();
+        state.yDomain = newYScale.domain();
+
+        // Update the Plot axes
+        updatePlot(state.xDomain, state.yDomain);
+
+        state.dirty = true;
+      });
+
+    svgSelection.call(zoom);
+  </script>
+  <script id="9" type="text/x-typescript">
+    // Simple shader that draws a gradient based on position
+    const drawGradient = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        varying vec2 xy;
+        uniform mat4 viewInverse;
+        void main () {
+          xy = (viewInverse * vec4(uv, 0, 1)).xy;
+          gl_Position = vec4(uv, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        varying vec2 xy;
+
+        void main () {
+          // Create a simple pattern based on position
+          float r = length(xy);
+          float theta = atan(xy.y, xy.x);
+
+          vec3 color = 0.5 + 0.5 * cos(r * 2.0 + vec3(0.0, 2.1, 4.2));
+
+          // Add grid pattern
+          vec2 grid = abs(fract(xy) - 0.5);
+          float line = smoothstep(0.02, 0.0, min(grid.x, grid.y));
+
+          color = mix(color, vec3(0.2), line * 0.5);
+
+          gl_FragColor = vec4(color, 1);
+        }`,
+      attributes: {
+        uv: [-4, -4, 4, -4, 0, 4]
+      },
+      count: 3,
+      depth: { enable: false }
+    })
+  </script>
+  <script id="10" type="text/x-typescript">
+    // Create custom scales that use the state domains
+    function getScales() {
+      const xScale = stack.plot.scale("x");
+      const yScale = stack.plot.scale("y");
+      return {
+        x: { domain: state.xDomain, range: xScale.range },
+        y: { domain: state.yDomain, range: yScale.range }
+      };
+    }
+
+    let loop = regl.frame(() => {
+      if (!state.dirty) return;
+      try {
+        const scales = getScales();
+        configureAxes(scales.x, scales.y, () => {
+          regl.clear({ color: [1, 1, 1, 1] });
+          drawGradient();
+        });
+        state.dirty = false;
+      } catch (e) {
+        console.error(e);
+        if (loop) loop.cancel();
+        loop = null;
+      }
+    });
+    invalidation.then(() => {
+      if (loop) loop.cancel();
+      loop = null;
+    });
+  </script>
+</notebook>
