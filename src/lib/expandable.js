@@ -1,14 +1,14 @@
 /**
  * Creates an expandable wrapper for content that can pop out to cover more of the page.
  *
- * @param {Function} renderFn - Function that receives (plotWidth, plotHeight) and returns content
+ * @param {HTMLElement|string} content - The content element to wrap
  * @param {Object} options - Configuration options
  * @param {number} options.width - Default width when collapsed
  * @param {number} options.height - Default height when collapsed
- * @param {Function} [options.onResize] - Optional callback when dimensions change: (width, height, expanded) => void
+ * @param {Function} [options.onResize] - Optional callback when dimensions change: (content, width, height, expanded) => void
  * @returns {HTMLElement} The expandable container
  */
-export function expandable(renderFn, { width, height, onResize }) {
+export function expandable(content, { width, height, onResize }) {
   let expanded = false;
   let currentWidth = width;
   let currentHeight = height;
@@ -64,8 +64,11 @@ export function expandable(renderFn, { width, height, onResize }) {
     toggleBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.2)';
   });
 
-  // Render initial content
-  let content = renderFn(width, height);
+  // Handle function content (call it to get the element)
+  if (typeof content === 'function') {
+    content = content();
+  }
+  // Handle string content
   if (typeof content === 'string') {
     const temp = document.createElement('div');
     temp.innerHTML = content;
@@ -75,6 +78,11 @@ export function expandable(renderFn, { width, height, onResize }) {
   contentWrapper.appendChild(content);
   contentWrapper.appendChild(toggleBtn);
   container.appendChild(contentWrapper);
+
+  // Call onResize immediately to initialize content at the correct size
+  if (onResize) {
+    onResize(content, width, height, false);
+  }
 
   // Measure actual content height after it's in the DOM
   let collapsedHeight = null;
@@ -93,7 +101,7 @@ export function expandable(renderFn, { width, height, onResize }) {
     currentWidth = newWidth;
     currentHeight = newHeight;
     if (onResize) {
-      onResize(newWidth, newHeight, expanded);
+      onResize(content, newWidth, newHeight, expanded);
     }
   }
 

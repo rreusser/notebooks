@@ -4,8 +4,8 @@
  */
 export function createElementStack({
   container = null,  // Optional: existing container to reuse
-  width,
-  height,
+  width = 1,
+  height = 1,
   layers = {}
 } = {}) {
   // Create or reuse container
@@ -82,7 +82,7 @@ export function createElementStack({
         container.style.width = `${newWidth}px`;
         container.style.height = `${newHeight}px`;
 
-        // Re-render all layers at new size
+        // Render all layers at new size
         for (const label of Object.keys(container._layerDefs)) {
           renderLayer(label);
         }

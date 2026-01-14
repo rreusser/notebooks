@@ -3,16 +3,40 @@
   <title>Plot with Zoom</title>
   <script id="1" type="text/markdown">
     # Plot with Zoom
-
-    This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (a regl canvas, an Observable Plot, and an SVG) so that zoom and pan stay in sync across all of them. The layers and content are just one example. The point is to wire up the plumbing.
-
+  </script>
+  <script id="2" type="text/markdown">
+    This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (a [regl](https://github.com/regl-project/regl) WebGL  canvas, an [Observable Plot](https://observablehq.com/plot/), and an SVG) so that zoom and pan stay in sync across all of them. The goal is to generalize it to other interactive figures in a similar manner.
+  </script>
+  <script id="3" type="text/markdown">
     The key components are:
 
-    - **Element stack**: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and preserves expensive resources like WebGL contexts across reactive updates.
+    - **Element stack**: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and persists resources like WebGL contexts across reactive updates.
     - **Zoomable axes**: A rendering-agnostic zoom controller built on d3.zoom. It tracks the current view as orthographic matrices and exposes d3 scales for coordinate conversion. When the view changes, it notifies listeners so each layer can update accordingly.
     - **Expandable wrapper**: The plot can be expanded to fill most of the viewport by clicking the toggle button in the corner. This is useful for exploring detail without leaving the page.
   </script>
-  <script id="2" type="text/x-typescript">
+  <script id="4" type="text/x-typescript" pinned="">
+    const figure = html`<figure>
+      ${stack.element}
+      <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
+    </figure>`;
+
+    display(expandable(figure, {
+      width: Math.min(width, 640),
+      height: Math.min(480, width),
+      onResize(el, w, h) {
+        stack.resize(w, h);
+        axes.updateScales(
+          stack.elements.plot.scale("x"),
+          stack.elements.plot.scale("y")
+        );
+        regl.dirty = true;
+      }
+    }));
+  </script>
+  <script id="16" type="text/markdown">
+    The code above performs final display of the figure we develop below. The focus here is managing the expandable section, in particular instantiating the content and managing what happens when resized.
+  </script>
+  <script id="5" type="text/x-typescript">
     import * as d3 from 'npm:d3'
     import createREGL from 'npm:regl'
     import { createElementStack } from './lib/element-stack.js'
@@ -22,31 +46,28 @@
     import { collapseCodeBlocks } from './lib/collapsible-code.js'
     import { expandable } from './lib/expandable.js'
   </script>
-  <script id="3" type="text/x-typescript">
-    // Stable container - no dependencies, persists across reactive updates
-    // This allows WebGL contexts and other expensive resources to be reused
+  <script id="19" type="text/markdown">
+    The first major step is to instantiate the stack container. This is a persistent container that will hold the plot. This awful statefulness is critical when using WebGL, because a cell dependency on the page `width` would trigger reinsantiation of the WebGL context, which inevitably leads to lost WebGL contexts and much gnashing of teeth.
+  </script>
+  <script id="18" type="text/x-typescript" pinned="">
     const stackContainer = document.createElement('div');
   </script>
-  <script id="4" type="text/x-typescript" pinned="">
-    const plotWidth = Math.min(width, 640);
-    const plotHeight = Math.min(480, width);
-
-    // Create element stack with layer definitions
-    // Pass stackContainer to reuse existing elements (especially WebGL context)
+  <script id="20" type="text/markdown">
+    Next, we configure the stack. The `reglElement` helper returns a function which receives the current regl element as an argument, thus preventing reinstantiation.
+  </script>
+  <script id="7" type="text/x-typescript" pinned="">
     const stack = createElementStack({
       container: stackContainer,
-      width: plotWidth,
-      height: plotHeight,
       layers: {
         regl: reglElement(createREGL, {
           extensions: ['OES_standard_derivatives'],
           attributes: { depthStencil: false, preserveDrawingBuffer: true }
         }),
-        plot: ({ width, height, xDomain=[-2, 2], yDomain=[-2, 2] }) => 
+        plot: ({ width, height, xDomain=[-2, 2], yDomain=[-2, 2] }) =>
           Plot.plot({
             width,
             height,
-            marginTop: 0,
+            marginTop: 20,
             marginRight: 10,
             marginLeft: 40,
             marginBottom: 20,
@@ -62,10 +83,8 @@
           (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
       }
     });
-
-    const regl = stack.elements.regl.value;
-    regl.dirty = true;
-
+  </script>
+  <script id="8" type="text/x-typescript" pinned="">
     const axes = createZoomableAxes({
       d3,
       element: stack.elements.svg,
@@ -77,36 +96,15 @@
         stack.update({ plot: { xDomain, yDomain } });
       }
     });
-
-    display(expandable((plotWidth, plotHeight) => {
-      return html`<figure>
-        ${stack.element}
-        <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
-      </figure>`;
-    }, {
-      width: plotWidth,
-      height: plotHeight,
-      onResize: function resizeStack(w, h) {
-        // Update figure max-width to allow larger content
-        const figure = stack.element.closest('figure');
-        if (figure) figure.style.maxWidth = `${w}px`;
-        stack.resize(w, h);
-        axes.updateScales(
-          stack.elements.plot.scale("x"),
-          stack.elements.plot.scale("y")
-        );
-        regl.dirty = true;
-      }
-    }));
   </script>
-  <script id="4b" type="text/markdown">
+  <script id="9" type="text/markdown">
     As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation. The function maps complex numbers according to
 
     ${tex.block`f(z) = \frac{(z - a)(b - m)}{(z - b)(a - m)}`}
 
     where ${tex`a`}, ${tex`m`}, and ${tex`b`} are control points you can drag to explore the transformation. By construction, ${tex`f(a) = 0`}, ${tex`f(b) = \infty`}, and ${tex`f(m) = 1`}. Möbius transformations are conformal (angle-preserving) and map circles to circles, though some of those circles may have infinite radius (i.e., lines).
   </script>
-  <script id="5" type="text/x-typescript" pinned="">
+  <script id="10" type="text/x-typescript" pinned="">
     // Control points for the complex function f(z) = (z - a)(b - m) / (z - b)(a - m)
     const controlPoints = {
       a: { x: -1, y: 0.5 },
@@ -114,7 +112,11 @@
       b: { x: 1, y: -0.5 }
     };
   </script>
-  <script id="5b" type="text/x-typescript" pinned="">
+  <script id="11" type="text/x-typescript" pinned="">
+    const regl = stack.elements.regl.value;
+    regl.dirty = true;
+  </script>
+  <script id="12" type="text/x-typescript" pinned="">
     const drawGradient = regl({
       vert: `
         precision highp float;
@@ -167,7 +169,7 @@
       count: 3,
     });
   </script>
-  <script id="5c" type="text/x-typescript" pinned="">
+  <script id="13" type="text/x-typescript" pinned="">
     // Create SVG circles for draggable control points
     {
       const svg = d3.select(stack.elements.svg);
@@ -203,11 +205,11 @@
         .join('text')
         .attr('class', 'label')
         .attr('text-anchor', 'middle')
-        .attr('font-family', 'sans-serif')
-        .attr('font-size', '14px')
+        .attr('font-family', 'serif')
+        .attr('font-size', '18px')
         .attr('font-style', 'italic')
         .attr('fill', '#333')
-        .style('text-shadow', [[-1, 0, 1.5], [1, 0, 1.5], [0, 1, 1.5], [0, -1, 1.5]].map(([i, j, sh]) => `${i}px ${j}px ${sh}px white`).join(', '))
+        .style('text-shadow', [[-1, 0, 2.5], [1, 0, 2.5], [0, 1, 2.5], [0, -1, 2.5]].map(([i, j, sh]) => `${i}px ${j}px ${sh}px white`).join(', '))
         .text(d => d.label);
 
       function updatePositions() {
@@ -223,7 +225,7 @@
       stack.addEventListener('update', updatePositions);
     }
   </script>
-  <script id="6" type="text/x-typescript" pinned="">
+  <script id="14" type="text/x-typescript" pinned="">
     let loop = regl.frame(() => {
       try {
         if (!regl.dirty) return;
@@ -242,9 +244,9 @@
 
     invalidation.then(() => loop?.cancel());
   </script>
-  <script type="text/x-typescript">
+  <script id="15" type="text/x-typescript">
     collapseCodeBlocks({
-      maxHeight: 400
+      maxHeight: 500
     });
   </script>
 </notebook>
