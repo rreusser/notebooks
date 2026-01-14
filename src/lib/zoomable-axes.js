@@ -80,7 +80,9 @@ export function createZoomableAxes({
   }
 
   // Set up d3.zoom
-  const selection = d3.select(element).style("cursor", "grab");
+  const selection = d3.select(element)
+    .attr("id", "zoom-target")
+    .style("cursor", "grab");
 
   const zoom = d3.zoom()
     .scaleExtent(scaleExtent)
