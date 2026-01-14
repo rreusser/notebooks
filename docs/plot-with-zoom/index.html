@@ -1507,8 +1507,9 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Zoomable Multi-Layer Plots in Notebook Kit</title>  <script type="module" crossorigin src="/notebooks/assets/index-Bk2rP35L.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Zoomable Multi-Layer Plots in Notebook Kit</title>  <script type="module" crossorigin src="/notebooks/assets/index-D76WqbHE.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/comments-I77vOiCB.js">
 </head>
 <body>
   <nav class="menu">
@@ -1586,8 +1587,7 @@ main h6 {
         .<span class="tok-definition">attr</span>(<span class="tok-string">"height"</span>, <span class="tok-variable">height</span>)
         .<span class="tok-definition">node</span>()
   }]
-});</code></pre><div id="cell-20" class="observablehq observablehq--cell"><div><p>Now, we configure the stack. The <code>reglElement</code> helper returns a function which receives the current regl element as an argument, thus preventing reinstantiation.</p>
-</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><h3 id="observable-plot" tabindex="-1"><a href="#observable-plot">Observable Plot</a></h3>
+});</code></pre><div id="cell-35" class="observablehq observablehq--cell"><div><h3 id="observable-plot" tabindex="-1"><a href="#observable-plot">Observable Plot</a></h3>
 </div></div><div id="cell-22" class="observablehq observablehq--cell"><div><p>Next, we provide a function to instantiate the <a href="https://observablehq.com/plot/">Observable Plot</a>. Since we don’t reuse it, we don’t have to be too careful. The only part we do reuse is the x and y domains, so we need to be careful to pass that back in for reuse.</p>
 </div></div><div id="cell-21" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">function</span> <span class="tok-definition">createPlot</span>(<span class="tok-definition">width</span>, <span class="tok-definition">height</span>, <span class="tok-definition">xDomain</span> = [-<span class="tok-literal">2</span>, <span class="tok-literal">2</span>], <span class="tok-definition">yDomain</span> = [-<span class="tok-literal">2</span>, <span class="tok-literal">2</span>]) {
   <span class="tok-keyword">return</span> <span class="tok-variable">Plot</span>.<span class="tok-definition">plot</span>({
@@ -1778,6 +1778,13 @@ main h6 {
 <span class="tok-variable">invalidation</span>.<span class="tok-definition">then</span>(() =&gt; <span class="tok-variable">loop</span>?.<span class="tok-definition">cancel</span>());</code></pre><div id="cell-37" class="observablehq observablehq--cell"><div><h2 id="conclusions" tabindex="-1"><a href="#conclusions">Conclusions</a></h2>
 </div></div><div id="cell-32" class="observablehq observablehq--cell"><div><p>Is this good? Bad? Overwrought? I’m not sure. It’s a lot. But then, it layers WebGL, Observable Plot, and SVG into a single interactive plot with some nice conveniences. And there’s no reason you couldn’t add any additional technology you please. It’s a healthy chunk of code, and the full source includes a few more helper function used above. What I am sure of is that the output seems, to me, humbly, <em>really good</em>. These things are very tedious to get right, and I’m happy so far with how this looks. It could certainly be wrapped up a bit more for convenience, at least when the full flexibility of the above system is not needed. But I might try to give this a go in a place or two.</p>
 </div></div><div id="cell-15" class="observablehq observablehq--cell"></div></main>
+      <style>
+        #comment-root {
+          margin: auto;
+          max-width: 640px;
+        }
+      </style>
+      <div id="comment-root" data-post-id="115892519884431495"></div>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 

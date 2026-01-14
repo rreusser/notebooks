@@ -4,54 +4,28 @@
   <script id="1" type="text/markdown">
     # Chaotic Magnetic Pendulum
   </script>
-  <script id="29" type="text/x-typescript">
-    const el = createElementStack({
-      container: stackEl,
+  <script id="4" type="text/x-typescript">
+    const figure = html`<figure>
+      ${stack.element}
+      <figcaption>Drag points to adjust magnet positions. Use mouse wheel to zoom, drag background to pan.</figcaption>
+    </figure>`;
+
+    display(expandable(figure, {
       width: Math.min(width, 640),
       height: Math.min(640, width),
-      layers: {
-        regl: ({ current, width, height }) => {
-          const pixelRatio = devicePixelRatio;
-          current = current || reglCanvas(createREGL, {
-            attributes: { depthStencil: false },
-            pixelRatio,
-          });
-          current.style.width = `${width}px`;
-          current.style.height = `${height}px`;
-          current.width = width * pixelRatio;
-          current.height = height * pixelRatio;
-          return current;
-        },
-        plot: ({ width, height }) =>
-          Plot.plot({
-            width,
-            height,
-            aspectRatio: 1,
-            marginTop: 0,
-            marginRight: 5,
-            marginLeft: 22,
-            marginBottom: 20,
-            style: { backgroundColor: "transparent", maxWidth: "none" },
-            x: { domain: [-3, 3], grid: true, tickSpacing: 100 },
-            y: {
-              domain: [(-2.9 * height) / width, (2.9 * height) / width],
-              grid: true,
-              tickSpacing: 100
-            }
-          }),
-        svg: ({ width, height }) =>
-          d3.create("svg").attr("width", width).attr("height", height).node()
+      toggleOffset: [-3, -14],
+      onResize(el, w, h) {
+        stack.resize(w, h);
+        axes.updateScales(
+          stack.elements.plot.scale("x"),
+          stack.elements.plot.scale("y")
+        );
+        regl.dirty = true;
       }
-    });
-    const stack = el.value;
-    display(html`<figure>
-      ${el}
-      <figcaption>Drag points to adjust magnet positions.</figcaption>
-    </figure>`);
+    }));
   </script>
   <script id="30" type="text/x-typescript">
     const h = view(Inputs.range([1e-3 * 0, 1], {
-      //transform: Math.log,
       label: "pendulum height, h",
       value: 0.5
     }))
@@ -73,9 +47,8 @@
     }))
     const opts = view(Inputs.checkbox([
       "Draw trajectory",
-      //'Use steps which exceed tolerance'
     ], {
-      value: ["Draw trajectory", 'Use steps which exceed tolerance']
+      value: ["Draw trajectory"]
     }));
   </script>
   <script id="9" type="text/markdown">
@@ -111,13 +84,13 @@
     To get started, we define the derivative function
   </script>
   <script id="49" type="text/x-typescript">
-    const i = Array.from({length: N}).map((_, i) => i);
+    const iDeriv = Array.from({length: N}).map((_, i) => i);
     const glslDeriv = `vec4 deriv (vec4 y) {
       vec2 pos = y.xy;
       vec2 vel = y.zw;
-      ${i.map(i => `vec2 r${i} = p${i} - pos;`).join('\n  ')}
-      ${i.map(i => `float d${i} = dot(r${i}, r${i}) + h2;`).join('\n  ')}
-      vec2 force = ${i.map(i => `r${i} / (d${i} * d${i} * sqrt(d${i}))`).join(' +\n               ')};
+      ${iDeriv.map(i => `vec2 r${i} = p${i} - pos;`).join('\n  ')}
+      ${iDeriv.map(i => `float d${i} = dot(r${i}, r${i}) + h2;`).join('\n  ')}
+      vec2 force = ${iDeriv.map(i => `r${i} / (d${i} * d${i} * sqrt(d${i}))`).join(' +\n               ')};
       return vec4(vel, force - b * vel - pos);
     }`
   </script>
@@ -127,7 +100,7 @@
     ```
   </script>
   <script id="47" type="text/markdown">
-    The GLSL variant of `ode45` is reproduced below. It’s mostly equivalent to the CPU variant except modified for the limitations of GLSL control flow.
+    The GLSL variant of `ode45` is reproduced below. It's mostly equivalent to the CPU variant except modified for the limitations of GLSL control flow.
   </script>
   <script id="42" type="text/markdown">
     ```glsl
@@ -186,7 +159,7 @@
     ```
   </script>
   <script id="48" type="text/markdown">
-    Note that if the error threshold is not achieved (that is, if we need to reduce the time step to keep error under control), then we simply throw out the timestep entirely. This is very wasteful! *C’est la vie*.
+    Note that if the error threshold is not achieved (that is, if we need to reduce the time step to keep error under control), then we simply throw out the timestep entirely. This is very wasteful! *C'est la vie*.
   </script>
   <script id="43" type="text/markdown">
     Given zero velocity and starting position `xy`, the final iteration loop is reproduced below. We start by packing the state into a `vec4`. We update the state ${steps} times, overwriting the state and mutating `dt` on each step. The iteration is quite straightfoward, but GLSL 1.00 does not permit loop bounds to be computed at runtime, so we have to hard-code the loop extents into the shader.
@@ -199,12 +172,12 @@
     ```
   </script>
   <script id="52" type="text/markdown">
-    The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of GLSL fragment shaders, we can’t really know, so we just do our best and go with it.
+    The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of GLSL fragment shaders, we can't really know, so we just do our best and go with it.
 
-    I’ve chosen a rainbow color palette from [Inigo Quilez](https://iquilezles.org/articles/palettes/) and used a [quasirandom sequence](https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/) from Martin Roberts to distribute the colors somewhat randomly so that adjacent colors around the unit circle aren’t also adjacent around the color wheel.
+    I've chosen a rainbow color palette from [Inigo Quilez](https://iquilezles.org/articles/palettes/) and used a [quasirandom sequence](https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/) from Martin Roberts to distribute the colors somewhat randomly so that adjacent colors around the unit circle aren't also adjacent around the color wheel.
   </script>
   <script id="67" type="text/x-typescript">
-    const i = Array.from({length: N}).map((_, i) => i);
+    const iPalette = Array.from({length: N}).map((_, i) => i);
     const glslPalette = `float quasirandom (int n) {
       return fract(0.5 + ${1.0 / 1.6180339887498948482} * float(n));
     }
@@ -216,12 +189,11 @@
       return a + b * cos(6.283185 * (c * t + d));
     }`;
     const glslScheme = `vec3 computeWeightedColor (vec2 y) {
-      ${i.map(i => `vec2 r${i} = y - p${i};`).join('\n  ')}
-      ${i.map(i => `float w${i} = 1.0 / dot(r${i}, r${i}); w${i} *= w${i};`).join('\n  ')}
+      ${iPalette.map(i => `vec2 r${i} = y - p${i};`).join('\n  ')}
+      ${iPalette.map(i => `float w${i} = 1.0 / dot(r${i}, r${i}); w${i} *= w${i};`).join('\n  ')}
       return (
         ${
-          /*i.map(i => `w${i} * ${colorScheme[i]}`).join(' +\n    ')*/
-          i.map(i => {
+          iPalette.map(i => {
             const theta = Math.PI * 2 * i / N;
             const a = 0.5 + 0.5 * Math.cos(theta);
             const b = 0.5 + 0.5 * Math.cos(theta + Math.PI * 2 / 3);
@@ -229,7 +201,7 @@
             return `w${i} * mix(palette(0.63 + quasirandom(${i})), vec3(0.9), 0.35)`;
           }).join(' +\n    ')
         }
-      ) / (${i.map(i => `w${i}`).join(' + ')});
+      ) / (${iPalette.map(i => `w${i}`).join(' + ')});
     }`;
   </script>
   <script id="68" type="text/markdown">
@@ -243,26 +215,72 @@
     ```
   </script>
   <script id="53" type="text/markdown">
-    That’s it. Once in place, adaptive methods are just great. It’s a pretty handy function which you’re free to lift and use. (The source is MIT Licensed.) You can view the live notebook [on Observable](https://observablehq.com/@rreusser/magnetic-pendulum).
+    That's it. Once in place, adaptive methods are just great. It's a pretty handy function which you're free to lift and use. (The source is MIT Licensed.) You can view the live notebook [on Observable](https://observablehq.com/@rreusser/magnetic-pendulum).
   </script>
   <script id="7" type="text/x-typescript">
-    import { mat4 } from 'npm:gl-matrix'
     import createREGL from 'npm:regl'
     import { ode45 } from "observable:@rreusser/integration"
   </script>
   <script id="2" type="text/x-typescript">
-    import { initializeElementStack, createElementStack, createAxisConfiguration } from './lib/element-stack.js'
-    import { reglCanvas } from './lib/regl-canvas.js'
+    import { createElementStack } from './lib/element-stack.js'
+    import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
+    import { createZoomableAxes } from './lib/zoomable-axes.js'
+    import { expandable } from './lib/expandable.js'
   </script>
-  <script id="3" type="text/x-typescript">
-    const stackEl = initializeElementStack();
+  <script id="29" type="text/x-typescript">
+    function createPlot(width, height, xDomain = [-3, 3], yDomain = [-3, 3]) {
+      return Plot.plot({
+        width,
+        height,
+        marginTop: 5,
+        marginRight: 10,
+        marginLeft: 30,
+        marginBottom: 20,
+        style: { backgroundColor: "transparent", maxWidth: "none", position: "absolute" },
+        x: { domain: xDomain, grid: true, tickSpacing: 100 },
+        y: { domain: yDomain, grid: true, tickSpacing: 100 }
+      });
+    }
+  </script>
+  <script id="5" type="text/x-typescript">
+    const stack = createElementStack({
+      layers: [{
+        id: 'regl',
+        element: reglElement(createREGL, {
+          attributes: { depthStencil: false, preserveDrawingBuffer: true }
+        })
+      }, {
+        id: 'plot',
+        element: ({ width, height }) => createPlot(width, height)
+      }, {
+        id: 'svg',
+        element: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg"))
+            .attr("width", width)
+            .attr("height", height)
+            .node()
+      }]
+    });
+  </script>
+  <script id="8" type="text/x-typescript">
+    const axes = createZoomableAxes({
+      d3,
+      element: stack.elements.svg,
+      xScale: stack.elements.plot.scale("x"),
+      yScale: stack.elements.plot.scale("y"),
+      aspectRatio: 1,
+      onChange: ({ xDomain, yDomain }) => {
+        regl.dirty = true;
+        const newPlot = createPlot(stack.width, stack.height, xDomain, yDomain);
+        stack.elements.plot.replaceWith(newPlot);
+        stack.elements.plot = newPlot;
+        stack.dispatchEvent(new CustomEvent('update'));
+      }
+    });
   </script>
   <script id="18" type="text/x-typescript">
-    const regl = stack.regl.value;
-    const svg = stack.svg.value;
-    const state = {
-      dirty: false
-    };
+    const regl = stack.elements.regl.value;
+    regl.dirty = true;
   </script>
   <script id="27" type="text/x-typescript">
     const magnets = Array.from({length: N}).map((_, i) => ({
@@ -302,118 +320,119 @@
     };
   </script>
   <script id="26" type="text/x-typescript">
-    const xScale = stack.plot.scale("x");
-    const yScale = stack.plot.scale("y");
-    const svg = d3.select(stack.svg).style("cursor", "crosshair");
-    svg.selectAll("circle").remove();
-    svg.on("mousemove", (event) => {
-      updateTrajectory(computeTrajectory([
-        xScale.invert(event.offsetX),
-        yScale.invert(event.offsetY)
-      ]));
-    });
-    //window.addEventListener("mouseout", () => updateTrajectory(null));
+    // SVG interaction for trajectories and magnet controls
+    {
+      const svg = d3.select(stack.elements.svg);
 
-    const makeline = d3
-      .line()
-      .x(({ x }) => xScale.apply(x))
-      .y(({ y }) => yScale.apply(y));
-    function updateTrajectory (trajectory) {
-      svg
-        .selectAll(".trajectorybg")
-        .data([trajectory || []])
-        .join(
-          (enter) =>
-            enter
-              .append("path")
-              .style("fill", "none")
-              .style("stroke-width", 5)
-              .style("stroke", "rgba(255,255,255,0.6)")
-              .attr("class", "trajectorybg")
-              .attr("d", makeline),
-          (update) => update.attr("d", makeline)
-        );
-      svg
-        .selectAll(".trajectory")
-        .data([trajectory || []])
-        .join(
-          (enter) =>
-            enter
-              .append("path")
-              .style("fill", "none")
-              .style("stroke-width", 2)
-              .style("stroke", "blue")
-              .attr("class", "trajectory")
-              .attr("d", makeline),
-          (update) => update.attr("d", makeline)
-        );
-    }
+      // Add clipPath for viewport
+      const defs = svg.selectAll('defs').data([0]).join('defs');
+      const clipRect = defs.selectAll('clipPath#viewport-clip')
+        .data([0])
+        .join('clipPath')
+        .attr('id', 'viewport-clip')
+        .selectAll('rect')
+        .data([0])
+        .join('rect');
 
-    function updatePositions(p) {
-      p.attr("r", 5)
-        .attr("cx", ({ x }) => xScale.apply(x))
-        .attr("cy", ({ y }) => yScale.apply(y));
-    }
+      // Clipped group for content
+      const clippedGroup = svg.selectAll('g.clipped')
+        .data([0])
+        .join('g')
+        .attr('class', 'clipped')
+        .attr('clip-path', 'url(#viewport-clip)');
 
-    updateTrajectory([]);
-    svg
-      .selectAll("circle")
-      .data(magnets)
-      .join(
-        (enter) =>
-          enter
-            .append("circle")
-            .style("fill", "black")
-            .style("stroke", "white")
-            .style("stroke-width", 2)
-            .style("cursor", "move")
-            .call(updatePositions)
-            .call(
-              d3.drag().on("drag", (event) => {
-                let {
-                  sourceEvent: { offsetX, offsetY, touches },
-                  subject: { index }
-                } = event;
-                if (touches?.length) {
-                  const { x, y } = svg.node().getBoundingClientRect();
-                  offsetX = touches[0].clientX - x;
-                  offsetY = touches[0].clientY - y;
-                }
-                magnets[index].x = xScale.invert(offsetX);
-                magnets[index].y = yScale.invert(offsetY);
-                svg.selectAll("circle").call(updatePositions);
-                state.dirty = true;
-              })
-            ),
-        (update) => update.call(updatePositions)
-      );
-  </script>
-  <script id="20" type="text/x-typescript">
-    state.dirty = true;
-    let loop = regl.frame(({ time }) => {
-      if (!state.dirty) return;
-      try {
-        configureAxes(stack.plot.scale("x"), stack.plot.scale("y"), () => {
-          regl.clear({ color: [1, 0, 0, 1] });
-          drawField({
-            h, b, magnets, tolerance,
-            discard: !opts.includes('Use steps which exceed tolerance')
-          });
-        });
-        state.dirty = false;
-      } catch (e) {
-        console.error(e);
-        if (loop) loop.cancel();
-        loop = null;
+      svg.on("mousemove", (event) => {
+        updateTrajectory(computeTrajectory([
+          axes.xScale.invert(event.offsetX),
+          axes.yScale.invert(event.offsetY)
+        ]));
+      });
+
+      function makeline(data) {
+        return d3.line()
+          .x(({ x }) => axes.xScale(x))
+          .y(({ y }) => axes.yScale(y))(data);
       }
-    });
-    invalidation.then(() => {
-      if (loop) loop.cancel();
-      loop = null;
-    });
-  </script>
-  <script id="22" type="text/x-typescript">
-    const configureAxes = createAxisConfiguration(mat4, regl)
+
+      function updateTrajectory(trajectory) {
+        clippedGroup
+          .selectAll(".trajectorybg")
+          .data([trajectory || []])
+          .join(
+            (enter) =>
+              enter
+                .append("path")
+                .style("fill", "none")
+                .style("stroke-width", 5)
+                .style("stroke", "rgba(255,255,255,0.6)")
+                .attr("class", "trajectorybg")
+                .attr("d", makeline),
+            (update) => update.attr("d", makeline)
+          );
+        clippedGroup
+          .selectAll(".trajectory")
+          .data([trajectory || []])
+          .join(
+            (enter) =>
+              enter
+                .append("path")
+                .style("fill", "none")
+                .style("stroke-width", 2)
+                .style("stroke", "blue")
+                .attr("class", "trajectory")
+                .attr("d", makeline),
+            (update) => update.attr("d", makeline)
+          );
+      }
+
+      function updatePositions() {
+        // Update clip rect to match viewport
+        const [x0, x1] = axes.xRange;
+        const [y0, y1] = axes.yRange;
+        clipRect
+          .attr('x', Math.min(x0, x1))
+          .attr('y', Math.min(y0, y1))
+          .attr('width', Math.abs(x1 - x0))
+          .attr('height', Math.abs(y1 - y0));
+
+        clippedGroup.selectAll("circle.magnet")
+          .attr("cx", d => axes.xScale(d.x))
+          .attr("cy", d => axes.yScale(d.y));
+      }
+
+      updateTrajectory([]);
+      clippedGroup
+        .selectAll("circle.magnet")
+        .data(magnets)
+        .join(
+          (enter) =>
+            enter
+              .append("circle")
+              .attr("class", "magnet")
+              .attr("r", 5)
+              .style("fill", "black")
+              .style("stroke", "white")
+              .style("stroke-width", 2)
+              .style("cursor", "move")
+              .call(
+                d3.drag()
+                  .subject(function(event, d) {
+                    return { x: axes.xScale(d.x), y: axes.yScale(d.y) };
+                  })
+                  .on('start', function() { d3.select(this).attr('cursor', 'grabbing'); })
+                  .on("drag", function(event, d) {
+                    d.x = axes.xScale.invert(event.x);
+                    d.y = axes.yScale.invert(event.y);
+                    updatePositions();
+                    regl.dirty = true;
+                  })
+                  .on('end', function() { d3.select(this).attr('cursor', 'move'); })
+              )
+        );
+
+      updatePositions();
+      stack.addEventListener('update', updatePositions);
+    }
   </script>
   <script id="21" type="text/x-typescript">
     const magnetUniforms = {};
@@ -480,15 +499,39 @@
         uv: [-4, -4, 4, -4, 0, 4]
       },
       uniforms: {
+        viewInverse: regl.prop('viewInverse'),
         h2: (_, { h }) => h * h,
         b: regl.prop("b"),
         tol2: (_, { tolerance }) => tolerance * tolerance,
         discardFails: regl.prop('discard'),
         ...magnetUniforms
       },
-      count: 3,
-      depth: { enable: false }
+      depth: { enable: false },
+      scissor: { enable: true, box: reglAxesViewport(axes) },
+      viewport: reglAxesViewport(axes),
+      count: 3
     })
+  </script>
+  <script id="20" type="text/x-typescript">
+    let loop = regl.frame(() => {
+      if (!regl.dirty) return;
+      try {
+        drawField({
+          viewInverse: axes.viewInverse,
+          h, b, magnets, tolerance,
+          discard: !opts.includes('Use steps which exceed tolerance')
+        });
+        regl.dirty = false;
+      } catch (e) {
+        console.error(e);
+        if (loop) loop.cancel();
+        loop = null;
+      }
+    });
+    invalidation.then(() => {
+      if (loop) loop.cancel();
+      loop = null;
+    });
   </script>
   <script id="59" type="text/x-typescript">
     function srgbToLinear(c) {
