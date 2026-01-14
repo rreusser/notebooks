@@ -46,6 +46,10 @@ export function createZoomableAxes({
     return [xd, newYDomain];
   }
 
+  // Store the original initial x domain as the fixed reference for zoom limits
+  // (y domain varies with aspect ratio, so we only track x)
+  const baseXDomain = [...initialXDomain];
+
   // State (apply aspect ratio to initial domains)
   let [xDomain, yDomain] = enforceAspectRatio([...initialXDomain], [...initialYDomain]);
 
@@ -62,14 +66,31 @@ export function createZoomableAxes({
   // Initialize matrices
   updateMatrices();
 
-  // D3 scales for zoom transform - use corrected domains so pan/zoom works correctly
-  const xScaleD3 = d3.scaleLinear().domain(xDomain).range(getXRange());
-  const yScaleD3 = d3.scaleLinear().domain(yDomain).range(getYRange());
+  // Compute base Y domain dynamically based on current pixel dimensions
+  function getBaseYDomain() {
+    const [, baseYDomain] = enforceAspectRatio([...baseXDomain], [...initialYDomain]);
+    return baseYDomain;
+  }
 
-  // Sync internal d3 scale ranges with external scales
+  // D3 scales for zoom transform - x domain is fixed, y domain computed dynamically
+  const xScaleD3 = d3.scaleLinear().domain(baseXDomain).range(getXRange());
+  const yScaleD3 = d3.scaleLinear().domain(getBaseYDomain()).range(getYRange());
+
+  // Sync internal d3 scale ranges and recompute base y domain for new pixel dimensions
   function syncRanges() {
     xScaleD3.range(getXRange());
-    yScaleD3.range(getYRange());
+    yScaleD3.domain(getBaseYDomain()).range(getYRange());
+  }
+
+  // Compute the zoom transform that maps from base domain to current domain
+  // Uses x as the primary zoom factor since y may be adjusted by aspect ratio enforcement
+  function computeTransform() {
+    // Scale factor based on x domain (primary zoom direction)
+    const k = (baseXDomain[1] - baseXDomain[0]) / (xDomain[1] - xDomain[0]);
+    // Translation: position current domain correctly in screen space
+    const tx = xScaleD3.range()[0] - k * xScaleD3(xDomain[0]);
+    const ty = yScaleD3.range()[0] - k * yScaleD3(yDomain[0]);
+    return d3.zoomIdentity.translate(tx, ty).scale(k);
   }
 
   // Zoom extent as a function (reads current ranges)
@@ -118,10 +139,10 @@ export function createZoomableAxes({
       syncRanges();
       // Re-enforce aspect ratio with new pixel dimensions, preserving current view
       [xDomain, yDomain] = enforceAspectRatio(xDomain, yDomain);
-      // Update base d3 scale domains and reset zoom transform
-      xScaleD3.domain(xDomain);
-      yScaleD3.domain(yDomain);
-      selection.call(zoom.transform, d3.zoomIdentity);
+      // Compute transform that represents current zoom relative to base domain
+      // This preserves absolute zoom limits across resize
+      const transform = computeTransform();
+      selection.call(zoom.transform, transform);
       // Recompute matrices with updated domains
       updateMatrices();
       // Notify listeners of the domain change
