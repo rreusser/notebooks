@@ -109,7 +109,8 @@ export function createZoomableAxes({
     get yRange() { return getYRange(); },
     get view() { return view; },
     get viewInverse() { return viewInverse; },
-
+    get xScale() { return xScaleD3.copy().domain(xDomain); },
+    get yScale() { return yScaleD3.copy().domain(yDomain); },
   };
 
   return axes;

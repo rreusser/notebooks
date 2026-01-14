@@ -51,6 +51,7 @@ export function createElementStack({
           container.appendChild(newEl);
         }
       }
+      container.dispatchEvent(new CustomEvent("update"));
       return stack;
     };
   }

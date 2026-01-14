@@ -4,7 +4,7 @@
   <script id="1" type="text/markdown">
     # Plot with Zoom
 
-    A template for 2D plots with mouse wheel zooming using d3.zoom.
+    This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (here a regl canvas, an Observable Plot, and an SVG) so that zoom and pan stay in sync across all of them. The layers and content are just one example. The point is to wire up the plumbing.
   </script>
   <script id="2" type="text/x-typescript">
     import * as d3 from 'npm:d3'
@@ -12,6 +12,7 @@
     import { initializeElementStack, createElementStack } from './lib/element-stack.js'
     import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
     import { createZoomableAxes } from './lib/zoomable-axes.js'
+    import { createPolarDomainColoringShader } from './domain-coloring.js'
   </script>
   <script id="3" type="text/x-typescript">
     const stackEl = initializeElementStack();
@@ -24,7 +25,7 @@
     const plotConfig = {
       marginTop: 0,
       marginRight: 5,
-      marginLeft: 22,
+      marginLeft: 40,
       marginBottom: 20,
       style: { backgroundColor: "transparent", maxWidth: "none" }
     };
@@ -35,8 +36,12 @@
         width,
         height,
         ...plotConfig,
-        x: { domain: xDomain, grid: true, tickSpacing: 100 },
-        y: { domain: yDomain, grid: true, tickSpacing: 100 }
+        x: { domain: xDomain, tickSpacing: 100 },
+        y: { domain: yDomain, tickSpacing: 100 },
+        marks: [
+          Plot.ruleX([0], { stroke: "#0002" }),
+          Plot.ruleY([0], { stroke: "#0002" })
+        ]
       });
     }
 
@@ -46,7 +51,7 @@
       width: plotWidth,
       height: plotHeight,
       layers: {
-        regl: reglElement(createREGL, {attributes: { depthStencil: false }}),
+        regl: reglElement(createREGL, {extensions: ['OES_standard_derivatives'], attributes: { depthStencil: false, preserveDrawingBuffer: true }}),
         plot: ({ width, height }) => createPlot({width, height}),
         svg: ({ current, width, height }) =>
           (current ? d3.select(current) : d3.create("svg")).attr("width", width).attr("height", height).node()
@@ -75,46 +80,141 @@
       <figcaption>Use mouse wheel to zoom, drag to pan.</figcaption>
     </figure>`);
   </script>
+  <script id="4b" type="text/markdown">
+    As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation with three draggable control points.
+  </script>
   <script id="5" type="text/x-typescript" pinned="">
+    // Control points for the complex function f(z) = (z - a)(b - m) / (z - b)(a - m)
+    const controlPoints = {
+      a: { x: -1, y: 0.5 },
+      m: { x: 0, y: 0 },
+      b: { x: 1, y: -0.5 }
+    };
+  </script>
+  <script id="5b" type="text/x-typescript" pinned="">
     const drawGradient = regl({
       vert: `
         precision highp float;
         attribute vec2 uv;
-        varying vec2 xy;
+        varying vec2 z;
         uniform mat4 viewInverse;
         void main () {
-          xy = (viewInverse * vec4(uv, 0, 1)).xy;
+          z = (viewInverse * vec4(uv, 0, 1)).xy;
           gl_Position = vec4(uv, 0, 1);
         }`,
       frag: `
+        #extension GL_OES_standard_derivatives : enable
         precision highp float;
-        varying vec2 xy;
+        varying vec2 z;
+        uniform vec2 a, m, b;
+        uniform float pixelRatio;
+
+        vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
+        vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }
+        vec2 f(vec2 z) { return cdiv(cmul(z - a, b - m), cmul(z - b, a - m)); }
+
+        ${createPolarDomainColoringShader()}
 
         void main () {
-          float r = length(xy);
-          vec3 color = 0.5 + 0.5 * cos(r * 2.0 + vec3(0.0, 2.1, 4.2));
+          vec2 w = f(z);
 
-          vec2 grid = abs(fract(xy) - 0.5);
-          float line = smoothstep(0.02, 0.0, min(grid.x, grid.y));
-          color = mix(color, vec3(0.2), line * 0.5);
-
-          gl_FragColor = vec4(color, 1);
+          gl_FragColor = domainColoring(
+            vec4(w, fwidth(w) * pixelRatio),
+            vec2(2.0, 2.0),    // steps
+            vec2(0.1),         // scale
+            vec2(0.1, 0.1),    // gridOpacity
+            vec2(0.35, 0.15),  // shadingOpacity
+            0.25,              // lineWidth
+            0.4,               // lineFeather
+            vec3(0),           // gridColor
+            4.0                // contrastPower
+          );
         }`,
       uniforms: {
-        viewInverse: regl.prop('viewInverse')
+        viewInverse: regl.prop('viewInverse'),
+        pixelRatio: regl.context('pixelRatio'),
+        a: regl.prop('a'),
+        m: regl.prop('m'),
+        b: regl.prop('b'),
       },
       attributes: { uv: [-4, -4, 4, -4, 0, 4] },
-      count: 3,
       depth: { enable: false },
       scissor: { enable: true, box: reglAxesViewport(axes) },
-      viewport: reglAxesViewport(axes)
+      viewport: reglAxesViewport(axes),
+      count: 3,
     });
+  </script>
+  <script id="5c" type="text/x-typescript" pinned="">
+    // Create SVG circles for draggable control points
+    {
+      const svg = d3.select(stack.svg);
+
+      const circleData = [
+        { id: 'a', point: controlPoints.a, color: 'rgb(51, 85, 238)', label: 'a' },
+        { id: 'm', point: controlPoints.m, color: 'rgb(51, 85, 238)', label: 'm' },
+        { id: 'b', point: controlPoints.b, color: 'rgb(51, 85, 238)', label: 'b' }
+      ];
+
+      const circles = svg.selectAll('circle.control')
+        .data(circleData, d => d.id)
+        .join('circle')
+        .attr('class', 'control')
+        .attr('r', 6)
+        .attr('fill', d => d.color)
+        .attr('stroke', '#fff')
+        .attr('stroke-width', 2)
+        .attr('cursor', 'move')
+        .call(d3.drag()
+          .on('start', function() { d3.select(this).attr('cursor', 'grabbing'); })
+          .on('drag', function(event, d) {
+            d.point.x = axes.xScale.invert(event.x);
+            d.point.y = axes.yScale.invert(event.y);
+            updatePositions();
+            regl.dirty = true;
+          })
+          .on('end', function() { d3.select(this).attr('cursor', 'move'); })
+        );
+
+      const labels = svg.selectAll('text.label')
+        .data(circleData, d => d.id)
+        .join('text')
+        .attr('class', 'label')
+        .attr('text-anchor', 'middle')
+        .attr('font-family', 'sans-serif')
+        .attr('font-size', '14px')
+        .attr('font-style', 'italic')
+        .attr('fill', '#333')
+        .style('text-shadow', [
+          [-1, 0, 1.5],
+          [1, 0, 1.5],
+          [0, 1, 1.5],
+          [0, -1, 1.5]
+        ].map(([i, j, sh]) => `${i}px ${j}px ${sh}px white`).join(', '))
+        .text(d => d.label);
+
+      function updatePositions() {
+        circles
+          .attr('cx', d => axes.xScale(d.point.x))
+          .attr('cy', d => axes.yScale(d.point.y));
+        labels
+          .attr('x', d => axes.xScale(d.point.x) + 8)
+          .attr('y', d => axes.yScale(d.point.y) + 18);
+      }
+
+      updatePositions();
+      stackEl.addEventListener('update', updatePositions);
+    }
   </script>
   <script id="6" type="text/x-typescript" pinned="">
     let loop = regl.frame(() => {
       try {
         if (!regl.dirty) return;
-        drawGradient({ viewInverse: axes.viewInverse });
+        drawGradient({
+          viewInverse: axes.viewInverse,
+          a: [controlPoints.a.x, controlPoints.a.y],
+          m: [controlPoints.m.x, controlPoints.m.y],
+          b: [controlPoints.b.x, controlPoints.b.y]
+        });
         regl.dirty = false;
       } catch (e) {
         loop.cancel();
