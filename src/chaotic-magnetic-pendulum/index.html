@@ -431,7 +431,10 @@
         );
 
       updatePositions();
-      stack.addEventListener('update', updatePositions);
+      stack.addEventListener('update', () => {
+        updatePositions();
+        updateTrajectory([]);
+      });
     }
   </script>
   <script id="21" type="text/x-typescript">
@@ -513,6 +516,7 @@
     })
   </script>
   <script id="20" type="text/x-typescript">
+    regl.dirty = true;
     let loop = regl.frame(() => {
       if (!regl.dirty) return;
       try {
