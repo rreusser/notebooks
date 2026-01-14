@@ -1536,7 +1536,7 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-2" class="observablehq observablehq--cell"><div><p>This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (a <a href="https://github.com/regl-project/regl">regl</a> WebGL  canvas, an <a href="https://observablehq.com/plot/">Observable Plot</a>, and an SVG) so that zoom and pan stay in sync across all of them. The goal is to generalize it to other interactive figures in a similar manner.</p>
+    <main><div id="cell-2" class="observablehq observablehq--cell"><div><p>This notebook sets up a zoomable 2D plot using d3.zoom. It stacks multiple layers (a <a href="https://github.com/regl-project/regl">regl</a> WebGL  canvas, an <a href="https://observablehq.com/plot/">Observable Plot</a>, and an SVG) so that zoom and pan stay in sync across all of them. The goal is to generalize it to other interactive figures in a similar manner. This all operates within <a href="https://observablehq.com/notebook-kit/kit">Observable Notebook Kit</a>, in which the pagse of this site are written.</p>
 </div></div><div id="cell-3" class="observablehq observablehq--cell"><div><p>The key components are:</p>
 <ul>
 <li><strong>Element stack</strong>: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and persists resources like WebGL contexts across reactive updates.</li>
