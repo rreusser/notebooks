@@ -165,27 +165,40 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
 
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const padding = 16;
+    const isMobile = viewportWidth < 640;
 
-    // Use available space with fixed insets rather than proportional
-    const horizontalInset = 48;  // Fixed inset on each side
-    const verticalInset = 48;    // Fixed inset on each side
-    const expandedWidth = viewportWidth - horizontalInset * 2 - padding * 2;
-    const expandedHeight = viewportHeight - verticalInset * 2 - padding * 2;
+    // On mobile, go full-bleed horizontally with small vertical padding for caption
+    const hPadding = isMobile ? 3 : 16;
+    const vPadding = isMobile ? 8 : 16;
+    const horizontalInset = isMobile ? 0 : 48;
+    const verticalInset = isMobile ? 32 : 48;
+    const expandedWidth = viewportWidth - horizontalInset * 2 - hPadding * 2;
+    const expandedHeight = viewportHeight - verticalInset * 2 - vPadding * 2;
 
-    const outerWidth = expandedWidth + padding * 2;
+    const outerWidth = expandedWidth + hPadding * 2;
 
-    // Position content wrapper using CSS centering (avoids measurement timing issues)
+    // Position content wrapper
     contentWrapper.style.position = 'fixed';
     contentWrapper.style.width = `${outerWidth}px`;
-    contentWrapper.style.top = '50%';
-    contentWrapper.style.left = '50%';
-    contentWrapper.style.transform = 'translate(-50%, -50%)';
-    contentWrapper.style.background = 'white';
-    contentWrapper.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
-    contentWrapper.style.padding = `${padding}px`;
-    contentWrapper.style.borderRadius = '8px';
     contentWrapper.style.zIndex = '9999';
+
+    if (isMobile) {
+      // Full-bleed horizontally on mobile, centered vertically
+      contentWrapper.style.top = '50%';
+      contentWrapper.style.left = '0';
+      contentWrapper.style.transform = 'translateY(-50%)';
+      contentWrapper.style.borderRadius = '0';
+      contentWrapper.style.boxShadow = 'none';
+    } else {
+      // Centered with insets on desktop
+      contentWrapper.style.top = '50%';
+      contentWrapper.style.left = '50%';
+      contentWrapper.style.transform = 'translate(-50%, -50%)';
+      contentWrapper.style.borderRadius = '8px';
+      contentWrapper.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
+    }
+    contentWrapper.style.background = 'white';
+    contentWrapper.style.padding = `${vPadding}px ${hPadding}px`;
 
     // Reset margins on inner content for proper centering
     const figure = contentWrapper.querySelector('figure');
