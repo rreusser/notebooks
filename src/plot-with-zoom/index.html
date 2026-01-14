@@ -13,6 +13,7 @@
     import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
     import { createZoomableAxes } from './lib/zoomable-axes.js'
     import { createPolarDomainColoringShader } from './domain-coloring.js'
+    import { collapseCodeBlocks } from './lib/collapsible-code.js'
   </script>
   <script id="3" type="text/x-typescript">
     const stackEl = initializeElementStack();
@@ -31,7 +32,7 @@
     };
 
     // Helper to create Plot with given domains
-    function createPlot({width, height, xDomain=[-3, 3], yDomain=[-3, 3]}) {
+    function createPlot({width, height, xDomain=[-2, 2], yDomain=[-2, 2]}) {
       return Plot.plot({
         width,
         height,
@@ -223,5 +224,10 @@
     });
 
     invalidation.then(() => loop?.cancel());
+  </script>
+  <script type="text/x-typescript">
+    collapseCodeBlocks({
+      maxHeight: 400
+    });
   </script>
 </notebook>
