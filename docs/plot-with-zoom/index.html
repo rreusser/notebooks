@@ -1619,14 +1619,14 @@ main h6 {
     <span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">plot</span> = <span class="tok-variable">newPlot</span>;
     <span class="tok-variable">stack</span>.<span class="tok-definition">dispatchEvent</span>(<span class="tok-keyword">new</span> <span class="tok-definition">CustomEvent</span>(<span class="tok-string">'update'</span>));
   }
-});</code></pre><div id="cell-9" class="observablehq observablehq--cell"><div><p>Next, we wire up some actual math. As a test case, we render a <a href="https://en.wikipedia.org/wiki/Domain_coloring">domain coloring</a> of a Möbius transformation. The function maps complex numbers according to</p>
+});</code></pre><div id="cell-33" class="observablehq observablehq--cell"><div><h3 id="svg" tabindex="-1"><a href="#svg">SVG</a></h3>
+</div></div><div id="cell-9" class="observablehq observablehq--cell"><div><p>Next, we wire up some actual math. As a test case, we render a <a href="https://en.wikipedia.org/wiki/Domain_coloring">domain coloring</a> of a Möbius transformation. The function maps complex numbers according to</p>
 <p>where , , and  are control points you can drag to explore the transformation. By construction, , , and . Möbius transformations are conformal (angle-preserving) and map circles to circles. Neat!</p>
 </div></div><div id="cell-10" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">controlPoints</span> = {
   <span class="tok-definition">a</span>: { <span class="tok-definition">x</span>: -<span class="tok-literal">1</span>, <span class="tok-definition">y</span>: <span class="tok-literal">0.5</span> },
   <span class="tok-definition">m</span>: { <span class="tok-definition">x</span>: <span class="tok-literal">0</span>, <span class="tok-definition">y</span>: <span class="tok-literal">0</span> },
   <span class="tok-definition">b</span>: { <span class="tok-definition">x</span>: <span class="tok-literal">1</span>, <span class="tok-definition">y</span>: -<span class="tok-literal">0.5</span> }
-};</code></pre><div id="cell-33" class="observablehq observablehq--cell"><div><h3 id="svg" tabindex="-1"><a href="#svg">SVG</a></h3>
-</div></div><div id="cell-26" class="observablehq observablehq--cell"><div><p>Next, we wire up some D3 controls. This one will get layered on top of everything else for interactivity.</p>
+};</code></pre><div id="cell-26" class="observablehq observablehq--cell"><div><p>Let’s create a SVG layer and wire up some D3 controls for these points. The SVG will get layered on top of everything else for interactivity.</p>
 </div></div><div id="cell-25" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">svg</span> = <span class="tok-variable">d3</span>.<span class="tok-definition">select</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">elements</span>.<span class="tok-definition">svg</span>);
 
 <span class="tok-comment">// Add clipPath for viewport</span>

@@ -121,6 +121,9 @@
       }
     });
   </script>
+  <script id="33" type="text/markdown">
+    ### SVG
+  </script>
   <script id="9" type="text/markdown">
     Next, we wire up some actual math. As a test case, we render a [domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) of a Möbius transformation. The function maps complex numbers according to
 
@@ -135,11 +138,8 @@
       b: { x: 1, y: -0.5 }
     };
   </script>
-  <script id="33" type="text/markdown">
-    ### SVG
-  </script>
   <script id="26" type="text/markdown">
-    Next, we wire up some D3 controls. This one will get layered on top of everything else for interactivity.
+    Let's create a SVG layer and wire up some D3 controls for these points. The SVG will get layered on top of everything else for interactivity.
   </script>
   <script id="25" type="text/x-typescript" pinned="">
     const svg = d3.select(stack.elements.svg);
