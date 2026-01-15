@@ -21,6 +21,10 @@
       parseInitialConditions,
       decodeHash
     } from './three-body-physics.js';
+    import { createInitialConditionsFigure } from './initial-conditions-figure.js';
+    import { createJacobiCoordsFigure, computeShapeFromPositions } from './jacobi-coords-figure.js';
+    import { createShapeSphere, createOrbitShapeSphere, createIcosphere, getCollisionPoints } from './shape-sphere.js';
+    import { createShapeProjection2D, computeProjectedBounds } from './shape-projection.js';
   </script>
 
   <script id="obs-imports" type="text/x-typescript">
@@ -131,14 +135,22 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       container.appendChild(orbitLabel);
       form.appendChild(container);
 
-      form.oninput = () => {
+      // Handle sequence changes - rebuild orbit options
+      seqSelect.onchange = () => {
         const [group, seq] = seqSelect.value.split(': ');
         currentGroup = group;
         currentSequence = seq;
         updateOrbitOptions();
         currentOrbit = orbitSelect.value;
         form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
-        form.dispatchEvent(new CustomEvent('input'));
+        form.dispatchEvent(new CustomEvent('input', { bubbles: true }));
+      };
+
+      // Handle orbit changes directly
+      orbitSelect.onchange = () => {
+        currentOrbit = orbitSelect.value;
+        form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
+        form.dispatchEvent(new CustomEvent('input', { bubbles: true }));
       };
 
       form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
@@ -152,7 +164,7 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
   <script id="102" type="text/x-typescript">
     const drawingParams = {
       lineOpacity: 1.0,
-      lineWidth: 4,
+      lineWidth: 2.5,
       lineBorderWidth: 1,
       pointSize: 10,
       speed: 5,
@@ -217,6 +229,23 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
           <dt>Share</dt><dd><a href="${hashValue}">link to this orbit</a></dd>
         </dl></small>
       </div>`);
+    })();
+  </script>
+
+  <script id="14" type="text/x-typescript">
+    // Initial conditions figure showing bodies with velocity arrows
+    (() => {
+      if (!initialConditions) return;
+      const figure = document.createElement('figure');
+      figure.style.maxWidth = '350px';
+      const svg = createInitialConditionsFigure(d3, initialConditions, drawingParams, {
+        width: Math.min(width, 350)
+      });
+      figure.appendChild(svg);
+      const caption = document.createElement('figcaption');
+      caption.innerHTML = `Initial conditions for the ${initialConditions.name} planar three-body orbit.`;
+      figure.appendChild(caption);
+      display(figure);
     })();
   </script>
 
@@ -485,6 +514,300 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
     ## Orbit classification
 
     The orbits can be classified using the topological approach described by Montgomery. We transform to [Jacobi coordinates](https://en.wikipedia.org/wiki/Jacobi_coordinates) and compute a shape vector ${tex`\mathbf{n}`} that lives on the unit sphere, invariant to rotation, translation, and overall size. The trajectory on this "shape sphere" never passes through three collision points (punctures). By tracking crossings of the equator, we compute a [free group word](https://en.wikipedia.org/wiki/Free_group) that identifies the orbit topologically.
+  </script>
+
+  <script id="201" type="text/markdown">
+    ### Shape space
+
+    Since the interesting aspects of a particular orbit are invariant under translation, rotation, and scaling, we seek a representation which removes these. We use [Jacobi coordinates](https://en.wikipedia.org/wiki/Jacobi_coordinates) and define a shape vector ${tex.block`
+    \mathbf{n} = \left( \frac{2 \mathbf{r}_1 \cdot \mathbf{r}_2}{R^2}, \frac{r_1^2 - r_2^2}{R^2}, \frac{2 (\mathbf{r}_1 \times \mathbf{r}_2) \cdot \mathbf{e}_z}{R^2}\right)
+    `} where ${tex`\mathbf{r}_1`} and ${tex`\mathbf{r}_2`} are the Jacobi coordinates and ${tex`R = \sqrt{r_1^2 + r_2^2}`}. The vector ${tex`\mathbf{n}`} lives on the unit sphere.
+
+    Move the points below and observe a corresponding behavior on the shape sphere:
+    - Pairwise collisions place the shape at one of three puncture points marked in color
+    - Collinear configurations (syzygies) lie on the equator
+  </script>
+
+  <script id="210" type="text/x-typescript">
+    // Interactive Jacobi coordinates figure linked to shape sphere
+    (() => {
+      if (!initialConditions) return;
+
+      // Fixed size, only shrink on narrow screens
+      const figWidth = Math.min(width, 480);
+
+      const container = document.createElement('div');
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.gap = '20px';
+
+      // Create Jacobi coords figure
+      const jacobiW = figWidth;
+      const jacobiFig = createJacobiCoordsFigure(d3, initialConditions, drawingParams, {
+        width: jacobiW,
+        height: jacobiW * 0.7
+      });
+
+      const jacobiWrapper = document.createElement('figure');
+      jacobiWrapper.style.margin = '0';
+      jacobiWrapper.appendChild(jacobiFig.node);
+      const jacobiCaption = document.createElement('figcaption');
+      jacobiCaption.textContent = 'Jacobi coordinates. Drag the masses to see the effect in shape space.';
+      jacobiWrapper.appendChild(jacobiCaption);
+      container.appendChild(jacobiWrapper);
+
+      // Create shape sphere canvas
+      const sphereW = figWidth;
+      const sphereH = sphereW * 0.7;
+      const canvas = document.createElement('canvas');
+      canvas.id = 'interactive-shape-sphere';
+      canvas.width = sphereW * devicePixelRatio;
+      canvas.height = sphereH * devicePixelRatio;
+      canvas.style.width = `${sphereW}px`;
+      canvas.style.height = `${sphereH}px`;
+      canvas.style.cursor = 'grab';
+
+      const sphereWrapper = document.createElement('figure');
+      sphereWrapper.style.margin = '0';
+      sphereWrapper.appendChild(canvas);
+      const sphereCaption = document.createElement('figcaption');
+      sphereCaption.textContent = 'Shape sphere with collision points. Drag to rotate.';
+      sphereWrapper.appendChild(sphereCaption);
+      container.appendChild(sphereWrapper);
+
+      // Create regl context and shape sphere
+      const sphereRegl = createREGL({ canvas, extensions: ['ANGLE_instanced_arrays', 'OES_standard_derivatives'], attributes: { antialias: true } });
+      const shapeSphere = createShapeSphere(sphereRegl, { theta: 0.7, phi: 0.3 });
+
+      // Initialize
+      shapeSphere.setPunctures(initialConditions.m);
+      shapeSphere.setShape(jacobiFig.getShape());
+      shapeSphere.render(sphereW, sphereH);
+
+      // Link Jacobi figure to shape sphere
+      jacobiFig.addEventListener('input', () => {
+        shapeSphere.setShape(jacobiFig.getShape());
+        shapeSphere.render(sphereW, sphereH);
+      });
+
+      // Drag to rotate
+      let isDragging = false, lastX = 0, lastY = 0;
+      canvas.addEventListener('mousedown', e => {
+        isDragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+      });
+      window.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        shapeSphere.rotate((e.clientX - lastX) * 0.01, (e.clientY - lastY) * 0.01);
+        shapeSphere.render(sphereW, sphereH);
+        lastX = e.clientX;
+        lastY = e.clientY;
+      });
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+        canvas.style.cursor = 'grab';
+      });
+
+      display(container);
+
+      // Cleanup
+      invalidation.then(() => {
+        shapeSphere.destroy();
+        sphereRegl.destroy();
+      });
+    })();
+  </script>
+
+  <script id="211" type="text/markdown">
+    We return to the ${tex`${initialConditions?.name || ''}`} orbit and plot it on the shape sphere below. Since all orbits here are collision-free, the trajectory meanders about on the surface of the sphere but never passes through any of the three pairwise collision points (punctures).
+
+    Three dimensional space is still a bit much to work with, so we additionally turn the shape sphere on its side and project the orbit stereographically about one puncture onto a plane below. Two punctures are visible while the third (about which we projected) is removed to infinity.
+  </script>
+
+  <script id="212" type="text/x-typescript">
+    // Shape sphere with orbit trajectory and stereographic projection
+    (() => {
+      if (!shapeTrajectory || !initialConditions) return;
+
+      const figWidth = Math.min(width, 480);
+      const figHeight = figWidth * 0.8;
+
+      const canvas = document.createElement('canvas');
+      canvas.id = 'orbit-shape-sphere';
+      canvas.width = figWidth * devicePixelRatio;
+      canvas.height = figHeight * devicePixelRatio;
+      canvas.style.width = `${figWidth}px`;
+      canvas.style.height = `${figHeight}px`;
+      canvas.style.cursor = 'grab';
+
+      const figure = document.createElement('figure');
+      figure.appendChild(canvas);
+      const caption = document.createElement('figcaption');
+      caption.innerHTML = `Shape sphere trajectory of the <em>${initialConditions.name}</em> orbit, with the shape sphere turned on its side and projected onto a plane.`;
+      figure.appendChild(caption);
+
+      // Create regl and visualization
+      const orbitRegl = createREGL({
+        canvas,
+        attributes: { antialias: true, preserveDrawingBuffer: true },
+        extensions: ['ANGLE_instanced_arrays', 'OES_standard_derivatives']
+      });
+      const orbitSphere = createOrbitShapeSphere(orbitRegl, shapeTrajectory, initialConditions.m, {
+        theta: 0.7,
+        phi: 0.1
+      }, createDrawLines);
+
+      orbitSphere.render(figWidth, figHeight);
+
+      // Drag to rotate
+      let isDragging = false, lastX = 0, lastY = 0;
+      canvas.addEventListener('mousedown', e => {
+        isDragging = true;
+        lastX = e.clientX;
+        lastY = e.clientY;
+        canvas.style.cursor = 'grabbing';
+      });
+      window.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        orbitSphere.rotate((e.clientX - lastX) * 0.01, (e.clientY - lastY) * 0.01);
+        orbitSphere.render(figWidth, figHeight);
+        lastX = e.clientX;
+        lastY = e.clientY;
+      });
+      window.addEventListener('mouseup', () => {
+        isDragging = false;
+        canvas.style.cursor = 'grab';
+      });
+
+      display(figure);
+
+      invalidation.then(() => {
+        orbitSphere.destroy();
+        orbitRegl.destroy();
+      });
+    })();
+  </script>
+
+  <script id="213" type="text/x-typescript">
+    // Compute bounds for the shape projection plot
+    const projBounds = trajectory && initialConditions
+      ? computeProjectedBounds(trajectory, initialConditions.m)
+      : { minX: -2, maxX: 2, minY: -2, maxY: 2 };
+
+    // Make bounds square with aspect ratio 1
+    const projRangeX = projBounds.maxX - projBounds.minX;
+    const projRangeY = projBounds.maxY - projBounds.minY;
+    const projRange = Math.max(projRangeX, projRangeY);
+    const projCenterX = (projBounds.minX + projBounds.maxX) / 2;
+    const projCenterY = (projBounds.minY + projBounds.maxY) / 2;
+    const projXDomain = [projCenterX - projRange / 2, projCenterX + projRange / 2];
+    const projYDomain = [projCenterY - projRange / 2, projCenterY + projRange / 2];
+  </script>
+
+  <script id="214" type="text/x-typescript">
+    function createProjPlot(width, height, xDomain = projXDomain, yDomain = projYDomain) {
+      return Plot.plot({
+        width,
+        height,
+        marginTop: 20,
+        marginRight: 10,
+        marginLeft: 50,
+        marginBottom: 40,
+        style: { backgroundColor: 'transparent', maxWidth: 'none', position: 'absolute', top: '0', left: '0' },
+        x: { domain: xDomain, tickSpacing: 80, label: 'n₁ / (1 - n₂)' },
+        y: { domain: yDomain, tickSpacing: 80, label: 'n₃ / (1 - n₂)' },
+        marks: [
+          Plot.ruleX([0], { stroke: '#0002' }),
+          Plot.ruleY([0], { stroke: '#0002' })
+        ]
+      });
+    }
+  </script>
+
+  <script id="215" type="text/x-typescript">
+    const projStack = createElementStack({
+      layers: [{
+        id: 'regl',
+        element: reglElement(createREGL, {
+          optionalExtensions: ['ANGLE_instanced_arrays'],
+          attributes: { antialias: true, preserveDrawingBuffer: true }
+        })
+      }, {
+        id: 'plot',
+        element: ({ width, height }) => createProjPlot(width, height)
+      }]
+    });
+  </script>
+
+  <script id="216" type="text/x-typescript">
+    const projAxes = createZoomableAxes({
+      d3,
+      element: projStack.element,
+      xScale: projStack.elements.plot.scale('x'),
+      yScale: projStack.elements.plot.scale('y'),
+      aspectRatio: 1,
+      scaleExtent: [0.1, 100],
+      onChange: ({ xDomain, yDomain }) => {
+        const newPlot = createProjPlot(projStack.width, projStack.height, xDomain, yDomain);
+        projStack.elements.plot.replaceWith(newPlot);
+        projStack.elements.plot = newPlot;
+        projStack.dispatchEvent(new CustomEvent('update'));
+        if (projStack.elements.regl?.value) projStack.elements.regl.value.dirty = true;
+      }
+    });
+  </script>
+
+  <script id="217" type="text/x-typescript">
+    const projFigure = document.createElement('figure');
+    projFigure.appendChild(projStack.element);
+    const projCaption = document.createElement('figcaption');
+    projCaption.innerHTML = `Stereographic projection of the shape sphere trajectory. The two visible collision points are marked. The third (blue) is at the pole of projection (infinity).`;
+    projFigure.appendChild(projCaption);
+
+    display(expandable(projFigure, {
+      width: Math.min(width, 640),
+      height: Math.min(400, Math.floor(width * 0.625)),
+      onResize(el, w, h) {
+        projStack.resize(w, h);
+        projAxes.updateScales(projStack.elements.plot.scale('x'), projStack.elements.plot.scale('y'));
+        if (projStack.elements.regl?.value) projStack.elements.regl.value.dirty = true;
+      }
+    }));
+  </script>
+
+  <script id="218" type="text/x-typescript">
+    // Render the 2D shape projection
+    (() => {
+      const regl = projStack.elements.regl.value;
+      if (!regl || !trajectory || !initialConditions) return;
+
+      const projection = createShapeProjection2D(
+        regl,
+        trajectory,
+        initialConditions.m,
+        projAxes,
+        reglAxesViewport,
+        { speed: drawingParams.speed },
+        createDrawLines
+      );
+
+      regl.dirty = true;
+
+      const frame = regl.frame(ctx => {
+        if (!regl.dirty) return;
+        regl.dirty = false;
+
+        projection.render(ctx.time);
+        regl.dirty = true; // Keep animating
+      });
+
+      invalidation.then(() => {
+        frame.cancel();
+        projection.destroy();
+      });
+    })();
   </script>
 
   <script id="205" type="text/x-typescript">
