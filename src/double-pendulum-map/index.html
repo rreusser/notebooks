@@ -318,10 +318,7 @@
         if (regl.dirty || run) {
           drawMap();
           if (showPen && mouseHover.active) {
-            drawPendulum([
-              { y, w1: [0, 0, 0], w2: [0, 1, 0], l1, l2 },
-              { y, w1: [0, 1, 0], w2: [0, 0, 1], l1, l2 }
-            ]);
+            drawPendulum({ state: y[0], l1, l2, isCompound });
           }
           regl.dirty = false;
         }
@@ -645,71 +642,61 @@
     })
   </script>
   <script id="886" type="module">
-    const drawPendulum = regl({
+    // Draw pendulum using regl-gpu-lines for nice rendering
+    // All computation stays on GPU - sample texture in vertex shader
+
+    const drawPendulumLine = reglLines(regl, {
       vert: `
-    precision mediump float;
-    attribute vec2 line;
-    uniform vec2 resolution;
-    uniform vec3 w1, w2;
-    uniform vec2 hover;
-    uniform float lineWidth;
-    uniform sampler2D y;
-    uniform float l1, l2;
-    #define PI ${Math.PI}
-    void main () {
-      // Sample the state directly from the texture by passing the hovered
-      // point as a uniform, so that the data never leaves the GPU.
-      vec2 state = texture2D(y, hover).xy * (2.0 * PI) - PI;
+        precision highp float;
 
-      // Vectors representing the directions of the arms of the pendulum (scaled by lengths)
-      vec2 v1 = l1 * vec2(sin(state.x), -cos(state.x));
-      vec2 v2 = l2 * vec2(sin(state.y), -cos(state.y));
+        #pragma lines: attribute float index;
+        #pragma lines: position = getPosition(index);
+        #pragma lines: width = getWidth();
 
-      // Points representing the joints of the pendulum (and the end)
-      vec2 p0 = vec2(0);
-      vec2 p1 = v1;
-      vec2 p2 = p1 + v2;
+        uniform sampler2D state;
+        uniform vec2 hover;
+        uniform float l1, l2, width;
 
-      // Select two of the three above (arm1 or arm2) as endpoints of
-      // the line to be rendered
-      vec2 a = w1.x * p0 + w1.y * p1 + w1.z * p2;
-      vec2 b = w2.x * p0 + w2.y * p1 + w2.z * p2;
+        #define PI ${Math.PI}
 
-      // No aspect correction needed - we use a square viewport for the pendulum
+        vec4 getPosition(float idx) {
+          // Sample state from texture
+          vec2 theta = texture2D(state, hover).xy * (2.0 * PI) - PI;
 
-      // Normal and tangential vectors
-      vec2 t = normalize(b - a);
-      vec2 n = vec2(-t.y, t.x);
+          // Compute pendulum positions
+          vec2 v1 = l1 * vec2(sin(theta.x), -cos(theta.x));
+          vec2 v2 = l2 * vec2(sin(theta.y), -cos(theta.y));
 
-      // Select which end of line we're at
-      vec2 p = mix(a, b, line.y) * 0.5;
+          vec2 p0 = vec2(0);
+          vec2 p1 = v1;
+          vec2 p2 = p1 + v2;
 
-      // Offset normal to the line by the line width
-      p += n * line.x * lineWidth;
+          // Select position based on index
+          vec2 pos = idx < 0.5 ? p0 : (idx < 1.5 ? p1 : p2);
 
-      gl_Position = vec4(p, 0, 1);
-    }`,
+          // Scale to fit in clip space
+          return vec4(pos * 0.45, 0, 1);
+        }
+
+        float getWidth() { return width; }
+      `,
       frag: `
         precision lowp float;
+        uniform vec3 color;
         void main () {
-          gl_FragColor = vec4(0, 0, 0, 1);
-        }`,
-      attributes: {
-        line: [0.5, 0, 0.5, 1, -0.5, 0, -0.5, 1]
-      },
+          gl_FragColor = vec4(color, 1);
+        }
+      `,
       uniforms: {
-        y: regl.prop('y[0]'),
-        w1: regl.prop('w1'),
-        w2: regl.prop('w2'),
+        state: regl.prop('state'),
         hover: () => mouseHover.pt,
-        lineWidth: ctx => (4.0 * ctx.pixelRatio) / ctx.viewportWidth,
-        resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight],
         l1: regl.prop('l1'),
-        l2: regl.prop('l2')
+        l2: regl.prop('l2'),
+        width: (ctx, props) => ctx.pixelRatio * props.width,
+        color: regl.prop('color')
       },
       depth: { enable: false },
       scissor: { enable: true, box: reglAxesViewport(axes) },
-      // Use a square viewport centered in the axes viewport
       viewport: (ctx) => {
         const axesVp = reglAxesViewport(axes)(ctx);
         const size = Math.min(axesVp.width, axesVp.height);
@@ -719,13 +706,152 @@
           width: size,
           height: size
         };
+      }
+    });
+
+    // Draw circles for point masses (simple pendulum) or pivots
+    const drawPendulumPoints = regl({
+      vert: `
+        precision highp float;
+        attribute float pointIndex;
+        uniform sampler2D state;
+        uniform vec2 hover;
+        uniform float l1, l2, pointSize;
+        varying float vPointSize;
+
+        #define PI ${Math.PI}
+
+        void main() {
+          vec2 theta = texture2D(state, hover).xy * (2.0 * PI) - PI;
+
+          vec2 v1 = l1 * vec2(sin(theta.x), -cos(theta.x));
+          vec2 v2 = l2 * vec2(sin(theta.y), -cos(theta.y));
+
+          vec2 p0 = vec2(0);
+          vec2 p1 = v1;
+          vec2 p2 = p1 + v2;
+
+          vec2 pos = pointIndex < 0.5 ? p0 : (pointIndex < 1.5 ? p1 : p2);
+
+          gl_Position = vec4(pos * 0.45, 0, 1);
+          gl_PointSize = pointSize;
+          vPointSize = pointSize;
+        }
+      `,
+      frag: `
+        precision highp float;
+        uniform vec3 fillColor;
+        uniform vec3 strokeColor;
+        uniform float strokeWidthPx;
+        varying float vPointSize;
+
+        void main() {
+          // Distance from center in pixels
+          float distPx = length(gl_PointCoord - 0.5) * vPointSize;
+          float radius = vPointSize * 0.5;
+
+          // Smooth edges with 1px anti-aliasing
+          float outerEdge = smoothstep(radius, radius - 1.0, distPx);
+          float innerEdge = smoothstep(radius - strokeWidthPx, radius - strokeWidthPx - 1.0, distPx);
+
+          // Blend stroke (outside) and fill (inside)
+          vec3 color = mix(strokeColor, fillColor, innerEdge);
+          gl_FragColor = vec4(color, outerEdge);
+        }
+      `,
+      attributes: {
+        pointIndex: [0, 1, 2]
       },
-      primitive: 'triangle strip',
-      count: 4
-    })
+      uniforms: {
+        state: regl.prop('state'),
+        hover: () => mouseHover.pt,
+        l1: regl.prop('l1'),
+        l2: regl.prop('l2'),
+        pointSize: (ctx, props) => ctx.pixelRatio * props.pointSize,
+        fillColor: regl.prop('fillColor'),
+        strokeColor: regl.prop('strokeColor'),
+        strokeWidthPx: (ctx, props) => ctx.pixelRatio * props.strokeWidthPx
+      },
+      primitive: 'points',
+      count: 3,
+      depth: { enable: false },
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: 'src alpha',
+          srcAlpha: 1,
+          dstRGB: 'one minus src alpha',
+          dstAlpha: 1
+        },
+        equation: { rgb: 'add', alpha: 'add' },
+        color: [0, 0, 0, 0]
+      },
+      scissor: { enable: true, box: reglAxesViewport(axes) },
+      viewport: (ctx) => {
+        const axesVp = reglAxesViewport(axes)(ctx);
+        const size = Math.min(axesVp.width, axesVp.height);
+        return {
+          x: axesVp.x + (axesVp.width - size) / 2,
+          y: axesVp.y + (axesVp.height - size) / 2,
+          width: size,
+          height: size
+        };
+      }
+    });
+
+    // Pre-allocate buffers for line vertices [0, 1, 2]
+    const lineVertexBuffer = regl.buffer([0, 1, 2]);
+    const lineEndpointBuffer = regl.buffer([[0, 1, 2], [2, 1, 0]]);
+
+    const lineData = {
+      join: 'round',
+      cap: 'round',
+      vertexCount: 3,
+      vertexAttributes: { index: lineVertexBuffer },
+      endpointCount: 2,
+      endpointAttributes: { index: lineEndpointBuffer }
+    };
+
+    function drawPendulum(props) {
+      const { state, l1, l2, isCompound } = props;
+
+      if (isCompound) {
+        // Compound: thick coral bars with round joins
+        drawPendulumLine({
+          ...lineData,
+          state, l1, l2,
+          width: 14,
+          color: [0.75, 0.22, 0.17]  // #c0392b
+        });
+        // Small pivot points
+        drawPendulumPoints({
+          state, l1, l2,
+          pointSize: 12,
+          fillColor: [0.4, 0.4, 0.4],
+          strokeColor: [0.25, 0.25, 0.25],
+          strokeWidthPx: 1.5
+        });
+      } else {
+        // Simple: darker gray rods for visibility
+        drawPendulumLine({
+          ...lineData,
+          state, l1, l2,
+          width: 3,
+          color: [0.35, 0.35, 0.35]  // #595959
+        });
+        // Red point masses with dark outline
+        drawPendulumPoints({
+          state, l1, l2,
+          pointSize: 18,
+          fillColor: [0.91, 0.30, 0.24],  // #e74c3c
+          strokeColor: [0.6, 0.15, 0.1],  // darker red
+          strokeWidthPx: 1.5
+        });
+      }
+    }
   </script>
   <script id="889" type="module">
-    const mouseHover = { pt: [0, 0], active: false };
+    const mouseHover = { pt: [0, 0], active: false, dragging: false };
 
     // Set up mouse tracking on the SVG layer (topmost interactive element)
     const canvas = stack.elements.svg;
@@ -746,15 +872,45 @@
       mouseHover.active = false;
       regl.dirty = true;
     }
+    function onPointerDown() {
+      mouseHover.dragging = true;
+      canvas.classList.remove('crosshair-cursor');
+    }
+    function onPointerUp() {
+      mouseHover.dragging = false;
+      // Re-check if showPen is enabled
+      if (simulate.includes('Show pendulum at point under mouse')) {
+        canvas.classList.add('crosshair-cursor');
+      }
+    }
     canvas.addEventListener('pointermove', onPointerMove, false);
     canvas.addEventListener('pointerenter', onPointerEnter, false);
     canvas.addEventListener('pointerleave', onPointerLeave, false);
+    canvas.addEventListener('pointerdown', onPointerDown, false);
+    window.addEventListener('pointerup', onPointerUp, false);
 
     invalidation.then(() => {
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerenter', onPointerEnter);
       canvas.removeEventListener('pointerleave', onPointerLeave);
+      canvas.removeEventListener('pointerdown', onPointerDown);
+      window.removeEventListener('pointerup', onPointerUp);
     });
+
+  </script>
+  <script id="cursorStyle" type="text/html">
+    <style>
+      .crosshair-cursor { cursor: crosshair !important; }
+    </style>
+  </script>
+  <script id="cursorShowPen" type="module">
+    // Reactively update cursor when simulate changes
+    const svgEl = stack.elements.svg;
+    if (simulate.includes('Show pendulum at point under mouse')) {
+      svgEl.classList.add('crosshair-cursor');
+    } else {
+      svgEl.classList.remove('crosshair-cursor');
+    }
   </script>
   <script id="901" type="module">
     await import('./lib/twttr.js')
@@ -772,6 +928,7 @@
   </script>
   <script id="890" type="module">
     import createREGL from 'npm:regl@2.1.1'
+    import reglLines from 'npm:regl-gpu-lines@2.4.1'
     import { createElementStack } from './lib/element-stack.js'
     import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
     import { createZoomableAxes } from './lib/zoomable-axes.js'
