@@ -1,0 +1,2827 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Periodic Planar Three-Body Orbits</title>
+  <script id="8869" type="application/vnd.observable.javascript">
+    viewof title = md`
+    # Periodic Planar Three-Body Orbits`
+
+  </script>
+  <script id="1410" type="application/vnd.observable.javascript">
+    viewof introduction = md`
+    This notebook collects ${Object.keys(threeBodyInitialConditions)
+      .map((group) =>
+        Object.keys(threeBodyInitialConditions[group]).map(
+          (name) => Object.keys(threeBodyInitialConditions[group][name]).length
+        )
+      )
+      .flat()
+      .reduce((a, b) => a + b, 0)
+      .toLocaleString()} periodic solutions of the planar [three-body problem](https://en.wikipedia.org/wiki/Three-body_problem) in which three bodies experience mutual gravitational attraction according to [Newton's law of universal gravitation](https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation), ${tex.block`F=G{\frac {m_{1}m_{2}}{r^{2}}}.`}
+
+    Three-body orbits don't have a closed-form analytical solution and aren't in general periodic, but by reducing the dimensionality of the problem through symmetries and performing a lot of numerical searching, a number of authors have found and published large sets of initial conditions for periodic solutions.
+
+    In this notebook we collect and display the orbits, then discuss methods for classification. It's largely a rehashing of an old project, [Periodic three-body orbits](http://rreusser.github.io/periodic-three-body-orbits/), though the format of Observable makes it easy and fun to include discussion instead of limiting ourselves to pretty pictures!`
+  </script>
+  <script id="8536" type="application/vnd.observable.javascript">
+    viewof governingEquations = md`
+    ## Governing equations
+
+    The vector form of Newton's law of gravitation for the force on body 2 exerted by body 1 is ${tex.block`\mathbf{F}_2 = m_2\mathbf{\ddot{x}}_{2} = -\frac{Gm_1m_2(\mathbf{x}_2 - \mathbf{x}_1)}{||\mathbf{x}_2 - \mathbf{x}_1||^3},`} where ${tex`\mathbf{x}_1`} and ${tex`\mathbf{x}_2`} and ${tex`m_1`} and ${tex`m_2`} are the vector positions and masses of bodies ${tex`1`} and ${tex`2`}, respectively, and ${tex`\mathbf{\ddot{x}}_{2}`} is the acceleration of body ${tex`2`}. To compute a trajectory, we compute all pairwise forces and send the computation to a suitable numerical integration routine.
+
+    As a matter of implementation, we flatten the ${tex`x`} and ${tex`y`} coordinates and time derivatives ${tex`\dot{x}`} and ${tex`\dot{y}`} into the tuple ${tex`\mathbf{y}`} and encode the full state as ${tex.block`\mathbf{y} \equiv (x_1, y_1, \dot{x}_1, \dot{y}_1, x_2, y_2, \dot{x}_2, \dot{y}_2, x_3, y_3, \dot{x}_3, \dot{y}_3).`} Given state ${tex`\mathbf{y}`}, the function below computes the time derivative ${tex`\mathbf{\dot{y}}`}.`
+  </script>
+  <script id="2902" type="application/vnd.observable.javascript">
+    function planarThreeBodyDerivative (yp, y, t) {
+      let dx, dy, r3, fx, fy
+      let m0 = initialConditions.m[0]
+      let m1 = initialConditions.m[1]
+      let m2 = initialConditions.m[2]
+
+      // The first derivative of position is stored in the state vector,
+      // so its computation is nothing more than copying part of the
+      // state into the result.
+      yp[0] = y[2], yp[1] = y[3]
+      yp[4] = y[6], yp[5] = y[7]
+      yp[8] = y[10], yp[9] = y[11]
+
+      // The rest of the function computes the first derivative of
+      // velocity, i.e. the acceleration.
+      // Attraction between 0-1
+      dx = y[4] - y[0]
+      dy = y[5] - y[1]
+      r3 = Math.pow(dx * dx + dy * dy, 1.5)
+      dx /= r3, dy /= r3
+      yp[2] = dx * m1
+      yp[3] = dy * m1
+      yp[6] = -dx * m0
+      yp[7] = -dy * m0
+
+      // Attraction between 0-2
+      dx = y[8] - y[0]
+      dy = y[9] - y[1]
+      r3 = Math.pow(dx * dx + dy * dy, 1.5)
+      dx /= r3, dy /= r3
+      yp[2] += dx * m2
+      yp[3] += dy * m2
+      yp[10] = -dx * m0
+      yp[11] = -dy * m0
+
+      // Attraction between 1-2
+      dx = y[8] - y[4]
+      dy = y[9] - y[5]
+      r3 = Math.pow(dx * dx + dy * dy, 1.5)
+      dx /= r3, dy /= r3
+      yp[6] += dx * m2
+      yp[7] += dy * m2
+      yp[10] -= dx * m1
+      yp[11] -= dy * m1
+    };
+  </script>
+  <script id="5971" type="application/vnd.observable.javascript">
+    viewof integration = md`## Time integration`
+  </script>
+  <script id="1359" type="application/vnd.observable.javascript">
+    md`Since we only seek to integrate a single period of the orbit, we don't require excessive accuracy and opt for an adaptive Runge-Kutta scheme which adjusts the time step to maintain a specified accuracy. Since the bodies move very slowly when far apart but very quickly when passing by each other, adaptive methods are dramatically more efficient than fixed step methods.
+
+    In particular, we use the [Butcher tableau](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#Explicit_Runge.E2.80.93Kutta_methods) of the [Cash-Karp](https://en.wikipedia.org/wiki/Cash–Karp_method) scheme to integrate with fifth order accuracy with a fourth order embedded error estimate. "Embedded" means the same derivative evaluations can be combined differently to produce both fourth and fifth order estimates of the next time step. The difference between the two yields an estimate of the accuracy, which in turn tells how much we should increase or decrease the size of the time step to maintain the same overall accuracy.
+
+    This scheme is adequate for integrating the trajectories with reasonable accuracy and efficiency, but a higher order scheme or more advanced techniques might be worthwhile if we actually wanted to *locate* periodic orbits.
+
+    Please note that essentially *all* periodic, planar, three-body orbits except for some figure eights are unstable! For the convenience of visualization, this notebook tabulates a single period and repeats it. Therefore the orbits on this page repeat infinitely, while actual ongoing time integration would show relatively fast divergence.`
+  </script>
+  <script id="0" type="application/vnd.observable.javascript">
+    import {ode45} from '@rreusser/integration'
+  </script>
+  <script id="8" type="application/vnd.observable.javascript">
+    trajectory = {
+      let config = {
+        tolerance: initialConditions.tolerance || 1e-9,
+        tLimit: initialConditions.period
+      };
+
+      // An object to store the current state of the integration
+      let state = { t: 0, y: initialConditions.y0.slice() };
+
+      // An object into which to accumulate the full history
+      let result = { position: [], t: [] };
+
+      function storeStep(t, y) {
+        result.t.push(t);
+        // We store (x, y, t) for each step. That is, we extend time into
+        // the z-dimension. This allows us to plot in the 2D plane and use
+        // built-in GPU clipping to slide the orbit in the z-dimension and
+        // animate the lines.
+        result.position.push(y[0], y[1], t, y[4], y[5], t, y[8], y[9], t);
+      }
+
+      // Store the initial conditions
+      storeStep(state.t, state.y);
+
+      let step = 0;
+      while (step++ < 1e6 && !state.limitReached) {
+        // Perform a single adaptive step of arbitrary size
+        ode45(state, planarThreeBodyDerivative, config);
+
+        storeStep(state.t, state.y);
+      }
+
+      return result;
+    }
+  </script>
+  <script id="5963" type="application/vnd.observable.javascript">
+    md`## Initial conditions`
+  </script>
+  <script id="3695" type="application/vnd.observable.javascript">
+    {
+      const w = Math.min(width, 350);
+      const h = Math.floor(w * 0.7);
+
+      const svg = d3
+        .create('svg')
+        .attr('width', w)
+        .attr('height', h);
+
+      const arrowheadUid = DOM.uid('arrowhead');
+      svg
+        .append('defs')
+        .append('marker')
+        .attr('id', arrowheadUid.id)
+        .call(arrowhead());
+
+      function getBounds(y) {
+        return {
+          xmin: Math.min(y[0], y[4], y[8]),
+          xmax: Math.max(y[0], y[4], y[8]),
+          ymin: Math.min(y[1], y[5], y[9]),
+          ymax: Math.max(y[1], y[5], y[9]),
+          umin: Math.min(y[2], y[6], y[10]),
+          umax: Math.max(y[2], y[6], y[10]),
+          vmin: Math.min(y[3], y[7], y[11]),
+          vmax: Math.max(y[3], y[7], y[11])
+        };
+      }
+      const bounds = getBounds(initialConditions.y0);
+      const xrange = Math.max(bounds.xmax - bounds.xmin, bounds.ymax - bounds.ymin);
+      const vrange = Math.max(
+        Math.abs(bounds.umin),
+        Math.abs(bounds.umax),
+        Math.abs(bounds.vmin),
+        Math.abs(bounds.vmax)
+      );
+
+      function clipV(value) {
+        return value / Math.max(xrange * 0.2, vrange * 1.2);
+      }
+
+      const x = d3
+        .scaleLinear()
+        .domain([-xrange, xrange])
+        .range([0, w]);
+
+      const y = d3
+        .scaleLinear()
+        .domain([(-xrange * h) / w, (xrange * h) / w])
+        .range([h, 0]);
+
+      const line = d3
+        .line()
+        .x(d => x(d[0]))
+        .y(d => y(d[1]));
+
+      const axisExtent = 0.9;
+      svg
+        .append('g')
+        .attr('class', 'axes')
+        .selectAll('path')
+        .data([
+          [[-xrange * axisExtent, 0], [xrange * axisExtent, 0]],
+          [[0, (-xrange * axisExtent * h) / w], [0, (xrange * axisExtent * h) / w]]
+        ])
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', 'black')
+        .attr('fill', 'none')
+        .attr('stroke-width', 1)
+        .attr('marker-start', `url(${arrowheadUid.href.replace(/#.*#/, '#')})`)
+        .attr('marker-end', `url(${arrowheadUid.href.replace(/#.*#/, '#')})`);
+
+      const y0 = [0, 0, 0].map((d, i) => [
+        initialConditions.y0[4 * i + 0],
+        initialConditions.y0[4 * i + 1]
+      ]);
+
+      const v0 = [0, 0, 0].map((d, i) => [
+        clipV(initialConditions.y0[4 * i + 2]),
+        clipV(initialConditions.y0[4 * i + 3])
+      ]);
+      const pointSize = initialConditions.pointSize.map(d => Math.max(2.5, d * 8));
+
+      svg
+        .append('g')
+        .attr('class', 'velocities')
+        .selectAll('path')
+        .data(
+          y0
+            .map((d, i) => [
+              [y0[i][0], y0[i][1]],
+              [y0[i][0] + v0[i][0], y0[i][1] + v0[i][1]]
+            ])
+            .filter((v, i) => v0[i][0] * v0[i][0] + v0[i][1] * v0[i][1] > 0)
+        )
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', 'black')
+        .attr('fill', 'none')
+        .attr('stroke-width', 1.5)
+        .attr('marker-end', `url(${arrowheadUid.href.replace(/#.*#/, '#')})`);
+
+      svg
+        .append('g')
+        .attr('class', 'bodies')
+        .selectAll('circle')
+        .data(y0)
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', (d, i) => pointSize[i])
+        .attr('fill', (d, i) => floatRgbToHex(initialConditions.colors[i]))
+        .attr('stroke', (d, i) => floatRgbToHex(drawing.strokeColor[i]))
+        .attr('stroke-width', 2);
+
+      svg
+        .append('g')
+        .attr('class', 'labels')
+        .selectAll('text')
+        .data([
+          { xy: [0, (xrange * axisExtent * h) / w], text: 'y' },
+          { xy: [xrange * axisExtent, 0], text: 'x' }
+        ])
+        .join('text')
+        .text(d => d.text)
+        .attr('x', d => x(d.xy[0]))
+        .attr('y', d => y(d.xy[1]))
+        .attr('font-size', '14px')
+        .attr('font-family', 'serif')
+        .attr('font-style', 'italic')
+        .attr('dy', -2)
+        .attr('dx', 5);
+
+      svg
+        .append('g')
+        .attr('class', 'body-labels')
+        .selectAll('text')
+        .data(y0)
+        .join('text')
+        .text('m')
+        .call(function(el, i) {
+          el.append('tspan')
+            .attr('dy', 5)
+            .attr('font-weight', 400)
+            .attr('font-size', '0.75em')
+            .text((d, i) => i + 1);
+        })
+        .attr('x', d => x(d[0]))
+        .attr('y', d => y(d[1]))
+        .attr('font-size', '14px')
+        .attr('font-family', 'serif')
+        .attr('font-style', 'italic')
+        .attr('dx', (d, i) => 3 + pointSize[i] * 0.707)
+        .attr('dy', (d, i) => 14 - 3 + pointSize[i] * 0.707)
+        .attr('text-anchor', 'start');
+
+      return html`
+        <figure>
+          ${svg.node()}
+          <figcaption>Initial conditions for the ${tex`${initialConditions.name}`} planar three-body orbit.</figcaption>
+        </figure>
+      `;
+    }
+  </script>
+  <script id="2534" type="application/vnd.observable.javascript">
+    md`The initial conditions in this notebook are obtained from Milovan Šuvakov's [Three-body Gallery](http://three-body.ipb.ac.rs/) as well as from the listing of [Xiaoming Li and Shijun Liao](http://numericaltank.sjtu.edu.cn/three-body/three-body.htm). The initial conditions presented here fall into a few couple categories but all have zero net translational and angular momentum.
+
+    For more information as well as an excellent and approachable overview of the techniques used to locate the orbits, see Šuvakov and Dmitrašinović's [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S).
+    `
+  </script>
+  <script id="5870" type="application/vnd.observable.javascript">
+    import {
+      threeBodyInitialConditions,
+      references,
+      sequenceUrls
+    } from '@rreusser/periodic-three-body-initial-conditions'
+  </script>
+  <script id="8911" type="application/vnd.observable.javascript">
+    viewof duplicates = {
+      const curV =
+        threeBodyInitialConditions[selectedConditions.group][
+          selectedConditions.sequence
+        ][selectedConditions.orbit].v;
+      const curX =
+        threeBodyInitialConditions[selectedConditions.group][
+          selectedConditions.sequence
+        ][selectedConditions.orbit].x;
+      const dups = [];
+      for (let [groupName, group] of Object.entries(threeBodyInitialConditions)) {
+        for (let [sequenceName, sequence] of Object.entries(group)) {
+          for (let [orbitName, orbit] of Object.entries(sequence)) {
+            const v = orbit.v;
+            const d00 = v[0][0] - curV[0][0];
+            const d01 = v[0][1] - curV[0][1];
+            const d10 = v[1][0] - curV[1][0];
+            const d11 = v[1][1] - curV[1][1];
+            const d20 = v[2][0] - curV[2][0];
+            const d21 = v[2][1] - curV[2][1];
+            const x = orbit.x;
+            const dx00 = x[0][0] - curX[0][0];
+            const dx01 = x[0][1] - curX[0][1];
+            const dx10 = x[1][0] - curX[1][0];
+            const dx11 = x[1][1] - curX[1][1];
+            const dx20 = x[2][0] - curX[2][0];
+            const dx21 = x[2][1] - curX[2][1];
+            const r2 =
+              d00 * d00 +
+              d01 * d01 +
+              d10 * d10 +
+              d11 * d11 +
+              d20 * d20 +
+              d21 * d21 +
+              dx00 * dx00 +
+              dx01 * dx01 +
+              dx10 * dx10 +
+              dx11 * dx11 +
+              dx20 * dx20 +
+              dx21 * dx21;
+            if (r2 < 1e-6 * 1e-6) {
+              if (
+                groupName !== selectedConditions.group ||
+                sequenceName !== selectedConditions.sequence ||
+                orbitName !== selectedConditions.orbit
+              ) {
+                dups.push({ groupName, sequenceName, orbitName });
+              }
+            }
+          }
+        }
+      }
+      if (dups.length) {
+        const el = html`Exact duplicates:<br><ul>
+    ${dups.map(
+      (dup) =>
+        html`<li><a href="#group=${encodeURIComponent(
+          dup.groupName
+        )}&sequence=${encodeURIComponent(
+          dup.sequenceName
+        )}&orbit=${encodeURIComponent(dup.orbitName)}" target="_blank">${
+          dup.groupName
+        } - ${dup.sequenceName} - ${dup.orbitName}</a></li>`
+    )}
+    </ul>`;
+        el.value = dups;
+        return el;
+      } else {
+        const el = html`<span></span>`;
+        el.value = [];
+        return el;
+      }
+    }
+  </script>
+  <script id="4364" type="application/vnd.observable.javascript">
+    viewof selectedConditions = {
+      const form = this || document.createElement("form");
+
+      let parts = decodeHash(window.location.hash);
+      let currentGroup = unescape(parts.group) || "Šuvakov"; // "Li & Liao Unequal Mass"
+      let currentSequence = unescape(parts.sequence) || "III - Yin Yang"; // 'II.A i.c.' //.15.A.β'
+      let currentOrbit = unescape(parts.orbit) || "III.15.A.β"; // 'II.A.4 i.c. (2)'
+
+      let sequencesByGroup = Object.keys(threeBodyInitialConditions).map(
+        (group) => ({
+          label: group,
+          options: Object.keys(threeBodyInitialConditions[group]).map(
+            (sequence) => ({
+              label: sequence,
+              value: `${group}: ${sequence}`
+            })
+          )
+        })
+      );
+
+      function configureSequenceOpts(el) {
+        el.selectAll("select")
+          .data([null])
+          .join("select")
+          .attr("name", "sequence")
+          .selectAll("optgroup")
+          .data(sequencesByGroup)
+          .join("optgroup")
+          .attr("label", (d) => d.label)
+          .selectAll("option")
+          .data((d) => d.options)
+          .join("option")
+          .attr("value", (d) => d.value)
+          .attr("selected", (d) =>
+            d.value === `${currentGroup}: ${currentSequence}` ? "selected" : null
+          )
+          .text((d) => d.label);
+        el.selectAll("div")
+          .data([null])
+          .join("div")
+          .style("font-size", "0.85em")
+          .style("font-style", "italic")
+          .text("Sequence");
+      }
+
+      function configureOrbitOpts(el) {
+        let options;
+        while (!options) {
+          try {
+            options = Object.keys(
+              threeBodyInitialConditions[currentGroup][currentSequence]
+            ).map((orbitName) => ({
+              label: orbitName,
+              value: orbitName
+            }));
+          } catch (e) {
+            currentGroup = Object.keys(threeBodyInitialConditions)[0];
+            currentSequence = Object.keys(
+              threeBodyInitialConditions[currentGroup]
+            )[0];
+            currentOrbit = Object.keys(
+              threeBodyInitialConditions[currentGroup][currentSequence]
+            )[0];
+          }
+        }
+        el.selectAll("select")
+          .data([null])
+          .join("select")
+          .attr("name", "orbit")
+          .selectAll("optgroup")
+          .data([options])
+          .join("optgroup")
+          .attr("label", "- select orbit -")
+          .selectAll("option")
+          .data(options, (d) => `${currentGroup}:${currentSequence}:${d.value}`)
+          .join("option")
+          .attr("value", (d) => d.value)
+          .attr("selected", (d) =>
+            // Check for a dot as well for robustness against links which get the final trailing period chopped off
+            d.value === currentOrbit || d.value === currentOrbit + "."
+              ? "selected"
+              : null
+          )
+          .text((d) => d.label);
+        el.selectAll("div")
+          .data([null])
+          .join("div")
+          .style("font-size", "0.85em")
+          .style("font-style", "italic")
+          .text("Orbit");
+      }
+
+      function configureMenus(el) {
+        el.selectAll("div.title")
+          .data([null])
+          .join("div")
+          .attr("class", "title")
+          .text("Initial conditions")
+          .style("font", "700 0.9rem sans-serif");
+        el.selectAll("div.selectfield")
+          .data(["Sequence", "Orbit"])
+          .join("div")
+          .attr("class", "selectfield")
+          .style("display", "inline-block")
+          .style("margin-right", "0.5em")
+          .each(function (d) {
+            (d === "Sequence"
+              ? configureSequenceOpts
+              : configureOrbitOpts)(d3.select(this));
+          });
+      }
+
+      configureMenus(d3.select(form));
+
+      form.oninput = () => {
+        currentGroup = form.sequence.value.split(": ")[0];
+        currentSequence = form.sequence.value.split(": ")[1];
+        currentOrbit = form.orbit.value;
+        // Check for a dot as well for robustness against links which get the final trailing period chopped off
+        let ic =
+          threeBodyInitialConditions[currentGroup][currentSequence][currentOrbit] ||
+          threeBodyInitialConditions[currentGroup][currentSequence][
+            currentOrbit + "."
+          ];
+        if (!ic) {
+          currentOrbit = Object.keys(
+            threeBodyInitialConditions[currentGroup][currentSequence]
+          )[0];
+        }
+        configureMenus(d3.select(form));
+        form.value = {
+          group: currentGroup,
+          sequence: currentSequence,
+          orbit: currentOrbit
+        };
+      };
+
+      form.oninput();
+
+      return form;
+    }
+  </script>
+  <script id="105" type="application/vnd.observable.javascript">
+    {
+      const {
+        currentXScale,
+        currentYScale,
+        xScale,
+        yScale,
+        viewport,
+        element
+      } = plotContexts.orbit;
+      const { width, height, dpi } = viewport;
+
+      const svg = d3.select(element).attr("width", width).attr("height", height);
+
+      const drawLines = drawing.lineWidth > 0 && drawing.lineOpacity > 0;
+      const animatePoints = ~drawing.display.indexOf("particles");
+      const animateLines = ~drawing.display.indexOf("orbit");
+      const motionBlur = ~drawing.display.indexOf("blur")
+        ? Math.min(40, Math.max(3, Math.floor(drawing.speed)))
+        : 0;
+      const maxPermittedBlurSteps = 40 * 2 + 1;
+      const blurSteps = motionBlur * 2 + 1;
+      const animation = animatePoints || animateLines;
+
+      const reglCanvas = getOrAttachReglFO(svg, width, height, dpi, {
+        optionalExtensions: ["ANGLE_instanced_arrays"],
+        attributes: { antialias: true }
+      });
+      const regl = reglCanvas.value;
+      const data = regl.data;
+
+      data.positionsBuffer = createOrUpdateBuffer(
+        data.positionsBuffer,
+        regl.buffer,
+        trajectory.position
+      );
+
+      // Construct point data
+      const pointsBufferData = new Float32Array(maxPermittedBlurSteps * 9);
+      data.pointsBuffer = createOrUpdateBuffer(
+        data.pointsBuffer,
+        regl.buffer,
+        pointsBufferData
+      );
+      data.pointColorsBuffer = createOrUpdateBuffer(
+        data.pointColorsBuffer,
+        regl.buffer,
+        new Array(maxPermittedBlurSteps).fill(0).map((d, i) => {
+          let baseAlpha = (1 + 8 * (blurSteps / maxPermittedBlurSteps)) / blurSteps;
+          let alpha = motionBlur
+            ? baseAlpha *
+              Math.exp(-0.5 * Math.pow((i - blurSteps * 0.5) / blurSteps / 0.4, 2))
+            : 1;
+          return [0, 1, 2].map((i) => drawing.color[i].concat(alpha));
+        })
+      );
+      const opacity = (x) => 1.0 + drawing.lineOpacity * (x - 1);
+
+      // Construct data for line drawing commands (the three array entries
+      // trigger three webgl drawing calls
+      const lineData = [0, 1, 2].map((i) => ({
+        position: data.positionsBuffer,
+        offset: i * 3 * 4,
+        stride: 9 * 4,
+        color: { constant: drawing.color[i].map(opacity).concat(1) },
+        borderColor: { constant: drawing.strokeColor[i].concat(1) },
+        borderWidth: { constant: drawing.lineStrokeWidth },
+        width: { constant: drawing.lineWidth },
+        count: trajectory.t.length
+      }));
+
+      const pointsData = [0, 1, 2].map((i) => ({
+        positions: { buffer: data.pointsBuffer, stride: 4 * 9, offset: 4 * 3 * i },
+        colors: {
+          buffer: data.pointColorsBuffer,
+          stride: 4 * 4 * 3,
+          offset: 4 * 4 * i
+        },
+        pointSize: initialConditions.pointSize[i] * drawing.pointSize,
+        strokeWidth: drawing.lineStrokeWidth,
+        strokeColor: drawing.strokeColor[i],
+        count: blurSteps
+      }));
+
+      // Construct draw commands
+      const view = mat4create();
+      data.drawLines = data.drawLines || createDrawBorderedLineCommand(regl);
+      data.drawPoints = data.drawPoints || createStrokedPointsCommand(regl);
+      data.viewport = data.viewport || createReglViewportConfiguration(regl);
+      data.scale = data.scale || createReglLinearScaleConfiguration(regl);
+
+      const identity = mat4create();
+      data.configureLineDrawing =
+        data.configureLineDrawing ||
+        regl({
+          uniforms: {
+            uProjectionViewModel: (ctx, props) => {
+              mat4copy(view, ctx.view);
+              view[10] = -props.timeScale * 2.0;
+              view[14] = props.timeShift * props.timeScale * 2.0 - 1.0;
+              return view;
+            }
+          },
+          depth: { enable: true }
+        });
+      data.configurePointDrawing =
+        data.configurePointDrawing ||
+        regl({
+          uniforms: {
+            uProjectionView: (ctx, props) => {
+              mat4copy(view, ctx.view);
+              view[10] = 0;
+              return view;
+            }
+          },
+          depth: { enable: false },
+          blend: {
+            enable: true,
+            func: {
+              srcRGB: "src alpha",
+              srcAlpha: 1,
+              dstRGB: "one minus src alpha",
+              dstAlpha: "one minus src alpha"
+            },
+            equation: { rgb: "add", alpha: "add" }
+          }
+        });
+
+      // The main drawing function, called either in a loop or (if not animating
+      // when we interact with the plot.
+      if (data.t0 === undefined) {
+        data.t0 = NaN;
+        data.tPrev = NaN;
+        data.tDelta = 0;
+      }
+      let visible = true;
+      let dirty = true;
+      data.renderPlot = function renderPlot(ctx) {
+        if (!visible) return;
+
+        let time = ctx ? ctx.time : isNaN(data.tPrev) ? 0 : data.tPrev;
+        if (isNaN(data.tPrev)) {
+          data.tPrev = data.t0 = time;
+        } else {
+          data.tDelta = Math.min(1 / 30, time - data.tPrev);
+          data.tPrev = time;
+        }
+
+        // Bail out early if there's nothing to draw
+        if (!animateLines && !animatePoints && !dirty) return;
+        dirty = false;
+
+        // Compute the time shift and scale
+        let tPeriod = trajectory.t[trajectory.t.length - 1];
+        let t0 = data.t0;
+        let ts = time * drawing.speed;
+        while (ts > t0 + tPeriod * 2) t0 += tPeriod * 2;
+        while (ts < t0) t0 -= tPeriod * 2;
+        let timeShift = ts - t0;
+        let timeScale = 1.0 / tPeriod;
+
+        regl.clear({ color: [0, 0, 0, 0], depth: 1 });
+
+        data.viewport(viewport, () => {
+          data.scale(currentXScale, currentYScale, () => {
+            if (drawLines) {
+              data.configureLineDrawing(
+                { timeShift: animateLines ? timeShift : tPeriod, timeScale },
+                () => {
+                  data.drawLines(lineData);
+                }
+              );
+            }
+
+            if (animatePoints) {
+              // Evaluate the points at a few different times, put all the data
+              // in a single buffer, and issue a single draw call. We just bisect
+              // the precomputed trajectory data so that our main draw loop involves
+              // no integration.
+              let t = trajectory.t,
+                y = trajectory.position;
+              for (var b = -motionBlur, b9 = 0; b <= motionBlur; b++, b9 += 9) {
+                var tBlur =
+                  timeShift +
+                  data.tDelta * (b / Math.max(1, motionBlur + 0.5)) * drawing.speed;
+                let tt = ((tBlur * timeScale) % 1) / timeScale;
+                let i0 = binarySearch(t, tt);
+                let i1 = Math.min(t.length - 1, i0 + 1);
+                let ii = (tt - t[i0]) / (t[i1] - t[i0]);
+                for (var j = 0; j < 9; j++) {
+                  pointsBufferData[b9 + j] =
+                    (1.0 - ii) * y[i0 * 9 + j] + ii * y[i1 * 9 + j];
+                }
+              }
+              data.pointsBuffer.subdata(pointsBufferData);
+              data.configurePointDrawing(() => {
+                data.drawPoints(pointsData);
+              });
+            }
+          });
+        });
+      };
+
+      // Draw the axes
+      svg.selectAll(`.axes`).remove();
+      const axes = svg
+        .selectAll(".axes")
+        .data(["axes"])
+        .join("g")
+        .attr("class", "axes");
+
+      data.updateAxes = function updateAxes() {
+        axes.call(
+          viewportAxes(viewport, currentXScale, currentYScale, {
+            xAxis: isNarrowScreen ? d3.axisTop : d3.axisBottom,
+            yAxis: isNarrowScreen ? d3.axisRight : d3.axisLeft
+          })
+        );
+      };
+
+      // Set up zoom interactions
+      svg.attr("class", "draggable").call(
+        persistentZoom(currentXScale, currentYScale, xScale, yScale)
+          .scaleExtent([0.01, 10000])
+          .on("zoom.plot", () => (dirty = true))
+          .on("zoom.axes", () => data.updateAxes())
+      );
+
+      // Allow modification of the draw callback via the data object,
+      // but just keep the same timer loop
+      data.frame = data.frame || regl.frame((ctx) => data.renderPlot(ctx));
+
+      // Perform one synchronous render so we don't get a white flash
+      data.renderPlot();
+      data.updateAxes();
+
+      // Stop drawing the plot when offscreen
+      const observer = new IntersectionObserver((entries) => {
+        visible = entries.pop().intersectionRatio > 0;
+      });
+      observer.observe(reglCanvas);
+      invalidation.then(() => {
+        observer.disconnect();
+      });
+
+      return html`
+        <figure style="max-width:100%">
+          <div style="height:${height}px">
+            ${svg.node()}
+          </div>
+          <figcaption>${tex`${initialConditions.name}`} orbit in physical space.</figcaption>
+        </figure>
+      `;
+    }
+  </script>
+  <script id="3198" type="application/vnd.observable.javascript">
+    viewof drawing = {
+      let animationOptions = [
+        { value: 'orbit', label: 'animate orbit', checked: false },
+        { value: 'particles', label: 'animate particles', checked: true },
+        { value: 'blur', label: 'motion blur', checked: true }
+      ];
+
+      const form = html`
+      <form class="form-compact">
+        <details>
+          <summary style="font-size:0.85em;">Display options</summary>
+
+          <div class="field">
+            ${animationOptions
+              .map(
+                option =>
+                  `<label style="display: inline-block; margin: 5px 10px 3px 0; font-size: 0.85em;"><input type=checkbox name=display value=${
+                    option.value
+                  }${option.checked ? " checked" : ""}> ${option.label}</label>`
+              )
+              .join('')}
+          </div>
+
+          <div class="field"><input type=range name=lineOpacity min=0 max=1 step=0.01 value=0.7> <small><i>line opacity: <output name=lineOpacityOutput></output></i></small></div>
+
+          <div class="field"><input type=range name=lineWidth min=0.5 max=4 step=0.1 value=1.5> <small><i>line width: <output name=lineWidthOutput></i></output></small></div>
+
+          <div class="field"><input type=range name=lineStrokeWidth min=0 max=4 step=0.1 value=0.5> <small><i>stroke width: <output name=lineStrokeWidthOutput></i></output></small></div>
+
+          <div class="field"><input type=range name=pointSize min=4 max=20 step=1 value=10> <small><i>point size: <output name=pointSizeOutput></i></output></small></div>
+
+          <div class="field"><input type=range name=speed min=0.05 max=20 step=0.05 value=5> <small><i>speed: <output name=speedOutput></i></output></small></div>
+
+          <div class="field">
+            <input type=color name=lineColor1 value=${floatRgbToHex([
+              0.63,
+              0.83,
+              0.18
+            ])}>
+            <input type=color name=lineColor2 value=${floatRgbToHex([
+              0.18,
+              0.63,
+              0.83
+            ])}>
+            <input type=color name=lineColor3 value=${floatRgbToHex([
+              0.83,
+              0.18,
+              0.63
+            ])}>
+            <small><i>orbit color</i></small>
+          </div>
+
+          <div class="field">
+            <input type=color name=strokeColor1 value=${floatRgbToHex([1, 1, 1])}>
+            <input type=color name=strokeColor2 value=${floatRgbToHex([1, 1, 1])}>
+            <input type=color name=strokeColor3 value=${floatRgbToHex([1, 1, 1])}>
+            <small><i>stroke color</i></small>
+          </div>
+        </details>
+      </form>`;
+      form.oninput = () => {
+        form.lineOpacityOutput.value = form.lineOpacity.valueAsNumber;
+        form.lineWidthOutput.value = form.lineWidth.valueAsNumber;
+        form.lineStrokeWidthOutput.value = form.lineStrokeWidth.valueAsNumber;
+        form.pointSizeOutput.value = form.pointSize.valueAsNumber;
+        form.speedOutput.value = form.speed.valueAsNumber;
+        form.value = {
+          lineOpacity: form.lineOpacity.valueAsNumber,
+          lineWidth: form.lineWidth.valueAsNumber,
+          lineStrokeWidth: form.lineStrokeWidth.valueAsNumber,
+          pointSize: form.pointSize.valueAsNumber,
+          speed: form.speed.valueAsNumber,
+          display: [...form.display.values()]
+            .filter(x => x.checked)
+            .map(x => x.value),
+          color: [
+            hexRgbToFloat(form.lineColor1.value),
+            hexRgbToFloat(form.lineColor2.value),
+            hexRgbToFloat(form.lineColor3.value)
+          ],
+          strokeColor: [
+            hexRgbToFloat(form.strokeColor1.value),
+            hexRgbToFloat(form.strokeColor2.value),
+            hexRgbToFloat(form.strokeColor3.value)
+          ]
+        };
+      };
+      form.oninput();
+      return form;
+    }
+  </script>
+  <script id="8330" type="application/vnd.observable.javascript">
+    {
+      const group = selectedConditions.group;
+      const sequence = selectedConditions.sequence;
+      const orbit = selectedConditions.orbit;
+      const conditions = threeBodyInitialConditions[group][sequence][orbit];
+      const p = conditions.x;
+      const v = conditions.v;
+      const m = conditions.m ? conditions.m : [1, 1, 1];
+      const isUnequalMass = m[0] !== m[1] || m[0] !== m[2];
+      const ref = references[conditions.ref];
+
+      let cName = selectedConditions.orbit;
+      let url = conditions.url;
+      let isIsoscelesCollinear = /i\.c\./.test(cName);
+      if (/i\.c\./.test(cName)) {
+        cName = cName.replace(/ i\.c\./, "^{i.c.}").replace(/.([0-9]+)/, "_{$1}");
+        //url = sequencesUrls[sequence]
+      } else if (/^F/.test(cName)) {
+        cName = cName.replace(/^F([0-9]+)/, "F_{$1}");
+        //url = sequencesUrls[sequence]
+      }
+      let hashValue = `#group=${encodeURIComponent(
+        group
+      )}&sequence=${encodeURIComponent(sequence)}&orbit=${encodeURIComponent(
+        orbit
+      )}`;
+
+      let sequenceName = `${group} - ${sequence.replace(
+        /i\.c\./,
+        "isosceles collinear"
+      )}`;
+
+      var output = html`<div style="border: 1px solid #ccc; box-sizing: border-box; padding: 0 10px; max-width:640px;">
+      <small><dl class="inline-flex">
+        <dt>Sequence</dt><dd><a href="${
+          sequenceUrls[group][sequence]
+        }">${sequenceName}${isUnequalMass ? " (unequal mass)" : ""}</a></dd>
+        <dt>Orbit</dt><dd>${
+          url ? html`<a href="${url}">${tex`${cName}`}</a>` : tex`${cName}`
+        }</dd>
+        <dt >Initial positions</dt><dd>${tex`((${p[0][0]}, ${p[0][1]}),`} ${tex`(${p[1][0]}, ${p[1][1]}),`} ${tex`(${p[2][0]}, ${p[2][1]}))`}</dd>
+        <dt>Initial velocities</dt><dd>${tex`((${v[0][0]}, ${v[0][1]}),`} ${tex`(${v[1][0]}, ${v[1][1]}),`} ${tex`(${v[2][0]}, ${v[2][1]}))`}</dd>
+        <dt>Masses</dt><dd>${tex`(${m[0]},`} ${tex`${m[1]},`} ${tex`${m[2]})`}</dd>
+        <dt><a href="http://three-body.ipb.ac.rs/info.php">Free group element</a></dt><dd style="word-break:break-all;">${freeGroupWord}</dd>
+        <dt>Period</dt><dd>${conditions.T}</dd>
+        ${
+          conditions.E !== undefined
+            ? `<dt>Energy</dt><dd>${conditions.E}</dd>`
+            : ""
+        }
+        <!--dt>Angular momentum</dt><dd>${tex`${
+          conditions.L === undefined ? 0 : conditions.L
+        }`}</dd-->
+        <dt>Discovered</dt><dd>${conditions.year}</dd>
+        <dt>Reference</dt><dd>
+           ${ref.authors}, <em>${ref.title}</em>${
+        ref.journal
+          ? `, <strong>${ref.journal}</strong>,${ref.page ? ` ${ref.page}` : ""} (${
+              ref.year
+            })`
+          : ""
+      }.${
+        ref.preprint
+          ? ` <a href="${ref.preprint.url}">${ref.preprint.label}</a>`
+          : ""
+      }
+        </dd>
+        <dt>Share</dt><dd><a href="${hashValue}">link to this orbit 🔗</a></dt>
+      </dl></small>
+      </div>`;
+      return output;
+    }
+  </script>
+  <script id="2241" type="application/vnd.observable.javascript">
+    initialConditions = {
+      const group = selectedConditions.group;
+      const sequence = selectedConditions.sequence;
+      const orbit = selectedConditions.orbit;
+      const conditions = threeBodyInitialConditions[group][sequence][orbit];
+      const p = conditions.x;
+      const v = conditions.v;
+      const m = conditions.m ? conditions.m : [1, 1, 1];
+      const isUnequalMass = m[0] !== m[1] || m[0] !== m[2];
+      const ref = references[conditions.ref];
+
+      let cName = selectedConditions.orbit;
+      let url = conditions.url;
+      let isIsoscelesCollinear = /i\.c\./.test(cName);
+      if (/i\.c\./.test(cName)) {
+        cName = cName.replace(/ i\.c\./, "^{i.c.}").replace(/.([0-9]+)/, "_{$1}");
+        //url = sequencesUrls[sequence]
+      } else if (/^F/.test(cName)) {
+        cName = cName.replace(/^F([0-9]+)/, "F_{$1}");
+        //url = sequencesUrls[sequence]
+      }
+      let hashValue = `#group=${encodeURIComponent(
+        group
+      )}&sequence=${encodeURIComponent(sequence)}&orbit=${encodeURIComponent(
+        orbit
+      )}`;
+
+      let sequenceName = sequence.replace(/i\.c\./, "isosceles collinear");
+
+      let ic = {
+        name: cName,
+        y0: [
+          p[0][0],
+          p[0][1],
+          v[0][0],
+          v[0][1],
+          p[1][0],
+          p[1][1],
+          v[1][0],
+          v[1][1],
+          p[2][0],
+          p[2][1],
+          v[2][0],
+          v[2][1]
+        ],
+        tolerance: conditions.tolerance || 1e-9,
+        period: conditions.T,
+        m: conditions.m ? conditions.m : [1, 1, 1]
+      };
+
+      ic.colors = drawing.color;
+
+      var totalMass = ic.m.reduce((a, b) => a + b, 0);
+      ic.pointSize = ic.m
+        .map((x) => (x / totalMass) * 3)
+        .map((x) => Math.pow(x, 0.5));
+
+      return ic;
+    }
+  </script>
+  <script id="5845" type="application/vnd.observable.javascript">
+    md`## Orbit classification
+
+    It'd be fine to stop right here, but the rest of this notebook will try to communicate how we start to talk about classifying the orbits since without some means of classification, we really just have a large puddle of orbits. We'll use the topogical approach described by Montgomery in [The N-body problem, the braid group, and action-minimizing periodic solutions](https://ui.adsabs.harvard.edu/abs/1998Nonli..11..363M/abstract), though to be honest I didn't get too far in that paper and have found [the works of Šuvakov, Dmitrašinović, et al.](http://three-body.ipb.ac.rs/ref.php) much more helpful and approachable. (This is a reflection of my time and abilities, of course, not of the works of Montgomery.)
+
+    Since the interesting aspects of a particular orbit are invariant under translation, rotation, and scaling, we seek a representation which removes the uninteresting aspects. We therefore start with a commonly used coordinate system for n-body problems called [*Jacobi coordinates*](https://en.wikipedia.org/wiki/Jacobi_coordinates). To compute Jacobi coordinates, we start with a single body and aggregate the remaining bodies one at a time, computing as each successive Jacobi coordinate the vector from one additional body to the center of mass of the currently aggregated bodies. The final coordinate is the center of mass of the whole system (which we discard since the overall system, at worst, moves with constant velocity). [See below](#jacobiCoords) for an illustration this procedure.
+
+    Jacobi coordinates therefore remove net translation and reduce the degrees of freedom in position from six to four. We can further reduce the dimensionality to two by defining the *shape vector* ${tex.block`
+    \begin{aligned}
+    \mathbf{n} &= (n_x, n_y, n_z) \\
+    &= \left( \frac{2 \mathbf{r}_1 \cdot \mathbf{r}_2}{R^2}, \frac{r_1^2 - r_2^2}{R^2}, \frac{2 (\mathbf{r}_1 \times \mathbf{r}_2) \cdot \mathbf{e}_z}{R^2}\right)
+    \end{aligned}
+    `} where ${tex`\mathbf{r}_1`} and ${tex`\mathbf{r}_2`} are the Jacobi coordinates, ${tex`\mathbf{e}_z`} is the unit vector along the z-axis, and ${tex`R = \sqrt{r_1^2 + r_2^2}`}. The vector ${tex`\mathbf{n}`} lives on the unit sphere and describes the configuration of the system in a manner invariant to rotation, translation and overall size.
+
+    Move the points below and observe a corresponding behavior on the shape sphere.
+    - pairwise collisions place the shape at one of three points, marked on the shape sphere in red, green and blue.
+    - collinear configurations, called *syzygies*, lie on the equator.
+    `
+  </script>
+  <script id="7196" type="application/vnd.observable.javascript">
+    viewof jacobiCoords = {
+      const w = Math.min(width, 480);
+      const h = Math.floor(w * 0.7);
+
+      const svg = d3
+        .create('svg')
+        .attr('width', w)
+        .attr('height', h);
+
+      const output = html`
+        <figure>
+          ${svg.node()}
+          <figcaption>Jacobi coordinates for three bodies. We discard ${tex`r_3`}. Move the masses and observe the effect in shape space.</figcaption>
+        </figure>`;
+
+      const arrowheadUid = DOM.uid('arrowhead');
+      svg
+        .append('defs')
+        .append('marker')
+        .attr('id', arrowheadUid.id)
+        .call(arrowhead());
+
+      const positions = [[4, 1], [3, 2.7], [1, 2.5]];
+
+      function jacobi(y) {
+        let m1 = initialConditions.m[0];
+        let m2 = initialConditions.m[1];
+        let m3 = initialConditions.m[2];
+        let r1x = y[0][0] - y[1][0];
+        let r1y = y[0][1] - y[1][1];
+        let r2x = (m1 * y[0][0] + m2 * y[1][0]) / (m1 + m2) - y[2][0];
+        let r2y = (m1 * y[0][1] + m2 * y[1][1]) / (m1 + m2) - y[2][1];
+        let r3x = (m1 * y[0][0] + m2 * y[1][0] + m3 * y[2][0]) / (m1 + m2 + m3);
+        let r3y = (m1 * y[0][1] + m2 * y[1][1] + m3 * y[2][1]) / (m1 + m2 + m3);
+        return [[r1x, r1y], [r2x, r2y], [r3x, r3y]];
+      }
+
+      function endpoints(y) {
+        let j = jacobi(y);
+        return [
+          [[y[1][0], y[1][1]], [y[1][0] + j[0][0], y[1][1] + j[0][1]]],
+          [[y[2][0], y[2][1]], [y[2][0] + j[1][0], y[2][1] + j[1][1]]],
+          [[0, 0], [j[2][0], j[2][1]]]
+        ];
+      }
+
+      const xrange = 5;
+      const x = d3
+        .scaleLinear()
+        .domain([-xrange * 0.1, xrange * 1.1])
+        .range([0, w]);
+
+      const y = d3
+        .scaleLinear()
+        .domain([(-xrange * 0.1 * h) / w, (xrange * 1.1 * h) / w])
+        .range([h, 0]);
+
+      const line = d3
+        .line()
+        .x(d => x(d[0]))
+        .y(d => y(d[1]));
+
+      function shorten(xAxis, yAxis, amount1, amount2) {
+        return function(line) {
+          let x0 = xAxis(line[0][0]);
+          let y0 = yAxis(line[0][1]);
+          let x1 = xAxis(line[1][0]);
+          let y1 = yAxis(line[1][1]);
+          let x10 = x1 - x0;
+          let y10 = y1 - y0;
+          let r = Math.hypot(x10, y10);
+          let ex10 = x10 / r;
+          let ey10 = y10 / r;
+          return [
+            [xAxis.invert(x0 + ex10 * amount1), yAxis.invert(y0 + ey10 * amount1)],
+            [xAxis.invert(x1 - ex10 * amount2), yAxis.invert(y1 - ey10 * amount2)]
+          ];
+        };
+      }
+
+      function interpolate(t) {
+        return function(line) {
+          return [
+            t * line[1][0] + (1 - t) * line[0][0],
+            t * line[1][1] + (1 - t) * line[0][1]
+          ];
+        };
+      }
+
+      svg
+        .append('g')
+        .attr('class', 'axes')
+        .selectAll('path')
+        .data([
+          [[-xrange * 0.05, 0], [xrange, 0]],
+          [[0, (-xrange * 0.05 * h) / w], [0, (xrange * h) / w]]
+        ])
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', 'black')
+        .attr('fill', 'none')
+        .attr('stroke-width', 1)
+        .attr('marker-start', `url(${arrowheadUid.href.replace(/#.*#/, '#')})`)
+        .attr('marker-end', `url(${arrowheadUid.href.replace(/#.*#/, '#')})`);
+
+      const y0 = [0, 0, 0].map((d, i) => [
+        initialConditions.y0[4 * i + 0],
+        initialConditions.y0[4 * i + 1]
+      ]);
+      const pointSize = initialConditions.pointSize.map(d => Math.max(2.5, d * 8));
+
+      let bodies = svg.append('g').attr('class', 'bodies');
+      let jacobiArrows = svg.append('g').attr('class', 'jacobi');
+      let jacobiLabels = svg.append('g').attr('class', 'jacobi-labels');
+      let labels = svg.append('g').attr('class', 'labels');
+      let bodyLabels = svg.append('g').attr('class', 'bodyLabels');
+      let handles = svg.append('g').attr('class', 'handles');
+
+      let shortenAmounts = [
+        [pointSize[1] + 1, pointSize[0] - 1 + 6],
+        [pointSize[2] + 1, 6],
+        [0, 6]
+      ];
+
+      function update() {
+        output.dispatchEvent(new CustomEvent("input"));
+
+        bodies
+          .selectAll('circle')
+          .data(positions)
+          .join('circle')
+          .attr('cx', d => x(d[0]))
+          .attr('cy', d => y(d[1]))
+          .attr('r', (d, i) => pointSize[i])
+          .attr('fill', (d, i) => floatRgbToHex(initialConditions.colors[i]))
+          .attr('stroke', (d, i) => floatRgbToHex(drawing.strokeColor[i]))
+          .attr('stroke-width', 2);
+
+        jacobiArrows
+          .selectAll('path')
+          .data(
+            endpoints(positions).map((l, i) =>
+              shorten(x, y, shortenAmounts[i][0], shortenAmounts[i][1])(l)
+            )
+          )
+          .join('path')
+          .attr('d', line);
+
+        jacobiLabels
+          .selectAll('text')
+          .data(endpoints(positions).map(interpolate(0.35)))
+          .join('text')
+          .attr('x', d => x(d[0]))
+          .attr('y', d => y(d[1]));
+
+        bodyLabels
+          .selectAll('text')
+          .data(positions)
+          .join('text')
+          .attr('x', d => x(d[0]))
+          .attr('y', d => y(d[1]));
+
+        handles
+          .selectAll('circle')
+          .data(positions)
+          .join('circle')
+          .attr('cx', d => x(d[0]))
+          .attr('cy', d => y(d[1]));
+      }
+
+      jacobiArrows
+        .selectAll('path')
+        .data(endpoints(positions))
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', 'black')
+        .attr('fill', 'none')
+        .attr('stroke-width', 1.5)
+        .attr('marker-end', `url(${arrowheadUid.href.replace(/#.*#/, '#')})`);
+
+      jacobiLabels
+        .selectAll('text')
+        .data(endpoints(positions))
+        .join('text')
+        .text((d, i) => `r`)
+        .call(function(el, i) {
+          el.append('tspan')
+            .attr('dy', 5)
+            .attr('font-weight', 400)
+            .attr('font-size', '0.75em')
+            .text((d, i) => i + 1);
+        })
+        .attr('font-size', '16px')
+        .attr('font-weight', 700)
+        .attr('font-family', 'serif')
+        .attr('font-style', 'italic')
+        .attr('dy', 9)
+        .attr('dx', 9);
+
+      labels
+        .selectAll('text')
+        .data([
+          { xy: [0, (xrange * h) / w], text: 'y' },
+          { xy: [xrange, 0], text: 'x' }
+        ])
+        .join('text')
+        .text(d => d.text)
+        .attr('x', d => x(d.xy[0]))
+        .attr('y', d => y(d.xy[1]))
+        .attr('font-size', '14px')
+        .attr('font-family', 'serif')
+        .attr('font-style', 'italic')
+        .attr('dy', -2)
+        .attr('dx', 5);
+
+      bodyLabels
+        .selectAll('text')
+        .data(positions)
+        .join('text')
+        .text('m')
+        .call(function(el, i) {
+          el.append('tspan')
+            .attr('dy', 5)
+            .attr('font-weight', 400)
+            .attr('font-size', '0.75em')
+            .text((d, i) => i + 1);
+        })
+        .attr('font-size', '14px')
+        .attr('font-family', 'serif')
+        .attr('font-style', 'italic')
+        .attr('dx', (d, i) => 3 + pointSize[i] * 0.707)
+        .attr('dy', (d, i) => -14 + 3 + pointSize[i] * 0.707)
+        .attr('text-anchor', 'top');
+
+      handles
+        .selectAll('circle')
+        .data(positions)
+        .join('circle')
+        .attr('class', 'draggable')
+        .attr('r', 25)
+        .attr('fill', 'transparent')
+        .call(
+          d3.drag().on('drag', d => {
+            d[0] = x.invert(d3.event.x);
+            d[1] = y.invert(d3.event.y);
+            update();
+          })
+        );
+
+      update();
+      output.value = positions;
+
+      return output;
+    }
+  </script>
+  <script id="7445" type="application/vnd.observable.javascript">
+    {
+      const {
+        currentXScale,
+        currentYScale,
+        xScale,
+        yScale,
+        viewport,
+        element
+      } = plotContexts.shapeSphereTest;
+      const { width, height, dpi } = viewport;
+
+      const svg = d3.select(element).attr("width", width).attr("height", height);
+
+      const drawLine = shapeDrawing.lineWidth > 0 && shapeDrawing.lineOpacity > 0;
+
+      const reglCanvas = getOrAttachReglFO(svg, width, height, dpi, {
+        optionalExtensions: ["ANGLE_instanced_arrays", "OES_standard_derivatives"],
+        attributes: { antialias: true }
+      });
+      const regl = reglCanvas.value;
+      const data = regl.data;
+
+      data.camera =
+        data.camera ||
+        createReglCamera(regl, {
+          phi: 0.3,
+          center: [0, 0, 0],
+          theta: 0.7,
+          distance: 3,
+          near: 0.01,
+          far: 5000,
+          zoomAboutCursor: false
+        });
+      data.camera.resize(width / height);
+      data.interactions =
+        data.interactions ||
+        createInteractions(data.camera, { zoom: false, touchZoom: true });
+
+      data.icosphere = data.icosphere || createIcosphere(4);
+      data.icospherePositions =
+        data.icospherePositions || regl.buffer(data.icosphere.positions);
+      data.icosphereElements =
+        data.icosphereElements || regl.elements(data.icosphere.cells);
+      let icosphereData = {
+        positions: data.icospherePositions,
+        elements: data.icosphereElements,
+        count: data.icosphere.cells.length * 3
+      };
+
+      data.puncturePointsBuffer =
+        data.puncturePointsBuffer || regl.buffer(new Float32Array(3 * 5));
+      data.puncturePointColorsBuffer =
+        data.puncturePointColorsBuffer || regl.buffer(new Float32Array(4 * 5));
+      function transpose(pt) {
+        return [pt[1], pt[2], pt[0]];
+      }
+
+      let shape = computeShape(
+        [],
+        jacobiCoords[0][0],
+        jacobiCoords[0][1],
+        jacobiCoords[1][0],
+        jacobiCoords[1][1],
+        jacobiCoords[2][0],
+        jacobiCoords[2][1]
+      );
+
+      data.l1 = createOrUpdateBuffer(
+        data.l1,
+        regl.buffer,
+        [[0, 0, 0], shape].map(transpose)
+      );
+      data.l2 = createOrUpdateBuffer(
+        data.l2,
+        regl.buffer,
+        [[0, 0, 0], vec3normalize([], [shape[0], shape[1], 0])].map(transpose)
+      );
+
+      let divisions = 200;
+      data.equator = createOrUpdateBuffer(
+        data.equator,
+        regl.buffer,
+        new Array(divisions).fill(0).map((d, i) => {
+          let theta = (2 * Math.PI * i) / (divisions - 1);
+          return [Math.cos(theta), 0, Math.sin(theta)];
+        })
+      );
+
+      let exz = vec3normalize(vec3create(), [shape[0], shape[1], 0]);
+      let ey = [0, 0, 1];
+      let phi = Math.atan(shape[2] / Math.hypot(shape[0], shape[1]));
+      data.dropLine = createOrUpdateBuffer(
+        data.dropLine,
+        regl.buffer,
+        new Array(divisions + 1).fill(0).map((d, i) => {
+          let angle = (phi * i) / divisions;
+          let sum = vec3create();
+          vec3scaleAndAdd(sum, [0, 0, 0], exz, Math.cos(angle));
+          vec3scaleAndAdd(sum, sum, ey, Math.sin(angle));
+          return transpose(sum);
+        })
+      );
+
+      const lineData = [
+        {
+          position: data.l2,
+          color: { constant: [0.6, 0.6, 0.6, 1] }
+        },
+        {
+          position: data.equator,
+          color: { constant: [0.6, 0.6, 0.6, 1] },
+          count: divisions
+        },
+        {
+          position: data.dropLine,
+          color: { constant: [0.6, 0.6, 0.6, 1] },
+          count: divisions
+        }
+      ].map((p) =>
+        Object.assign(
+          {
+            offset: 0,
+            stride: 4 * 3,
+            width: { constant: 1 },
+            strokeColor: shapeDrawing.strokeColor,
+            strokeWidth: 0,
+            count: 2
+          },
+          p
+        )
+      );
+
+      const arrowsData = [
+        {
+          positions: data.l1,
+          color: shapeDrawing.color.concat(shapeDrawing.lineOpacity),
+          offset: 0,
+          stride: 4 * 3,
+          strokeWidth: 0,
+          arrowheadWidth: 9,
+          arrowheadLength: 12,
+          arrowTailWidth: 2.5,
+          count: 2
+        }
+      ];
+
+      let pt1 = computeShape([], 0, 0, 1, 1, 1, 1);
+      let pt2 = computeShape([], 1, 1, 0, 0, 1, 1);
+      let pt3 = computeShape([], 1, 1, 1, 1, 0, 0);
+      data.puncturePointsBuffer.subdata([pt1, pt2, pt3].map(transpose));
+      data.puncturePointColorsBuffer.subdata([
+        [0.2, 0.9, 0.1, 1],
+        [0.9, 0.1, 0.2, 1],
+        [0.1, 0.2, 0.9, 1]
+      ]);
+
+      const pointData = [
+        {
+          positions: {
+            buffer: data.puncturePointsBuffer,
+            stride: 4 * 3,
+            offset: 0
+          },
+          colors: data.puncturePointColorsBuffer,
+          pointSize: 12,
+          strokeWidth: 2,
+          strokeColor: [1, 1, 1],
+          count: 3
+        }
+      ];
+
+      let projectionView = mat4create();
+      data.drawArrows = data.drawArrows || createDrawArrowsCommand(regl);
+      data.drawLines = data.drawLines || createDrawLineCommand(regl);
+      data.drawPoints = data.drawPoints || createStrokedPointsCommand(regl);
+      data.drawGlobe = data.drawGlobe || createDrawGlobeCommand(regl);
+      data.viewport = data.viewport || createReglViewportConfiguration(regl);
+      data.scale = data.scale || createReglLinearScaleConfiguration(regl);
+
+      data.configureDrawing = regl({
+        uniforms: {
+          uProjectionViewModel: (ctx, props) => {
+            return mat4multiply(mat4create(), ctx.projection, ctx.view);
+          }
+        },
+        depth: { enable: true }
+      });
+
+      // The main drawing function, called either in a loop or (if not animating
+      // when we interact with the plot.
+      let visible = true;
+      data.camera.taint();
+      data.renderPlot = function renderPlot(ctx) {
+        if (!visible) return;
+
+        data.viewport(viewport, () => {
+          data.camera((state) => {
+            if (!state.dirty) return;
+            regl.clear({ color: [0, 0, 0, 0], depth: 1 });
+            data.configureDrawing(() => {
+              data.drawLines(lineData);
+              data.drawArrows(arrowsData);
+              data.drawPoints(pointData);
+              data.drawGlobe(icosphereData);
+            });
+          });
+        });
+      };
+
+      if (!data.frame) {
+        data.frame = regl.frame(function (ctx) {
+          data.renderPlot(ctx);
+        });
+      }
+
+      // Perform one synchronous render so we don't get a white flash
+      data.renderPlot({ time: 0 });
+
+      // Stop drawing the plot when offscreen
+      const observer = new IntersectionObserver((entries) => {
+        visible = entries.pop().intersectionRatio > 0;
+      });
+      observer.observe(reglCanvas);
+      invalidation.then(() => {
+        observer.disconnect();
+      });
+
+      svg.attr("class", "draggable");
+
+      return html`
+        <figure>
+          ${svg.node()}
+          <figcaption>Shape sphere for Jacobi coordinates with the three pairwise collision points marked in red, green, and blue.</figcaption>
+        </figure>
+      `;
+    }
+  </script>
+  <script id="5836" type="application/vnd.observable.javascript">
+    function computeShape (out, x1, y1, x2, y2, x3, y3) {
+      let m1 = initialConditions.m[0]
+      let m2 = initialConditions.m[1]
+      let m3 = initialConditions.m[2]
+
+      // Compute Jacobi coordinates
+      let r1x = (x1 - x2) / Math.sqrt(2)
+      let r1y = (y1 - y2) / Math.sqrt(2)
+      let r2x = ((m1 * x1 + m2 * x2) / (m1 + m2) - x3) * 2 / Math.sqrt(6)
+      let r2y = ((m1 * y1 + m2 * y2) / (m1 + m2) - y3) * 2 / Math.sqrt(6)
+      let r1sq = r1x * r1x + r1y * r1y
+      let r2sq = r2x * r2x + r2y * r2y
+
+      // Convert to shape space
+      out[2] = 2.0 * (r1x * r2y - r1y * r2x) / (r1sq + r2sq)
+      out[0] = 2.0 * (r1x * r2x + r1y * r2y) / (r1sq + r2sq)
+      out[1] = (r2sq - r1sq) / (r1sq + r2sq)
+      return out
+    }
+  </script>
+  <script id="7647" type="application/vnd.observable.javascript">
+    md`We return to the ${tex`${initialConditions.name}`} orbit and [plot it below](#projectedShapeSphere) on the shape sphere.
+
+    Since all orbits here are collision-free, the trajectory meanders about on the surface of the sphere but never passes through any of the three pairwise collision points. In fact we can imagine continuously deforming a trajectory to find similar nearby orbits just as long as we don't ever pass over the collision points and create an invalid orbit. In topology, these forbidden missing points are called *punctures*, and a family of orbits we can obtain through continuous deformation without passing over the punctures corresponds the concept of the [*fundamental group*](https://en.wikipedia.org/wiki/Fundamental_group) from algebraic topology. Algebraic topology is a topic well beyond my expertise, so I'll tread lightly here and not pretend to know more about it.`
+  </script>
+  <script id="5627" type="application/vnd.observable.javascript">
+    shape = {
+      let result = []
+      let y = trajectory.position;
+      for (var i = 0, i9 = 0; i < trajectory.t.length; i++, i9 += 9) {
+        result.push.apply(result, computeShape([],
+          y[i9 + 0], y[i9 + 1],
+          y[i9 + 3], y[i9 + 4],
+          y[i9 + 6], y[i9 + 7],
+        ))
+      }
+      return result
+    }
+  </script>
+  <script id="5856" type="application/vnd.observable.javascript">
+    function computeStereographicProjection (out, xyz) {
+      out[0] = xyz[0] / (1 - xyz[1]) * 2.0
+      out[1] = -1
+      out[2] = xyz[2] / (1 - xyz[1]) * 2.0
+      return out
+    }
+  </script>
+  <script id="5860" type="application/vnd.observable.javascript">
+    projectedShape = {
+      let result = {xyt: [], xyz: []}
+      let xy = []
+      let n = shape.length
+      for (let i = 0, i3 = 0; i3 < n; i++, i3 += 3) {
+        let xy = computeStereographicProjection([], [shape[i3], shape[i3 + 1], shape[i3 + 2]])
+        result.xyz.push(xy[0], xy[1], xy[2])
+
+        let fisheye = computeFisheye([], [xy[0], xy[2]], shapeDrawing.fisheye);
+        result.xyt.push(fisheye[0], fisheye[1], trajectory.t[i])
+      }
+      return result
+    }
+  </script>
+  <script id="6271" type="application/vnd.observable.javascript">
+    viewof projectedShapeSphere = {
+      const {
+        currentXScale,
+        currentYScale,
+        xScale,
+        yScale,
+        viewport,
+        element
+      } = plotContexts.shapeSphere;
+      const { width, height, dpi } = viewport;
+
+      const svg = d3.select(element).attr("width", width).attr("height", height);
+
+      const drawLine = shapeDrawing.lineWidth > 0 && shapeDrawing.lineOpacity > 0;
+
+      const reglCanvas = getOrAttachReglFO(svg, width, height, dpi, {
+        optionalExtensions: ["ANGLE_instanced_arrays", "OES_standard_derivatives"],
+        attributes: { antialias: true }
+      });
+      const regl = reglCanvas.value;
+      const data = regl.data;
+
+      data.camera =
+        data.camera ||
+        createReglCamera(regl, {
+          phi: 0.1,
+          center: [0, -0.2, 0],
+          rotationCenter: [0, 0, 0],
+          theta: 0.7,
+          distance: 5,
+          near: 0.01,
+          far: 5000
+        });
+      data.camera.resize(width / height);
+      data.interactions =
+        data.interactions ||
+        createInteractions(data.camera, {
+          zoomSpeed: 0.5,
+          zoom: false,
+          touchZoom: true
+        });
+
+      data.shapeSpaceBuffer = createOrUpdateBuffer(
+        data.shapeSpaceBuffer,
+        regl.buffer,
+        shape
+      );
+      data.projectedShapeBuffer = createOrUpdateBuffer(
+        data.projectedShapeBuffer,
+        regl.buffer,
+        projectedShape.xyz
+      );
+
+      data.icosphere = data.icosphere || createIcosphere(4);
+      data.icospherePositions =
+        data.icospherePositions || regl.buffer(data.icosphere.positions);
+      data.icosphereElements =
+        data.icosphereElements || regl.elements(data.icosphere.cells);
+      let icosphereData = {
+        positions: data.icospherePositions,
+        elements: data.icosphereElements,
+        count: data.icosphere.cells.length * 3,
+        model: mat4rotateX(mat4create(), mat4create(), Math.PI * 0.5)
+      };
+
+      data.puncturePointsBuffer =
+        data.puncturePointsBuffer || regl.buffer(new Float32Array(3 * 5));
+      data.puncturePointColorsBuffer =
+        data.puncturePointColorsBuffer || regl.buffer(new Float32Array(4 * 5));
+
+      let pt1 = computeShape([], 0, 0, 1, 1, 1, 1);
+      let pt2 = computeShape([], 1, 1, 0, 0, 1, 1);
+      let pt3 = computeShape([], 1, 1, 1, 1, 0, 0);
+      let ppt1 = computeStereographicProjection([], pt1);
+      let ppt2 = computeStereographicProjection([], pt2);
+      data.puncturePointsBuffer.subdata([pt1, pt2, pt3, ppt1, ppt2]);
+      data.puncturePointColorsBuffer.subdata([
+        [0.2, 0.9, 0.1, 1],
+        [0.9, 0.1, 0.2, 1],
+        [0.1, 0.2, 0.9, 1],
+        [0.2, 0.9, 0.1, 1],
+        [0.9, 0.1, 0.2, 1]
+      ]);
+
+      let divisions = 200;
+      data.equator = createOrUpdateBuffer(
+        data.equator,
+        regl.buffer,
+        new Array(divisions + 1).fill(0).map((d, i) => {
+          let theta = (2 * Math.PI * i) / divisions;
+          return [Math.cos(theta), Math.sin(theta), 0];
+        })
+      );
+
+      data.referenceLineBuffer =
+        data.referenceLineBuffer || regl.buffer([ppt2, [0, 1, 0], ppt1]);
+
+      const puncturePointData = {
+        positions: { buffer: data.puncturePointsBuffer, stride: 4 * 3, offset: 0 },
+        colors: data.puncturePointColorsBuffer,
+        pointSize: 12,
+        strokeWidth: 2,
+        strokeColor: [1, 1, 1],
+        count: 5
+      };
+
+      const opacity = (x) => 1.0 + shapeDrawing.lineOpacity * (x - 1);
+      const lineData = [
+        {
+          position: data.shapeSpaceBuffer,
+          color: { constant: shapeDrawing.color.map(opacity).concat(1) },
+          count: trajectory.t.length
+        },
+        {
+          position: data.equator,
+          width: { constant: 0.5 },
+          color: { constant: [0.7, 0.7, 0.7, 1] },
+          count: divisions + 1
+        },
+        {
+          position: data.projectedShapeBuffer,
+          color: { constant: [0.7, 0.7, 0.7].map(opacity).concat(1) },
+          count: trajectory.t.length
+        },
+        {
+          position: data.referenceLineBuffer,
+          color: { constant: [0.6, 0.6, 0.6].map(opacity).concat(1) },
+          count: 3
+        }
+      ].map((p) =>
+        Object.assign(
+          {
+            offset: 0,
+            stride: 4 * 3,
+            width: { constant: 1 },
+            borderColor: { constant: shapeDrawing.strokeColor },
+            borderWidth: { constant: 0 }
+          },
+          p
+        )
+      );
+
+      let projectionView = mat4create();
+      data.drawLines = data.drawLines || createDrawBorderedLineCommand(regl);
+      data.drawPoints = data.drawPoints || createStrokedPointsCommand(regl);
+      data.drawGlobe = data.drawGlobe || createDrawGlobeCommand(regl);
+      data.viewport = data.viewport || createReglViewportConfiguration(regl);
+      data.scale = data.scale || createReglLinearScaleConfiguration(regl);
+      data.configureDrawing = regl({
+        uniforms: {
+          uProjectionViewModel: (ctx, props) => {
+            return mat4multiply(mat4create(), ctx.projection, ctx.view);
+          }
+        },
+        depth: { enable: true }
+      });
+
+      // The main drawing function, called either in a loop or (if not animating
+      // when we interact with the plot.
+      let visible = true;
+      data.camera.taint();
+      data.renderPlot = function renderPlot(ctx) {
+        if (!visible) return;
+
+        data.viewport(viewport, () => {
+          data.camera((state) => {
+            if (!state.dirty) return;
+            regl.clear({ color: [0, 0, 0, 0], depth: 1 });
+            data.configureDrawing(() => {
+              data.drawLines(lineData);
+              data.drawPoints(puncturePointData);
+              data.drawGlobe(icosphereData);
+            });
+          });
+        });
+      };
+
+      if (!data.frame) {
+        data.frame = regl.frame(function (ctx) {
+          data.renderPlot(ctx);
+        });
+      }
+
+      // Perform one synchronous render so we don't get a white flash
+      data.renderPlot({ time: 0 });
+
+      // Stop drawing the plot when offscreen
+      const observer = new IntersectionObserver((entries) => {
+        visible = entries.pop().intersectionRatio > 0;
+      });
+      observer.observe(reglCanvas);
+      invalidation.then(() => {
+        observer.disconnect();
+      });
+
+      svg.attr("class", "draggable");
+
+      return html`
+        <figure>
+          ${svg.node()}
+          <figcaption>Shape sphere trajectory of the ${tex`${initialConditions.name}`} orbit, with the shape sphere turned on its side and projected onto a plane.</figcaption>
+        </figure>
+      `;
+    }
+  </script>
+  <script id="7684" type="application/vnd.observable.javascript">
+    md`Three dimensional space is still a bit much to work with, so we additionally turn the shape sphere on its side, select one of the punctures, and project the orbit stereographically about that point onto a plane. The figure above illustrates this process.
+
+    The figure below shows the orbit projected into the two-dimensional plane. Two punctures are visible while the the puncture about which we projected is removed to infinity. The shape trajectory now lies in a flat two dimensional plane, looping around the two projected punctures but never passing through them.`
+  </script>
+  <script id="5467" type="application/vnd.observable.javascript">
+    {
+      const {
+        currentXScale,
+        currentYScale,
+        xScale,
+        yScale,
+        viewport,
+        element
+      } = plotContexts.projectedShapeSphere;
+      const { width, height, dpi } = viewport;
+
+      const svg = d3
+        .select(element)
+        .attr('width', width)
+        .attr('height', height);
+
+      const drawLine = shapeDrawing.lineWidth > 0 && shapeDrawing.lineOpacity > 0;
+      const animateLines = animateShape;
+
+      const reglCanvas = getOrAttachReglFO(svg, width, height, dpi, {
+        optionalExtensions: ['ANGLE_instanced_arrays'],
+        attributes: { antialias: true }
+      });
+      const regl = reglCanvas.value;
+      const data = regl.data;
+
+      data.shapeSpaceBuffer = createOrUpdateBuffer(
+        data.shapeSpaceBuffer,
+        regl.buffer,
+        projectedShape.xyt
+      );
+
+      const opacity = x => 1.0 + shapeDrawing.lineOpacity * (x - 1);
+      const lineData = {
+        position: data.shapeSpaceBuffer,
+        offset: 0,
+        stride: 4 * 3,
+        color: { constant: shapeDrawing.color.map(opacity).concat(1) },
+        borderColor: { constant: shapeDrawing.strokeColor.concat(1) },
+        borderWidth: { constant: shapeDrawing.lineStrokeWidth },
+        width: { constant: shapeDrawing.lineWidth },
+        count: trajectory.t.length
+      };
+
+      data.puncturePointsBuffer =
+        data.puncturePointsBuffer || regl.buffer(new Float32Array(6));
+      data.puncturePointColorsBuffer =
+        data.puncturePointColorsBuffer || regl.buffer(new Float32Array(8));
+
+      const pt1 = computeStereographicProjection(
+        [],
+        computeShape([], 0, 0, 1, 1, 1, 1)
+      );
+      const pt1Fish = computeFisheye([], [pt1[0], pt1[2]], shapeDrawing.fisheye);
+      const pt2 = computeStereographicProjection(
+        [],
+        computeShape([], 1, 1, 0, 0, 1, 1)
+      );
+      const pt2Fish = computeFisheye([], [pt2[0], pt2[2]], shapeDrawing.fisheye);
+      data.puncturePointsBuffer.subdata(
+        new Float32Array([pt1Fish[0], pt1Fish[1], 0, pt2Fish[0], pt2Fish[1], 0])
+      );
+
+      data.puncturePointColorsBuffer.subdata(
+        new Float32Array([0.1, 0.9, 0.2, 1, 0.9, 0.2, 0.1, 1])
+      );
+
+      const puncturePointData = {
+        positions: { buffer: data.puncturePointsBuffer, stride: 4 * 3, offset: 0 },
+        colors: data.puncturePointColorsBuffer,
+        pointSize: 12,
+        strokeWidth: 2,
+        strokeColor: [1, 1, 1],
+        count: 2
+      };
+
+      // Construct draw commands
+      const view = mat4create();
+      data.drawLines = data.drawLines || createDrawBorderedLineCommand(regl);
+      data.drawPoints = data.drawPoints || createStrokedPointsCommand(regl);
+      data.viewport = data.viewport || createReglViewportConfiguration(regl);
+      data.scale = data.scale || createReglLinearScaleConfiguration(regl);
+      data.configureLineDrawing =
+        data.configureLineDrawing ||
+        regl({
+          uniforms: {
+            uProjectionViewModel: (ctx, props) => {
+              mat4copy(view, ctx.view);
+              view[10] = -props.timeScale * 2.0;
+              view[14] = props.timeShift * props.timeScale * 2.0 - 1.0;
+              return view;
+            }
+          },
+          depth: { enable: true }
+        });
+      data.configurePointDrawing =
+        data.configurePointDrawing ||
+        regl({
+          uniforms: {
+            uProjectionView: (ctx, props) => {
+              mat4copy(view, ctx.view);
+              view[10] = 0;
+              return view;
+            }
+          },
+          depth: { enable: false },
+          blend: {
+            enable: true,
+            func: {
+              srcRGB: 'src alpha',
+              srcAlpha: 1,
+              dstRGB: 'one minus src alpha',
+              dstAlpha: 'one minus src alpha'
+            },
+            equation: { rgb: 'add', alpha: 'add' }
+          }
+        });
+
+      // The main drawing function, called either in a loop or (if not animating
+      // when we interact with the plot.
+      if (data.t0 === undefined) {
+        data.t0 = NaN;
+        data.tPrev = NaN;
+        data.tDelta = 0;
+      }
+      let visible = true;
+      let dirty = true;
+      data.renderPlot = function renderPlot(ctx) {
+        if (!visible) return;
+
+        let time = ctx ? ctx.time : isNaN(data.tPrev) ? 0 : data.tPrev;
+        if (isNaN(data.tPrev)) {
+          data.tPrev = data.t0 = time;
+        } else {
+          data.tDelta = Math.min(1 / 30, time - data.tPrev);
+          data.tPrev = time;
+        }
+
+        // Bail out early if there's nothing to draw
+        if (!animateLines && !dirty) return;
+        dirty = false;
+
+        // Compute the time shift and scale
+        let tPeriod = trajectory.t[trajectory.t.length - 1];
+        let t0 = data.t0;
+        if (isNaN(t0)) t0 = time;
+        let ts = time * shapeDrawing.speed;
+        while (ts > t0 + tPeriod * 2) t0 += tPeriod * 2;
+        while (ts < t0) t0 -= tPeriod * 2;
+        let timeShift = ts - t0;
+        let timeScale = 1.0 / tPeriod;
+
+        regl.clear({ color: [0, 0, 0, 0], depth: 1 });
+
+        data.viewport(viewport, () => {
+          data.scale(currentXScale, currentYScale, () => {
+            data.configureLineDrawing(
+              { timeShift: animateLines ? timeShift : tPeriod, timeScale },
+              () => {
+                data.drawLines(lineData);
+              }
+            );
+
+            data.configurePointDrawing(
+              { timeShift: animateLines ? timeShift : tPeriod, timeScale },
+              () => {
+                data.drawPoints(puncturePointData);
+              }
+            );
+          });
+        });
+      };
+
+      // Draw the axes
+      svg.selectAll(`.axes`).remove();
+      const axes = svg
+        .selectAll('.axes')
+        .data(['axes'])
+        .join('g')
+        .attr('class', 'axes');
+
+      function updateAxes() {
+        axes.call(
+          viewportAxes(viewport, currentXScale, currentYScale, {
+            xAxis: isNarrowScreen ? d3.axisTop : d3.axisBottom,
+            yAxis: isNarrowScreen ? d3.axisRight : d3.axisLeft
+          })
+        );
+      }
+
+      // Set up zoom interactions
+      svg.attr('class', 'draggable').call(
+        persistentZoom(currentXScale, currentYScale, xScale, yScale)
+          .scaleExtent([0.0001, 10000])
+          .on('zoom.plot', () => {
+            dirty = true;
+          })
+          .on('zoom.axes', updateAxes)
+      );
+
+      // Allow modification of the draw callback but just keep the same
+      // timer loop
+      if (!data.frame) {
+        data.frame = regl.frame(function(ctx) {
+          data.renderPlot(ctx);
+        });
+      }
+
+      // Perform one synchronous render so we don't get a white flash
+      data.renderPlot({ time: 0 });
+
+      updateAxes();
+
+      // Stop drawing the plot when offscreen
+      const observer = new IntersectionObserver(entries => {
+        visible = entries.pop().intersectionRatio > 0;
+      });
+      observer.observe(reglCanvas);
+      invalidation.then(() => {
+        observer.disconnect();
+      });
+
+      return html`
+        <figure>
+          ${svg.node()}
+          <figcaption>${tex`${initialConditions.name}`} orbit in projected shape space with two of three pairwise collision points (punctures) marked in red and green. The third collision point is at infinity.</figcaption>
+        </figure>
+      `;
+    }
+  </script>
+  <script id="7797" type="application/vnd.observable.javascript">
+    viewof animateShape = checkbox({options: [{value: 'animate', label: 'animate shape trajectory'}]})
+  </script>
+  <script id="5505" type="application/vnd.observable.javascript">
+    viewof shapeDrawing = {
+      const form = html`
+      <form class="form-compact">
+        <details>
+          <summary style="font-size:0.85em;">Display options</summary>
+          <div class="field"><input type=range name=lineOpacity min=0 max=1 step=0.01 value=1> <small><i>line opacity: <output name=lineOpacityOutput></output></i></small></div>
+
+          <div class="field"><input type=range name=lineWidth min=0.5 max=4 step=0.1 value=1> <small><i>line width: <output name=lineWidthOutput></i></output></small></div>
+
+          <div class="field"><input type=range name=lineStrokeWidth min=0 max=4 step=0.1 value=0> <small><i>line stroke: <output name=lineStrokeWidthOutput></i></output></small></div>
+
+          <div class="field"><input type=range name=speed min=0.05 max=20 step=0.05 value=3> <small><i>speed: <output name=speedOutput></i></output></small></div>
+
+          <div class="field"><input type=range name=fisheye min=0 max=1 step=0.01 value=0> <small><i>fisheye</small></div>
+
+          <div class="field">
+            <input type=color name=lineColor1 value=${floatRgbToHex([
+              0.18,
+              0.63,
+              0.83
+            ])}>
+            <small><i>shape color</i></small>
+          </div>
+
+          <div class="field">
+            <input type=color name=strokeColor1 value=${floatRgbToHex([1, 1, 1])}>
+            <small><i>stroke color</i></small>
+          </div>
+        </details>
+      </form>`;
+      form.oninput = () => {
+        form.lineOpacityOutput.value = form.lineOpacity.valueAsNumber;
+        form.lineWidthOutput.value = form.lineWidth.valueAsNumber;
+        form.lineStrokeWidthOutput.value = form.lineStrokeWidth.valueAsNumber;
+        form.speedOutput.value = form.speed.valueAsNumber;
+        form.value = {
+          lineOpacity: form.lineOpacity.valueAsNumber,
+          lineWidth: form.lineWidth.valueAsNumber,
+          lineStrokeWidth: form.lineStrokeWidth.valueAsNumber,
+          speed: form.speed.valueAsNumber,
+          fisheye: form.fisheye.valueAsNumber,
+          color: hexRgbToFloat(form.lineColor1.value),
+          strokeColor: hexRgbToFloat(form.strokeColor1.value)
+        };
+      };
+      form.oninput();
+      return form;
+    }
+  </script>
+  <script id="7948" type="application/vnd.observable.javascript">
+    md`From here, our task is conceptually simple. We walk along the projected shape of the orbit and note every time it completes a loop, either clockwise or counterclockwise, around one of the two punctures. The result is a [_free group word_](https://en.wikipedia.org/wiki/Free_group) and (at last!) identifies our orbit in the topological sense. We record an ${tex`a`} for clockwise loops around the righthand puncture and ${tex`a^{-1}`} (which we abbreviate as ${tex`A`}) for counterclockwise loops. Similarly we record ${tex`b`} and ${tex`B`}, respectively, for counterclockwise and clockwise loops around the lefthand puncture.`
+  </script>
+  <script id="8418" type="application/vnd.observable.javascript">
+    {
+      const w = Math.min(width, 350);
+      const h = Math.floor(w * 0.7);
+
+      const svg = d3
+        .create('svg')
+        .attr('width', w)
+        .attr('height', h);
+
+      const lineColor = floatRgbToHex(shapeDrawing.color);
+      const axisColor = '#666';
+      const arrowheadUid = DOM.uid('arrowhead');
+      const axisArrowheadUid = DOM.uid('axisArrowhead');
+      const defs = svg.append('defs');
+
+      defs
+        .append('marker')
+        .attr('id', arrowheadUid.id)
+        .call(arrowhead({ width: 11, length: 13 }))
+        .attr('fill', lineColor);
+
+      defs
+        .append('marker')
+        .attr('id', axisArrowheadUid.id)
+        .call(arrowhead())
+        .attr('fill', axisColor);
+
+      let xrange = 3;
+      let axisExtent = 0.9;
+      const x = d3
+        .scaleLinear()
+        .domain([-xrange, xrange])
+        .range([0, w]);
+
+      const y = d3
+        .scaleLinear()
+        .domain([(-xrange * h) / w, (xrange * h) / w])
+        .range([h, 0]);
+
+      const line = d3
+        .line()
+        .x(d => x(d[0]))
+        .y(d => y(d[1]));
+      svg
+        .append('g')
+        .attr('class', 'axes')
+        .selectAll('path')
+        .data([
+          [[-xrange * axisExtent, 0], [xrange * axisExtent, 0]],
+          [[0, (-xrange * axisExtent * h) / w], [0, (xrange * axisExtent * h) / w]]
+        ])
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', axisColor)
+        .attr('fill', 'none')
+        .attr('stroke-width', 1)
+        .attr('marker-start', `url(${axisArrowheadUid.href.replace(/#.*#/, '#')})`)
+        .attr('marker-end', `url(${axisArrowheadUid.href.replace(/#.*#/, '#')})`);
+
+      svg
+        .append('g')
+        .attr('class', 'vertex-stroke')
+        .selectAll('circle')
+        .data([[0, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', 6)
+        .attr('fill', 'white');
+
+      svg
+        .append('g')
+        .attr('class', 'circle-stroke')
+        .selectAll('circle')
+        .data([[-1, 0], [1, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', x(1) - x(0))
+        .attr('stroke', 'white')
+        .attr('stroke-width', 5)
+        .attr('fill', 'none');
+
+      svg
+        .append('g')
+        .attr('class', 'circles')
+        .selectAll('circle')
+        .data([[-1, 0], [1, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', x(1) - x(0))
+        .attr('stroke', lineColor)
+        .attr('stroke-width', 2)
+        .attr('fill', 'none');
+
+      svg
+        .append('g')
+        .attr('class', 'bodies')
+        .selectAll('circle')
+        .data([[-1, 0], [1, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', 6)
+        .attr('fill', (d, i) =>
+          floatRgbToHex(i === 0 ? [0.9, 0.2, 0.1] : [0.1, 0.9, 0.2])
+        )
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2);
+
+      svg
+        .append('g')
+        .attr('class', 'vertex')
+        .selectAll('circle')
+        .data([[0, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', 4)
+        .attr('fill', lineColor);
+
+      svg
+        .append('g')
+        .attr('class', 'arrowheads')
+        .selectAll('path')
+        .data([
+          [[1, 1], [1.001, 1]],
+          [[-1, 1], [-1.001, 1]],
+          [[-1, -1], [-0.999, -1]],
+          [[1, -1], [0.999, -1]]
+        ])
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', lineColor)
+        .attr('fill', 'none')
+        .attr('stroke-width', 1.5)
+        .attr('marker-end', `url(${arrowheadUid.href.replace(/#.*#/, '#')})`);
+
+      svg
+        .append('g')
+        .attr('class', 'body-labels')
+        .selectAll('text')
+        .data([{ x: [-1, 1], text: 'b' }, { x: [1, 1], text: 'a' }])
+        .join('text')
+        .text(d => d.text)
+        .attr('x', d => x(d.x[0]))
+        .attr('y', d => y(d.x[1]))
+        .attr('font-size', '17px')
+        .attr('font-family', 'serif')
+        .attr('font-style', 'italic')
+        .attr('dx', -3)
+        .attr('dy', -10)
+        .attr('text-anchor', 'top');
+
+      return html`
+        <figure>
+          ${svg.node()}
+          <figcaption>Our free group elements, ${tex`a`} and ${tex`b`}.</figcaption>
+        </figure>
+      `;
+    }
+  </script>
+  <script id="8714" type="application/vnd.observable.javascript">
+    md`Though conceptually simple, reading these elements is somewhat tedious. In their paper [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S), Šuvakov and Dmitrašinović present a "free group word reading algorithm". Following the algorithm, we track every crossing of the shape sphere equator, which corresponds to collinear configurations (*syzygies*). We track the direction of each crossing and which body is in the middle, then convert the information via a lookup table into the free group word.`
+  </script>
+  <script id="8207" type="application/vnd.observable.javascript">
+    freeGroupWord = {
+      function middleBodyIndexFromShape(x, y, z) {
+        let theta = Math.atan2(x, y);
+        return Math.floor(((theta / (2 * Math.PI) + 1) % 1) * 3);
+      }
+      const lsyz = [1];
+      let zPrev = 0;
+      for (let i = 0; i < shape.length; i += 3) {
+        let z = shape[i + 2];
+        if (zPrev * z < 0) {
+          let index = middleBodyIndexFromShape(shape[i], shape[i + 1]);
+          lsyz.push(index);
+        }
+
+        zPrev = z;
+      }
+
+      // Warning: is this condition correct? I'm not 100% convinced, but it's
+      // just a bit annoying to back up and figure out whether we integrated
+      // to just past the period of just before and then figure out what that
+      // means, so I'm going to trust this for now.
+      if (lsyz[lsyz.length - 1] !== 2) lsyz.push(2);
+
+      let oddI = [[null, 'F', 'FA'], ['B', null, 'A'], ['EB', 'E', null]];
+      let evenI = [[null, 'D', 'DG'], ['H', null, 'G'], ['CH', 'C', null]];
+      let circles = [];
+      for (let i = 0; i < lsyz.length - 1; i++) {
+        circles.push((i % 2 === 0 ? evenI : oddI)[lsyz[i]][lsyz[i + 1]]);
+      }
+      let c = circles.join('');
+      let freeGroup = [];
+      let groupLookup = { AC: 'b', GE: 'B', BD: 'a', HF: 'A' };
+      for (let i = 0; i < c.length; i += 2) {
+        let chars = c.substr(i, 2);
+        freeGroup.push(groupLookup[chars]);
+      }
+      return freeGroup.join('');
+    }
+  </script>
+  <script id="8728" type="application/vnd.observable.javascript">
+    md`In this case, for the ${tex`${initialConditions.name}`} orbit, we compute the free group word *<span style="word-break:break-all">${freeGroupWord}</span>*.
+
+    Many patterns lie within. Figure-eight orbits, for example, follow a repeating *BabA* pattern. Other classes of orbits follow more complicated patterns. To preempt an issue you may have noticed, *yes*, there is indeed ambiguity in this classification. We could have chosen one of the other puncture points about which to project. For some families of orbits this makes a difference; for others it does not. Orbits are similarly equivalent under time reversal so that the free group word *Ab* is equivalent to *Ba*. Šuvakov and Dmitrašinović have a much more detailed discussion of these considerations in their paper [Linear stability of periodic three-body orbits with zero angular momentum and topological dependence of Kepler's third law: a numerical test](https://arxiv.org/abs/1705.03728). It's worth a read!`
+  </script>
+  <script id="8522" type="application/vnd.observable.javascript">
+    md`## Future work
+    In a future notebook, I'd love to implement a search algorithm to actually locate periodic orbits. From the abstract of the paper mentioned above, [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S),
+
+    > The recent discovery of thirteen new and distinct three-body periodic planar orbits suggests that many more such orbits remain undiscovered. Searches in two-dimensional subspaces of the full four-dimensional space of initial conditions require computing resources that are available to many students, and the required level of computational and numerical expertise is also at the advanced undergraduate level. We discuss the methods for solving the planar three-body equations of motion, as well as some basic strategies and tactics for searches of periodic orbits. Our discussion should allow interested undergraduates to start their own searches. Users can submit new three-body orbits to a wiki-based website.
+
+    The [wiki appears either defunct or in progress](http://www.orbitopedia.org/), but the exploration sounds fun!
+
+    Comments? Question? [Let me know](https://twitter.com/rickyreusser/status/1185354588280348672).
+    `
+  </script>
+  <script id="8848" type="application/vnd.observable.javascript">
+    md`## License
+
+    With the exception of code imported from other sources as stated above, the code in this notebook is MIT Licensed.`
+  </script>
+  <script id="8838" type="application/vnd.observable.javascript">
+    LICENSE = "mit" /* 
+
+    Copyright (c) 2019 by Ricky Reusser
+
+    Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+    */
+  </script>
+  <script id="8861" type="application/vnd.observable.javascript">
+    md`The written content of this notebook is licensed under a ${html`<a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons Attribution-NonCommercial 4.0 International License</a><br><a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/"><img alt="Creative Commons License" style="border-width:0" src="https://i.creativecommons.org/l/by-nc/4.0/88x31.png" /></a>.`}`
+  </script>
+  <script id="1474" type="application/vnd.observable.javascript">
+    md`## Imports and definitions`
+  </script>
+  <script id="7530" type="application/vnd.observable.javascript">
+    plotContexts = {
+      function getPlotContext(existingContext, opts) {
+        const xrange = opts.xrange || [-1, 1];
+        const yrange = opts.yrange || [-1, 1];
+        const w = opts.width || 640;
+        const margin =
+          opts.margin ||
+          (width < 640 ? { t: 3, r: 0, b: 1, l: 1 } : { t: 5, r: 5, b: 20, l: 40 });
+
+        const height = opts.height || Math.max(300, Math.min(900, w * 0.7));
+        const viewport = { width: w, height, dpi: devicePixelRatio, margin };
+
+        const yScale = d3
+          .scaleLinear()
+          .domain(xrange)
+          .range([viewport.height - viewport.margin.b, viewport.margin.t]);
+
+        const xScale = constrainLinearScaleAspectRatio(
+          d3
+            .scaleLinear()
+            .domain(yrange)
+            .range([viewport.margin.l, viewport.width - viewport.margin.r]),
+          yScale,
+          1
+        );
+
+        return Object.assign(
+          existingContext || {
+            element: d3.create('svg').node()
+          },
+          {
+            viewport,
+            xScale,
+            yScale,
+            currentXScale: xScale.copy(),
+            currentYScale: yScale.copy()
+          }
+        );
+      }
+
+      return {
+        orbit: getPlotContext((this || {}).orbit, {
+          width: width,
+          height: Math.max(340, Math.floor(width * 0.7))
+        }),
+        shapeSphereTest: getPlotContext((this || {}).shapeSphereTest, {
+          width: Math.min(width, 480),
+          height: Math.min(width, 480) * 0.7,
+          margin: { t: 0, r: 0, b: 0, l: 0 }
+        }),
+        projectedShapeSphere: getPlotContext((this || {}).projectedShapeSphere, {
+          width: Math.min(width, 640),
+          height: Math.max(Math.min(width, 640) * 0.7, 300),
+          xrange: [-1.5, 1.5],
+          yrange: [-1.5, 1.5]
+        }),
+        shapeSphere: getPlotContext((this || {}).shapeSphere, {
+          width: Math.min(width, 640),
+          height: Math.max(Math.min(width, 640) * 0.7, 300),
+          margin: { t: 0, r: 0, b: 0, l: 0 }
+        })
+      };
+    }
+  </script>
+  <script id="244" type="application/vnd.observable.javascript">
+    d3 = require('d3@5')
+  </script>
+  <script id="1248" type="application/vnd.observable.javascript">
+    createREGL = require('regl')
+  </script>
+  <script id="6489" type="application/vnd.observable.javascript">
+    import {createIcosphere} from '@rreusser/icosphere'
+  </script>
+  <script id="241" type="application/vnd.observable.javascript">
+    import {
+      getOrAttachReglFO,
+      constrainLinearScaleAspectRatio,
+      createReglViewportConfiguration,
+      createReglLinearScaleConfiguration,
+      persistentZoom,
+      viewportAxes,
+      createReglCamera,
+      createInteractions
+    } from '@rreusser/regl-tools'
+  </script>
+  <script id="7785" type="application/vnd.observable.javascript">
+    import {vec3normalize, vec3scaleAndAdd, vec3create} from '@rreusser/gl-vec3'
+  </script>
+  <script id="5074" type="application/vnd.observable.javascript">
+    import {
+      mat4copy,
+      mat4create,
+      mat4rotateX,
+      mat4rotateY,
+      mat4rotateZ,
+      mat4translate,
+      mat4multiply
+    } from '@rreusser/gl-mat4'
+  </script>
+  <script id="7138" type="application/vnd.observable.javascript">
+    function createOrUpdateBuffer(existing, ctor, data) {
+      let buffer;
+      let dataSize = data.length;
+      if (Array.isArray(data)) {
+        let ptr = data;
+        dataSize = 1;
+        while (Array.isArray(ptr)) {
+          dataSize *= ptr.length;
+          ptr = ptr[0];
+        }
+      }
+      if (!existing || dataSize > existing.capacity) {
+        buffer = ctor(data);
+        buffer.capacity = dataSize;
+      } else {
+        buffer = existing.subdata(data);
+        buffer.capacity = dataSize;
+      }
+      buffer.count = dataSize;
+      return buffer;
+    }
+  </script>
+  <script id="7735" type="application/vnd.observable.javascript">
+    function createDrawGlobeCommand(regl) {
+      var identity = mat4create();
+      return regl({
+        vert: `
+          precision highp float;
+          uniform mat4 uProjectionView, uModel;
+          attribute vec3 aPosition;
+          varying vec3 p;
+          void main () {
+            p = aPosition;
+            gl_Position = uProjectionView * uModel * vec4(aPosition, 1);
+          }
+          `,
+        frag: `
+          #extension GL_OES_standard_derivatives : enable
+          precision highp float;
+          varying vec3 p;
+          uniform float dist;
+
+          float gridFactor (vec2 parameter, float width, float feather) {
+            float w1 = width - feather * 0.5;
+            vec2 d = fwidth(parameter);
+            vec2 looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+            vec2 a2 = smoothstep(d * w1, d * (w1 + feather), looped);
+            return min(a2.x, a2.y);
+          }
+
+          #define LAT_GRID (180.0 / 3.1415926 / 30.0)
+          #define LON_GRID (180.0 / 3.1415926 / 60.0)
+
+          void main () {
+            float theta = atan(p.z, p.x);
+            float f = gridFactor(vec2(atan(p.y, length(p.xz)) * LAT_GRID, theta * LON_GRID), 1.0, 0.5);
+            gl_FragColor = vec4(vec3(0), mix(0.16, 0.10, f));
+          }
+        `,
+        attributes: {
+          aPosition: regl.prop('positions')
+        },
+        uniforms: {
+          uModel: (ctx, props) => props.model || identity
+        },
+        elements: regl.prop('elements'),
+        primitive: 'triangles',
+        depth: { enable: true, mask: false },
+        cull: { enable: true, face: 'back' },
+        blend: {
+          enable: true,
+          func: {
+            srcRGB: 'src alpha',
+            srcAlpha: 1,
+            dstRGB: 'one minus src alpha',
+            dstAlpha: 1
+          },
+          equation: { rgb: 'reverse subtract', alpha: 'add' }
+        },
+        polygonOffset: {
+          enable: true,
+          offset: {
+            factor: 2,
+            units: 0
+          }
+        },
+        count: regl.prop('count')
+      });
+    }
+  </script>
+  <script id="8318" type="application/vnd.observable.javascript">
+    function createStrokedPointsCommand(regl) {
+      return regl({
+        vert: `
+          precision highp float;
+
+          uniform mat4 uProjectionView;
+          uniform float uPixelRatio, uStrokeWidth;
+          uniform float uPointSize;
+          attribute vec3 aPosition;
+          attribute vec4 aColor;
+          varying vec4 vColor;
+
+          void main () {
+            vColor = aColor;
+            gl_Position = uProjectionView * vec4(aPosition, 1);
+            gl_PointSize = (uPointSize + uStrokeWidth) * uPixelRatio;
+          }`,
+        frag: `
+          precision highp float;
+          varying vec4 vColor;
+          uniform vec3 uStrokeColor, uPointColor;
+          uniform vec2 uStrokeEdges;
+          void main () {
+            float r = length(gl_PointCoord.xy * 2.0 - 1.0);
+            if (r > 1.0) discard;
+            vec3 color = mix(
+              uStrokeColor,
+              vColor.rgb,
+              smoothstep(uStrokeEdges.y, uStrokeEdges.x, r) *
+              smoothstep(-uStrokeEdges.y, -uStrokeEdges.x, r)
+            );
+            gl_FragColor = vec4(color, vColor.a);
+          }`,
+        attributes: {
+          aPosition: regl.prop('positions'),
+          aColor: regl.prop('colors')
+        },
+        uniforms: {
+          uPointSize: regl.prop('pointSize'),
+          uPixelRatio: regl.context('pixelRatio'),
+          uStrokeWidth: regl.prop('strokeWidth'),
+          uStrokeColor: regl.prop('strokeColor'),
+          uStrokeEdges: (ctx, props) => {
+            if (!props.strokeWidth) return [1, 2];
+            let s = props.strokeWidth * 2.0;
+            return [
+              1.0 - (s + 0.5) / (props.pointSize + s),
+              1.0 - (s - 0.5) / (props.pointSize + s)
+            ];
+          }
+        },
+        primitive: 'points',
+        count: regl.prop('count')
+      });
+    }
+  </script>
+  <script id="5937" type="application/vnd.observable.javascript">
+    function createDrawArrowsCommand(regl) {
+      return regl({
+        vert: `
+          precision highp float;
+          uniform mat4 uProjectionView;
+          uniform float uTailWidth, uAspect, uScale;
+          uniform vec2 uArrowheadShape;
+          attribute vec3 aPoint, aNextPoint;
+          attribute vec4 aArrow;
+
+          void main () {
+            vec4 p = uProjectionView * vec4(aPoint, 1);
+            vec4 pn = uProjectionView * vec4(aNextPoint, 1);
+            gl_Position = mix(p, pn, aArrow.y);
+            vec2 unitVector = normalize((pn.xy / pn.w - p.xy / p.w) * vec2(uAspect, 1));
+            vec2 perpUnitVector = vec2(-unitVector.y, unitVector.x);
+            gl_Position.xy += (
+                perpUnitVector * (aArrow.x * uTailWidth + aArrow.w * uArrowheadShape.y) +
+                + unitVector * aArrow.z * uArrowheadShape.x
+              ) / vec2(uAspect, 1) * gl_Position.w;
+          }
+        `,
+        frag: `
+          precision highp float;
+          uniform vec4 uColor;
+          void main () {
+            gl_FragColor = uColor;
+          }
+        `,
+        attributes: {
+          aPoint: {
+            buffer: regl.prop('positions'),
+            stride: (ctx, props) => {
+              return props.stride === undefined ? 3 * 4 : props.stride;
+            },
+            offset: function(ctx, props) {
+              return props.offset === undefined ? 0 : props.offset;
+            },
+            divisor: 1
+          },
+          aNextPoint: {
+            buffer: regl.prop('positions'),
+            stride: (ctx, props) => {
+              return props.stride === undefined ? 3 * 4 : props.stride;
+            },
+            offset: function(ctx, props) {
+              let stride = props.stride === undefined ? 3 * 4 : props.stride;
+              let offset = props.offset === undefined ? 0 : props.offset;
+              return stride + offset;
+            },
+            divisor: 1
+          },
+          aArrow: new Float32Array([
+            // The per-instance triangles are defined in terms of four pieces of data which tell where
+            // on the arrow we are, using the mesh vertex and mesh normal as inputs. The components are:
+            //    x: selects the position perpendicular to the length of the arrow in screen space
+            //    y: selects either the (vertex) or (vertex + normal) in 3D space
+            //    z: selects the arrowhead length-wise offset in screen space
+            //    w: selects the arrowhead width-wise offset in screen space
+            // The first triangle of the tail:
+            -1,
+            0,
+            0,
+            0,
+            1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            -1,
+            0,
+
+            // The second triangle of the tail:
+            -1,
+            0,
+            0,
+            0,
+            1,
+            1,
+            -1,
+            0,
+            -1,
+            1,
+            -1,
+            0,
+
+            // The arrowhead:
+            0,
+            1,
+            -1,
+            -1,
+            0,
+            1,
+            -1,
+            1,
+            0,
+            1,
+            0,
+            0
+          ])
+        },
+        uniforms: {
+          uTailWidth: (ctx, props) =>
+            (props.arrowTailWidth / ctx.viewportHeight) * ctx.pixelRatio,
+          uArrowheadShape: (ctx, props) => [
+            (props.arrowheadLength / ctx.viewportHeight) * ctx.pixelRatio * 2.0,
+            (props.arrowheadWidth / ctx.viewportHeight) * ctx.pixelRatio
+          ],
+          uAspect: ctx => ctx.viewportWidth / ctx.viewportHeight,
+          uColor: regl.prop('color')
+        },
+        primitive: 'triangles',
+        instances: (ctx, props) => props.count - 1,
+        count: 9
+      });
+    }
+  </script>
+  <script id="7657" type="application/vnd.observable.javascript">
+    function computeFisheye (out, x, amount) {
+      let r = Math.pow(x[0] * x[0] + x[1] * x[1], 0.5 * amount)
+
+      out[0] = x[0] / (1 + r)
+      out[1] = x[1] / (1 + r)
+      out[2] = x[2]
+
+      return out
+    }
+  </script>
+  <script id="8105" type="application/vnd.observable.javascript">
+    import {
+      createDrawBorderedLineCommand,
+      createDrawLineCommand
+    } from '@rreusser/quick-miterless-lines-in-webgl'
+  </script>
+  <script id="1735" type="application/vnd.observable.javascript">
+    import {binarySearch, decodeHash, isThumbnailDaemon, floatRgbToHex, arrowhead, hexRgbToFloat} from '@rreusser/utils'
+  </script>
+  <script id="1928" type="application/vnd.observable.javascript">
+    isNarrowScreen = width <= 640
+  </script>
+  <script id="7794" type="application/vnd.observable.javascript">
+    import {checkbox} from '@jashkenas/inputs'
+  </script>
+  <script id="2282" type="application/vnd.observable.javascript">
+    html`<style>
+    .observablehq .katex,
+    .observablehq .katex-display>.katex {
+      font-size: 1.08em;
+    }
+
+    .observablehq svg.draggable,
+    .observablehq svg .draggable {
+      cursor: grab;
+    }
+    .observablehq .katex-display {
+      overflow: visible;
+    }
+    .observablehq svg.draggable:active,
+    .observablehq svg .draggable:active {
+      cursor: grabbing;
+    }
+    .observablehq p > img {
+      margin-left: auto;
+      margin-right: auto;
+      display: block;
+    }
+    .observablehq blockquote {
+      border-left: 5px solid #ddd;
+      padding-left: 15px;
+    }
+    .observablehq dl.inline-flex {
+      max-width: 640px;
+      display: flex;
+      flex-flow: row;
+      flex-wrap: wrap;
+      overflow: visible;
+    }
+    .observablehq dl.inline-flex dt {
+      flex: 0 0 25%;
+      min-width: 130px;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      font-weight: 600;
+      margin: 0;
+    }
+    .observablehq dl.inline-flex dd {
+      flex: 0 0 75%;
+      text-align: left;
+      text-overflow: ellipsis;
+      overflow: hidden;
+      margin: 0 0 0 auto;
+    }
+    .observablehq .form-compact input {
+      max-width: 60%;
+    }
+    .observablehq figcaption {
+      max-width: 400px;
+      margin-left: auto;
+      margin-top: 1em;
+      margin-right: auto;
+      color: black;
+      font-size: 0.9em;
+      font-family: serif;
+    }
+    .observablehq figcaption:before {
+      color: black;
+      font-family: serif;
+      font-weight: 600;
+      content: "Figure: ";
+    }
+    .observablehq figure {
+      box-sizing: border-box;
+    }
+    .observablehq figure {
+      padding: 15px 0;
+      box-sizing: border-box;
+      max-width: 640px;
+      text-align: center;
+    }
+    .observablehq .field {
+      margin: 0.5em 0;
+    }
+    .observablehq summary {
+      cursor: pointer;
+    }
+    .observablehq h2 {
+      padding-top: 1em;
+    }
+
+    .observablehq figure {
+      padding-top: 1em;
+      padding-bottom: 1em;
+    }
+
+    @media (max-width: 590px) {
+      .observablehq dl.inline-flex dd {
+        flex: 0 0 95%;
+      }
+      .observablehq dl.inline-flex dt {
+        flex: 0 0 100%;
+      }
+    }
+    </style>`
+  </script>
+</notebook>

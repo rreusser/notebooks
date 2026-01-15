@@ -37,6 +37,8 @@ export function createElementStack({
 
     newEl.setAttribute("data-layer", name);
     if (!newEl.style.position) newEl.style.position = "absolute";
+    if (!newEl.style.top) newEl.style.top = "0";
+    if (!newEl.style.left) newEl.style.left = "0";
 
     if (current && current !== newEl) {
       current.replaceWith(newEl);

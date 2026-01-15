@@ -1,0 +1,529 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Periodic Planar Three-Body Orbits</title>
+
+  <script id="1" type="text/markdown">
+    # Periodic Planar Three-Body Orbits
+  </script>
+
+  <script id="imports" type="text/x-typescript">
+    import createREGL from 'npm:regl@2.1.1';
+    import createDrawLines from 'npm:regl-gpu-lines@2.4.1';
+    import { createElementStack } from '../lib/element-stack.js';
+    import { reglElement, reglAxesViewport } from '../lib/regl-canvas.js';
+    import { createZoomableAxes } from '../lib/zoomable-axes.js';
+    import { expandable } from '../lib/expandable.js';
+    import {
+      planarThreeBodyDerivative,
+      computeShape,
+      computeFreeGroupWord,
+      integrateTrajectory,
+      parseInitialConditions,
+      decodeHash
+    } from './three-body-physics.js';
+  </script>
+
+  <script id="obs-imports" type="text/x-typescript">
+    import { ode45 } from 'observable:@rreusser/integration';
+    import {
+      threeBodyInitialConditions,
+      references,
+      sequenceUrls
+    } from 'observable:@rreusser/periodic-three-body-initial-conditions';
+  </script>
+
+  <script id="2" type="text/x-typescript">
+    const orbitCount = Object.keys(threeBodyInitialConditions)
+      .flatMap(group => Object.keys(threeBodyInitialConditions[group])
+        .flatMap(seq => Object.keys(threeBodyInitialConditions[group][seq]).length))
+      .reduce((a, b) => a + b, 0);
+
+    display(md`This notebook collects ${orbitCount.toLocaleString()} periodic solutions of the planar [three-body problem](https://en.wikipedia.org/wiki/Three-body_problem) in which three bodies experience mutual gravitational attraction according to [Newton's law of universal gravitation](https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation), ${tex.block`F=G{\frac {m_{1}m_{2}}{r^{2}}}.`}
+
+Three-body orbits don't have a closed-form analytical solution and aren't in general periodic, but by reducing the dimensionality of the problem through symmetries and performing a lot of numerical searching, a number of authors have found and published large sets of initial conditions for periodic solutions.`);
+  </script>
+
+  <script id="3" type="text/markdown">
+    ## Governing equations
+
+    The vector form of Newton's law of gravitation for the force on body 2 exerted by body 1 is ${tex.block`\mathbf{F}_2 = m_2\mathbf{\ddot{x}}_{2} = -\frac{Gm_1m_2(\mathbf{x}_2 - \mathbf{x}_1)}{||\mathbf{x}_2 - \mathbf{x}_1||^3},`} where ${tex`\mathbf{x}_1`} and ${tex`\mathbf{x}_2`} and ${tex`m_1`} and ${tex`m_2`} are the vector positions and masses of bodies ${tex`1`} and ${tex`2`}, respectively, and ${tex`\mathbf{\ddot{x}}_{2}`} is the acceleration of body ${tex`2`}. Given state ${tex`\mathbf{y}`}, we compute the time derivative ${tex`\mathbf{\dot{y}}`}.
+  </script>
+
+  <script id="5" type="text/markdown">
+    ## Time integration
+
+    Since we only seek to integrate a single period of the orbit, we use an adaptive [Cash-Karp](https://en.wikipedia.org/wiki/Cash–Karp_method) Runge-Kutta scheme with fifth order accuracy.
+
+    Please note that essentially *all* periodic, planar, three-body orbits except for some figure eights are unstable! For visualization, this notebook tabulates a single period and repeats it.
+  </script>
+
+  <script id="8" type="text/markdown">
+    ## Initial conditions
+  </script>
+
+  <script id="11" type="text/x-typescript">
+    const selectedConditionsInput = (() => {
+      const form = document.createElement('form');
+      form.className = 'orbit-selector';
+
+      const hashParts = decodeHash(window.location.hash);
+      let currentGroup = hashParts.group || 'Šuvakov';
+      let currentSequence = hashParts.sequence || 'III - Yin Yang';
+      let currentOrbit = hashParts.orbit || 'III.15.A.β';
+
+      const sequencesByGroup = Object.keys(threeBodyInitialConditions).map(group => ({
+        label: group,
+        options: Object.keys(threeBodyInitialConditions[group]).map(seq => ({
+          label: seq,
+          value: `${group}: ${seq}`
+        }))
+      }));
+
+      const seqLabel = document.createElement('label');
+      seqLabel.innerHTML = '<small><em>Sequence</em></small><br>';
+      const seqSelect = document.createElement('select');
+      seqSelect.name = 'sequence';
+      sequencesByGroup.forEach(group => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group.label;
+        group.options.forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.label;
+          if (opt.value === `${currentGroup}: ${currentSequence}`) option.selected = true;
+          optgroup.appendChild(option);
+        });
+        seqSelect.appendChild(optgroup);
+      });
+      seqLabel.appendChild(seqSelect);
+
+      const orbitLabel = document.createElement('label');
+      orbitLabel.innerHTML = '<small><em>Orbit</em></small><br>';
+      const orbitSelect = document.createElement('select');
+      orbitSelect.name = 'orbit';
+      orbitLabel.appendChild(orbitSelect);
+
+      function updateOrbitOptions() {
+        orbitSelect.innerHTML = '';
+        const orbits = Object.keys(threeBodyInitialConditions[currentGroup]?.[currentSequence] || {});
+        orbits.forEach(orbit => {
+          const option = document.createElement('option');
+          option.value = orbit;
+          option.textContent = orbit;
+          if (orbit === currentOrbit) option.selected = true;
+          orbitSelect.appendChild(option);
+        });
+        if (!orbits.includes(currentOrbit) && orbits.length > 0) {
+          currentOrbit = orbits[0];
+          orbitSelect.value = currentOrbit;
+        }
+      }
+
+      updateOrbitOptions();
+
+      const title = document.createElement('div');
+      title.innerHTML = '<strong style="font-size:0.9rem">Initial conditions</strong>';
+      form.appendChild(title);
+
+      const container = document.createElement('div');
+      container.style.cssText = 'display:flex;gap:1em;flex-wrap:wrap;';
+      container.appendChild(seqLabel);
+      container.appendChild(orbitLabel);
+      form.appendChild(container);
+
+      form.oninput = () => {
+        const [group, seq] = seqSelect.value.split(': ');
+        currentGroup = group;
+        currentSequence = seq;
+        updateOrbitOptions();
+        currentOrbit = orbitSelect.value;
+        form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
+        form.dispatchEvent(new CustomEvent('input'));
+      };
+
+      form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
+      return form;
+    })();
+
+    const selectedConditions = Generators.input(selectedConditionsInput);
+    display(selectedConditionsInput);
+  </script>
+
+  <script id="102" type="text/x-typescript">
+    const drawingParams = {
+      lineOpacity: 1.0,
+      lineWidth: 4,
+      lineBorderWidth: 1,
+      pointSize: 10,
+      speed: 5,
+      color: [[0.63, 0.83, 0.18], [0.18, 0.63, 0.83], [0.83, 0.18, 0.63]],
+      borderColor: [[1, 1, 1], [1, 1, 1], [1, 1, 1]],
+      strokeColor: [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
+    };
+  </script>
+
+  <script id="12" type="text/x-typescript">
+    const initialConditions = (() => {
+      const { group, sequence, orbit } = selectedConditions;
+      const conditions = threeBodyInitialConditions[group]?.[sequence]?.[orbit];
+      return parseInitialConditions(conditions, orbit, drawingParams.color);
+    })();
+  </script>
+
+  <script id="7" type="text/x-typescript">
+    const trajectory = integrateTrajectory(ode45, initialConditions);
+  </script>
+
+  <script id="202" type="text/x-typescript">
+    const shapeTrajectory = (() => {
+      const result = [];
+      const masses = initialConditions?.m || [1, 1, 1];
+      for (let i = 0; i < trajectory.t.length; i++) {
+        result.push(...computeShape(trajectory.position, masses, i));
+      }
+      return result;
+    })();
+  </script>
+
+  <script id="204" type="text/x-typescript">
+    const freeGroupWord = computeFreeGroupWord(shapeTrajectory);
+  </script>
+
+  <script id="13" type="text/x-typescript">
+    (() => {
+      const { group, sequence, orbit } = selectedConditions;
+      const conditions = threeBodyInitialConditions[group]?.[sequence]?.[orbit];
+      if (!conditions) return;
+
+      const p = conditions.x;
+      const v = conditions.v;
+      const m = conditions.m || [1, 1, 1];
+      const ref = references[conditions.ref];
+      const isUnequalMass = m[0] !== m[1] || m[0] !== m[2];
+
+      const hashValue = `#group=${encodeURIComponent(group)}&sequence=${encodeURIComponent(sequence)}&orbit=${encodeURIComponent(orbit)}`;
+      const seqName = `${group} - ${sequence.replace(/i\.c\./, 'isosceles collinear')}`;
+
+      display(html`<div style="border:1px solid #ccc;padding:0 10px;max-width:640px;box-sizing:border-box;">
+        <small><dl class="inline-flex">
+          <dt>Sequence</dt><dd><a href="${sequenceUrls[group]?.[sequence] || '#'}">${seqName}${isUnequalMass ? ' (unequal mass)' : ''}</a></dd>
+          <dt>Orbit</dt><dd>${conditions.url ? html`<a href="${conditions.url}">${tex`${initialConditions.name}`}</a>` : tex`${initialConditions.name}`}</dd>
+          <dt>Initial positions</dt><dd>${tex`((${p[0][0]}, ${p[0][1]}), (${p[1][0]}, ${p[1][1]}), (${p[2][0]}, ${p[2][1]}))`}</dd>
+          <dt>Masses</dt><dd>${tex`(${m[0]}, ${m[1]}, ${m[2]})`}</dd>
+          <dt>Free group element</dt><dd style="word-break:break-all;">${freeGroupWord}</dd>
+          <dt>Period</dt><dd>${conditions.T}</dd>
+          <dt>Discovered</dt><dd>${conditions.year}</dd>
+          <dt>Reference</dt><dd>${ref.authors}, <em>${ref.title}</em></dd>
+          <dt>Share</dt><dd><a href="${hashValue}">link to this orbit</a></dd>
+        </dl></small>
+      </div>`);
+    })();
+  </script>
+
+  <script id="101" type="text/x-typescript">
+    const controlsContainer = html`<div class="plot-controls"></div>`;
+
+    function ctrl(input) {
+      controlsContainer.appendChild(input);
+      return Generators.input(input);
+    }
+
+    const lineOpacity = ctrl(Inputs.range([0, 1], { label: 'Line opacity', value: 0.7, step: 0.01 }));
+    const pointSize = ctrl(Inputs.range([4, 20], { label: 'Point size', value: 10, step: 1 }));
+    const animSpeed = ctrl(Inputs.range([0.05, 20], { label: 'Speed', value: 5, step: 0.05 }));
+
+    display(controlsContainer);
+  </script>
+
+  <script id="103" type="text/x-typescript">
+    drawingParams.lineOpacity = lineOpacity;
+    drawingParams.pointSize = pointSize;
+    drawingParams.speed = animSpeed;
+    if (stack?.elements?.regl?.value) stack.elements.regl.value.dirty = true;
+  </script>
+
+  <script id="104" type="text/x-typescript">
+    function createPlot(width, height, xDomain = [-2, 2], yDomain = [-2, 2]) {
+      return Plot.plot({
+        width,
+        height,
+        marginTop: 20,
+        marginRight: 10,
+        marginLeft: 40,
+        marginBottom: 20,
+        style: { backgroundColor: 'transparent', maxWidth: 'none', position: 'absolute', top: '0', left: '0' },
+        x: { domain: xDomain, tickSpacing: 100 },
+        y: { domain: yDomain, tickSpacing: 100 },
+        marks: [
+          Plot.ruleX([0], { stroke: '#0002' }),
+          Plot.ruleY([0], { stroke: '#0002' })
+        ]
+      });
+    }
+  </script>
+
+  <script id="105" type="text/x-typescript">
+    const stack = createElementStack({
+      layers: [{
+        id: 'regl',
+        element: reglElement(createREGL, {
+          optionalExtensions: ['ANGLE_instanced_arrays'],
+          attributes: { antialias: true, preserveDrawingBuffer: true }
+        })
+      }, {
+        id: 'plot',
+        element: ({ width, height }) => createPlot(width, height)
+      }, {
+        id: 'svg',
+        element: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg"))
+            .attr("width", width)
+            .attr("height", height)
+            .style("position", "absolute")
+            .style("top", "0")
+            .style("left", "0")
+            .node()
+      }]
+    });
+  </script>
+
+  <script id="106" type="text/x-typescript">
+    const axes = createZoomableAxes({
+      d3,
+      element: stack.elements.svg,
+      xScale: stack.elements.plot.scale('x'),
+      yScale: stack.elements.plot.scale('y'),
+      aspectRatio: 1,
+      scaleExtent: [0.01, 10000],
+      onChange: ({ xDomain, yDomain }) => {
+        const newPlot = createPlot(stack.width, stack.height, xDomain, yDomain);
+        stack.elements.plot.replaceWith(newPlot);
+        stack.elements.plot = newPlot;
+        stack.dispatchEvent(new CustomEvent('update'));
+        if (stack.elements.regl?.value) stack.elements.regl.value.dirty = true;
+      }
+    });
+  </script>
+
+  <script id="107" type="text/x-typescript">
+    display(expandable(stack.element, {
+      width: Math.min(width, 640),
+      height: Math.min(480, width * 0.7),
+      onResize(el, w, h) {
+        stack.resize(w, h);
+        axes.updateScales(stack.elements.plot.scale('x'), stack.elements.plot.scale('y'));
+        if (stack.elements.regl?.value) stack.elements.regl.value.dirty = true;
+      }
+    }));
+  </script>
+
+  <script id="108" type="text/x-typescript">
+    (() => {
+      const regl = stack.elements.regl.value;
+      if (!regl) return;
+
+      const positionsBuffer = regl.buffer(trajectory.position);
+      const pointsBufferData = new Float32Array(9);
+      const pointsBuffer = regl.buffer(pointsBufferData);
+
+      const drawLines = createDrawLines(regl, {
+        vert: `
+          precision highp float;
+
+          #pragma lines: attribute vec3 position;
+          #pragma lines: position = getPosition(position);
+          #pragma lines: width = getWidth();
+
+          uniform mat4 view;
+          uniform float timeScale, timeShift;
+          uniform float width;
+
+          vec4 getPosition(vec3 p) {
+            return view * vec4(p.xy, (p.z * timeScale - timeShift) * 2.0 - 1.0, 1.0);
+          }
+
+          float getWidth() {
+            return width;
+          }
+        `,
+        frag: `
+          precision highp float;
+          varying vec3 lineCoord;
+          uniform vec3 color, borderColor;
+          uniform float opacity, width, borderWidth;
+          void main() {
+            float sdf = length(lineCoord.xy) * width;
+            vec3 c = mix(color, borderColor, smoothstep(width - borderWidth - 1.0, width - borderWidth + 1.0, sdf));
+            gl_FragColor = vec4(c * opacity, opacity);
+          }
+        `,
+        uniforms: {
+          view: () => axes.view,
+          timeScale: regl.prop('timeScale'),
+          timeShift: regl.prop('timeShift'),
+          color: regl.prop('color'),
+          borderColor: regl.prop('borderColor'),
+          opacity: () => drawingParams.lineOpacity,
+          width: (ctx) => ctx.pixelRatio * drawingParams.lineWidth,
+          borderWidth: (ctx) => ctx.pixelRatio * drawingParams.lineBorderWidth
+        },
+        depth: { enable: true },
+        blend: {
+          enable: true,
+          func: { src: 'one', dst: 'zero' }
+        },
+        viewport: reglAxesViewport(axes),
+        scissor: { enable: true, box: reglAxesViewport(axes) }
+      });
+
+      const drawPoints = regl({
+        vert: `
+          precision highp float;
+          attribute vec3 position;
+          uniform mat4 view;
+          uniform float pointSize, pixelRatio;
+          void main() {
+            gl_Position = view * vec4(position.xy, 0, 1);
+            gl_PointSize = pointSize * pixelRatio;
+          }
+        `,
+        frag: `
+          precision highp float;
+          uniform vec3 color, strokeColor;
+          void main() {
+            float r = length(gl_PointCoord * 2.0 - 1.0);
+            if (r > 1.0) discard;
+            vec3 c = r > 0.7 ? strokeColor : color;
+            gl_FragColor = vec4(c, 1.0);
+          }
+        `,
+        attributes: {
+          position: { buffer: pointsBuffer, stride: 12, offset: regl.prop('offset') }
+        },
+        uniforms: {
+          view: () => axes.view,
+          pointSize: regl.prop('pointSize'),
+          pixelRatio: regl.context('pixelRatio'),
+          color: regl.prop('color'),
+          strokeColor: regl.prop('strokeColor')
+        },
+        count: 1,
+        primitive: 'points',
+        depth: { enable: false },
+        viewport: reglAxesViewport(axes),
+        scissor: { enable: true, box: reglAxesViewport(axes) }
+      });
+
+      function binarySearch(arr, val) {
+        let lo = 0, hi = arr.length - 1;
+        while (lo < hi) {
+          const mid = (lo + hi) >> 1;
+          if (arr[mid] < val) lo = mid + 1;
+          else hi = mid;
+        }
+        return Math.max(0, lo - 1);
+      }
+
+      regl.dirty = true;
+
+      const frame = regl.frame(ctx => {
+        if (!regl.dirty) return;
+        regl.dirty = false;
+
+        const tPeriod = trajectory.t[trajectory.t.length - 1];
+        const ts = ctx.time * drawingParams.speed;
+        // timeShift ranges -1 to 1: at -1 lines are above clip (entering), at 1 below (exiting)
+        const timeShift = ((ts % (tPeriod * 2)) / tPeriod) - 1;
+        const timeScale = 1 / tPeriod;
+
+        regl.clear({ color: [0, 0, 0, 0], depth: 1 });
+
+        for (let i = 0; i < 3; i++) {
+          drawLines({
+            join: 'bevel',
+            vertexCount: trajectory.t.length,
+            vertexAttributes: {
+              position: { buffer: positionsBuffer, stride: 36, offset: i * 12 }
+            },
+            timeScale,
+            timeShift,
+            color: drawingParams.color[i],
+            borderColor: drawingParams.borderColor[i]
+          });
+        }
+
+        const t = trajectory.t;
+        const y = trajectory.position;
+        // Point position: map timeShift from [-1,1] to [0, tPeriod] twice per cycle
+        const tt = (((timeShift + 1) % 1) * tPeriod);
+        const idx = binarySearch(t, tt);
+        const idx1 = Math.min(t.length - 1, idx + 1);
+        const frac = (tt - t[idx]) / (t[idx1] - t[idx] || 1);
+
+        for (let j = 0; j < 9; j++) {
+          pointsBufferData[j] = (1 - frac) * y[idx * 9 + j] + frac * y[idx1 * 9 + j];
+        }
+        pointsBuffer.subdata(pointsBufferData);
+
+        for (let i = 0; i < 3; i++) {
+          drawPoints({
+            offset: i * 12,
+            pointSize: (initialConditions?.pointSize?.[i] || 1) * drawingParams.pointSize,
+            color: drawingParams.color[i],
+            strokeColor: drawingParams.strokeColor[i]
+          });
+        }
+
+        regl.dirty = true;
+      });
+
+      invalidation.then(() => frame.cancel());
+    })();
+  </script>
+
+  <script id="200" type="text/markdown">
+    ## Orbit classification
+
+    The orbits can be classified using the topological approach described by Montgomery. We transform to [Jacobi coordinates](https://en.wikipedia.org/wiki/Jacobi_coordinates) and compute a shape vector ${tex`\mathbf{n}`} that lives on the unit sphere, invariant to rotation, translation, and overall size. The trajectory on this "shape sphere" never passes through three collision points (punctures). By tracking crossings of the equator, we compute a [free group word](https://en.wikipedia.org/wiki/Free_group) that identifies the orbit topologically.
+  </script>
+
+  <script id="205" type="text/x-typescript">
+    display(md`For the ${tex`${initialConditions?.name || ''}`} orbit, the free group word is: *${freeGroupWord}*.
+
+Figure-eight orbits follow a repeating *BabA* pattern. For more details, see [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S).`);
+  </script>
+
+  <script id="300" type="text/markdown">
+    ## License
+
+    Code is MIT Licensed. Written content is [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/).
+  </script>
+
+  <script id="900" type="text/x-typescript">
+    display(html`<style>
+      .observablehq dl.inline-flex {
+        display: flex;
+        flex-flow: row wrap;
+        max-width: 640px;
+      }
+      .observablehq dl.inline-flex dt {
+        flex: 0 0 25%;
+        min-width: 130px;
+        font-weight: 600;
+        margin: 0;
+      }
+      .observablehq dl.inline-flex dd {
+        flex: 0 0 75%;
+        margin: 0 0 0 auto;
+      }
+      .orbit-selector select {
+        margin-top: 0.25em;
+      }
+      @media (max-width: 590px) {
+        .observablehq dl.inline-flex dt { flex: 0 0 100%; }
+        .observablehq dl.inline-flex dd { flex: 0 0 95%; }
+      }
+    </style>`);
+  </script>
+
+</notebook>

@@ -331,6 +331,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
 
     // Reset content wrapper positioning
     contentWrapper.style.position = 'relative';
+    contentWrapper.style.display = 'inline-block';
     contentWrapper.style.top = '';
     contentWrapper.style.left = '';
     contentWrapper.style.transform = '';
@@ -372,6 +373,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
 
     // Position content wrapper
     contentWrapper.style.position = 'fixed';
+    contentWrapper.style.display = 'block';
     contentWrapper.style.width = `${outerWidth}px`;
     contentWrapper.style.zIndex = '9999';
 

@@ -45,6 +45,9 @@ export function reglElement(createREGL, {
     current.height = height * pixelRatio;
     current.style.width = `${width}px`;
     current.style.height = `${height}px`;
+    current.style.position = "absolute";
+    current.style.top = "0";
+    current.style.left = "0";
     return current;
   };
 }
