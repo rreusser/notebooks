@@ -236,6 +236,7 @@
       xScale: stack.elements.plot.scale("x"),
       yScale: stack.elements.plot.scale("y"),
       aspectRatio: 1,
+      scaleExtent: [0.1, 1000],
       onChange: ({ xDomain, yDomain }) => {
         regl.dirty = true;
         const newPlot = createPlot(stack.width, stack.height, xDomain, yDomain);
