@@ -8,7 +8,7 @@
 
     ${tex.block`u_t + \frac{1}{2}|\nabla u|^2 + \nabla^2 u + \nabla^4 u = 0.`}
 
-    The KSE arises in a number of contexts and was [dervied by Yoshiki Kuramoto and Gregory Sivashinsky](https://en.wikipedia.org/wiki/Kuramoto%E2%80%93Sivashinsky_equation) while researching laminar flame front instabilities. It is one of the simplest partial differential equations exhibiting complicated dynamics, displaying chaotic behavior in large domains.
+    The KSE arises in a number of contexts and was [dervied by Yoshiki Kuramoto and Gregory Sivashinsky](https://en.wikipedia.org/wiki/Kuramoto%E2%80%93Sivashinsky_equation) while researching laminar flame front instabilities. It's one of the simplest partial differential equations exhibiting complicated dynamics, displaying chaotic behavior in large domains. It’s particularly interseting because it’s a chaotic PDE of *one* variable. Contrast this with the [Lorenz Attractor](https://en.wikipedia.org/wiki/Lorenz_system) which is a chaotic ODE of *three* variables.
 
     For the fully immersive version, see [the WebGL visualization here](https://rreusser.github.io/kuramoto-sivashinsky/). This page explores modernization to WebGPU and [Observable Notebook Kit](https://observablehq.com/notebook-kit/kit), as well as adding cleanup like plot axes (at last!).
   </script>
@@ -18,10 +18,10 @@
 
     display(md`
 
-As far as the simulation goes, the factors ${tex`\nu_1 = (\pi/L_x)^2`} and ${tex`\nu_2 = (\pi/L_y)^2`} describe the length scale in each dimension. Chaotic behavior occurs when these factors are small. When either factor approaches order unity, the dynamics simplify in that direction, effectively reducing the solution to one dimension.
+    As far as the simulation goes, consider a doubly periodic domain ${tex`[0, L_x] \times [0, L_y]`}. The factors ${tex`\nu_1 = (\pi/L_x)^2`} and ${tex`\nu_2 = (\pi/L_y)^2`} describe the length scale in each dimension. Chaotic behavior occurs when these factors are small. When either factor approaches order unity, the dynamics simplify in that direction, effectively reducing the solution to one dimension. On the threshold between are some pretty weird alternating, quasiperiodic, and even traveling wave solutions.
 
-Based on the config below, we solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`} with ${tex`\nu_1 = ${nu[0].toFixed(6)}`} and ${tex`\nu_2 = ${nu[1].toFixed(6)}.`}
-`);
+    Based on the config below, we solve the problem in the doubly periodic domain, ${tex`[0, ${L[0].toFixed(1)}] \times [0, ${L[1].toFixed(1)}]`} with ${tex`\nu_1 = ${nu[0].toFixed(6)}`} and ${tex`\nu_2 = ${nu[1].toFixed(6)}.`}
+    `);
   </script>
   <script id="3" type="module">
     // With hierarchical FFT, we can support sizes up to maxWorkgroupSize^2
@@ -53,7 +53,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     });
     const NString = view(NInput);
   </script>
-  <script id="3b" type="module">
+  <script id="11" type="module">
     const N = parseInt(NString.split('×')[0]);
   </script>
   <script id="4" type="module">
@@ -158,29 +158,29 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     const invertInput = Inputs.toggle({ label: 'Invert colorscale', value: true });
     const invert = view(invertInput);
   </script>
-  <script id="11" type="text/markdown">
+  <script id="12" type="text/markdown">
     ## Solution method
 
     This notebook follows the solution method outlined in A. Kalogirou's thesis, [Nonlinear dynamics of surfactant-laden multilayer shear flows and related systems](https://spiral.imperial.ac.uk/entities/publication/fad83337-01c0-44c0-b7e4-b80be9b75a0f), particularly equations (F.8) - (F.10). The solution uses an implicit-explicit [Backward Differentiation Formula](https://en.wikipedia.org/wiki/Backward_differentiation_formula) in the spatial frequency domain.
   </script>
-  <script id="12" type="text/markdown">
+  <script id="13" type="text/markdown">
     The equation is solved in the spatial frequency domain, with the exception of the nonlinear term ${tex`\frac{1}{2}|\nabla u|^2`} which requires computing the gradient while transforming back to the spatial domain, then squaring, then transforming back to the frequency domain.
   </script>
-  <script id="13" type="text/markdown">
+  <script id="14" type="text/markdown">
     A few implementation notes:
 
     - Equation (F.10) seems to be missing a factor of ${tex`dt`} in the biharmonic term.
     - Since all terms include derivatives, the offset of ${tex`u`} has no effect and can simply be removed by zeroing out the mean (zero-wavenumber) component on every update.
     - The multi-step method is initialized with the same values for both previous steps, rather than implementing a special Backward Euler initialization step.
   </script>
-  <script id="14" type="text/markdown">
+  <script id="15" type="text/markdown">
     The domain has size ${tex`[0, 2 L_x] \times [0, 2 L_y]`}, but the equation is solved in the domain ${tex`[0, 2\pi] \times [0, 2\pi]`} via the rescaling in Chapter 9 of Kalogirou's thesis,
 
     ${tex.block`x \rarr \frac{L_x}{\pi} x, \;\;\; y \rarr \frac{L_y}{\pi} y, \;\;\; t \rarr \left(\frac{L_x}{\pi}\right)^2 t.`}
 
     along with the factors ${tex`\nu_1 = \left(\frac{\pi}{L_x}\right)^2`} and ${tex`\nu_2 = \left(\frac{\pi}{L_y}\right)^2`}.
   </script>
-  <script id="15" type="text/markdown">
+  <script id="16" type="text/markdown">
     From Appendix F on page 227, the full second order spatial frequency domain update equation for solution ${tex`\hat{V}`} at step ${tex`n+2`} as a function of the data from previous steps ${tex`n+1`} and ${tex`n`} is
 
     ${tex.block`\begin{aligned}
@@ -198,7 +198,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
 
     where ${tex`\mathscr{F}(\cdot)`} represents the spatial Fourier Transform and ${tex`v`} is the spatial domain solution.
   </script>
-  <script id="16" type="text/markdown">
+  <script id="17" type="text/markdown">
     Finally,
 
     ${tex.block`\begin{aligned}
@@ -208,10 +208,10 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
 
     using the definition ${tex`c = 1 + \frac{1}{\nu_1}`}.
   </script>
-  <script id="17" type="text/markdown">
+  <script id="18" type="text/markdown">
     At first this update equation seems imposing, but if ${tex`k_1`} and ${tex`k_2`} refer to a particular wavenumber then the above is a simple algebraic expression for each grid point, independent of all others. The only exceptions are the expressions for ${tex`\hat{A}_{k_1,k_2}`} and ${tex`\hat{B}_{k_1,k_2}`}, which represent the solution, differentiated in the frequency domain via multiplication by ${tex`ik_x`} and ${tex`ik_y`}, inverse-FFT'd into the spatial domain, squared, and then FFT'd back into the spatial frequency domain. From there, the rest is tedious but straightforward shuffling of buffers.
   </script>
-  <script id="17b" type="text/markdown">
+  <script id="19" type="text/markdown">
     ## WebGPU implementation
 
     WebGPU has no built-in FFT, so this notebook implements [Cooley-Tukey](https://en.wikipedia.org/wiki/Cooley%E2%80%93Tukey_FFT_algorithm) radix-2 in compute shaders: bit-reversal at the input, then ${tex`\log_2 N`} butterfly stages. For grids larger than the maximum workgroup size (256 on most devices), a hierarchical four-step FFT breaks the transform into smaller pieces. Getting the indexing, normalization, and twiddle factors right is tedious, but at least FFT bugs are obvious.
@@ -223,7 +223,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     Finally, you may or may not like this, I might lose followers, etc., but I converted this notebook from WebGL 1 in part way of Claude Code, using my experimental [MCP server for Observable Notebook Kit](https://github.com/rreusser/mcp-observable-notebookkit-debug). It implements a small server which controls an in-browser dev preview over a WebSocket, querying runtime outputs, modifying control inputs, analyzing the variable dependency graph, and even analyzing image output. I'm not religious about AI in either direction. It's good at what it's good at. It's evil where it's used badly, and that's that.
 
   </script>
-  <script id="18" type="module">
+  <script id="20" type="module">
     import { createWebGPUContext } from './webgpu-context.js';
 
     const context = await createWebGPUContext();
@@ -232,14 +232,14 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
 
     invalidation.then(() => device.destroy());
   </script>
-  <script id="19" type="module">
+  <script id="21" type="module">
     import { createKSPipelines } from './pipeline.js';
     import { executeFFT2D } from './fft.js';
     import { createElementStack } from './lib/element-stack.js';
     import { createZoomableAxes } from './lib/zoomable-axes.js';
     import { expandable } from './lib/expandable.js';
   </script>
-  <script id="20" type="module">
+  <script id="22" type="module">
     const gridN = N;
     const vec2Size = gridN * gridN * 2 * 4;
     const vec4Size = gridN * gridN * 4 * 4;
@@ -247,7 +247,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
     const dx = [2 * Math.PI / gridN, 2 * Math.PI / gridN];
   </script>
-  <script id="21" type="module">
+  <script id="23" type="module">
     // Depend on constants
     gridN; vec2Size; dx;
 
@@ -266,7 +266,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       });
     }
   </script>
-  <script id="22" type="module">
+  <script id="24" type="module">
     // Vhat buffers: 3 time levels for BDF2
     const Vhat = [0, 1, 2].map(i => device.createBuffer({
       label: `Vhat[${i}]`,
@@ -297,7 +297,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     // may still have pending callbacks that reference them. WebGPU will garbage
     // collect the buffers when there are no more references.
   </script>
-  <script id="23" type="module">
+  <script id="25" type="module">
     const initParamsBuffer = device.createBuffer({
       size: 16,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
@@ -360,7 +360,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     // may still have pending callbacks that reference them. WebGPU will garbage
     // collect the buffers when there are no more references.
   </script>
-  <script id="24" type="module">
+  <script id="26" type="module">
     function generateColorscale(interpolator) {
       const data = new Uint8Array(256 * 4);
       for (let i = 0; i < 256; i++) {
@@ -402,7 +402,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       [256, 1]
     );
   </script>
-  <script id="25" type="module">
+  <script id="27" type="module">
     // Plot margins - canvas will be positioned inside these
     const margins = { top: 20, right: 10, bottom: 30, left: 40 };
 
@@ -527,7 +527,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       ]
     });
   </script>
-  <script id="26" type="module">
+  <script id="28" type="module">
     // Re-render when aspectRatio or Lx changes
     // Also show canvas after initialization completes
     // Note: stack.resize() is handled by expandable's onResize callback
@@ -544,7 +544,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     render();
     canvas.style.visibility = 'visible';
   </script>
-  <script id="27" type="module">
+  <script id="29" type="module">
     const simState = {
       timeLevel: 0,
       time: 0,
@@ -562,7 +562,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       invert: false
     };
   </script>
-  <script id="28" type="module">
+  <script id="30" type="module">
     Lx; aspectRatio; n; contrast; colorscaleName; invert;
     simParams.Lx = Lx;
     simParams.aspectRatio = aspectRatio;
@@ -571,7 +571,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     simParams.colorscaleName = colorscaleName;
     simParams.invert = invert;
   </script>
-  <script id="29" type="module">
+  <script id="31" type="module">
     // Get current simulation parameters from simParams
     function getParams() {
       const Lx = simParams.Lx;
@@ -856,7 +856,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       device.queue.submit([enc.finish()]);
     }
   </script>
-  <script id="30" type="module">
+  <script id="32" type="module">
     // Depend on n and restart so we reinitialize when either changes
     n; restart;
     await initialize(n);
@@ -866,7 +866,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     // Animation loop depends on this to wait for init to complete
     const initComplete = { n, restart };
   </script>
-  <script id="31" type="module">
+  <script id="33" type="module">
     // Depend on step/render (for N changes) and initComplete (for n/restart changes)
     // initComplete changes when restart changes, so no direct restart dependency needed
     step; render; initComplete;
@@ -906,12 +906,12 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       }
     });
   </script>
-  <script id="32" type="module">
+  <script id="34" type="module">
     // Re-render when vis params change (params-update already updated simParams)
     contrast; colorscaleName; invert; initComplete;
     render();
   </script>
-  <script id="33" type="module">
+  <script id="35" type="module">
     const statusEl = html`<p><em>t = <span id="sim-time">0</span>, step = <span id="sim-step">0</span></em></p>`;
 
     let statusFrameId = null;
