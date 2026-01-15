@@ -42,24 +42,38 @@
       value: 'Compound'
     }));
   </script>
-  <script id="915" type="text/x-typescript">
-    md`${tex`\theta_1 \in [${(zoomBox.center[0] - zoomBox.scale[0] / 2).toFixed(
-      8
-    )}, ${(zoomBox.center[0] + zoomBox.scale[0] / 2).toFixed(
-      8
-    )}]`}<br>${tex`\theta_2 \in [${(
-      zoomBox.center[1] -
-      zoomBox.scale[1] / 2
-    ).toFixed(8)}, ${(zoomBox.center[1] + zoomBox.scale[1] / 2).toFixed(8)}]`}`
-  </script>
-  <script id="289" type="application/vnd.observable.javascript">
-    viz = html`<figure>
-    <div style="position:relative;">
-    ${regl._gl.canvas}
-    <div id="zoombox" style="display:none"></div>
-    </div>
-    <figcaption>Hover to view pendulum at current point. Click and drag to zoom. Double click to return to initial view</figcaption>
-    </figure>`
+    <script id="289" type="module">
+    const figure = html`<figure>
+      ${stack.element}
+      <figcaption>Hover to view pendulum. Scroll to zoom, drag to pan.</figcaption>
+    </figure>`;
+
+    display(expandable(figure, {
+      width: Math.min(width, 640),
+      height: Math.min(width, 640),
+      toggleOffset: [-6, -33],
+      onResize(el, w, h) {
+        stack.resize(w, h);
+        axes.updateScales(
+          stack.elements.plot.scale("x"),
+          stack.elements.plot.scale("y")
+        );
+        // Sync textureDomain to new aspect-ratio-adjusted view domain
+        textureDomain.x[0] = axes.xDomain[0];
+        textureDomain.x[1] = axes.xDomain[1];
+        textureDomain.y[0] = axes.yDomain[0];
+        textureDomain.y[1] = axes.yDomain[1];
+        // Resize FBOs and reinitialize to maintain 1:1 resolution
+        resizeFBOs(w, h);
+        regl.poll();
+        y[0].use(() =>
+          blit(() => {
+            initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2 });
+          })
+        );
+        regl.dirty = true;
+      }
+    }));
   </script>
   <script id="917" type="text/x-typescript">
     const simulate = view(Inputs.checkbox(['Simulate', 'Show pendulum at point under mouse'], {
@@ -68,6 +82,9 @@
   </script>
   <script id="916" type="text/x-typescript">
     const restart = view(Inputs.button('Restart'));
+  </script>
+  <script id="resetView" type="text/x-typescript">
+    const resetView = view(Inputs.button('Reset View'));
   </script>
   <script id="914" type="text/x-typescript">
     const m1 = view(Inputs.range([0.1, 1], {
@@ -108,47 +125,124 @@
       transform: Math.log
     }));
   </script>
-  <script id="5" type="module">
-    const regl = (function () {
-      var canvas = document.createElement('canvas');
-      let regl = createREGL({
-        optionalExtensions: [
-          'OES_texture_half_float',
-          'OES_texture_float',
-          'ANGLE_instanced_arrays'
-        ],
-        canvas,
-        pixelRatio: pixelRatio,
-        attributes: {
-          antialias: true,
-          alpha: false,
-          depthStencil: false,
-          preserveDrawingBuffer: false
-        }
+  <script id="createPlot" type="module">
+    function createPlot(width, height, xDomain = [-Math.PI, Math.PI], yDomain = [-Math.PI, Math.PI]) {
+      return Plot.plot({
+        width,
+        height,
+        marginTop: 20,
+        marginRight: 10,
+        marginLeft: 50,
+        marginBottom: 40,
+        style: { backgroundColor: "transparent", maxWidth: "none", position: "absolute" },
+        x: { domain: xDomain, tickSpacing: 80, label: "θ₁", labelAnchor: "center" },
+        y: { domain: yDomain, tickSpacing: 80, label: "θ₂", labelAnchor: "center" },
+        marks: []
       });
-      return regl;
-    })();
+    }
   </script>
-  <script id="47" type="module">
-    const resizeContext = (function () {
-      // Depend on page width here to avoid recreating regl context when the page
-      // width changes
-      const canvas = regl._gl.canvas;
-      var w = radius;
-      var h = radius;
-      canvas.style.width = `${Math.floor(w / pixelRatio)}px`;
-      canvas.style.height = `${Math.floor(h / pixelRatio)}px`;
-      canvas.width = w;
-      canvas.height = h;
-    })();
+  <script id="stack" type="module">
+    const stack = createElementStack({
+      layers: [{
+        id: 'regl',
+        element: reglElement(createREGL, {
+          optionalExtensions: ['OES_texture_half_float', 'OES_texture_float', 'OES_texture_float_linear', 'OES_texture_half_float_linear', 'ANGLE_instanced_arrays'],
+          attributes: { antialias: true, alpha: false, depthStencil: false, preserveDrawingBuffer: true }
+        })
+      }, {
+        id: 'plot',
+        element: ({ width, height }) => createPlot(width, height)
+      }, {
+        id: 'svg',
+        element: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg"))
+            .attr("width", width)
+            .attr("height", height)
+            .style("position", "absolute")
+            .node()
+      }]
+    });
+  </script>
+  <script id="5" type="module">
+    const regl = stack.elements.regl.value;
+  </script>
+  <script id="axes" type="module">
+    let reinitTimeout = null;
+
+    // Baseline domain
+    const baselineDomain = { x: [-Math.PI, Math.PI], y: [-Math.PI, Math.PI] };
+
+    function reinitialize() {
+      // Sync textureDomain to current view domain
+      textureDomain.x[0] = axes.xDomain[0];
+      textureDomain.x[1] = axes.xDomain[1];
+      textureDomain.y[0] = axes.yDomain[0];
+      textureDomain.y[1] = axes.yDomain[1];
+
+      // Resize FBOs to match viewport
+      resizeFBOs(stack.width, stack.height);
+
+      // Initialize the texture
+      regl.poll();
+      y[0].use(() =>
+        blit(() => {
+          initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2 });
+        })
+      );
+      regl.dirty = true;
+    }
+
+    function resetToBaseline() {
+      // Reset textureDomain to baseline
+      textureDomain.x[0] = baselineDomain.x[0];
+      textureDomain.x[1] = baselineDomain.x[1];
+      textureDomain.y[0] = baselineDomain.y[0];
+      textureDomain.y[1] = baselineDomain.y[1];
+
+      // Reset zoom to initial domain (this will trigger onChange -> reinitialize)
+      axes.reset();
+    }
+
+    const axes = createZoomableAxes({
+      d3,
+      element: stack.elements.svg,
+      xScale: stack.elements.plot.scale("x"),
+      yScale: stack.elements.plot.scale("y"),
+      aspectRatio: 1,
+      onChange: ({ xDomain, yDomain }) => {
+        regl.dirty = true;
+        const newPlot = createPlot(stack.width, stack.height, xDomain, yDomain);
+        stack.elements.plot.replaceWith(newPlot);
+        stack.elements.plot = newPlot;
+        stack.dispatchEvent(new CustomEvent('update'));
+
+        // Debounced reinitialize after zoom stops
+        clearTimeout(reinitTimeout);
+        reinitTimeout = setTimeout(reinitialize, 300);
+      }
+    });
+  </script>
+  <script id="handleResetView" type="module">
+    // React to reset view button
+    resetView;
+    if (resetView > 0) {
+      resetToBaseline();
+    }
   </script>
   <script id="158" type="module">
     // The main simulation and initialization setup.
-    zoomBox;
-
     // Trigger reinitialization when 'restart' clicked or pendulum type changes
     restart;
     pendulumType;
+
+    // Sync textureDomain to current view domain
+    textureDomain.x[0] = axes.xDomain[0];
+    textureDomain.x[1] = axes.xDomain[1];
+    textureDomain.y[0] = axes.yDomain[0];
+    textureDomain.y[1] = axes.yDomain[1];
+
+    // Resize FBOs to match viewport
+    resizeFBOs(stack.width, stack.height);
 
     // Must call this when calling regl outside of frame loop
     regl.poll();
@@ -156,24 +250,31 @@
     // Call initialize in blit context, writing to y[0] framebuffer
     y[0].use(() =>
       blit(() => {
-        initialize({ omega0_0, omega0_1, zoomBox, pendulumType, m1, m2, l1, l2 });
+        initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2 });
       })
     );
+
+    // Export a token so frame loop can depend on initialization
+    const initialized = true;
   </script>
   <script id="54" type="module">
-    // Trigger redraw on restart or zoombox change
+    // Depend on initialization completing
+    initialized;
+    // Trigger redraw on restart
     restart;
-    zoomBox;
     m1; m2; l1; l2;
 
     const run = ~simulate.indexOf('Simulate');
     const showPen = ~simulate.indexOf('Show pendulum at point under mouse');
     const isCompound = pendulumType === 'Compound';
 
-    let needsDraw = true;
+    regl.dirty = true;
     const frame = regl.frame(() => {
-      // Configure a full-viewport shader
       blit(() => {
+        if (regl.dirty || run) {
+          regl.clear({ color: [1, 1, 1, 1] });
+        }
+
         // Step the simulation if running
         if (run) {
           // Run two steps from one data framebuffer to the other,
@@ -185,18 +286,16 @@
         }
 
         // Draw the simulation if something has happened
-        if (needsDraw) {
-          drawMap({ y: y[0] });
-          if (showPen && mouseHover.active && !mouseHover.boxActive) {
+        if (regl.dirty || run) {
+          drawMap();
+          if (showPen && mouseHover.active) {
             drawPendulum([
               { y, w1: [0, 0, 0], w2: [0, 1, 0], l1, l2 },
               { y, w1: [0, 1, 0], w2: [0, 0, 1], l1, l2 }
             ]);
           }
+          regl.dirty = false;
         }
-
-        // Trigger update
-        needsDraw = run ? true : false;
       });
     });
     invalidation.then(() => frame.cancel());
@@ -209,12 +308,36 @@
       ? 'half float'
       : 'uint8'
   </script>
+  <script id="textureDomain" type="module">
+    // Track the world-space domain that the texture currently represents
+    // This starts at the full range and updates after each reinitialize
+    const textureDomain = {
+      x: [-Math.PI, Math.PI],
+      y: [-Math.PI, Math.PI]
+    };
+  </script>
   <script id="58" type="module">
+    // Create framebuffers sized to match viewport at device pixel ratio
+    const initialWidth = Math.round(stack.width * pixelRatio);
+    const initialHeight = Math.round(stack.height * pixelRatio);
+
+    // Check if linear filtering is supported for the texture type
+    const supportsLinearFilter = (colorType === 'float' && regl.hasExtension('OES_texture_float_linear')) ||
+                                  (colorType === 'half float' && regl.hasExtension('OES_texture_half_float_linear')) ||
+                                  colorType === 'uint8';
+    const filterMode = 'nearest';//supportsLinearFilter ? 'linear' : 'nearest';
+
     const y = (function () {
       const fbos = [0, 1].map(() =>
         regl.framebuffer({
-          colorType,
-          radius,
+          color: regl.texture({
+            width: initialWidth,
+            height: initialHeight,
+            type: colorType,
+            wrap: 'clamp',
+            min: filterMode,
+            mag: filterMode
+          }),
           depth: false,
           stencil: false
         })
@@ -222,6 +345,16 @@
       invalidation.then(() => fbos.forEach(fbo => fbo.destroy()));
       return fbos;
     })();
+
+    // Helper to resize FBOs when viewport changes
+    function resizeFBOs(w, h) {
+      const pw = Math.round(w * pixelRatio);
+      const ph = Math.round(h * pixelRatio);
+      if (y[0].width !== pw || y[0].height !== ph) {
+        y[0].resize(pw, ph);
+        y[1].resize(pw, ph);
+      }
+    }
   </script>
   <script id="113" type="module">
     const blit = regl({
@@ -244,19 +377,22 @@
     const initialize = regl({
       frag: `
         precision highp float;
-        uniform sampler2D colorscale;
-        uniform vec2 resolution, omega0, center, scale;
+        uniform vec2 resolution, omega0;
+        uniform vec4 texDomain; // xMin, xMax, yMin, yMax - the domain this texture represents
         uniform bool isCompound;
         uniform float m1, m2, l1, l2;
         #define PI ${Math.PI}
         void main () {
-          // Really just the full spectrum of angles for the two parts of the pendulum,
-          // [0, 2pi] x [0, 2pi], with zero velocity, but we center it about 0.5 to
-          // slightly improve how well it works with half float precision
-          vec2 theta0 = center + (0.5 + scale * ((vec2(0, 1) + vec2(1, -1) * gl_FragCoord.xy / resolution) - 0.5));
-          vec2 theta = theta0 * (2.0 * PI) - PI;
-          vec2 velocity;
+          // UV position in texture [0, 1]
+          vec2 uv = gl_FragCoord.xy / resolution;
 
+          // Map UV to world coordinates (theta values) based on textureDomain
+          vec2 theta = vec2(
+            mix(texDomain.x, texDomain.y, uv.x),
+            mix(texDomain.z, texDomain.w, uv.y)
+          );
+
+          vec2 velocity;
           if (isCompound) {
             // Convert angular velocities to generalized momenta for compound pendulum
             // Mass matrix from Lagrangian: p = M*theta_dot
@@ -281,15 +417,13 @@
             );
           }
 
+          // Store normalized: map [-PI, PI] to [0, 1]
           gl_FragColor = (vec4(theta, velocity) + PI) / (2.0 * PI);
         }`,
       uniforms: {
+        resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight],
         omega0: (ctx, props) => [props.omega0_0, props.omega0_1],
-        center: (ctx, props) => props.zoomBox.center.map(x => (x * 0.5) / Math.PI),
-        scale: (ctx, props) => [
-          props.zoomBox.scale[0] / (Math.PI * 2),
-          props.zoomBox.scale[1] / (Math.PI * 2)
-        ],
+        texDomain: () => [textureDomain.x[0], textureDomain.x[1], textureDomain.y[0], textureDomain.y[1]],
         isCompound: (ctx, props) => props.pendulumType === 'Compound',
         m1: regl.prop('m1'),
         m2: regl.prop('m2'),
@@ -400,6 +534,7 @@
       framebuffer: regl.prop('dst'),
       uniforms: {
         y: regl.prop('src'),
+        resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight],
         dt: regl.prop('dt'),
         isCompound: regl.prop('isCompound'),
         m1: regl.prop('m1'),
@@ -414,7 +549,10 @@
       frag: `
         precision highp float;
         uniform sampler2D colorscale, y;
-        uniform vec2 resolution;
+        uniform vec4 axesViewport; // x, y, width, height in pixels
+        uniform vec4 viewDomain;   // current view: xMin, xMax, yMin, yMax
+        uniform vec4 texDomain;    // texture domain: xMin, xMax, yMin, yMax
+        #define PI ${Math.PI}
         #define TWOPI ${2 * Math.PI}
 
         vec3 colormap(vec2 uv) {
@@ -423,15 +561,40 @@
         }
 
         void main () {
+          // Map from viewport pixel to normalized position [0,1] within viewport
+          vec2 viewportUV = (gl_FragCoord.xy - axesViewport.xy) / axesViewport.zw;
+
+          // Ephemeral transform: map viewportUV to textureUV
+          // textureUV = offset + viewportUV * scale
+          vec2 viewSize = vec2(viewDomain.y - viewDomain.x, viewDomain.w - viewDomain.z);
+          vec2 texSize = vec2(texDomain.y - texDomain.x, texDomain.w - texDomain.z);
+          vec2 scale = viewSize / texSize;
+          vec2 offset = vec2(viewDomain.x - texDomain.x, viewDomain.z - texDomain.z) / texSize;
+          vec2 uv = offset + viewportUV * scale;
+
+          // Check if UV is outside texture bounds - show solid color
+          if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0) {
+            gl_FragColor = vec4(0.95, 0.95, 0.95, 1.0); // Light gray for out of bounds
+            return;
+          }
+
           // Sample the state at this pixel
-          vec4 state = texture2D(y, gl_FragCoord.xy / resolution);
+          vec4 state = texture2D(y, uv);
 
           // Color it by the projection of the 4D state to 2D (theta1, theta2):
           gl_FragColor = vec4(colormap(state.xy), 1);
         }`,
       uniforms: {
-        y: regl.prop('y')
-      }
+        y: () => y[0],
+        axesViewport: (ctx) => {
+          const vp = reglAxesViewport(axes)(ctx);
+          return [vp.x, vp.y, vp.width, vp.height];
+        },
+        viewDomain: () => [axes.xDomain[0], axes.xDomain[1], axes.yDomain[0], axes.yDomain[1]],
+        texDomain: () => [textureDomain.x[0], textureDomain.x[1], textureDomain.y[0], textureDomain.y[1]]
+      },
+      scissor: { enable: true, box: reglAxesViewport(axes) },
+      viewport: reglAxesViewport(axes)
     })
   </script>
   <script id="886" type="module">
@@ -496,124 +659,43 @@
         l2: regl.prop('l2')
       },
       depth: { enable: false },
+      scissor: { enable: true, box: reglAxesViewport(axes) },
+      viewport: reglAxesViewport(axes),
       primitive: 'triangle strip',
       count: 4
     })
   </script>
   <script id="889" type="module">
-    const mouseHover = ({ pt: [0, 0], active: false, boxActive: false });
-  </script>
-  <script id="619" type="module">
-    const zoomBox = view((function () {
-      viz;
-      const dummy = html`<span></span>`;
+    const mouseHover = { pt: [0, 0], active: false };
 
-      const zoomBox = {
-        center: [0, 0],
-        scale: [Math.PI * 2, Math.PI * 2]
-      };
+    // Set up mouse tracking on the regl canvas
+    const canvas = stack.elements.regl;
+    function onPointerMove(event) {
+      // Convert pixel coordinates to texture coordinates [0, 1]
+      const rect = canvas.getBoundingClientRect();
+      const x = (event.clientX - rect.left) / rect.width;
+      const y = 1 - (event.clientY - rect.top) / rect.height;
+      mouseHover.pt[0] = x;
+      mouseHover.pt[1] = y;
+      regl.dirty = true;
+    }
+    function onPointerEnter() {
+      mouseHover.active = true;
+      regl.dirty = true;
+    }
+    function onPointerLeave() {
+      mouseHover.active = false;
+      regl.dirty = true;
+    }
+    canvas.addEventListener('pointermove', onPointerMove, false);
+    canvas.addEventListener('pointerenter', onPointerEnter, false);
+    canvas.addEventListener('pointerleave', onPointerLeave, false);
 
-      const canvas = regl._gl.canvas;
-      let start = { x: NaN, y: NaN };
-      let end = { x: NaN, y: NaN };
-      let captured = false;
-      function emitUpdate() {
-        dummy.dispatchEvent(new CustomEvent('input'));
-      }
-
-      function onDoubleClick() {
-        zoomBox.center[0] = 0;
-        zoomBox.center[1] = 0;
-        zoomBox.scale[0] = Math.PI * 2;
-        zoomBox.scale[1] = Math.PI * 2;
-        emitUpdate();
-      }
-      canvas.addEventListener('dblclick', onDoubleClick, false);
-      const box = document.getElementById('zoombox');
-      box.style.position = 'absolute';
-      box.style.border = '1px solid rgba(0,0,0,0.6)';
-      box.style.backgroundColor = 'rgba(255,255,255,0.2)';
-      box.style.pointerEvents = 'none';
-
-      function updateBox() {
-        box.style.left = `${Math.min(start.x, end.x)}px`;
-        box.style.top = `${Math.min(start.y, end.y)}px`;
-        box.style.width = `${Math.abs(end.x - start.x)}px`;
-        box.style.height = `${Math.abs(end.y - start.y)}px`;
-      }
-
-      function onPointerDown(event) {
-        captured = true;
-        start.x = event.offsetX;
-        start.y = event.offsetY;
-        end.x = event.offsetX;
-        end.y = event.offsetY;
-        canvas.setPointerCapture(event.pointerId);
-        box.style.display = 'block';
-        updateBox();
-        mouseHover.boxActive = true;
-      }
-      function onPointerMove(event) {
-        mouseHover.pt[0] = event.offsetX / dimension;
-        mouseHover.pt[1] = 1 - event.offsetY / dimension;
-        mouseHover.boxActive = false;
-        if (!captured) return;
-        end.x = event.offsetX;
-        end.y = event.offsetY;
-        updateBox();
-        mouseHover.boxActive = true;
-      }
-      function onPointerUp(event) {
-        box.style.display = 'none';
-        captured = false;
-        end.x = event.offsetX;
-        end.y = event.offsetY;
-        if (end.x === start.x || end.y === start.y) return;
-        let curX0 = zoomBox.center[0] - zoomBox.scale[0] * 0.5;
-        let curX1 = zoomBox.center[0] + zoomBox.scale[0] * 0.5;
-        let curY0 = zoomBox.center[1] - zoomBox.scale[1] * 0.5;
-        let curY1 = zoomBox.center[1] + zoomBox.scale[1] * 0.5;
-
-        let xcen = (0.5 * (start.x + end.x)) / dimension;
-        let ycen = (0.5 * (start.y + end.y)) / dimension;
-        let xscale = Math.abs(end.x - start.x) / dimension;
-        let yscale = Math.abs(end.y - start.y) / dimension;
-
-        zoomBox.center[0] = lerp(curX0, curX1, xcen);
-        zoomBox.center[1] = lerp(curY0, curY1, ycen);
-        zoomBox.scale[0] *= xscale;
-        zoomBox.scale[1] *= yscale;
-
-        canvas.releasePointerCapture(event.pointerId);
-        updateBox();
-        emitUpdate();
-        mouseHover.boxActive = false;
-      }
-
-      function onPointerEnter() {
-        mouseHover.active = true;
-      }
-      function onPointerLeave() {
-        mouseHover.active = false;
-      }
-      canvas.addEventListener('pointerdown', onPointerDown, false);
-      canvas.addEventListener('pointermove', onPointerMove, false);
-      canvas.addEventListener('pointerup', onPointerUp, false);
-
-      canvas.addEventListener('pointerenter', onPointerEnter, false);
-      canvas.addEventListener('pointerleave', onPointerLeave, false);
-
-      invalidation.then(() => {
-        canvas.addEventListener('dblclick', onDoubleClick, false);
-        canvas.removeEventListener('pointerdown', onPointerDown);
-        canvas.removeEventListener('pointermove', onPointerMove);
-        canvas.removeEventListener('pointerup', onPointerUp);
-        canvas.removeEventListener('pointerenter', onPointerEnter);
-        canvas.removeEventListener('pointerleave', onPointerLeave);
-      });
-      dummy.value = zoomBox;
-      return dummy;
-    })());
+    invalidation.then(() => {
+      canvas.removeEventListener('pointermove', onPointerMove);
+      canvas.removeEventListener('pointerenter', onPointerEnter);
+      canvas.removeEventListener('pointerleave', onPointerLeave);
+    });
   </script>
   <script id="901" type="module">
     await import('./lib/twttr.js')
@@ -626,17 +708,15 @@
       return div;
     }
   </script>
-  <script id="766" type="module">
-    const dimension = width;
-  </script>
-  <script id="82" type="module">
-    const radius = Math.floor(dimension * pixelRatio); // (height/width in regl-speak)
-  </script>
-  <script id="49" type="module">
+    <script id="49" type="module">
     const pixelRatio = window.devicePixelRatio;
   </script>
   <script id="890" type="module">
     import createREGL from 'npm:regl@2.1.1'
+    import { createElementStack } from './lib/element-stack.js'
+    import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
+    import { createZoomableAxes } from './lib/zoomable-axes.js'
+    import { expandable } from './lib/expandable.js'
   </script>
   <script id="485" type="module">
     import { canWriteToFBOOfType } from 'observable:@rreusser/regl-tools'

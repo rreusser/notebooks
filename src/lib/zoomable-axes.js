@@ -147,6 +147,14 @@ export function createZoomableAxes({
       updateMatrices();
       // Notify listeners of the domain change
       onChange({ xDomain, yDomain, xRange: getXRange(), yRange: getYRange() });
+    },
+    // Reset zoom to initial (base) domain
+    reset() {
+      syncRanges();
+      [xDomain, yDomain] = enforceAspectRatio([...baseXDomain], [...initialYDomain]);
+      selection.call(zoom.transform, d3.zoomIdentity);
+      updateMatrices();
+      onChange({ xDomain, yDomain, xRange: getXRange(), yRange: getYRange() });
     }
   };
 
