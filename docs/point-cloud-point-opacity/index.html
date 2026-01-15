@@ -3,8 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="Selecting the Right Opacity for 2D Point Clouds">
+  <meta property="og:title" content="Selecting the Right Opacity for 2D Point Clouds">
+  <meta name="twitter:description" content="Logic and GLSL shaders to select point cloud opacity for consistent visual appearance">
+  <meta name="subject" content="Logic and GLSL shaders to select point cloud opacity for consistent visual appearance">
+  <meta name="description" content="Logic and GLSL shaders to select point cloud opacity for consistent visual appearance">
+  <meta property="og:description" content="Logic and GLSL shaders to select point cloud opacity for consistent visual appearance">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/point-cloud-point-opacity.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/point-cloud-point-opacity.jpg">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1499,8 +1506,9 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Selecting the Right Opacity for 2D Point Clouds</title>  <script type="module" crossorigin src="/notebooks/assets/index-BanTljyx.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1511,181 +1519,332 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Selecting the Right Opacity for 2D Point Clouds</h1>
     <div class="byline">
-      
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20201208">December 8, 2020</time>
     </div>
     <div class="resource-links">
+        <a href="https://observablehq.com/@rreusser/selecting-the-right-opacity-for-2d-point-clouds" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="white"></circle>
+            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
+          </svg>
+          Live notebook
+        </a>
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/point-cloud-point-opacity/index.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="plot-with-zoom/">Zoomable Multi-Layer Plots in Notebook Kit</a></h2>
-            <span class="publishedAt">January 13, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/">Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU</a></h2>
-            <span class="publishedAt">January 10, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="wilcoxon-signed-rank-test/">Wilcoxon Signed-Rank Test for Performance Testing</a></h2>
-            <span class="publishedAt">January 6, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="perfectly-matched-layers-for-the-wave-equation/">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <span class="publishedAt">December 31, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="reflecting-on-two-years-of-yoga/">Reflecting on Two Years of Yoga</a></h2>
-            <span class="publishedAt">December 27, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="of-noise-and-neighbors/">Of Noise and Neighbors</a></h2>
-            <span class="publishedAt">September 29, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="regl-canvas/">REGL in Observable Notebooks 2.0</a></h2>
-            <span class="publishedAt">August 12, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="clifford-and-de-jong-attractors/">Clifford and de Jong Attractors</a></h2>
-            <span class="publishedAt">May 16, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="chaotic-magnetic-pendulum/">Chaotic Magnetic Pendulum</a></h2>
-            <span class="publishedAt">August 7, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="spring-training/">Spring Training on the Treadmill</a></h2>
-            <span class="publishedAt">June 8, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="speed-climbing-world-record-progression/">Speed Climbing World Record Progression</a></h2>
-            <span class="publishedAt">May 3, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/">Series Acceleration with Shanks Transformation</a></h2>
-            <span class="publishedAt">September 23, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="cubic-basis-vs-hermite-interpolation/">Cubic basis vs. Hermite interpolation</a></h2>
-            <span class="publishedAt">May 13, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="bicubic-texture-interpolation-using-linear-filtering/">Bicubic Texture Interpolation using Linear Filtering</a></h2>
-            <span class="publishedAt">January 6, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">November 16, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="fast-generalized-winding-numbers-in-2d/">Fast Generalized Winding Numbers in 2D</a></h2>
-            <span class="publishedAt">September 7, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">May 24, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="double-pendulum-map/">The Double Pendulum Map</a></h2>
-            <span class="publishedAt">May 14, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="malkus-waterwheel/">Malkus Waterwheel</a></h2>
-            <span class="publishedAt">February 13, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="point-cloud-point-opacity/">Selecting the Right Opacity for 2D Point Clouds</a></h2>
-            <span class="publishedAt">December 8, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="adaptive-contouring-in-fragment-shaders/">Adaptive Contouring in Fragment Shaders</a></h2>
-            <span class="publishedAt">November 21, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="integers-in-single-precision-floating-point/">Visualizing Integers in Floating-Point</a></h2>
-            <span class="publishedAt">February 9, 2020</span>
-          </div>
-          
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This notebook is a response to the question from <a href="https://benschmidt.org">Benjamin Schmidt</a>’s notebook, <a href="https://observablehq.com/@bmschmidt/dot-density-election-maps-with-webgl">Dot-density election maps with Webgl</a>. Benjamin points out in the section <strong>Dynamic sizes and opacities</strong>,</p>
+<blockquote>
+For this to look good, the opacity and size needs to change with the zoom level. See my notes on the right way to increase point sizes on zoom here.. It seems clear that opacity needs a similar strategy, but I don't yet know what that formula should be.
+</blockquote>
+<p>I’ve run into this so many times, and it’s agonizing every single time! My goal in this notebook is to hopefully just answer the question, <em>what should the point opacity be when you render a lot of points</em>?</p>
+<p>Please do note: <em>the best answer does not involve directly drawing millions of points of data at the same time</em>. It’s unlikely you’re actually processing that much information at one time, whether that’s because you’re only looking at a small subset or because you’re looking at aggregate statistics like the density. There are lots of ways to extract meaning from large datasets; this notebook just happens to concern itself with the particular case where you do, for a variety of legitimate reasons, want to directly render many points.</p>
+<p><em><strong>Update</strong></em>: Kari Lavikka has <a href="https://twitter.com/KariLavikka/status/1335928770423910400">contributed a wonderful SDF fix</a> for varying the point opacity at the edge to accomplish better antialiasing.</p>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"><div><h2 id="first-css-versus-device-pixels" tabindex="-1"><a href="#first-css-versus-device-pixels">First, CSS versus device pixels</a></h2>
+<p>First, let’s recall the difference between <a href="https://developer.mozilla.org/en-US/docs/Glossary/CSS_pixel"><em>CSS pixels</em></a> and <em>device pixels</em>. A single CSS pixel corresponds to a nicely sized single dot on a screen, as seen by a human. Until retina displays became common, there was generally no confusion and a pixel was a pixel. In a retina display with a <em>device pixel ratio</em> of 2, however, each CSS pixel corresponds to a block of  <em>device pixels</em>.</p>
+<p>Therefore, so that WebGL points have a consistent CSS pixel size for everyone, we must multiply our `gl_PointSize` by the pixel ratio (which we may select slightly differently than the true <em>device</em> pixel ratio in case we want to downsample the canvas resolution just a bit and help things render a bit more quickly).</p>
+</div></div><div id="cell-3" class="observablehq observablehq--cell"><div><h2 id="selecting-a-point-size" tabindex="-1"><a href="#selecting-a-point-size">Selecting a point size</a></h2>
+<p>We start with an arbitrary function to select a point size. The function below implements a possible function with the following rules:</p>
+<ul>
+<li>We select a point size in y-axis units.</li>
+<li>We apply a the minimum and maximum size, specified in CSS pixels</li>
+</ul>
+<p>Remember that these rules are arbitrary and the opacity function we’ll come up with below will happily use whatever size we give it.</p>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-comment">// Compute the point size, in device pixels</span>
+<span class="tok-keyword">function</span> <span class="tok-definition">pointSizeDevicePixels</span>(<span class="tok-definition">ctx</span>, <span class="tok-definition">props</span>) {
+  <span class="tok-comment">// Get the y range from the orthographic view matrix</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">yAxisRange</span> = <span class="tok-literal">2.0</span> / <span class="tok-variable">ctx</span>.<span class="tok-definition">view</span>[<span class="tok-literal">5</span>];
+
+  <span class="tok-comment">// The height as a fraction of the current y range, then converted to device pixels</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">heightFraction</span> = <span class="tok-variable">props</span>.<span class="tok-definition">pointYAxisSize</span> / <span class="tok-variable">yAxisRange</span>;
+  <span class="tok-keyword">const</span> <span class="tok-definition">deviceSize</span> = <span class="tok-variable">heightFraction</span> * <span class="tok-variable">ctx</span>.<span class="tok-definition">viewportHeight</span>;
+
+  <span class="tok-keyword">return</span> <span class="tok-variable">clamp</span>(
+    <span class="tok-variable">deviceSize</span>,
+    <span class="tok-variable">props</span>.<span class="tok-definition">pointScreenSize</span>[<span class="tok-literal">0</span>] * <span class="tok-variable">ctx</span>.<span class="tok-definition">pixelRatio</span>,
+    <span class="tok-variable">props</span>.<span class="tok-definition">pointScreenSize</span>[<span class="tok-literal">1</span>] * <span class="tok-variable">ctx</span>.<span class="tok-definition">pixelRatio</span>
+  );
+}
+
+<span class="tok-keyword">function</span> <span class="tok-definition">clamp</span>(<span class="tok-definition">value</span>, <span class="tok-definition">min</span>, <span class="tok-definition">max</span>) {
+  <span class="tok-keyword">return</span> <span class="tok-variable">Math</span>.<span class="tok-definition">max</span>(<span class="tok-variable">min</span>, <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-variable">max</span>, <span class="tok-variable">value</span>));
+}</code></pre><div id="cell-5" class="observablehq observablehq--cell"><div><h2 id="computing-the-opacity" tabindex="-1"><a href="#computing-the-opacity">Computing the opacity</a></h2>
+<p>Now we get to the fun part. If we view drawing points as depositing opacity, then in order to produce a constant look, we desire some consistent average fill of opacity per screen area. Let’s call this fill density  and measure it in units of , where  corresponds to a single full-opacity pixel.</p>
+<p>Consider a single -pixel rasterized point with opacity . We’ll assume for simplicity that all of our pixels have the same size and opacity. Then the total fill  of this point is  and the total fill  of  such rasterized points is</p>
+<p>If we have a canvas of size  device pixels, then average fill is</p>
+<p>Solving for , we obtain</p>
+<p>As we zoom in or out, consider that we see a smaller or larger fraction of the points. To account for this, we finally scale the density by the zoom factors  and  where  and  are the initial axis dimensions while  and  are the current axis dimensions. Thus our final expression for opacity is</p>
+<p>Note: One might think to simplify this using  instead of  to eliminate aspect ratio dependence. However, when the plot maintains equal scaling in data units per pixel (aspect ratio = 1), resizing the container causes the data domain to adjust. The  form correctly accounts for this and keeps opacity stable across resize operations.</p>
+<p>Finally, we do some additional bookeeping in the function below to switch over to adjusting the opacity rather than the point size once we reach the minimum point size with respect to device pixels. These adjustments work together with corresponding modifications in the vertex and fragment shaders in the <a href="#drawPoints">`drawPoints`</a> function below. The additional factors are:</p>
+<ul>
+<li>If we render circles rather than squares, adjust the opacity to account for the fact that the unit circle only covers 78% of the unit square.</li>
+<li>If the point size is smaller than the minimum permissible size, we multiply opacity by the square of the ratio between desired size and actual size so that we accumulate the correct amount of fill.</li>
+</ul>
+</div></div><div id="cell-6" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">function</span> <span class="tok-definition">pointOpacity</span>(<span class="tok-definition">ctx</span>, <span class="tok-definition">props</span>) {
+  <span class="tok-comment">// We use the above function for the point size. This means we can plug</span>
+  <span class="tok-comment">// in any function, even nonlinear, as long as we compute the opacity</span>
+  <span class="tok-comment">// correctly.</span>
+  <span class="tok-keyword">var</span> <span class="tok-definition">p</span> = <span class="tok-variable">pointSizeDevicePixels</span>(<span class="tok-variable">ctx</span>, <span class="tok-variable">props</span>);
+
+  <span class="tok-comment">// Compute the plot's x and y range from the orthographic view matrix</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">X</span> = <span class="tok-literal">2.0</span> / <span class="tok-variable">ctx</span>.<span class="tok-definition">view</span>[<span class="tok-literal">0</span>];
+  <span class="tok-keyword">const</span> <span class="tok-definition">Y</span> = <span class="tok-literal">2.0</span> / <span class="tok-variable">ctx</span>.<span class="tok-definition">view</span>[<span class="tok-literal">5</span>];
+  <span class="tok-keyword">const</span> <span class="tok-definition">X0</span> = <span class="tok-variable">props</span>.<span class="tok-definition">initialAxisDimensions</span>[<span class="tok-literal">0</span>];
+  <span class="tok-keyword">const</span> <span class="tok-definition">Y0</span> = <span class="tok-variable">props</span>.<span class="tok-definition">initialAxisDimensions</span>[<span class="tok-literal">1</span>];
+
+  <span class="tok-comment">// Viewport size, in device pixels</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">W</span> = <span class="tok-variable">ctx</span>.<span class="tok-definition">viewportWidth</span>;
+  <span class="tok-keyword">const</span> <span class="tok-definition">H</span> = <span class="tok-variable">ctx</span>.<span class="tok-definition">viewportHeight</span>;
+
+  <span class="tok-comment">// Number of points</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">N</span> = <span class="tok-variable">props</span>.<span class="tok-definition">N</span>;
+
+  <span class="tok-keyword">let</span> <span class="tok-definition">alpha</span> = ((<span class="tok-variable">props</span>.<span class="tok-definition">rho</span> * <span class="tok-variable">W</span> * <span class="tok-variable">H</span>) / (<span class="tok-variable">N</span> * <span class="tok-variable">p</span> * <span class="tok-variable">p</span>)) * (<span class="tok-variable">X0</span> / <span class="tok-variable">X</span>) * (<span class="tok-variable">Y0</span> / <span class="tok-variable">Y</span>);
+
+  <span class="tok-comment">// If it's a circle, only (pi r^2) of the unit square is filled so we</span>
+  <span class="tok-comment">// slightly increase the alpha accordingly.</span>
+  <span class="tok-variable">alpha</span> *= <span class="tok-variable">props</span>.<span class="tok-definition">circularPoints</span> ? <span class="tok-literal">1.0</span> / (<span class="tok-literal">0.25</span> * <span class="tok-variable">Math</span>.<span class="tok-definition">PI</span>) : <span class="tok-literal">1.0</span>;
+
+  <span class="tok-comment">// If the pixels shrink below the minimum permitted size, then we adjust</span>
+  <span class="tok-comment">// the opacity instead and apply clamping of the point size in the vertex</span>
+  <span class="tok-comment">// shader. Note that we add 0.5 since we slightly inrease the size of</span>
+  <span class="tok-comment">// points during rendering to accommodate SDF-style antialiasing.</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">clampedPointDeviceSize</span> =
+    <span class="tok-variable">Math</span>.<span class="tok-definition">max</span>(<span class="tok-variable">props</span>.<span class="tok-definition">minimumPointDeviceSize</span>, <span class="tok-variable">p</span>) + <span class="tok-literal">0.5</span>;
+
+  <span class="tok-comment">// We square this since we're concerned with the ratio of *areas*.</span>
+  <span class="tok-variable">alpha</span> *= <span class="tok-variable">Math</span>.<span class="tok-definition">pow</span>(<span class="tok-variable">p</span> / <span class="tok-variable">clampedPointDeviceSize</span>, <span class="tok-literal">2.0</span>);
+
+  <span class="tok-comment">// And finally, we clamp to the range [0, 1]. We should really clamp this</span>
+  <span class="tok-comment">// to 1 / precision on the low end, depending on the data type of the</span>
+  <span class="tok-comment">// destination so that we never render *nothing*.</span>
+  <span class="tok-keyword">return</span> <span class="tok-variable">clamp</span>(<span class="tok-variable">alpha</span>, <span class="tok-literal">0.0</span>, <span class="tok-literal">1.0</span>);
+}</code></pre><div id="cell-7" class="observablehq observablehq--cell"><div><h2 id="additional-considerations" tabindex="-1"><a href="#additional-considerations">Additional considerations</a></h2>
+<h3 id="data-types" tabindex="-1"><a href="#data-types">Data types</a></h3>
+<p>There are a few extra considerations. First, the data type. If we render ten million points, the opacity of each point may be tiny, perhaps just . For RGBA channels of type `uint8`, the smallest representable opacity is . If our opacities are barely representable, we expect heavy quantization of the colors at best and perhaps nothing on the screen at worst. A simple solution is to render to an offscreen `float16` or `float32` framebuffer, then transfer the colors to the screen.</p>
+<h3 id="gamma" tabindex="-1"><a href="#gamma">Gamma</a></h3>
+<p>Whether or not we render to a framebuffer with higher precision, since we’ve computed our colors in a linear colorspace by simply adding them up, we should convert to sRGB by applying gamma as a separate step. The input color from the color picker is in sRGB, so we convert it to linear for blending, then convert the accumulated result back to sRGB for display. I’ve used the standard sRGB gamma approximation of 2.2.</p>
+<h3 id="antialiasing" tabindex="-1"><a href="#antialiasing">Antialiasing</a></h3>
+<p><em><strong>Update</strong></em>: I wasn’t thinking! Thanks to <a href="https://twitter.com/KariLavikka">Kari Lavikka</a> for <a href="https://observablehq.com/@tuner/selecting-the-right-opacity-for-2d-point-clouds-with-sdf-ant">varying the opacity to accomplish antialiasing</a> and also clamping the minimum point size to a single pixel and then varying the opacity instead.</p>
+<h3 id="blending" tabindex="-1"><a href="#blending">Blending</a></h3>
+<p>I’ve used additive blending to overlay the points, with one exception. Since the points accumulate <em>toward black from white</em>, I’ve used `reverse subtract` with the color inverted so that we start with 1.0 and accumulate toward 0.0. This is equivalent to rendering the inverted image and then un-inverting at the end. <a href="https://www.andersriggelsen.dk/glblendfunc.php">This tool helps me reason through it</a>.</p>
+<h3 id="rendering-optimization" tabindex="-1"><a href="#rendering-optimization">Rendering optimization</a></h3>
+<p><a href="https://twitter.com/DimaYv/status/1335914283406856192">@dy has pointed out based on his regl-scatter2d module</a> that sorting the points, either with a space-filling curve or even just along a single axis, can also have a significant performance impact.</p>
+<h3 id="axes-and-interactions" tabindex="-1"><a href="#axes-and-interactions">Axes and interactions</a></h3>
+<p>Finally, I’ve used D3 for the linear scales and zoom interaction. This notebook uses the same zooming and Plot-based axis rendering approach as other notebooks in this collection.</p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"><div><h2 id="observations" tabindex="-1"><a href="#observations">Observations</a></h2>
+<p>Adjust the sliders below and observe that the plot maintains its appearance as you zoom or as the number of points or even window size changes. Also observe the wild colors if you zoom out with a `uint8` framebuffer.</p>
+</div></div><div id="cell-100" class="observablehq observablehq--cell"></div><div id="cell-101" class="observablehq observablehq--cell"></div><div id="cell-102" class="observablehq observablehq--cell"></div><div id="cell-103" class="observablehq observablehq--cell"></div><div id="cell-104" class="observablehq observablehq--cell"></div><div id="cell-105" class="observablehq observablehq--cell"></div><div id="cell-200" class="observablehq observablehq--cell"></div><div id="cell-300" class="observablehq observablehq--cell"><div><h2 id="web-gl-implementation" tabindex="-1"><a href="#web-gl-implementation">WebGL Implementation</a></h2>
+</div></div><div id="cell-301" class="observablehq observablehq--cell"></div><div id="cell-302" class="observablehq observablehq--cell"></div><div id="cell-303" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">GLSL_SRGB_GAMMA</span> = <span class="tok-string">`</span>
+<span class="tok-string">  const float SRGB_GAMMA = 2.2;</span>
+<span class="tok-string">  vec3 linearToSRGB(vec3 rgb) {</span>
+<span class="tok-string">    return pow(clamp(rgb, vec3(0), vec3(1)), vec3(1.0 / SRGB_GAMMA));</span>
+<span class="tok-string">  }`</span>;
+
+<span class="tok-keyword">const</span> <span class="tok-definition">copyToScreen</span> = <span class="tok-variable">regl</span>({
+  <span class="tok-definition">vert</span>: <span class="tok-string">`</span>
+<span class="tok-string">    precision highp float;</span>
+<span class="tok-string">    attribute vec2 xy;</span>
+<span class="tok-string">    void main () {</span>
+<span class="tok-string">      gl_Position = vec4(xy, 0, 1);</span>
+<span class="tok-string">    }`</span>,
+  <span class="tok-definition">frag</span>: <span class="tok-string">`</span>
+<span class="tok-string">    precision highp float;</span>
+<span class="tok-string">    uniform vec2 framebufferResolution;</span>
+<span class="tok-string">    uniform sampler2D src;</span>
+<span class="tok-string">    </span>${<span class="tok-variable">GLSL_SRGB_GAMMA</span>}
+<span class="tok-string">    void main () {</span>
+<span class="tok-string">      vec4 color = texture2D(src, gl_FragCoord.xy / framebufferResolution);</span>
+<span class="tok-string">      gl_FragColor = vec4(linearToSRGB(color.rgb), 1);</span>
+<span class="tok-string">    }`</span>,
+  <span class="tok-definition">attributes</span>: { <span class="tok-definition">xy</span>: [-<span class="tok-literal">4</span>, -<span class="tok-literal">4</span>, <span class="tok-literal">4</span>, -<span class="tok-literal">4</span>, <span class="tok-literal">0</span>, <span class="tok-literal">4</span>] },
+  <span class="tok-definition">uniforms</span>: {
+    <span class="tok-definition">src</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'src'</span>),
+    <span class="tok-definition">framebufferResolution</span>: (<span class="tok-definition">ctx</span>) =&gt; [<span class="tok-variable">ctx</span>.<span class="tok-definition">framebufferWidth</span>, <span class="tok-variable">ctx</span>.<span class="tok-definition">framebufferHeight</span>]
+  },
+  <span class="tok-definition">count</span>: <span class="tok-literal">3</span>,
+  <span class="tok-definition">depth</span>: { <span class="tok-definition">enable</span>: <span class="tok-literal">false</span> }
+});
+
+<span class="tok-keyword">function</span> <span class="tok-definition">createDrawPoints</span>(<span class="tok-definition">circularPoints</span>) {
+  <span class="tok-keyword">return</span> <span class="tok-variable">regl</span>({
+    <span class="tok-definition">vert</span>: <span class="tok-string">`</span>
+<span class="tok-string">      precision highp float;</span>
+<span class="tok-string">      attribute vec2 xy;</span>
+<span class="tok-string">      uniform float pointSize, minimumPointDeviceSize;</span>
+<span class="tok-string">      uniform mat4 view;</span>
+<span class="tok-string">      void main () {</span>
+<span class="tok-string">        gl_Position = view * vec4(xy, 0, 1);</span>
+<span class="tok-string">        gl_PointSize = max(minimumPointDeviceSize, pointSize) + 0.5;</span>
+<span class="tok-string">      }`</span>,
+    <span class="tok-definition">frag</span>: <span class="tok-string">`</span>
+<span class="tok-string">      precision highp float;</span>
+<span class="tok-string">      uniform float opacity, pointSize;</span>
+<span class="tok-string">      uniform vec3 invertedPointColor;</span>
+
+<span class="tok-string">      float linearstep(float edge0, float edge1, float x) {</span>
+<span class="tok-string">        return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);</span>
+<span class="tok-string">      }</span>
+
+<span class="tok-string">      void main () {</span>
+<span class="tok-string">        float alpha = opacity;</span>
+<span class="tok-string">        vec2 c = gl_PointCoord * 2.0 - 1.0;</span>
+<span class="tok-string">        #if </span>${<span class="tok-variable">circularPoints</span> ? <span class="tok-string">'1'</span> : <span class="tok-string">'0'</span>}
+<span class="tok-string">        float sdf = length(c);</span>
+<span class="tok-string">        #else</span>
+<span class="tok-string">        float sdf = max(abs(c.x), abs(c.y));</span>
+<span class="tok-string">        #endif</span>
+<span class="tok-string">        alpha *= linearstep(pointSize + 0.5, pointSize - 0.5, sdf * pointSize);</span>
+<span class="tok-string">        gl_FragColor = vec4(invertedPointColor, alpha);</span>
+<span class="tok-string">      }`</span>,
+    <span class="tok-definition">attributes</span>: { <span class="tok-definition">xy</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'pointsBuffer'</span>) },
+    <span class="tok-definition">blend</span>: {
+      <span class="tok-definition">enable</span>: <span class="tok-literal">true</span>,
+      <span class="tok-definition">func</span>: { <span class="tok-definition">srcRGB</span>: <span class="tok-string">'src alpha'</span>, <span class="tok-definition">dstRGB</span>: <span class="tok-literal">1</span>, <span class="tok-definition">srcAlpha</span>: <span class="tok-literal">1</span>, <span class="tok-definition">dstAlpha</span>: <span class="tok-literal">1</span> },
+      <span class="tok-definition">equation</span>: { <span class="tok-definition">rgb</span>: <span class="tok-string">'reverse subtract'</span>, <span class="tok-definition">alpha</span>: <span class="tok-string">'add'</span> }
+    },
+    <span class="tok-definition">uniforms</span>: {
+      <span class="tok-definition">view</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'view'</span>),
+      <span class="tok-definition">invertedPointColor</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'invertedPointColor'</span>),
+      <span class="tok-definition">minimumPointDeviceSize</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'minimumPointDeviceSize'</span>),
+      <span class="tok-definition">opacity</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'opacity'</span>),
+      <span class="tok-definition">pointSize</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'pointSize'</span>)
+    },
+    <span class="tok-definition">primitive</span>: <span class="tok-string">'points'</span>,
+    <span class="tok-definition">count</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'N'</span>),
+    <span class="tok-definition">depth</span>: { <span class="tok-definition">enable</span>: <span class="tok-literal">false</span> },
+    <span class="tok-definition">scissor</span>: { <span class="tok-definition">enable</span>: <span class="tok-literal">true</span>, <span class="tok-definition">box</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'scissor'</span>) },
+    <span class="tok-definition">viewport</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'viewport'</span>)
+  });
+}
+
+<span class="tok-comment">// Mutable state - all in one cell to avoid cross-cell reassignment issues</span>
+<span class="tok-keyword">let</span> <span class="tok-definition">pointsBuffer</span> = <span class="tok-variable">regl</span>.<span class="tok-definition">buffer</span>(<span class="tok-variable">generatePoints</span>(<span class="tok-variable">plotData</span>, <span class="tok-variable">N</span>, { <span class="tok-definition">x</span>: <span class="tok-variable">initialXDomain</span>, <span class="tok-definition">y</span>: <span class="tok-variable">initialYDomain</span> }));
+<span class="tok-keyword">let</span> <span class="tok-definition">fbo</span> = <span class="tok-variable">regl</span>.<span class="tok-definition">framebuffer</span>({
+  <span class="tok-definition">width</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">width</span> * <span class="tok-variable">pixelRatio</span>),
+  <span class="tok-definition">height</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">height</span> * <span class="tok-variable">pixelRatio</span>),
+  <span class="tok-definition">colorType</span>: <span class="tok-variable">colorType</span>
+});
+<span class="tok-keyword">let</span> <span class="tok-definition">drawPoints</span> = <span class="tok-variable">createDrawPoints</span>(<span class="tok-variable">circularPoints</span>);
+<span class="tok-keyword">let</span> <span class="tok-definition">currentPlotData</span> = <span class="tok-variable">plotData</span>;
+<span class="tok-keyword">let</span> <span class="tok-definition">currentN</span> = <span class="tok-variable">N</span>;
+<span class="tok-keyword">let</span> <span class="tok-definition">currentColorType</span> = <span class="tok-variable">colorType</span>;
+<span class="tok-keyword">let</span> <span class="tok-definition">currentPixelRatio</span> = <span class="tok-variable">pixelRatio</span>;
+<span class="tok-keyword">let</span> <span class="tok-definition">currentCircularPoints</span> = <span class="tok-variable">circularPoints</span>;
+
+<span class="tok-keyword">const</span> <span class="tok-definition">loop</span> = <span class="tok-variable">regl</span>.<span class="tok-definition">frame</span>(() =&gt; {
+  <span class="tok-comment">// Check for parameter changes that require recreation</span>
+  <span class="tok-keyword">if</span> (<span class="tok-variable">plotData</span> !== <span class="tok-variable">currentPlotData</span> || <span class="tok-variable">N</span> !== <span class="tok-variable">currentN</span>) {
+    <span class="tok-variable">pointsBuffer</span>.<span class="tok-definition">destroy</span>();
+    <span class="tok-variable">pointsBuffer</span> = <span class="tok-variable">regl</span>.<span class="tok-definition">buffer</span>(<span class="tok-variable">generatePoints</span>(<span class="tok-variable">plotData</span>, <span class="tok-variable">N</span>, { <span class="tok-definition">x</span>: <span class="tok-variable">initialXDomain</span>, <span class="tok-definition">y</span>: <span class="tok-variable">initialYDomain</span> }));
+    <span class="tok-variable">currentPlotData</span> = <span class="tok-variable">plotData</span>;
+    <span class="tok-variable">currentN</span> = <span class="tok-variable">N</span>;
+    <span class="tok-variable">render</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+  }
+
+  <span class="tok-keyword">if</span> (<span class="tok-variable">colorType</span> !== <span class="tok-variable">currentColorType</span> || <span class="tok-variable">pixelRatio</span> !== <span class="tok-variable">currentPixelRatio</span>) {
+    <span class="tok-variable">fbo</span>.<span class="tok-definition">destroy</span>();
+    <span class="tok-variable">fbo</span> = <span class="tok-variable">regl</span>.<span class="tok-definition">framebuffer</span>({
+      <span class="tok-definition">width</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">width</span> * <span class="tok-variable">pixelRatio</span>),
+      <span class="tok-definition">height</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">height</span> * <span class="tok-variable">pixelRatio</span>),
+      <span class="tok-definition">colorType</span>: <span class="tok-variable">colorType</span>
+    });
+    <span class="tok-variable">currentColorType</span> = <span class="tok-variable">colorType</span>;
+    <span class="tok-variable">currentPixelRatio</span> = <span class="tok-variable">pixelRatio</span>;
+    <span class="tok-variable">render</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+  }
+
+  <span class="tok-keyword">if</span> (<span class="tok-variable">circularPoints</span> !== <span class="tok-variable">currentCircularPoints</span>) {
+    <span class="tok-variable">drawPoints</span> = <span class="tok-variable">createDrawPoints</span>(<span class="tok-variable">circularPoints</span>);
+    <span class="tok-variable">currentCircularPoints</span> = <span class="tok-variable">circularPoints</span>;
+    <span class="tok-variable">render</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+  }
+
+  <span class="tok-comment">// Check if any rendering parameters changed</span>
+  <span class="tok-keyword">if</span> (<span class="tok-variable">pointYAxisSize</span> || <span class="tok-variable">rho</span> || <span class="tok-variable">pointScreenSizeMin</span> || <span class="tok-variable">pointScreenSizeMax</span> ||
+      <span class="tok-variable">minimumPointDeviceSize</span> || <span class="tok-variable">pointColor</span>) {
+    <span class="tok-variable">render</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+  }
+
+  <span class="tok-keyword">if</span> (!<span class="tok-variable">render</span>.<span class="tok-definition">dirty</span>) <span class="tok-keyword">return</span>;
+
+  <span class="tok-comment">// Resize framebuffer if needed</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">targetWidth</span> = <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">width</span> * <span class="tok-variable">pixelRatio</span>);
+  <span class="tok-keyword">const</span> <span class="tok-definition">targetHeight</span> = <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">stack</span>.<span class="tok-definition">height</span> * <span class="tok-variable">pixelRatio</span>);
+  <span class="tok-keyword">if</span> (<span class="tok-variable">fbo</span>.<span class="tok-definition">width</span> !== <span class="tok-variable">targetWidth</span> || <span class="tok-variable">fbo</span>.<span class="tok-definition">height</span> !== <span class="tok-variable">targetHeight</span>) {
+    <span class="tok-variable">fbo</span>.<span class="tok-definition">resize</span>(<span class="tok-variable">targetWidth</span>, <span class="tok-variable">targetHeight</span>);
+  }
+
+  <span class="tok-comment">// Compute viewport bounds from axes</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">viewport</span> = {
+    <span class="tok-definition">x</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-variable">axes</span>.<span class="tok-definition">xRange</span>[<span class="tok-literal">0</span>], <span class="tok-variable">axes</span>.<span class="tok-definition">xRange</span>[<span class="tok-literal">1</span>]) * <span class="tok-variable">pixelRatio</span>,
+    <span class="tok-definition">y</span>: <span class="tok-variable">targetHeight</span> - <span class="tok-variable">Math</span>.<span class="tok-definition">max</span>(<span class="tok-variable">axes</span>.<span class="tok-definition">yRange</span>[<span class="tok-literal">0</span>], <span class="tok-variable">axes</span>.<span class="tok-definition">yRange</span>[<span class="tok-literal">1</span>]) * <span class="tok-variable">pixelRatio</span>,
+    <span class="tok-definition">width</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">abs</span>(<span class="tok-variable">axes</span>.<span class="tok-definition">xRange</span>[<span class="tok-literal">1</span>] - <span class="tok-variable">axes</span>.<span class="tok-definition">xRange</span>[<span class="tok-literal">0</span>]) * <span class="tok-variable">pixelRatio</span>,
+    <span class="tok-definition">height</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">abs</span>(<span class="tok-variable">axes</span>.<span class="tok-definition">yRange</span>[<span class="tok-literal">0</span>] - <span class="tok-variable">axes</span>.<span class="tok-definition">yRange</span>[<span class="tok-literal">1</span>]) * <span class="tok-variable">pixelRatio</span>
+  };
+
+  <span class="tok-comment">// Create context object for opacity/size calculations</span>
+  <span class="tok-keyword">const</span> <span class="tok-definition">ctx</span> = {
+    <span class="tok-definition">view</span>: <span class="tok-variable">axes</span>.<span class="tok-definition">view</span>,
+    <span class="tok-definition">viewportWidth</span>: <span class="tok-variable">viewport</span>.<span class="tok-definition">width</span>,
+    <span class="tok-definition">viewportHeight</span>: <span class="tok-variable">viewport</span>.<span class="tok-definition">height</span>,
+    <span class="tok-definition">pixelRatio</span>: <span class="tok-variable">pixelRatio</span>
+  };
+
+  <span class="tok-keyword">const</span> <span class="tok-definition">props</span> = {
+    <span class="tok-definition">N</span>,
+    <span class="tok-definition">pointYAxisSize</span>,
+    <span class="tok-definition">pointScreenSize</span>: [<span class="tok-variable">pointScreenSizeMin</span>, <span class="tok-variable">pointScreenSizeMax</span>],
+    <span class="tok-definition">minimumPointDeviceSize</span>,
+    <span class="tok-definition">rho</span>,
+    <span class="tok-definition">circularPoints</span>,
+    <span class="tok-definition">initialAxisDimensions</span>
+  };
+
+  <span class="tok-keyword">const</span> <span class="tok-definition">pointColorRGB</span> = <span class="tok-variable">hexToRgb</span>(<span class="tok-variable">pointColor</span>);
+  <span class="tok-keyword">const</span> <span class="tok-definition">pointColorLinear</span> = <span class="tok-variable">sRGBToLinear</span>(<span class="tok-variable">pointColorRGB</span>);
+
+  <span class="tok-comment">// Render to framebuffer</span>
+  <span class="tok-variable">fbo</span>.<span class="tok-definition">use</span>(() =&gt; {
+    <span class="tok-variable">regl</span>.<span class="tok-definition">clear</span>({ <span class="tok-definition">color</span>: [<span class="tok-literal">1</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1</span>] });
+    <span class="tok-variable">drawPoints</span>({
+      <span class="tok-definition">view</span>: <span class="tok-variable">axes</span>.<span class="tok-definition">view</span>,
+      <span class="tok-definition">pointsBuffer</span>,
+      <span class="tok-definition">N</span>,
+      <span class="tok-definition">invertedPointColor</span>: [
+        <span class="tok-literal">1</span> - <span class="tok-variable">pointColorLinear</span>[<span class="tok-literal">0</span>],
+        <span class="tok-literal">1</span> - <span class="tok-variable">pointColorLinear</span>[<span class="tok-literal">1</span>],
+        <span class="tok-literal">1</span> - <span class="tok-variable">pointColorLinear</span>[<span class="tok-literal">2</span>]
+      ],
+      <span class="tok-definition">minimumPointDeviceSize</span>,
+      <span class="tok-definition">opacity</span>: <span class="tok-variable">pointOpacity</span>(<span class="tok-variable">ctx</span>, <span class="tok-variable">props</span>),
+      <span class="tok-definition">pointSize</span>: <span class="tok-variable">pointSizeDevicePixels</span>(<span class="tok-variable">ctx</span>, <span class="tok-variable">props</span>),
+      <span class="tok-definition">viewport</span>,
+      <span class="tok-definition">scissor</span>: <span class="tok-variable">viewport</span>
+    });
+  });
+
+  <span class="tok-comment">// Copy to screen with linear → sRGB conversion</span>
+  <span class="tok-variable">copyToScreen</span>({ <span class="tok-definition">src</span>: <span class="tok-variable">fbo</span> });
+
+  <span class="tok-variable">render</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">false</span>;
+});
+
+<span class="tok-variable">invalidation</span>.<span class="tok-definition">then</span>(() =&gt; {
+  <span class="tok-variable">loop</span>.<span class="tok-definition">cancel</span>();
+  <span class="tok-variable">pointsBuffer</span>.<span class="tok-definition">destroy</span>();
+  <span class="tok-variable">fbo</span>.<span class="tok-definition">destroy</span>();
+});</code></pre><div id="cell-400" class="observablehq observablehq--cell"></div></main>
+  </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
 

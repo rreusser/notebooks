@@ -126,9 +126,7 @@
 
     ### Gamma
 
-    In fact, whether or not we render to a framebuffer with higher precision, since we've computed our colors in a linear colorspace by simply adding them up, we should convert to sRGB by applying gamma as a separate step. I've done this below with a quick and easy power-of-2.2 approximate gamma correction function.
-
-    ***Update***: I've updated it to use explicitly-named color conversion functions to help ensure correctness. I think I've done it correctly, but overlapping colors seem much closer to what I expect if I perform the conversion backwards. I think it just reflects what's actually wide variation in point density and that reversing the gamma (i.e. 1.0 / 2.2) simply compresses the dynamic range at the expense of strict "correctness".
+    Whether or not we render to a framebuffer with higher precision, since we've computed our colors in a linear colorspace by simply adding them up, we should convert to sRGB by applying gamma as a separate step. The input color from the color picker is in sRGB, so we convert it to linear for blending, then convert the accumulated result back to sRGB for display. I've used the standard sRGB gamma approximation of 2.2.
 
     ### Antialiasing
 
@@ -269,7 +267,6 @@
     const viewofMinimumPointDeviceSize = Inputs.range([1, 4], { step: 0.1, value: 1.5, label: "Min device pixel size" });
     const viewofPointColor = Inputs.color({ value: "#87aad4", label: "Point color" });
     const viewofCircularPoints = Inputs.toggle({ value: true, label: "Circular points" });
-    const viewofGamma = Inputs.range([0.4, 2.5], { step: 0.01, value: 2.2, label: "Gamma" });
     const viewofPixelRatio = Inputs.range([0.5, devicePixelRatio], { step: 0.5, value: devicePixelRatio, label: "Pixel ratio" });
     const viewofColorType = Inputs.select(colorTypeOptions, { value: colorTypeOptions[0], label: "Framebuffer type" });
 
@@ -282,7 +279,6 @@
     const minimumPointDeviceSize = Generators.input(viewofMinimumPointDeviceSize);
     const pointColor = Generators.input(viewofPointColor);
     const circularPoints = Generators.input(viewofCircularPoints);
-    const gamma = Generators.input(viewofGamma);
     const pixelRatio = Generators.input(viewofPixelRatio);
     const colorType = Generators.input(viewofColorType);
 
@@ -296,7 +292,6 @@
       ${viewofMinimumPointDeviceSize}
       ${viewofPointColor}
       ${viewofCircularPoints}
-      ${viewofGamma}
       ${viewofPixelRatio}
       ${viewofColorType}
     </div>`);
@@ -316,11 +311,13 @@
       ] : [0, 0, 0];
     }
 
-    function approxSRGBtoLinear(rgb, gamma) {
+    const SRGB_GAMMA = 2.2;
+
+    function sRGBToLinear(rgb) {
       return [
-        Math.pow(rgb[0], gamma),
-        Math.pow(rgb[1], gamma),
-        Math.pow(rgb[2], gamma)
+        Math.pow(rgb[0], SRGB_GAMMA),
+        Math.pow(rgb[1], SRGB_GAMMA),
+        Math.pow(rgb[2], SRGB_GAMMA)
       ];
     }
   </script>
@@ -416,9 +413,10 @@
     }
   </script>
   <script id="303" type="text/x-typescript" pinned="">
-    const glslApproxLinearToSRGB = `
-      vec3 approxLinearToSRGB (vec3 rgb, float gamma) {
-        return pow(clamp(rgb, vec3(0), vec3(1)), vec3(1.0 / gamma));
+    const GLSL_SRGB_GAMMA = `
+      const float SRGB_GAMMA = 2.2;
+      vec3 linearToSRGB(vec3 rgb) {
+        return pow(clamp(rgb, vec3(0), vec3(1)), vec3(1.0 / SRGB_GAMMA));
       }`;
 
     const copyToScreen = regl({
@@ -432,15 +430,13 @@
         precision highp float;
         uniform vec2 framebufferResolution;
         uniform sampler2D src;
-        uniform float gamma;
-        ${glslApproxLinearToSRGB}
+        ${GLSL_SRGB_GAMMA}
         void main () {
           vec4 color = texture2D(src, gl_FragCoord.xy / framebufferResolution);
-          gl_FragColor = vec4(approxLinearToSRGB(color.rgb, gamma), 1);
+          gl_FragColor = vec4(linearToSRGB(color.rgb), 1);
         }`,
       attributes: { xy: [-4, -4, 4, -4, 0, 4] },
       uniforms: {
-        gamma: regl.prop('gamma'),
         src: regl.prop('src'),
         framebufferResolution: (ctx) => [ctx.framebufferWidth, ctx.framebufferHeight]
       },
@@ -544,7 +540,7 @@
 
       // Check if any rendering parameters changed
       if (pointYAxisSize || rho || pointScreenSizeMin || pointScreenSizeMax ||
-          minimumPointDeviceSize || gamma || pointColor) {
+          minimumPointDeviceSize || pointColor) {
         render.dirty = true;
       }
 
@@ -584,7 +580,7 @@
       };
 
       const pointColorRGB = hexToRgb(pointColor);
-      const pointColorLinearRGB = approxSRGBtoLinear(pointColorRGB, gamma);
+      const pointColorLinear = sRGBToLinear(pointColorRGB);
 
       // Render to framebuffer
       fbo.use(() => {
@@ -594,9 +590,9 @@
           pointsBuffer,
           N,
           invertedPointColor: [
-            1 - pointColorLinearRGB[0],
-            1 - pointColorLinearRGB[1],
-            1 - pointColorLinearRGB[2]
+            1 - pointColorLinear[0],
+            1 - pointColorLinear[1],
+            1 - pointColorLinear[2]
           ],
           minimumPointDeviceSize,
           opacity: pointOpacity(ctx, props),
@@ -606,8 +602,8 @@
         });
       });
 
-      // Copy to screen with gamma correction
-      copyToScreen({ src: fbo, gamma });
+      // Copy to screen with linear → sRGB conversion
+      copyToScreen({ src: fbo });
 
       render.dirty = false;
     });
