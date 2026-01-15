@@ -58,17 +58,18 @@
           stack.elements.plot.scale("x"),
           stack.elements.plot.scale("y")
         );
-        // Sync textureDomain to new aspect-ratio-adjusted view domain
-        textureDomain.x[0] = axes.xDomain[0];
-        textureDomain.x[1] = axes.xDomain[1];
-        textureDomain.y[0] = axes.yDomain[0];
-        textureDomain.y[1] = axes.yDomain[1];
+        // Compute extended texture domain covering full stack including margins
+        const extended = computeTextureDomain(axes.xDomain, axes.yDomain, w, h);
+        textureDomain.x[0] = extended.x[0];
+        textureDomain.x[1] = extended.x[1];
+        textureDomain.y[0] = extended.y[0];
+        textureDomain.y[1] = extended.y[1];
         // Resize FBOs and reinitialize to maintain 1:1 resolution
         resizeFBOs(w, h);
         regl.poll();
         y[0].use(() =>
           blit(() => {
-            initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2 });
+            initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2, debugCheckerboard: false });
           })
         );
         regl.dirty = true;
@@ -172,12 +173,37 @@
     // Baseline domain
     const baselineDomain = { x: [-Math.PI, Math.PI], y: [-Math.PI, Math.PI] };
 
+    // Plot margins (must match createPlot)
+    const margins = { top: 20, right: 10, bottom: 40, left: 50 };
+
+    // Compute extended texture domain that covers full stack (including margins)
+    // This ensures 1:1 pixel mapping between texture and screen
+    function computeTextureDomain(viewXDomain, viewYDomain, stackWidth, stackHeight) {
+      const viewportWidth = stackWidth - margins.left - margins.right;
+      const viewportHeight = stackHeight - margins.top - margins.bottom;
+
+      const xScale = (viewXDomain[1] - viewXDomain[0]) / viewportWidth;
+      const yScale = (viewYDomain[1] - viewYDomain[0]) / viewportHeight;
+
+      return {
+        x: [
+          viewXDomain[0] - margins.left * xScale,
+          viewXDomain[1] + margins.right * xScale
+        ],
+        y: [
+          viewYDomain[0] - margins.bottom * yScale,
+          viewYDomain[1] + margins.top * yScale
+        ]
+      };
+    }
+
     function reinitialize() {
-      // Sync textureDomain to current view domain
-      textureDomain.x[0] = axes.xDomain[0];
-      textureDomain.x[1] = axes.xDomain[1];
-      textureDomain.y[0] = axes.yDomain[0];
-      textureDomain.y[1] = axes.yDomain[1];
+      // Compute extended texture domain that covers full stack including margins
+      const extended = computeTextureDomain(axes.xDomain, axes.yDomain, stack.width, stack.height);
+      textureDomain.x[0] = extended.x[0];
+      textureDomain.x[1] = extended.x[1];
+      textureDomain.y[0] = extended.y[0];
+      textureDomain.y[1] = extended.y[1];
 
       // Resize FBOs to match viewport
       resizeFBOs(stack.width, stack.height);
@@ -186,18 +212,19 @@
       regl.poll();
       y[0].use(() =>
         blit(() => {
-          initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2 });
+          initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2, debugCheckerboard: false });
         })
       );
       regl.dirty = true;
     }
 
     function resetToBaseline() {
-      // Reset textureDomain to baseline
-      textureDomain.x[0] = baselineDomain.x[0];
-      textureDomain.x[1] = baselineDomain.x[1];
-      textureDomain.y[0] = baselineDomain.y[0];
-      textureDomain.y[1] = baselineDomain.y[1];
+      // Reset textureDomain to extended baseline (covering margins)
+      const extended = computeTextureDomain(baselineDomain.x, baselineDomain.y, stack.width, stack.height);
+      textureDomain.x[0] = extended.x[0];
+      textureDomain.x[1] = extended.x[1];
+      textureDomain.y[0] = extended.y[0];
+      textureDomain.y[1] = extended.y[1];
 
       // Reset zoom to initial domain (this will trigger onChange -> reinitialize)
       axes.reset();
@@ -235,13 +262,14 @@
     restart;
     pendulumType;
 
-    // Sync textureDomain to current view domain
-    textureDomain.x[0] = axes.xDomain[0];
-    textureDomain.x[1] = axes.xDomain[1];
-    textureDomain.y[0] = axes.yDomain[0];
-    textureDomain.y[1] = axes.yDomain[1];
+    // Compute extended texture domain covering full stack including margins
+    const extended = computeTextureDomain(axes.xDomain, axes.yDomain, stack.width, stack.height);
+    textureDomain.x[0] = extended.x[0];
+    textureDomain.x[1] = extended.x[1];
+    textureDomain.y[0] = extended.y[0];
+    textureDomain.y[1] = extended.y[1];
 
-    // Resize FBOs to match viewport
+    // Resize FBOs to match stack (full size including margins)
     resizeFBOs(stack.width, stack.height);
 
     // Must call this when calling regl outside of frame loop
@@ -250,7 +278,7 @@
     // Call initialize in blit context, writing to y[0] framebuffer
     y[0].use(() =>
       blit(() => {
-        initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2 });
+        initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2, debugCheckerboard: false });
       })
     );
 
@@ -264,7 +292,8 @@
     restart;
     m1; m2; l1; l2;
 
-    const run = ~simulate.indexOf('Simulate');
+    const DEBUG_CHECKERBOARD = false;  // DEBUG: Set to true to show static checkerboard
+    const run = !DEBUG_CHECKERBOARD && ~simulate.indexOf('Simulate');
     const showPen = ~simulate.indexOf('Show pendulum at point under mouse');
     const isCompound = pendulumType === 'Compound';
 
@@ -275,7 +304,7 @@
           regl.clear({ color: [1, 1, 1, 1] });
         }
 
-        // Step the simulation if running
+        // Step the simulation if running (disabled in debug mode)
         if (run) {
           // Run two steps from one data framebuffer to the other,
           // i.e. from y1=f(y0) and then back to y0=f(y1)
@@ -381,8 +410,17 @@
         uniform vec4 texDomain; // xMin, xMax, yMin, yMax - the domain this texture represents
         uniform bool isCompound;
         uniform float m1, m2, l1, l2;
+        uniform bool debugCheckerboard;
         #define PI ${Math.PI}
         void main () {
+          // DEBUG: Output checkerboard pattern to verify texture sizing
+          // Each checker is 8x8 texture pixels - should appear as perfect squares if 1:1
+          if (debugCheckerboard) {
+            float checker = mod(floor(gl_FragCoord.x / 8.0) + floor(gl_FragCoord.y / 8.0), 2.0);
+            gl_FragColor = vec4(vec3(checker), 1.0);
+            return;
+          }
+
           // UV position in texture [0, 1]
           vec2 uv = gl_FragCoord.xy / resolution;
 
@@ -425,6 +463,7 @@
         omega0: (ctx, props) => [props.omega0_0, props.omega0_1],
         texDomain: () => [textureDomain.x[0], textureDomain.x[1], textureDomain.y[0], textureDomain.y[1]],
         isCompound: (ctx, props) => props.pendulumType === 'Compound',
+        debugCheckerboard: regl.prop('debugCheckerboard'),
         m1: regl.prop('m1'),
         m2: regl.prop('m2'),
         l1: regl.prop('l1'),
@@ -552,6 +591,7 @@
         uniform vec4 axesViewport; // x, y, width, height in pixels
         uniform vec4 viewDomain;   // current view: xMin, xMax, yMin, yMax
         uniform vec4 texDomain;    // texture domain: xMin, xMax, yMin, yMax
+        uniform bool debugPassthrough;
         #define PI ${Math.PI}
         #define TWOPI ${2 * Math.PI}
 
@@ -581,6 +621,12 @@
           // Sample the state at this pixel
           vec4 state = texture2D(y, uv);
 
+          // DEBUG: Pass through raw texture value for checkerboard testing
+          if (debugPassthrough) {
+            gl_FragColor = vec4(state.rgb, 1.0);
+            return;
+          }
+
           // Color it by the projection of the 4D state to 2D (theta1, theta2):
           gl_FragColor = vec4(colormap(state.xy), 1);
         }`,
@@ -591,7 +637,8 @@
           return [vp.x, vp.y, vp.width, vp.height];
         },
         viewDomain: () => [axes.xDomain[0], axes.xDomain[1], axes.yDomain[0], axes.yDomain[1]],
-        texDomain: () => [textureDomain.x[0], textureDomain.x[1], textureDomain.y[0], textureDomain.y[1]]
+        texDomain: () => [textureDomain.x[0], textureDomain.x[1], textureDomain.y[0], textureDomain.y[1]],
+        debugPassthrough: false  // DEBUG: Set to true to see raw checkerboard
       },
       scissor: { enable: true, box: reglAxesViewport(axes) },
       viewport: reglAxesViewport(axes)
@@ -628,6 +675,8 @@
       vec2 a = w1.x * p0 + w1.y * p1 + w1.z * p2;
       vec2 b = w2.x * p0 + w2.y * p1 + w2.z * p2;
 
+      // No aspect correction needed - we use a square viewport for the pendulum
+
       // Normal and tangential vectors
       vec2 t = normalize(b - a);
       vec2 n = vec2(-t.y, t.x);
@@ -653,14 +702,24 @@
         w1: regl.prop('w1'),
         w2: regl.prop('w2'),
         hover: () => mouseHover.pt,
-        lineWidth: ctx => (4.0 * ctx.pixelRatio) / ctx.framebufferWidth,
+        lineWidth: ctx => (4.0 * ctx.pixelRatio) / ctx.viewportWidth,
         resolution: ctx => [ctx.framebufferWidth, ctx.framebufferHeight],
         l1: regl.prop('l1'),
         l2: regl.prop('l2')
       },
       depth: { enable: false },
       scissor: { enable: true, box: reglAxesViewport(axes) },
-      viewport: reglAxesViewport(axes),
+      // Use a square viewport centered in the axes viewport
+      viewport: (ctx) => {
+        const axesVp = reglAxesViewport(axes)(ctx);
+        const size = Math.min(axesVp.width, axesVp.height);
+        return {
+          x: axesVp.x + (axesVp.width - size) / 2,
+          y: axesVp.y + (axesVp.height - size) / 2,
+          width: size,
+          height: size
+        };
+      },
       primitive: 'triangle strip',
       count: 4
     })
@@ -668,8 +727,8 @@
   <script id="889" type="module">
     const mouseHover = { pt: [0, 0], active: false };
 
-    // Set up mouse tracking on the regl canvas
-    const canvas = stack.elements.regl;
+    // Set up mouse tracking on the SVG layer (topmost interactive element)
+    const canvas = stack.elements.svg;
     function onPointerMove(event) {
       // Convert pixel coordinates to texture coordinates [0, 1]
       const rect = canvas.getBoundingClientRect();
