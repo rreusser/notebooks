@@ -14,6 +14,7 @@
       width: Math.min(width, 640),
       height: Math.min(640, width),
       toggleOffset: [-3, -14],
+      controls: '.magnetic-pendulum-controls',
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
@@ -25,31 +26,40 @@
     }));
   </script>
   <script id="30" type="text/x-typescript">
-    const h = view(Inputs.range([1e-3 * 0, 1], {
+    const controlsContainer = html`<div class="magnetic-pendulum-controls"></div>`;
+
+    function ctrl(input) {
+      controlsContainer.appendChild(input);
+      return Generators.input(input);
+    }
+
+    const h = ctrl(Inputs.range([1e-3 * 0, 1], {
       label: "pendulum height, h",
       value: 0.5
     }))
-    const b = view(Inputs.range([1e-8, 1], { label: "friction", value: 0.2 }))
-    const tolerance = view(Inputs.range([1e-6, 1e-2], {
+    const b = ctrl(Inputs.range([1e-8, 1], { label: "friction", value: 0.2 }))
+    const tolerance = ctrl(Inputs.range([1e-6, 1e-2], {
       transform: Math.log,
       label: "tolerance",
       value: 3e-4
     }))
-    const steps = view(Inputs.range([0, 200], {
+    const steps = ctrl(Inputs.range([0, 200], {
       label: "integration steps",
       value: 120,
       step: 1
     }))
-    const N = view(Inputs.range([2, 10], {
+    const N = ctrl(Inputs.range([2, 10], {
       label: "Magnet count",
       value: 3,
       step: 1
     }))
-    const opts = view(Inputs.checkbox([
+    const opts = ctrl(Inputs.checkbox([
       "Draw trajectory",
     ], {
       value: ["Draw trajectory"]
     }));
+
+    display(controlsContainer);
   </script>
   <script id="9" type="text/markdown">
     The plot above represents a top-down view of a chaotic [magnetic pendulum](https://simple.wikipedia.org/wiki/Magnetic_pendulum). The black dots represent attracting magnets. Click and drag to move them. Each point on the plot represents the starting position of a pendulum. A pendulum is released from rest, and a bit of friction ensures it eventually comes to rest at one of the magnets. Color indicates which.

@@ -13,6 +13,33 @@
     - **Element stack**: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and persists resources like WebGL contexts across reactive updates.
     - **Zoomable axes**: A rendering-agnostic zoom controller built on d3.zoom. It tracks the current view as orthographic matrices and exposes d3 scales for coordinate conversion. When the view changes, it notifies listeners so each layer can update accordingly.
     - **Expandable wrapper**: The plot can be expanded to fill most of the viewport by clicking the toggle button in the corner.
+    - **Controls**: Adjust shading opacity, shading contrast, and grid intensity using the sliders below. Controls are available in a floating panel when expanded.
+  </script>
+  <script id="42" type="text/x-typescript">
+    const controlsContainer = html`<div class="plot-controls"></div>`;
+
+    function ctrl(input) {
+      controlsContainer.appendChild(input);
+      return Generators.input(input);
+    }
+
+    const shadingOpacity = ctrl(Inputs.range([0, 1], {
+      label: "Shading opacity",
+      value: 1,
+      step: 0.01
+    }));
+    const shadingContrast = ctrl(Inputs.range([0, 1], {
+      label: "Shading contrast",
+      value: 0.35,
+      step: 0.01
+    }));
+    const gridIntensity = ctrl(Inputs.range([0, 1], {
+      label: "Grid intensity",
+      value: 0.1,
+      step: 0.01
+    }));
+
+    display(controlsContainer);
   </script>
   <script id="4" type="text/x-typescript" pinned="">
     const figure = html`<figure>
@@ -24,6 +51,7 @@
       width: Math.min(width, 640),
       height: Math.min(480, width),
       toggleOffset: [-6, -33],
+      controls: '.plot-controls',
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
@@ -33,6 +61,17 @@
         regl.dirty = true;
       }
     }));
+  </script>
+  <script id="6" type="text/x-typescript">
+    // Stable params object for use in cells that shouldn't re-run on control changes
+    const params = { shadingOpacity: 1, gridIntensity: 0.1, shadingContrast: 0.35 };
+  </script>
+  <script id="17" type="text/x-typescript">
+    // Update params when controls change
+    params.shadingOpacity = shadingOpacity;
+    params.gridIntensity = gridIntensity;
+    params.shadingContrast = shadingContrast;
+    regl.dirty = true;
   </script>
   <script id="16" type="text/markdown">
     The code above performs final display of the figure, wrapping it in an expandable container.
@@ -248,6 +287,7 @@
         varying vec2 z;
         uniform vec2 a, m, b;
         uniform float pixelRatio;
+        uniform float uShadingOpacity, uGridIntensity, uShadingContrast;
 
         vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }
         vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }
@@ -258,17 +298,19 @@
         void main () {
           vec2 w = f(z);
 
-          gl_FragColor = domainColoring(
+          vec4 color = domainColoring(
             vec4(w, fwidth(w) * pixelRatio),
             vec2(2.0, 2.0),    // steps
             vec2(0.1),         // scale
-            vec2(0.1, 0.1),    // gridOpacity
-            vec2(0.35, 0.15),  // shadingOpacity
+            vec2(uGridIntensity),         // gridOpacity
+            vec2(uShadingOpacity * uShadingContrast),  // shadingOpacity
             0.25,              // lineWidth
             0.4,               // lineFeather
-            vec3(0),           // gridColor
+            vec3(0.0),         // gridColor
             4.0                // contrastPower
           );
+
+          gl_FragColor = vec4(color.rgb, 1.0);
         }`,
       uniforms: {
         viewInverse: regl.prop('viewInverse'),
@@ -276,6 +318,9 @@
         a: regl.prop('a'),
         m: regl.prop('m'),
         b: regl.prop('b'),
+        uShadingOpacity: () => params.shadingOpacity,
+        uGridIntensity: () => params.gridIntensity,
+        uShadingContrast: () => params.shadingContrast,
       },
       attributes: { uv: [-4, -4, 4, -4, 0, 4] },
       depth: { enable: false },

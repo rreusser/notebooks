@@ -159,6 +159,7 @@
       width: Math.min(width, 640),
       height: Math.min(480, width),
       toggleOffset: [-6, -33],
+      controls: '#point-cloud-controls',
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
@@ -282,7 +283,7 @@
     const pixelRatio = Generators.input(viewofPixelRatio);
     const colorType = Generators.input(viewofColorType);
 
-    display(html`<div>
+    display(html`<div id="point-cloud-controls">
       ${viewofPlotData}
       ${viewofN}
       ${viewofRho}

@@ -1507,7 +1507,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Zoomable Multi-Layer Plots in Notebook Kit</title>  <script type="module" crossorigin src="/notebooks/assets/index-B1P7zNT8.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Zoomable Multi-Layer Plots in Notebook Kit</title>  <script type="module" crossorigin src="/notebooks/assets/index-DibYfCKL.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
   <link rel="modulepreload" crossorigin href="/notebooks/assets/comments-I77vOiCB.js">
 </head>
@@ -1542,8 +1542,9 @@ main h6 {
 <li><strong>Element stack</strong>: A small helper that manages multiple absolutely positioned layers within a container. Each layer can be a canvas, SVG, or any DOM element. The stack handles resizing all layers together and persists resources like WebGL contexts across reactive updates.</li>
 <li><strong>Zoomable axes</strong>: A rendering-agnostic zoom controller built on d3.zoom. It tracks the current view as orthographic matrices and exposes d3 scales for coordinate conversion. When the view changes, it notifies listeners so each layer can update accordingly.</li>
 <li><strong>Expandable wrapper</strong>: The plot can be expanded to fill most of the viewport by clicking the toggle button in the corner.</li>
+<li><strong>Controls</strong>: Adjust shading opacity, shading contrast, and grid intensity using the sliders below. Controls are available in a floating panel when expanded.</li>
 </ul>
-</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">figure</span> = <span class="tok-variable">html</span><span class="tok-string">`&lt;figure&gt;</span>
+</div></div><div id="cell-42" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">const</span> <span class="tok-definition">figure</span> = <span class="tok-variable">html</span><span class="tok-string">`&lt;figure&gt;</span>
 <span class="tok-string">  </span>${<span class="tok-variable">stack</span>.<span class="tok-definition">element</span>}
 <span class="tok-string">  &lt;figcaption&gt;Drag points to adjust values. Use mouse wheel to zoom, drag to pan.&lt;/figcaption&gt;</span>
 <span class="tok-string">&lt;/figure&gt;`</span>;
@@ -1552,6 +1553,7 @@ main h6 {
   <span class="tok-definition">width</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-variable">width</span>, <span class="tok-literal">640</span>),
   <span class="tok-definition">height</span>: <span class="tok-variable">Math</span>.<span class="tok-definition">min</span>(<span class="tok-literal">480</span>, <span class="tok-variable">width</span>),
   <span class="tok-definition">toggleOffset</span>: [-<span class="tok-literal">6</span>, -<span class="tok-literal">33</span>],
+  <span class="tok-definition">controls</span>: <span class="tok-string">'.plot-controls'</span>,
   <span class="tok-definition">onResize</span>(<span class="tok-definition">el</span>, <span class="tok-definition">w</span>, <span class="tok-definition">h</span>) {
     <span class="tok-variable">stack</span>.<span class="tok-definition">resize</span>(<span class="tok-variable">w</span>, <span class="tok-variable">h</span>);
     <span class="tok-variable">axes</span>.<span class="tok-definition">updateScales</span>(
@@ -1560,7 +1562,7 @@ main h6 {
     );
     <span class="tok-variable">regl</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
   }
-}));</code></pre><div id="cell-16" class="observablehq observablehq--cell"><div><p>The code above performs final display of the figure, wrapping it in an expandable container.</p>
+}));</code></pre><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"><div><p>The code above performs final display of the figure, wrapping it in an expandable container.</p>
 </div></div><div id="cell-40" class="observablehq observablehq--cell"><div><h2 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h2>
 </div></div><div id="cell-41" class="observablehq observablehq--cell"><div><p>The rest of this notebook walks through the configuration. This notebook doesn’t contain all of the code. The imports below pull in some modules and helper code used throughout.</p>
 </div></div><div id="cell-39" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-keyword">import</span> <span class="tok-definition">createREGL</span> <span class="tok-keyword">from</span> <span class="tok-string">'npm:regl@2.1.1'</span>
@@ -1723,6 +1725,7 @@ main h6 {
 <span class="tok-string">    varying vec2 z;</span>
 <span class="tok-string">    uniform vec2 a, m, b;</span>
 <span class="tok-string">    uniform float pixelRatio;</span>
+<span class="tok-string">    uniform float uShadingOpacity, uGridIntensity, uShadingContrast;</span>
 
 <span class="tok-string">    vec2 cmul(vec2 a, vec2 b) { return vec2(a.x * b.x - a.y * b.y, a.x * b.y + a.y * b.x); }</span>
 <span class="tok-string">    vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x * b.x + a.y * b.y, a.y * b.x - a.x * b.y) / dot(b, b); }</span>
@@ -1733,17 +1736,19 @@ main h6 {
 <span class="tok-string">    void main () {</span>
 <span class="tok-string">      vec2 w = f(z);</span>
 
-<span class="tok-string">      gl_FragColor = domainColoring(</span>
+<span class="tok-string">      vec4 color = domainColoring(</span>
 <span class="tok-string">        vec4(w, fwidth(w) * pixelRatio),</span>
 <span class="tok-string">        vec2(2.0, 2.0),    // steps</span>
 <span class="tok-string">        vec2(0.1),         // scale</span>
-<span class="tok-string">        vec2(0.1, 0.1),    // gridOpacity</span>
-<span class="tok-string">        vec2(0.35, 0.15),  // shadingOpacity</span>
+<span class="tok-string">        vec2(uGridIntensity),         // gridOpacity</span>
+<span class="tok-string">        vec2(uShadingOpacity * uShadingContrast),  // shadingOpacity</span>
 <span class="tok-string">        0.25,              // lineWidth</span>
 <span class="tok-string">        0.4,               // lineFeather</span>
-<span class="tok-string">        vec3(0),           // gridColor</span>
+<span class="tok-string">        vec3(0.0),         // gridColor</span>
 <span class="tok-string">        4.0                // contrastPower</span>
 <span class="tok-string">      );</span>
+
+<span class="tok-string">      gl_FragColor = vec4(color.rgb, 1.0);</span>
 <span class="tok-string">    }`</span>,
   <span class="tok-definition">uniforms</span>: {
     <span class="tok-definition">viewInverse</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'viewInverse'</span>),
@@ -1751,6 +1756,9 @@ main h6 {
     <span class="tok-definition">a</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'a'</span>),
     <span class="tok-definition">m</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'m'</span>),
     <span class="tok-definition">b</span>: <span class="tok-variable">regl</span>.<span class="tok-definition">prop</span>(<span class="tok-string">'b'</span>),
+    <span class="tok-definition">uShadingOpacity</span>: () =&gt; <span class="tok-variable">params</span>.<span class="tok-definition">shadingOpacity</span>,
+    <span class="tok-definition">uGridIntensity</span>: () =&gt; <span class="tok-variable">params</span>.<span class="tok-definition">gridIntensity</span>,
+    <span class="tok-definition">uShadingContrast</span>: () =&gt; <span class="tok-variable">params</span>.<span class="tok-definition">shadingContrast</span>,
   },
   <span class="tok-definition">attributes</span>: { <span class="tok-definition">uv</span>: [-<span class="tok-literal">4</span>, -<span class="tok-literal">4</span>, <span class="tok-literal">4</span>, -<span class="tok-literal">4</span>, <span class="tok-literal">0</span>, <span class="tok-literal">4</span>] },
   <span class="tok-definition">depth</span>: { <span class="tok-definition">enable</span>: <span class="tok-literal">false</span> },

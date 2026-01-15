@@ -36,13 +36,7 @@
       display(html`<p style="color:#a00">Warning! This simulation is using half-float precision and as a result won't be accurate. Try a device which supports the floating point WebGL textures for better results.</p>`);
     }
   </script>
-  <script id="571" type="module">
-    const pendulumType = view(Inputs.radio(['Simple', 'Compound'], {
-      label: 'Pendulum type',
-      value: 'Compound'
-    }));
-  </script>
-    <script id="289" type="module">
+  <script id="289" type="module">
     const figure = html`<figure>
       ${stack.element}
       <figcaption>Hover to view pendulum. Scroll to zoom, drag to pan.</figcaption>
@@ -52,6 +46,7 @@
       width: Math.min(width, 640),
       height: Math.min(width, 640),
       toggleOffset: [-6, -33],
+      controls: '.pendulum-controls',
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
@@ -69,64 +64,85 @@
         regl.poll();
         y[0].use(() =>
           blit(() => {
-            initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2, debugCheckerboard: false });
+            initialize({ ...params, debugCheckerboard: false });
           })
         );
         regl.dirty = true;
       }
     }));
   </script>
-  <script id="917" type="text/x-typescript">
-    const simulate = view(Inputs.checkbox(['Simulate', 'Show pendulum at point under mouse'], {
-      value: ['Simulate', 'Show pendulum at point under mouse']
-    }));
-  </script>
-  <script id="916" type="text/x-typescript">
-    const restart = view(Inputs.button('Restart'));
-  </script>
-  <script id="resetView" type="text/x-typescript">
-    const resetView = view(Inputs.button('Reset View'));
-  </script>
   <script id="914" type="text/x-typescript">
-    const m1 = view(Inputs.range([0.1, 1], {
+    const controlsContainer = html`<div class="pendulum-controls"></div>`;
+
+    function ctrl(input) {
+      controlsContainer.appendChild(input);
+      return Generators.input(input);
+    }
+
+    const m1 = ctrl(Inputs.range([0.1, 1], {
       label: 'Mass 1 (m₁)',
       value: 1,
       step: 0.01,
       transform: Math.log
     }));
-    const m2 = view(Inputs.range([0.1, 1], {
+    const m2 = ctrl(Inputs.range([0.1, 1], {
       label: 'Mass 2 (m₂)',
       value: 1,
       step: 0.01,
       transform: Math.log
     }));
-    const l1 = view(Inputs.range([0.1, 1], {
+    const l1 = ctrl(Inputs.range([0.1, 1], {
       label: 'Length 1 (l₁)',
       value: 1,
       step: 0.01,
       transform: Math.log
     }));
-    const l2 = view(Inputs.range([0.1, 1], {
+    const l2 = ctrl(Inputs.range([0.1, 1], {
       label: 'Length 2 (l₂)',
       value: 1,
       step: 0.01,
       transform: Math.log
     }));
-    const omega0_0 = view(Inputs.range([-2, 2], {
+    const omega0_0 = ctrl(Inputs.range([-2, 2], {
       label: 'Initial angular velocity of arm 1',
       value: 0
     }));
-    const omega0_1 = view(Inputs.range([-2, 2], {
+    const omega0_1 = ctrl(Inputs.range([-2, 2], {
       label: 'Initial angular velocity of arm 2',
       value: 0
     }));
-    const dt = view(Inputs.range([0.001, 0.1], {
+    const dt = ctrl(Inputs.range([0.001, 0.1], {
       label: 'Time step',
       value: 0.03,
       transform: Math.log
     }));
+    const pendulumType = ctrl(Inputs.radio(['Simple', 'Compound'], {
+      label: 'Pendulum type',
+      value: 'Compound'
+    }));
+    const simulate = ctrl(Inputs.checkbox(['Simulate', 'Show pendulum at point under mouse'], {
+      value: ['Simulate', 'Show pendulum at point under mouse']
+    }));
+    const resetView = ctrl(Inputs.button('Reset View'));
+    const restart = ctrl(Inputs.button('Restart'));
+
+    display(controlsContainer);
   </script>
-  <script id="createPlot" type="module">
+  <script id="915" type="module">
+    // Stable params object - modified in place to avoid triggering reactive updates
+    const params = { omega0_0: 0, omega0_1: 0, pendulumType: 'Compound', m1: 1, m2: 1, l1: 1, l2: 1 };
+  </script>
+  <script id="916" type="module">
+    // Update params when controls change (this cell re-runs, but params object reference stays stable)
+    params.omega0_0 = omega0_0;
+    params.omega0_1 = omega0_1;
+    params.pendulumType = pendulumType;
+    params.m1 = m1;
+    params.m2 = m2;
+    params.l1 = l1;
+    params.l2 = l2;
+  </script>
+  <script id="919" type="module">
     function createPlot(width, height, xDomain = [-Math.PI, Math.PI], yDomain = [-Math.PI, Math.PI]) {
       return Plot.plot({
         width,
@@ -142,7 +158,7 @@
       });
     }
   </script>
-  <script id="stack" type="module">
+  <script id="920" type="module">
     const stack = createElementStack({
       layers: [{
         id: 'regl',
@@ -167,7 +183,7 @@
   <script id="5" type="module">
     const regl = stack.elements.regl.value;
   </script>
-  <script id="axes" type="module">
+  <script id="921" type="module">
     let reinitTimeout = null;
 
     // Baseline domain
@@ -212,7 +228,7 @@
       regl.poll();
       y[0].use(() =>
         blit(() => {
-          initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2, debugCheckerboard: false });
+          initialize({ ...params, debugCheckerboard: false });
         })
       );
       regl.dirty = true;
@@ -250,7 +266,7 @@
       }
     });
   </script>
-  <script id="handleResetView" type="module">
+  <script id="922" type="module">
     // React to reset view button
     resetView;
     if (resetView > 0) {
@@ -259,9 +275,12 @@
   </script>
   <script id="158" type="module">
     // The main simulation and initialization setup.
-    // Trigger reinitialization when 'restart' clicked or pendulum type changes
+    // Trigger reinitialization when controls change
     restart;
     pendulumType;
+    omega0_0;
+    omega0_1;
+    m1; m2; l1; l2;
 
     // Compute extended texture domain covering full stack including margins
     const extended = computeTextureDomain(axes.xDomain, axes.yDomain, stack.width, stack.height);
@@ -279,7 +298,7 @@
     // Call initialize in blit context, writing to y[0] framebuffer
     y[0].use(() =>
       blit(() => {
-        initialize({ omega0_0, omega0_1, pendulumType, m1, m2, l1, l2, debugCheckerboard: false });
+        initialize({ ...params, debugCheckerboard: false });
       })
     );
 
@@ -335,7 +354,7 @@
       ? 'half float'
       : 'uint8'
   </script>
-  <script id="textureDomain" type="module">
+  <script id="923" type="module">
     // Track the world-space domain that the texture currently represents
     // This starts at the full range and updates after each reinitialize
     const textureDomain = {
@@ -899,12 +918,12 @@
     });
 
   </script>
-  <script id="cursorStyle" type="text/html">
+  <script id="924" type="text/html">
     <style>
       .crosshair-cursor { cursor: crosshair !important; }
     </style>
   </script>
-  <script id="cursorShowPen" type="module">
+  <script id="925" type="module">
     // Reactively update cursor when simulate changes
     const svgEl = stack.elements.svg;
     if (simulate.includes('Show pendulum at point under mouse')) {
@@ -924,7 +943,7 @@
       return div;
     }
   </script>
-    <script id="49" type="module">
+  <script id="49" type="module">
     const pixelRatio = window.devicePixelRatio;
   </script>
   <script id="890" type="module">
@@ -945,13 +964,6 @@
     function lerp(a, b, t) {
       return a + t * (b - a);
     }
-  </script>
-  <script id="651" type="text/html">
-    <style>
-    input[type=range] {
-      width: 500px;
-    }
-    </style>
   </script>
   <script id="906" type="text/markdown">
     <h2 id="appendix">Appendix: Derivations of Equations of Motion</h2>

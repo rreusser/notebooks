@@ -74,6 +74,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       label: html`Aspect ratio, ${tex`L_x / L_y`}`
     });
     const aspectRatio = view(aspectRatioInput);
+
     const nInput = Inputs.range([1, 8], {
       step: 1,
       value: 1,
@@ -84,8 +85,17 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
   <script id="6" type="module">
     const simulateInput = Inputs.toggle({ label: 'Simulate', value: ['Simulate'] });
     const simulate = view(simulateInput);
+
     const restartInput = Inputs.button('Restart');
     const restart = view(restartInput);
+
+    display(html`<div id="ks-controls">
+      ${LxInput}
+      ${aspectRatioInput}
+      ${nInput}
+      ${simulateInput}
+      ${restartInput}
+    </div>`);
   </script>
   <script id="7" type="module">
     // Set up zoomable axes using the plot's scales
@@ -117,6 +127,7 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
       width: Math.min(width, 640),
       height: Math.min(width, 640),
       toggleOffset: [-6, -15],
+      controls: '#ks-controls',
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
@@ -517,10 +528,10 @@ Based on the config below, we solve the problem in the doubly periodic domain, $
     });
   </script>
   <script id="26" type="module">
-    // Re-render when width, aspectRatio, or Lx changes
+    // Re-render when aspectRatio or Lx changes
     // Also show canvas after initialization completes
-    width; aspectRatio; Lx; initComplete;
-    stack.resize(Math.min(width, 640), Math.min(width, 640));
+    // Note: stack.resize() is handled by expandable's onResize callback
+    aspectRatio; Lx; initComplete;
     // Update plot with new domains
     const newPlot = createPlotElement(stack.width, stack.height, axes.xDomain, axes.yDomain, Lx, Lx / aspectRatio);
     stack.elements.plot.replaceWith(newPlot);

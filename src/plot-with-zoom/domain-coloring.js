@@ -201,7 +201,11 @@ vec4 domainColoring (vec4 f_df,
 
   float shading = 0.5 + (shadingOpacity.y * (0.5 - phaseShading)) + shadingOpacity.x * (magnitudeShading - 0.5);
 
-  vec3 result = rainbow(vec2(carg / ${phaseMultiplier.toFixed(1)} - 0.25, shading)).rgb;
+  vec3 result = mix(
+    vec3(1),
+    rainbow(vec2(carg / ${phaseMultiplier.toFixed(1)} - 0.25, shading)).rgb,
+    uShadingOpacity
+  );
   
   result = mix(gridColor, result, grid);
 

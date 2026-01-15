@@ -7,12 +7,24 @@
  * @param {number} options.height - Default height when collapsed
  * @param {number[]} [options.toggleOffset=[8,8]] - Offset [right, top] for the toggle button
  * @param {Function} [options.onResize] - Optional callback when dimensions change: (content, width, height, expanded) => void
+ * @param {string} [options.controls] - CSS selector for controls element that floats over the expanded content
  * @returns {HTMLElement} The expandable container
  */
-export function expandable(content, { width, height, toggleOffset = [8, 8], onResize }) {
+export function expandable(content, { width, height, toggleOffset = [8, 8], onResize, controls }) {
   let expanded = false;
   let currentWidth = width;
   let currentHeight = height;
+  let controlsPanelExpanded = false;
+  let controlsPanelPosition = { x: 16, y: 16 };
+  let floatingPanel = null;
+  let isDragging = false;
+  let dragStart = { x: 0, y: 0 };
+
+  // Track original location of controls for restoration
+  let controlsEl = null;
+  let controlsOriginalParent = null;
+  let controlsOriginalNextSibling = null;
+  let controlsPlaceholder = null;
 
   // Outer container maintains document flow
   const container = document.createElement('div');
@@ -47,6 +59,181 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     z-index: 9998;
   `;
   overlay.addEventListener('click', () => collapse());
+
+  // Create floating panel for controls (created once, reused)
+  if (controls) {
+    floatingPanel = document.createElement('div');
+    floatingPanel.className = 'expandable-controls-panel';
+    floatingPanel.style.cssText = `display: none;`;
+
+    // Draggable header
+    const panelHeader = document.createElement('div');
+    panelHeader.className = 'expandable-controls-header';
+    panelHeader.style.cssText = `
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 5px 10px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #e0e0e0;
+      cursor: move;
+      user-select: none;
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      color: #555;
+    `;
+
+    const panelTitle = document.createElement('span');
+    panelTitle.textContent = 'Controls';
+
+    const panelToggle = document.createElement('button');
+    panelToggle.className = 'expandable-controls-toggle';
+    panelToggle.innerHTML = '▼';
+    panelToggle.title = 'Collapse controls';
+    panelToggle.style.cssText = `
+      border: none;
+      background: none;
+      cursor: pointer;
+      font-size: 12px;
+      color: #666;
+      padding: 4px 8px;
+      border-radius: 4px;
+      transition: background 0.15s ease;
+    `;
+    panelToggle.addEventListener('mouseenter', () => {
+      panelToggle.style.background = 'rgba(0,0,0,0.1)';
+    });
+    panelToggle.addEventListener('mouseleave', () => {
+      panelToggle.style.background = 'none';
+    });
+    panelToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      toggleControlsPanel();
+    });
+
+    panelHeader.appendChild(panelTitle);
+    panelHeader.appendChild(panelToggle);
+
+    // Content area
+    const panelContent = document.createElement('div');
+    panelContent.className = 'expandable-controls-content';
+    panelContent.style.cssText = `
+      padding: 12px;
+      overflow-y: auto;
+      max-height: calc(100vh - 200px);
+    `;
+
+    floatingPanel.appendChild(panelHeader);
+    floatingPanel.appendChild(panelContent);
+
+    // Placeholder to maintain space when controls are moved
+    controlsPlaceholder = document.createElement('div');
+    controlsPlaceholder.className = 'expandable-controls-placeholder';
+    controlsPlaceholder.style.cssText = `display: none;`;
+
+    // Drag functionality
+    panelHeader.addEventListener('mousedown', (e) => {
+      if (e.target === panelToggle) return;
+      isDragging = true;
+      dragStart.x = e.clientX - controlsPanelPosition.x;
+      dragStart.y = e.clientY - controlsPanelPosition.y;
+      panelHeader.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      controlsPanelPosition.x = e.clientX - dragStart.x;
+      controlsPanelPosition.y = e.clientY - dragStart.y;
+      clampPanelPosition();
+      updatePanelPosition();
+    });
+
+    document.addEventListener('mouseup', () => {
+      if (isDragging) {
+        isDragging = false;
+        const header = floatingPanel?.querySelector('.expandable-controls-header');
+        if (header) header.style.cursor = 'move';
+      }
+    });
+
+    // Touch support
+    panelHeader.addEventListener('touchstart', (e) => {
+      if (e.target === panelToggle) return;
+      isDragging = true;
+      const touch = e.touches[0];
+      dragStart.x = touch.clientX - controlsPanelPosition.x;
+      dragStart.y = touch.clientY - controlsPanelPosition.y;
+      e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging) return;
+      const touch = e.touches[0];
+      controlsPanelPosition.x = touch.clientX - dragStart.x;
+      controlsPanelPosition.y = touch.clientY - dragStart.y;
+      clampPanelPosition();
+      updatePanelPosition();
+    }, { passive: true });
+
+    document.addEventListener('touchend', () => {
+      isDragging = false;
+    });
+  }
+
+  function clampPanelPosition() {
+    if (!floatingPanel) return;
+    const rect = floatingPanel.getBoundingClientRect();
+    controlsPanelPosition.x = Math.max(0, Math.min(controlsPanelPosition.x, window.innerWidth - rect.width));
+    controlsPanelPosition.y = Math.max(0, Math.min(controlsPanelPosition.y, window.innerHeight - rect.height));
+  }
+
+  function updatePanelPosition() {
+    if (floatingPanel && expanded) {
+      floatingPanel.style.left = `${controlsPanelPosition.x}px`;
+      floatingPanel.style.top = `${controlsPanelPosition.y}px`;
+    }
+  }
+
+  function toggleControlsPanel() {
+    controlsPanelExpanded = !controlsPanelExpanded;
+    if (!floatingPanel) return;
+    const content = floatingPanel.querySelector('.expandable-controls-content');
+    const toggle = floatingPanel.querySelector('.expandable-controls-toggle');
+    if (controlsPanelExpanded) {
+      if (content) content.style.display = 'block';
+      if (toggle) {
+        toggle.innerHTML = '▼';
+        toggle.title = 'Collapse controls';
+      }
+    } else {
+      if (content) content.style.display = 'none';
+      if (toggle) {
+        toggle.innerHTML = '▶';
+        toggle.title = 'Expand controls';
+      }
+    }
+  }
+
+  // Restore controls to their original location
+  function restoreControls() {
+    if (controlsEl && controlsOriginalParent) {
+      // Remove placeholder if it exists
+      if (controlsPlaceholder && controlsPlaceholder.parentNode) {
+        controlsPlaceholder.parentNode.removeChild(controlsPlaceholder);
+      }
+      // Move controls back
+      if (controlsOriginalNextSibling) {
+        controlsOriginalParent.insertBefore(controlsEl, controlsOriginalNextSibling);
+      } else {
+        controlsOriginalParent.appendChild(controlsEl);
+      }
+      controlsEl = null;
+      controlsOriginalParent = null;
+      controlsOriginalNextSibling = null;
+    }
+  }
 
   // Toggle button
   const toggleBtn = document.createElement('button');
@@ -132,6 +319,12 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     // Hide overlay
     overlay.style.opacity = '0';
     overlay.style.pointerEvents = 'none';
+
+    // Hide floating panel and restore controls
+    if (floatingPanel) {
+      floatingPanel.style.display = 'none';
+      restoreControls();
+    }
 
     // Reset container height
     container.style.height = '';
@@ -233,6 +426,63 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
       container.style.height = `${container.offsetHeight}px`;
     }
 
+    // Show floating controls panel
+    if (controls && floatingPanel) {
+      controlsEl = document.querySelector(controls);
+      if (controlsEl && controlsEl.parentNode) {
+        const panelContent = floatingPanel.querySelector('.expandable-controls-content');
+        if (panelContent) {
+          // Store original location
+          controlsOriginalParent = controlsEl.parentNode;
+          controlsOriginalNextSibling = controlsEl.nextSibling;
+
+          // Insert placeholder to maintain layout
+          controlsPlaceholder.style.height = `${controlsEl.offsetHeight}px`;
+          controlsPlaceholder.style.display = 'block';
+          controlsOriginalParent.insertBefore(controlsPlaceholder, controlsEl);
+
+          // Move controls to panel
+          panelContent.appendChild(controlsEl);
+        }
+
+        // Add panel to body and show
+        if (!floatingPanel.parentNode) {
+          document.body.appendChild(floatingPanel);
+        }
+        floatingPanel.style.cssText = `
+          position: fixed;
+          z-index: 10000;
+          background: white;
+          border-radius: 8px;
+          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+          overflow: hidden;
+          max-width: calc(100vw - 32px);
+          max-height: calc(100vh - 100px);
+          left: ${controlsPanelPosition.x}px;
+          top: ${controlsPanelPosition.y}px;
+        `;
+
+        // Set initial expand/collapse state
+        const isMobile = window.innerWidth < 640;
+        controlsPanelExpanded = !isMobile;
+        const content = floatingPanel.querySelector('.expandable-controls-content');
+        const toggle = floatingPanel.querySelector('.expandable-controls-toggle');
+        if (controlsPanelExpanded) {
+          if (content) content.style.display = 'block';
+          if (toggle) {
+            toggle.innerHTML = '▼';
+            toggle.title = 'Collapse controls';
+          }
+        } else {
+          if (content) content.style.display = 'none';
+          if (toggle) {
+            toggle.innerHTML = '▶';
+            toggle.title = 'Expand controls';
+          }
+        }
+      }
+    }
+
     updateExpandedPosition();
   }
 
@@ -267,6 +517,9 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
       document.removeEventListener('keydown', handleKeydown);
       window.removeEventListener('resize', handleResize);
       if (overlay.parentNode) overlay.remove();
+      // Restore controls before removing panel
+      restoreControls();
+      if (floatingPanel && floatingPanel.parentNode) floatingPanel.remove();
       observer.disconnect();
     }
   });
