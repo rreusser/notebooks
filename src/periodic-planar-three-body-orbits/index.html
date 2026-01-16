@@ -521,6 +521,7 @@
       if (!conditions) return html`<div class="orbit-metadata"></div>`;
 
       const p = conditions.x;
+      const v = conditions.v;
       const m = conditions.m || [1, 1, 1];
       const ref = references[conditions.ref];
       const isUnequalMass = m[0] !== m[1] || m[0] !== m[2];
@@ -536,6 +537,7 @@
               <dt>Sequence</dt><dd><a href="${sequenceUrls[group]?.[sequence] || '#'}">${seqName}${isUnequalMass ? ' (unequal mass)' : ''}</a></dd>
               <dt>Orbit</dt><dd>${conditions.url ? html`<a href="${conditions.url}">${tex`${initialConditions.name}`}</a>` : tex`${initialConditions.name}`}</dd>
               <dt>Initial positions</dt><dd>${tex`((${p[0][0]}, ${p[0][1]}), (${p[1][0]}, ${p[1][1]}), (${p[2][0]}, ${p[2][1]}))`}</dd>
+              <dt>Initial velocities</dt><dd>${tex`((${v[0][0]}, ${v[0][1]}), (${v[1][0]}, ${v[1][1]}), (${v[2][0]}, ${v[2][1]}))`}</dd>
               <dt>Masses</dt><dd>${tex`(${m[0]}, ${m[1]}, ${m[2]})`}</dd>
               <dt>Free group element</dt><dd style="word-break:break-all;">${freeGroupWord}</dd>
               <dt>Period</dt><dd>${conditions.T}</dd>
