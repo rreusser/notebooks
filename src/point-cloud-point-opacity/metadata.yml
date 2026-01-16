@@ -2,4 +2,3 @@ publishedAt: "December 8, 2020"
 description: "Logic and GLSL shaders to select point cloud opacity for consistent visual appearance"
 maxWidth: 640px
 observableUrl: https://observablehq.com/@rreusser/selecting-the-right-opacity-for-2d-point-clouds
-image: https://rreusser.github.io/notebooks/meta/point-cloud-point-opacity.jpg

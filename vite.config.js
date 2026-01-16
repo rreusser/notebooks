@@ -1,6 +1,6 @@
 import { observable, config } from "@observablehq/notebook-kit/vite";
 import { defineConfig } from "vite";
-import { readFile } from "node:fs/promises";
+import { readFile, access } from "node:fs/promises";
 import Handlebars from "handlebars";
 import { join, dirname, resolve, relative } from "node:path";
 import yaml from "yaml";
@@ -8,6 +8,7 @@ import { glob } from "glob";
 import { deserialize } from "@observablehq/notebook-kit";
 import { JSDOM } from "jsdom";
 import { debugNotebook } from "@rreusser/mcp-observable-notebookkit-debugger";
+import { metadataWarningPlugin } from "./scripts/metadata-warning-plugin.js";
 
 const window = new JSDOM().window;
 const parser = new window.DOMParser();
@@ -16,24 +17,49 @@ const __dirname = dirname(new URL(import.meta.url).pathname);
 
 const TEMPLATE_PATH = join(__dirname, "lib/template.html");
 const GITHUB_BASE_URL = "https://github.com/rreusser/notebooks/tree/main/src";
+const META_IMAGE_BASE_URL = "https://rreusser.github.io/notebooks/meta";
 const NOTEBOOKS_DIR = join(__dirname, "src");
 const notebookPaths = glob.sync(join(NOTEBOOKS_DIR, "**", "*.html"), {
   nodir: true,
   absolute: true,
 });
 
+async function fileExists(path) {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 async function readMetadata(filename) {
+  const notebookDir = dirname(filename);
+  const notebookSlug = relative(NOTEBOOKS_DIR, notebookDir);
+
   let metadataYAML = "";
-  const metadataPath = join(dirname(filename), "metadata.yml");
+  const metadataPath = join(notebookDir, "metadata.yml");
   try {
     metadataYAML = await readFile(metadataPath, "utf8");
   } catch (e) {}
-  const meta = yaml.parse(metadataYAML);
-  if (meta?.publishedAt) {
+  const meta = yaml.parse(metadataYAML) || {};
+
+  if (meta.publishedAt) {
     const pub = new Date(meta.publishedAt);
     meta.publishedAtNumeric = pub.toISOString().slice(0, 10).replace(/-/g, "");
   }
-  return meta || {};
+
+  // Auto-detect meta image and construct URL from file existence
+  delete meta.image;
+  const jpgPath = join(notebookDir, "meta.jpg");
+  const pngPath = join(notebookDir, "meta.png");
+  if (await fileExists(jpgPath)) {
+    meta.image = `${META_IMAGE_BASE_URL}/${notebookSlug}.jpg`;
+  } else if (await fileExists(pngPath)) {
+    meta.image = `${META_IMAGE_BASE_URL}/${notebookSlug}.png`;
+  }
+
+  return meta;
 }
 
 async function computeIndex() {
@@ -60,6 +86,7 @@ async function computeIndex() {
 export default defineConfig({
   ...config(),
   plugins: [
+    metadataWarningPlugin({ rootDir: NOTEBOOKS_DIR }),
     debugNotebook(),
     observable({
       template: TEMPLATE_PATH,
