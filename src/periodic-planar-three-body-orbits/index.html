@@ -444,21 +444,24 @@
       }
 
       regl.dirty = true;
-      let frozenTime = 0;
 
       const frame = regl.frame(ctx => {
         if (!regl.dirty) return;
         regl.dirty = false;
 
         const tPeriod = trajectory.t[trajectory.t.length - 1];
-        const currentTime = drawingParams.animate ? ctx.time : frozenTime;
-        if (drawingParams.animate) frozenTime = ctx.time;
-        const ts = currentTime * drawingParams.speed;
         // timeShift ranges -1 to 1: at -1 lines are above clip (entering), at 1 below (exiting)
-        // When not animating, adjust scale/shift to keep z in [-0.999, 0.999] to avoid clip boundary issues
+        // When not animating lines, adjust scale/shift to keep z in [-0.999, 0.999] to avoid clip boundary issues
         const clipEps = 0.0005;
-        const timeShift = drawingParams.animate ? ((ts % (tPeriod * 2)) / tPeriod) - 1 : -clipEps;
-        const timeScale = drawingParams.animate ? (1 / tPeriod) : ((1 - 2 * clipEps) / tPeriod);
+        let timeShift, timeScale;
+        if (drawingParams.animate) {
+          const ts = ctx.time * drawingParams.speed;
+          timeShift = ((ts % (tPeriod * 2)) / tPeriod) - 1;
+          timeScale = 1 / tPeriod;
+        } else {
+          timeShift = -clipEps;
+          timeScale = (1 - 2 * clipEps) / tPeriod;
+        }
 
         regl.clear({ color: [0, 0, 0, 0], depth: 1 });
 
@@ -480,30 +483,28 @@
 
         const t = trajectory.t;
         const y = trajectory.position;
-        // Point position: map timeShift from [-1,1] to [0, tPeriod] twice per cycle
-        const tt = (((timeShift + 1) % 1) * tPeriod);
-        const idx = binarySearch(t, tt);
+        // Point position: always animate based on ctx.time, independent of line animation
+        const pointTime = (ctx.time * drawingParams.speed) % tPeriod;
+        const idx = binarySearch(t, pointTime);
         const idx1 = Math.min(t.length - 1, idx + 1);
-        const frac = (tt - t[idx]) / (t[idx1] - t[idx] || 1);
+        const frac = (pointTime - t[idx]) / (t[idx1] - t[idx] || 1);
 
-        // Only draw points when animating
-        if (drawingParams.animate) {
-          for (let j = 0; j < 9; j++) {
-            pointsBufferData[j] = (1 - frac) * y[idx * 9 + j] + frac * y[idx1 * 9 + j];
-          }
-          pointsBuffer.subdata(pointsBufferData);
+        // Always draw animated points
+        for (let j = 0; j < 9; j++) {
+          pointsBufferData[j] = (1 - frac) * y[idx * 9 + j] + frac * y[idx1 * 9 + j];
+        }
+        pointsBuffer.subdata(pointsBufferData);
 
-          for (let i = 0; i < 3; i++) {
-            drawPoints({
-              offset: i * 12,
-              pointSize: (initialConditions?.pointSize?.[i] || 1) * drawingParams.pointSize,
-              color: drawingParams.color[i],
-              strokeColor: drawingParams.strokeColor[i]
-            });
-          }
+        for (let i = 0; i < 3; i++) {
+          drawPoints({
+            offset: i * 12,
+            pointSize: (initialConditions?.pointSize?.[i] || 1) * drawingParams.pointSize,
+            color: drawingParams.color[i],
+            strokeColor: drawingParams.strokeColor[i]
+          });
         }
 
-        if (drawingParams.animate) regl.dirty = true;
+        regl.dirty = true; // Always keep animating for points
       });
 
       invalidation.then(() => frame.cancel());
