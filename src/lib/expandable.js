@@ -396,9 +396,10 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     toggleBtn.style.top = `${-toggleOffset[1]}px`;
     toggleBtn.style.right = `${-toggleOffset[0]}px`;
 
-    // Hide overlay
-    overlay.style.opacity = '0';
-    overlay.style.pointerEvents = 'none';
+    // Remove overlay from DOM entirely (iOS Safari caches overscroll appearance)
+    if (overlay.parentNode) {
+      overlay.remove();
+    }
 
     // Stop watching for element recreation
     stopControlsObserver();
