@@ -340,7 +340,11 @@
       positionsWithSentinels.fill(SENTINEL, 9 + trajectory.position.length);
 
       const positionsBuffer = regl.buffer(positionsWithSentinels);
-      const pointsBufferData = new Float32Array(9);
+
+      // Motion blur: render multiple time-offset copies of each point
+      const BLUR_SAMPLES = 16;
+      const BLUR_FRAMES = 2; // frames of blur at 60fps
+      const pointsBufferData = new Float32Array(9 * BLUR_SAMPLES);
       const pointsBuffer = regl.buffer(pointsBufferData);
 
       const drawLines = createDrawLines(regl, {
@@ -409,11 +413,12 @@
         frag: `
           precision highp float;
           uniform vec3 color, strokeColor;
+          uniform float opacity;
           void main() {
             float r = length(gl_PointCoord * 2.0 - 1.0);
             if (r > 1.0) discard;
             vec3 c = r > 0.7 ? strokeColor : color;
-            gl_FragColor = vec4(c, 1.0);
+            gl_FragColor = vec4(c * opacity, opacity);
           }
         `,
         attributes: {
@@ -424,11 +429,16 @@
           pointSize: regl.prop('pointSize'),
           pixelRatio: regl.context('pixelRatio'),
           color: regl.prop('color'),
-          strokeColor: regl.prop('strokeColor')
+          strokeColor: regl.prop('strokeColor'),
+          opacity: regl.prop('opacity')
         },
         count: 1,
         primitive: 'points',
         depth: { enable: false },
+        blend: {
+          enable: true,
+          func: { srcRGB: 'one', srcAlpha: 'one', dstRGB: 'one minus src alpha', dstAlpha: 'one minus src alpha' }
+        },
         viewport: reglAxesViewport(axes),
         scissor: { enable: true, box: reglAxesViewport(axes) }
       });
@@ -484,24 +494,40 @@
         const t = trajectory.t;
         const y = trajectory.position;
         // Point position: always animate based on ctx.time, independent of line animation
-        const pointTime = (ctx.time * drawingParams.speed) % tPeriod;
-        const idx = binarySearch(t, pointTime);
-        const idx1 = Math.min(t.length - 1, idx + 1);
-        const frac = (pointTime - t[idx]) / (t[idx1] - t[idx] || 1);
+        const currentTime = (ctx.time * drawingParams.speed) % tPeriod;
 
-        // Always draw animated points
-        for (let j = 0; j < 9; j++) {
-          pointsBufferData[j] = (1 - frac) * y[idx * 9 + j] + frac * y[idx1 * 9 + j];
+        // Compute positions for all blur samples (spread over time, oldest first)
+        // Blur spans BLUR_FRAMES frames at 60fps, scaled by speed
+        const blurTimeSpan = BLUR_FRAMES * (1 / 60) * drawingParams.speed;
+        for (let s = 0; s < BLUR_SAMPLES; s++) {
+          // s=0 is oldest (most transparent), s=BLUR_SAMPLES-1 is newest (most opaque)
+          const sampleTime = (currentTime - blurTimeSpan * (BLUR_SAMPLES - 1 - s) / BLUR_SAMPLES + tPeriod) % tPeriod;
+          const idx = binarySearch(t, sampleTime);
+          const idx1 = Math.min(t.length - 1, idx + 1);
+          const frac = (sampleTime - t[idx]) / (t[idx1] - t[idx] || 1);
+
+          const bufferOffset = s * 9;
+          for (let j = 0; j < 9; j++) {
+            pointsBufferData[bufferOffset + j] = (1 - frac) * y[idx * 9 + j] + frac * y[idx1 * 9 + j];
+          }
         }
         pointsBuffer.subdata(pointsBufferData);
 
-        for (let i = 0; i < 3; i++) {
-          drawPoints({
-            offset: i * 12,
-            pointSize: (initialConditions?.pointSize?.[i] || 1) * drawingParams.pointSize,
-            color: drawingParams.color[i],
-            strokeColor: drawingParams.strokeColor[i]
-          });
+        // Draw blur samples - physically accurate blending with equal opacity
+        // 1.5x multiplier for bolder appearance
+        const opacity = 1.5 / BLUR_SAMPLES;
+        for (let s = 0; s < BLUR_SAMPLES; s++) {
+          const bufferOffset = s * 9 * 4; // 9 floats * 4 bytes per float
+
+          for (let i = 0; i < 3; i++) {
+            drawPoints({
+              offset: bufferOffset + i * 12,
+              pointSize: (initialConditions?.pointSize?.[i] || 1) * drawingParams.pointSize,
+              color: drawingParams.color[i],
+              strokeColor: drawingParams.color[i], // No border, solid color
+              opacity
+            });
+          }
         }
 
         regl.dirty = true; // Always keep animating for points

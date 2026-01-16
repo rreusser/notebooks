@@ -52,6 +52,8 @@
       label: 'Grid size, N'
     });
     const NString = view(NInput);
+
+    display(html`<div id="ks-grid-size">${NInput}</div>`);
   </script>
   <script id="11" type="module">
     const N = parseInt(NString.split('×')[0]);
@@ -127,7 +129,7 @@
       width: Math.min(width, 640),
       height: Math.min(width, 640),
       toggleOffset: [-6, -15],
-      controls: '#ks-controls',
+      controls: ['#ks-grid-size', '#ks-controls'],
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
