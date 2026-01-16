@@ -130,7 +130,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
       max-height: calc(100vh - 200px);
       display: flex;
       flex-direction: column;
-      gap: 4px;
+      gap: 16px;
     `;
 
     floatingPanel.appendChild(panelHeader);
@@ -206,7 +206,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     const content = floatingPanel.querySelector('.expandable-controls-content');
     const toggle = floatingPanel.querySelector('.expandable-controls-toggle');
     if (controlsPanelExpanded) {
-      if (content) content.style.display = 'block';
+      if (content) content.style.display = 'flex';
       if (toggle) {
         toggle.innerHTML = '▼';
         toggle.title = 'Collapse controls';
@@ -570,7 +570,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
         const content = floatingPanel.querySelector('.expandable-controls-content');
         const toggle = floatingPanel.querySelector('.expandable-controls-toggle');
         if (controlsPanelExpanded) {
-          if (content) content.style.display = 'block';
+          if (content) content.style.display = 'flex';
           if (toggle) {
             toggle.innerHTML = '▼';
             toggle.title = 'Collapse controls';

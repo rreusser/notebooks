@@ -536,8 +536,8 @@
             <small><dl class="inline-flex">
               <dt>Sequence</dt><dd><a href="${sequenceUrls[group]?.[sequence] || '#'}">${seqName}${isUnequalMass ? ' (unequal mass)' : ''}</a></dd>
               <dt>Orbit</dt><dd>${conditions.url ? html`<a href="${conditions.url}">${tex`${initialConditions.name}`}</a>` : tex`${initialConditions.name}`}</dd>
-              <dt>Initial positions</dt><dd>${tex`((${p[0][0]}, ${p[0][1]}), (${p[1][0]}, ${p[1][1]}), (${p[2][0]}, ${p[2][1]}))`}</dd>
-              <dt>Initial velocities</dt><dd>${tex`\begin{aligned}&(${v[0][0]}, ${v[0][1]}),\\&(${v[1][0]}, ${v[1][1]}),\\&(${v[2][0]}, ${v[2][1]})\end{aligned}`}</dd>
+              <dt>Initial positions</dt><dd>${tex`(${p[0][0]}, ${p[0][1]}),`} ${tex`(${p[1][0]}, ${p[1][1]}),`} ${tex`(${p[2][0]}, ${p[2][1]})`}</dd>
+              <dt>Initial velocities</dt><dd>${tex`(${v[0][0]}, ${v[0][1]}),`} ${tex`(${v[1][0]}, ${v[1][1]}),`} ${tex`(${v[2][0]}, ${v[2][1]})`}</dd>
               <dt>Masses</dt><dd>${tex`(${m[0]}, ${m[1]}, ${m[2]})`}</dd>
               <dt>Free group element</dt><dd style="word-break:break-all;">${freeGroupWord}</dd>
               <dt>Period</dt><dd>${conditions.T}</dd>
@@ -1034,18 +1034,18 @@
   </script>
   <script id="900" type="text/x-typescript">
     display(html`<style>
-      .observablehq dl.inline-flex {
+      dl.inline-flex {
         display: flex;
         flex-flow: row wrap;
         max-width: 640px;
       }
-      .observablehq dl.inline-flex dt {
+      dl.inline-flex dt {
         flex: 0 0 25%;
         min-width: 130px;
         font-weight: 600;
         margin: 0;
       }
-      .observablehq dl.inline-flex dd {
+      dl.inline-flex dd {
         flex: 0 0 75%;
         margin: 0 0 0 auto;
       }
@@ -1053,8 +1053,8 @@
         margin-top: 0.25em;
       }
       @media (max-width: 590px) {
-        .observablehq dl.inline-flex dt { flex: 0 0 100%; }
-        .observablehq dl.inline-flex dd { flex: 0 0 95%; }
+        dl.inline-flex dt { flex: 0 0 100%; }
+        dl.inline-flex dd { flex: 0 0 95%; }
       }
     </style>`);
   </script>
