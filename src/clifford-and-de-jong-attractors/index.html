@@ -165,6 +165,11 @@
         }))
       : (() => { throw new Error("Neither float nor half-float framebuffers are supported on this device"); })();
   </script>
+  <script id="651" type="application/vnd.observable.javascript">
+    floatFormat === "half float"
+      ? html`<p><em><small>Note: Half-float precision may cause color banding in high-density regions. For best results, view on a device that supports single-precision float.</small></em></p>`
+      : null
+  </script>
   <script id="1753" type="application/vnd.observable.javascript">
     link = {
       const url = new URL(document.baseURI);
@@ -873,33 +878,41 @@
         floatFBO = regl.framebuffer({
           colorType: type,
           colorFormat: "rgba",
-          radius: 1
+          radius: 1,
+          depthStencil: false
         });
 
         uintFBO = regl.framebuffer({
           colorType: "uint8",
           colorFormat: "rgba",
-          radius: 1
+          radius: 1,
+          depthStencil: false
         });
 
+        // Use full-screen triangle with blending (like the actual visualization)
         draw = regl({
           vert: `
           precision highp float;
           attribute vec2 aXY;
           void main () {
             gl_Position = vec4(aXY, 0, 1);
-            gl_PointSize = 1.0;
           }`,
           frag: `
           precision highp float;
           void main () {
-            gl_FragColor = vec4(1, 0, 0, 1);
+            gl_FragColor = vec4(0.5, 0, 0, 0.5);
           }`,
-          primitive: "points",
-          count: 1,
-          attributes: { aXY: [0, 0] },
+          primitive: "triangles",
+          count: 3,
+          attributes: { aXY: [-4, -4, 4, -4, 0, 4] },
           framebuffer: regl.prop("dst"),
-          depth: { enable: false }
+          depth: { enable: false },
+          // Test additive blending - this is what the visualization uses
+          blend: {
+            enable: true,
+            func: { srcRGB: 1, srcAlpha: 1, dstRGB: 1, dstAlpha: 1 },
+            equation: { rgb: "add", alpha: "add" }
+          }
         });
 
         transfer = regl({
@@ -923,11 +936,17 @@
           depth: { enable: false }
         });
 
+        floatFBO.use(() => regl.clear({ color: [0, 0, 0, 0] }));
+        // Draw twice to test additive blending (0.5 + 0.5 = 1.0)
+        draw({ dst: floatFBO });
         draw({ dst: floatFBO });
         transfer({ src: floatFBO, dst: uintFBO });
         const data = regl.read({ framebuffer: uintFBO });
 
-        return data[0] !== 0 && data[1] === 0 && data[2] === 0 && data[3] !== 0;
+        // After two blended draws of 0.5, we expect >150 (showing blending accumulated)
+        // A single draw would give ~127, so >150 proves blending worked
+        const success = data[0] > 150 && data[3] > 150;
+        return success;
       } catch (e) {
         return false;
       } finally {
