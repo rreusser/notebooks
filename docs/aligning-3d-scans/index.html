@@ -3,8 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="Aligning 3D Scans">
+  <meta property="og:title" content="Aligning 3D Scans">
+  <meta name="twitter:description" content="In which I rediscover principal component analysis">
+  <meta name="subject" content="In which I rediscover principal component analysis">
+  <meta name="description" content="In which I rediscover principal component analysis">
+  <meta property="og:description" content="In which I rediscover principal component analysis">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/aligning-3d-scans.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/aligning-3d-scans.jpg">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1499,8 +1506,9 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Aligning 3D Scans</title>  <script type="module" crossorigin src="/notebooks/assets/index-zZqOGn-5.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1511,195 +1519,74 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Aligning 3D Scans</h1>
     <div class="byline">
-      
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20180728">July 28, 2018</time>
     </div>
     <div class="resource-links">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/aligning-3d-scans/index.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="plot-with-zoom/">Zoomable Multi-Layer Plots in Notebook Kit</a></h2>
-            <span class="publishedAt">January 13, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/">Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU</a></h2>
-            <span class="publishedAt">January 10, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="wilcoxon-signed-rank-test/">Wilcoxon Signed-Rank Test for Performance Testing</a></h2>
-            <span class="publishedAt">January 6, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="perfectly-matched-layers-for-the-wave-equation/">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <span class="publishedAt">December 31, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="reflecting-on-two-years-of-yoga/">Reflecting on Two Years of Yoga</a></h2>
-            <span class="publishedAt">December 27, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="of-noise-and-neighbors/">Of Noise and Neighbors</a></h2>
-            <span class="publishedAt">September 29, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="regl-canvas/">REGL in Observable Notebooks 2.0</a></h2>
-            <span class="publishedAt">August 12, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="clifford-and-de-jong-attractors/">Clifford and de Jong Attractors</a></h2>
-            <span class="publishedAt">May 16, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="chaotic-magnetic-pendulum/">Chaotic Magnetic Pendulum</a></h2>
-            <span class="publishedAt">August 7, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="spring-training/">Spring Training on the Treadmill</a></h2>
-            <span class="publishedAt">June 8, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="speed-climbing-world-record-progression/">Speed Climbing World Record Progression</a></h2>
-            <span class="publishedAt">May 3, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/">Series Acceleration with Shanks Transformation</a></h2>
-            <span class="publishedAt">September 23, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="cubic-basis-vs-hermite-interpolation/">Cubic basis vs. Hermite interpolation</a></h2>
-            <span class="publishedAt">May 13, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="bicubic-texture-interpolation-using-linear-filtering/">Bicubic Texture Interpolation using Linear Filtering</a></h2>
-            <span class="publishedAt">January 6, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">November 16, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="fast-generalized-winding-numbers-in-2d/">Fast Generalized Winding Numbers in 2D</a></h2>
-            <span class="publishedAt">September 7, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">May 24, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="double-pendulum-map/">The Double Pendulum Map</a></h2>
-            <span class="publishedAt">May 14, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="malkus-waterwheel/">Malkus Waterwheel</a></h2>
-            <span class="publishedAt">February 13, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="point-cloud-point-opacity/">Selecting the Right Opacity for 2D Point Clouds</a></h2>
-            <span class="publishedAt">December 8, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="adaptive-contouring-in-fragment-shaders/">Adaptive Contouring in Fragment Shaders</a></h2>
-            <span class="publishedAt">November 21, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="integers-in-single-precision-floating-point/">Visualizing Integers in Floating-Point</a></h2>
-            <span class="publishedAt">February 9, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="periodic-planar-three-body-orbits/">Periodic Planar Three-Body Orbits</a></h2>
-            <span class="publishedAt">September 1, 2019</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="aligning-3d-scans/">Aligning 3D Scans</a></h2>
-            <span class="publishedAt">July 28, 2018</span>
-          </div>
-          
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-2" class="observablehq observablehq--cell"><style>
+  figcaption {
+    max-width: 350px;
+    margin: 0 auto;
+    text-align: left;
+  }
+</style></div><div id="cell-3" class="observablehq observablehq--cell"><div><p><em>The following is a post I wrote in 2018, when I worked at a now-defunct company called Standard Cyborg. Data was a bit messy, so I had to think through how to automate some pieces like just oriented 3D scans upward. In this post, I worked through what’s almost an embarrassing realization that you can end up at <a href="https://en.wikipedia.org/wiki/Principal_component_analysis">Principal Component Analysis</a> (PCA) from first principles and some algebra. But I was delighted to dig myself in deeper and deeper to some intuitive reasoning that actually led to a simple answer, so I wrote it up and here we are.</em></p>
+<p>At <a href="https://www.standardcyborg.com">Standard Cyborg</a>, we use 3D scans from a number of different sources to design sockets for prosthetic devices. Even in the best of circumstances in which we’re able to keep track of the physical “up” direction from acquisition through to the design phase, “physical up” isn’t really a useful direction since the limb could have been in any orientation during scanning (or any orientation <em>relative to the scanner</em>). We’d like to automatically orient incoming scans vertically so that they’re easy to work with.</p>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"><div><p>Working with 3D models isn’t exactly new territory. Before throwing math at this, we should stop to consider whether a nice <a href="https://en.wikibooks.org/wiki/OpenGL_Programming/Modern_OpenGL_Tutorial_Arcball">arcball camera</a> (or—<em>shudder</em>—x/y/z rotation handles!) would allow users to orient scans as they see fit, removing orientation as any concern of ours. We know so much about this problem though! In a broad sense, we know what the scans look like and how users will be modifying them, and we know that even the most grizzled power users find extra degrees of rotational freedom cumbersome and frustrating when they’re not required for the task at hand. At the very worst, we find automatic alignment a great preprocessing step that helps users, doesn’t hurt what’s already arbitrary, and in many cases nails it right away.</p>
+<p>The question remains then what alignment could possibly mean. There are an infinite number of valid meanings and corresponding solutions. The solution I describe here only addresses a particular meaning that happens to solve our little micro-problem quite well. It’s not new or novel—an alternate title for this article was “In which I discover the ellipsoid!”—and I’m only taking the trouble to describe it because I was so delighted to pick a heuristic out of the sky, find cause to break out some math, and actually end up with a function which runs robustly in a couple milliseconds.</p>
+<h2 id="choosing-an-axis" tabindex="-1"><a href="#choosing-an-axis">Choosing an axis</a></h2>
+<p>Most of the scans for which people use our software (and limbs in general, really) are basically cylindrical tubes so that the longest axis makes a decent first cut for orienting the scan.</p>
+</div></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"><div><p>This orientation seems friendlier than what we started with, but it doesn’t take long to spot some problems. For one, we haven’t said anything about how to actually compute the longest axis (<a href="https://en.wikipedia.org/wiki/Principal_component_analysis">Principal Component Analysis</a> (PCA) feels relevant?). More importantly though, if the scan had roughly equal proportions, the longest axis would be entirely arbitrary even for a cylinder with plainly obvious orientation.</p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"><div><p>Failure of this basic sanity check suggests the overall orientation of these scans isn’t so much defined by the position of the surface as by its orientation. Without agonizing over why, I decided a better option would be to select an alignment axis as perpendicular as possible to the surface normals. Hazarding a guess at stating that mathematically, I’d call that the axis which minimizes the sum of the squares of the dot products of the alignment axis with the surface normal vectors.</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"><div><h2 id="as-perpendicular-as-possible" tabindex="-1"><a href="#as-perpendicular-as-possible">As perpendicular as possible</a></h2>
+<p>The statement above is a mouthful which requires a bit of unpacking. If we’re going to tackle this as a minimization problem, we at least know we’ll need to roll up the ideas above into an objective function.</p>
+<p>Let’s start with the dot products. Recall the dot product between vectors  and  is equal to</p>
+<p>where  and  are the magnitudes of the two vectors, respectively, and  is the angle between them. All we really need to know here is that if two vectors are perpendicular, their dot product is zero.</p>
+<p>We can talk about a single surface normal vector, but somehow we need to aggregate information across all faces. Let’s call a surface normal vector of the  mesh face  and a candidate axis of alignment  (the Greek letter “xi”, pronounced “<em>ksee</em>”, which I’m selecting because it’s fun to write, isn’t likely to get confused with anything, and is fun to call “tornado” instead). My supposition is that if we dot the two, square the result, sum over the faces and call it , i.e.</p>
+<p>then the best alignment is the one which minimizes .</p>
+<p>We might have a reasonable objective function here, but to see why it feels like it should work, consider a cylinder. The axis of the cylinder is always perpendicular to the surface normal vectors. Assuming for simplicity that the vectors are all normalized, then the magnitudes drop out and . The axis of a cylinder minimizes  even when it’s not the longest axis, thus fixing the failed sanity check above. (If you want to be fancy, I think you could say we’re solving the same principal axis problem but in the tangent space instead, though I don’t think that interpretation is likely to help most people.)</p>
+<p>(Why the square? On a strictly mathematical basis, the dot product may be either positive or negative which would cause the minimization to diverge to . The square keeps  non-negative so that we can meaningfully minimize it.)</p>
+</div></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"><div><p>A bit more precisely, if the faces comprising the mesh aren’t uniformly distributed, the sum will be biased toward clusters of vertices and their associated normals. Instead of a sum over normal vectors , what we really want is an area-weighted sum. In fact what we <em>really</em> want is just an integral over the surface (call it ) with respect to the differential area vector (call it ). We define  as parallel to the surface normal but with magnitude equal to the area of a differential surface element. The continuous limit of  is then</p>
+<p>While we’re being precise, we assumed implicitly that the axis of alignment was a nonzero vector, but let’s now make that explicit in order to avoid the trivial solution  which <em>always</em> minimizes . Constraining  to be a unit vector will do just fine.</p>
+<p>Fully stating our problem, we want to find the argument  which minimizes  subject to the constraint that  is a unit vector:</p>
+<p>For piecewise constant faces with surface normal  (magnitude equal to the face’s area, recall), we can recast this as a discrete summation and arrive at our final problem statement,</p>
+<p>As for the areas, Eric Arnebäck has a nice article about <a href="https://erkaman.github.io/posts/area_convex_polygon.html">Computing the Area of a Convex Polygon</a>. It covers triangles. And for you geometry sorcerers and sorceresses, the answer is yes. We’re fitting an ellipsoid now. The rest of the article is me realizing I’m looking for an ellipsoid.</p>
+<h2 id="computing-it" tabindex="-1"><a href="#computing-it">Computing it</a></h2>
+<p>The problem above is a <a href="https://en.wikipedia.org/wiki/Constrained_optimization">constrained optimization problem</a>. Those can be a bit challenging to solve since you often only want to explore the solution space in directions which keep the constraints satisfied. It took me a while to recall, but if I learned one thing about constrained optimization in engineering (sadly I didn’t learn much more), I learned that <a href="https://en.wikipedia.org/wiki/Lagrange_multiplier">the method of Lagrange multipliers</a> exists to transform constrained optimization problems into unconstrained problems. The method works like this. Instead solving the problem</p>
+<p>we solve the problem</p>
+<p>where  is an auxiliary parameter (the “Lagrange multiplier”) that drives objective function toward satisfying the constraint. With just a bit of handwaving, we can demonstrate that setting the partial derivatives of  equal to zero yields</p>
+<p>which confirms the constraint is satisfied, and</p>
+<p>with the final leap of faith equality to zero taken since  is a <a href="https://en.wikipedia.org/wiki/Stationary_point">stationary point</a>. This step then enforces the original objective function, though I haven’t adequately justified it here. <a href="https://en.wikipedia.org/wiki/Lagrange_multiplier">Wikipedia actually has a pretty good explanation</a> which I’d be foolish to try to outdo.</p>
+<p>It only takes the tiniest modification to state our problem in the canonical form of a Lagrange-multiplier-ready problem,</p>
+<p>Applying the method, we arrive at the unconstrained problem</p>
+<p>Taking the partial derivatives with respect to , , and  as well as  and equating to zero isn’t particularly tedious. The result is a system of four simultaneous equations,</p>
+<p>It suddenly feels hopeless, especially since the fourth equation is a bit nonlinear in . Let’s cut down on the visual noise by defining</p>
+<p>as well as the analogous definitions for all pairwise combinations of axes. With these definitions, the above equation looks a bit more manageable, yielding</p>
+<p>Neglecting the last equation for a moment, we can state the first three as a matrix multiplication,</p>
+<p>This is just the standard form of an <a href="https://en.wikipedia.org/wiki/Eigenvalues_and_eigenvectors">eigenvalue problem</a>,</p>
+<p>and what’s more, its eigenvectors  are normalized by convention, which implicitly satisfies the constraint . Eigenvalues are simple and easy to compute, <a href="https://github.com/mljs/matrix">even in JavaScript</a>. We’ve solved it! Upon solving, we get three eigenvalues and corresponding unit eigenvectors which are identically the model axes and associated inverse strengths along the respective eigenvectors.</p>
+<p>As a final bonus, recall—or discover today!—that <a href="https://en.wikipedia.org/wiki/Positive-definite_matrix#Characterizations">the eigenvalues of a symmetric positive-definite matrix are real and orthogonal</a>, i.e. mutually perpendicular. And there are three of them. So we don’t just get unit vectors out of this, we get a three dimensional rotation matrix which can be applied directly to the model.</p>
+<h2 id="does-it-work" tabindex="-1"><a href="#does-it-work">Does it work?</a></h2>
+<p>Wonderfully! Robustly! Efficiently! The only nontrivial numerical part is the eigenvalue computation, but it’s only a small 3x3 matrix you can farm out to any old numerical library.</p>
+<p>The main caveat is that eigenvalues are only unique up to a sign so that we need to check for reflections and apply some slightly ad-hoc heuristics to disambiguate the sign. In particular, I’m just using the total summed area vector to see if we can put the open end in a consistent direction. There’s room for improvement.</p>
+<p>You can see the final result below. Note that the two remaining axes also align the knee!</p>
+<p><strong>Update:</strong> Eric Arnebäck <a href="https://twitter.com/erkaman2/status/1024296231508602881">asked about noise</a>. I’ve added a noise slider below and have removed a square root in the scaling so that the magnitudes are a bit more separated. The noise is not IID noise so take it with a grain of salt, but it hopefully gives some indication of the approach’s ability to reject noise.</p>
+</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="conclusions" tabindex="-1"><a href="#conclusions">Conclusions</a></h2>
+<p>At the end of the day, I rather suspect I’ve rederived a pretty standard technique for talking about the shape of a surface. I hope you’ll forgive me if my satisfaction isn’t diminished though since opportunities to legitimately break out Lagrange multipliers are so rare! And as part of my day job no less.</p>
+<p>There’s room for improvement in the final disambiguation of signs, but frankly once we’ve solved the main problem of figuring out a rough alignment, the subsequent algorithms have a significantly easier time making sense of the scan.</p>
+</div></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"></div></main>
+  </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
 
