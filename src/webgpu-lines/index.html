@@ -1,0 +1,220 @@
+<!doctype html>
+<notebook theme="air">
+  <title>WebGPU Lines</title>
+  <script id="1" type="text/markdown">
+    # WebGPU Lines
+
+    This notebook implements GPU-accelerated line rendering using WebGPU, based on the techniques from [regl-gpu-lines](https://github.com/rreusser/regl-gpu-lines).
+
+    Key features:
+    - Instanced rendering with triangle strips
+    - Screen-space line width (constant pixel width regardless of zoom)
+    - Bevel, miter, and round joins
+    - Integer index-based geometry generation in the vertex shader
+  </script>
+  <script id="2" type="module">
+    // Initialize WebGPU
+    if (!navigator.gpu) {
+      display(html`<p style="color: red;">WebGPU is not supported in this browser.</p>`);
+      throw new Error('WebGPU not supported');
+    }
+
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      throw new Error('Failed to get WebGPU adapter');
+    }
+
+    const device = await adapter.requestDevice();
+    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    invalidation.then(() => device.destroy());
+  </script>
+  <script id="3" type="module">
+    // Create canvas and configure WebGPU context
+    const dpr = window.devicePixelRatio || 1;
+    const canvasWidth = Math.min(640, width);
+    const canvasHeight = 480;
+
+    const canvas = html`<canvas
+      id="lines-canvas"
+      width="${Math.floor(canvasWidth * dpr)}"
+      height="${Math.floor(canvasHeight * dpr)}"
+      style="width: ${canvasWidth}px; height: ${canvasHeight}px; border: 1px solid #ccc;"
+    ></canvas>`;
+
+    const gpuContext = canvas.getContext('webgpu');
+    gpuContext.configure({
+      device,
+      format: canvasFormat,
+      alphaMode: 'premultiplied'
+    });
+
+    display(canvas);
+  </script>
+  <script id="4" type="module">
+    // Controls
+    const lineWidthInput = Inputs.range([1, 50], { label: 'Line width', value: 20, step: 0.5 });
+    const lineWidth = view(lineWidthInput);
+
+    const joinTypeInput = Inputs.select(['bevel', 'miter', 'round'], { label: 'Join type', value: 'round' });
+    const joinType = view(joinTypeInput);
+
+    const patternInput = Inputs.select(['wave', 'zigzag', 'spiral'], { label: 'Pattern', value: 'zigzag' });
+    const pattern = view(patternInput);
+
+    const miterLimitInput = Inputs.range([1, 10], { label: 'Miter limit', value: 4, step: 0.1 });
+    const miterLimit = view(miterLimitInput);
+
+    const joinResolutionInput = Inputs.range([2, 16], { label: 'Round join resolution', value: 8, step: 1 });
+    const joinResolution = view(joinResolutionInput);
+
+    display(html`<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+      ${lineWidthInput}
+      ${joinTypeInput}
+      ${patternInput}
+      ${miterLimitInput}
+      ${joinResolutionInput}
+    </div>`);
+  </script>
+  <script id="5" type="module">
+    import { createGPULines } from './webgpu-lines.js';
+
+    // Regenerate line data when pattern changes
+    pattern;
+
+    function generatePattern(patternType) {
+      if (patternType === 'zigzag') {
+        // Zigzag pattern with sharp angles
+        const numPoints = 12;
+        const positions = new Float32Array(numPoints * 4);
+        for (let i = 0; i < numPoints; i++) {
+          const t = i / (numPoints - 1);
+          const x = -0.8 + t * 1.6;
+          const y = (i % 2 === 0 ? 0.3 : -0.3);
+          positions[i * 4 + 0] = x;
+          positions[i * 4 + 1] = y;
+          positions[i * 4 + 2] = 0;
+          positions[i * 4 + 3] = 1;
+        }
+        return { positions, numPoints };
+      } else if (patternType === 'spiral') {
+        // Spiral pattern
+        const numPoints = 80;
+        const positions = new Float32Array(numPoints * 4);
+        for (let i = 0; i < numPoints; i++) {
+          const t = i / (numPoints - 1);
+          const angle = t * Math.PI * 6;
+          const r = 0.1 + t * 0.6;
+          positions[i * 4 + 0] = r * Math.cos(angle);
+          positions[i * 4 + 1] = r * Math.sin(angle);
+          positions[i * 4 + 2] = 0;
+          positions[i * 4 + 3] = 1;
+        }
+        return { positions, numPoints };
+      } else {
+        // Wave pattern (default)
+        const numPoints = 100;
+        const positions = new Float32Array(numPoints * 4);
+        for (let i = 0; i < numPoints; i++) {
+          const t = i / (numPoints - 1);
+          const x = -0.8 + t * 1.6;
+          const y = 0.3 * Math.sin(t * Math.PI * 4) + 0.2 * Math.cos(t * Math.PI * 7);
+          positions[i * 4 + 0] = x;
+          positions[i * 4 + 1] = y;
+          positions[i * 4 + 2] = 0;
+          positions[i * 4 + 3] = 1;
+        }
+        return { positions, numPoints };
+      }
+    }
+
+    const { positions, numPoints } = generatePattern(pattern);
+
+    // Create position buffer
+    const positionBuffer = device.createBuffer({
+      label: 'line-positions',
+      size: positions.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(positionBuffer, 0, positions);
+
+    invalidation.then(() => positionBuffer.destroy());
+  </script>
+  <script id="6" type="module">
+    // Recreate pipeline when join type or resolution changes
+    joinType; joinResolution; miterLimit;
+
+    const gpuLines = createGPULines(device, {
+      format: canvasFormat,
+      join: joinType,
+      joinResolution: joinResolution,
+      miterLimit: miterLimit,
+      vertexShaderBody: /* wgsl */`
+        // User vertex shader code can go here
+        // Access to: positions array, uniforms
+      `,
+      fragmentShaderBody: /* wgsl */`
+        fn getColor(lineCoord: vec3f) -> vec4f {
+          // lineCoord.x: along the line (for dashes)
+          // lineCoord.y: across the line (-1 to 1, 0 at center)
+          // lineCoord.z: 1 if outside main segment (in join extrapolation)
+
+          // Simple solid color with slight edge darkening
+          let edge = 1.0 - 0.3 * abs(lineCoord.y);
+          return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
+        }
+      `
+    });
+
+    invalidation.then(() => gpuLines.destroy());
+  </script>
+  <script id="7" type="module">
+    // Render loop
+    let frameId = null;
+
+    function render() {
+      const encoder = device.createCommandEncoder();
+
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: gpuContext.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0.95, g: 0.95, b: 0.95, a: 1 }
+        }]
+      });
+
+      gpuLines.draw(pass, {
+        positionBuffer,
+        vertexCount: numPoints,
+        width: lineWidth,
+        resolution: [canvas.width, canvas.height]
+      });
+
+      pass.end();
+      device.queue.submit([encoder.finish()]);
+
+      frameId = requestAnimationFrame(render);
+    }
+
+    frameId = requestAnimationFrame(render);
+
+    invalidation.then(() => {
+      if (frameId !== null) {
+        cancelAnimationFrame(frameId);
+      }
+    });
+  </script>
+  <script id="8" type="text/markdown">
+    ## How it works
+
+    The line renderer uses instanced rendering where each instance draws one segment of the line. For a line with N points, there are N-3 instances (since each instance needs a 4-point window: previous, start, end, next).
+
+    The vertex shader generates geometry using only a vertex index (0 to ~10 for bevel joins, more for round joins). This index determines:
+    1. Which half of the join we're drawing (first half at start, or mirrored second half at end)
+    2. Whether this vertex is on the outer edge, inner edge, or miter point of the join
+    3. The position along the segment
+
+    All geometry is computed in screen space to ensure consistent line width regardless of projection.
+  </script>
+</notebook>
