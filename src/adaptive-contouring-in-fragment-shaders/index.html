@@ -11,7 +11,7 @@
     This notebook walks through a strategy for adaptive contouring in a fragment shader, with particular application to domain coloring. [Domain coloring](https://en.wikipedia.org/wiki/Domain_coloring) is a simple and well-explored technique for visualizing functions in the complex plane using contours for magnitude and color for phase.
   </script>
   <script id="2815" type="text/markdown">
-    Over the past few years and with particular help and inspiration from [Jacob Rus](https://observablehq.com/@jrus), I've slowly iterated on my approach to domain coloring. A couple of the core ideas have proved so useful and generally applicable that I've wanted to write them up carefully and clearly for a long time. In this notebook, rather than focusing on the math and interpretation of domain coloring, I'm going to focus on some of the core tricks I use for everything from domain coloring to [contour plots](https://observablehq.com/@rreusser/contour-plots-with-d3-regl-and-observable?collection=@rreusser/webgl), [wireframe meshes](https://github.com/rreusser/glsl-solid-wireframe), [3D surface visualization](https://observablehq.com/@rreusser/faking-transparency-for-3d-surfaces), [gridlines](http://rreusser.github.io/flamms-paraboloid/), [cartoon edges](http://rreusser.github.io/aligning-3d-scans/), and [trippy animated gifs](https://twitter.com/rickyreusser/status/1329489340158799872).
+    Over the past few years and with particular help and inspiration from [Jacob Rus](https://observablehq.com/@jrus), I've slowly iterated on my approach to domain coloring. A couple of the core ideas have proved so useful and generally applicable that I've wanted to write them up carefully and clearly for a long time. In this notebook, rather than focusing on the math and interpretation of domain coloring, I'm going to focus on some of the core tricks I use for everything from domain coloring to [contour plots](https://observablehq.com/@rreusser/contour-plots-with-d3-regl-and-observable?collection=@rreusser/webgl), [wireframe meshes](https://github.com/rreusser/glsl-solid-wireframe), [3D surface visualization](https://observablehq.com/@rreusser/faking-transparency-for-3d-surfaces), [gridlines](http://rreusser.github.io/flamms-paraboloid/), [cartoon edges](http://rreusser.github.io/aligning-3d-scans/), and [trippy animated gifs](https://www.shadertoy.com/view/wdcfRs).
   </script>
   <script id="2819" type="application/vnd.observable.javascript">
     html`<figure>
@@ -180,15 +180,19 @@
 
   </script>
   <script id="3601" type="text/markdown">
-    Of particular interest to us is that division of a function (*units*) by its screen-space gradient (*units per pixel*) has units of *pixels*.
+    The key insight is dimensional. Division of a function (in *units*) by its screen-space gradient (in *units per pixel*) yields a result in *pixels*.
 
   </script>
   <script id="3602" type="text/markdown">
     ${tex.block`\frac{(\mathrm{units})}{(\frac{\mathrm{units}}{\mathrm{pixel}})} = \mathrm{pixels}`}
 
   </script>
+  <script id="3626" type="text/markdown">
+    Another way to think about it: at pixel scale, the function is approximately linear. Near each contour line (where the triangle wave crosses zero), dividing by the local slope normalizes the function so that it increases by exactly one unit per pixel. The result is the signed distance, in pixels, to the nearest contour.
+
+  </script>
   <script id="3603" type="text/markdown">
-    Thus, division of the above triangle wave gradient by the magnitude of the screen-space gradient at each point yields a new colormap which represents, *in units of pixels*, the distance from each contour line. From there, we simply apply a threshold, in units of pixels, and achieve a contour plot with uniform-width lines.
+    So if we divide the triangle wave by the screen-space gradient magnitude, we get a value that represents, in pixels, how far each point is from the nearest contour. Thresholding this at, say, 1.5 pixels gives us uniform-width antialiased contour lines everywhere on screen.
 
   </script>
   <script id="3604" type="text/markdown">
@@ -418,58 +422,59 @@
   <script id="1976" type="text/html">
     <div style="padding-top: 5em"></div>
   </script>
-  <script id="3626" type="text/markdown">
+  <script id="3655" type="text/markdown">
     ## Local contour spacing
   </script>
-  <script id="3627" type="text/markdown">
-    ***Note: Gosh, this section just isn't written that clearly. For some further illumination of the motivation, see: [rreusser.github.io#29](https://github.com/rreusser/rreusser.github.io/issues/29).***
-  </script>
   <script id="3628" type="text/markdown">
-    We now turn our attention to contour *spacing*. As successful as the above plot is, the spacing for this very tame function still varies from less than a pixel to more than a hundred.
+    We now turn our attention to contour *spacing*. As successful as the above plot is, the spacing for this very tame function still varies from less than a pixel to more than a hundred pixels.
+  </script>
+  <script id="3656" type="text/markdown">
+    We've already established that dividing by the screen-space gradient tells us how many pixels away we are from a contour line. That same gradient also tells us how densely contours are packed at any given point. If the gradient is large, contours are dense; if small, contours are sparse. So we can use this information to *choose* which contours to draw in any given region.
   </script>
   <script id="3629" type="text/markdown">
-    Our next observation is that we can use the same gradient to select a locally appropriate contour step size. We call regions of equal spacing *octaves*, and every time the octave increments, we split one division into ${tex`D`} divisions.
+    The approach is to partition the plane into regions we'll call *octaves*, where each octave draws contours at a different spacing. Within each octave, we draw ${tex`D`} evenly spaced contours. When the contours in one octave get too close together, we switch to the next octave and draw ${tex`D`} times fewer contours.
+  </script>
+  <script id="3657" type="text/markdown">
+    The key trick is to use a log-ceil-exp transform. Taking the logarithm of the gradient, rounding up to an integer, and exponentiating back produces discrete steps. Regions sharing the same integer octave value will draw contours at the same spacing. And because logarithms convert multiplication to addition, zooming in (which scales the gradient) simply shifts us between octaves rather than continuously changing the contour density.
   </script>
   <script id="3630" type="text/markdown">
-    To select the locally appropriate contour spacing octave, we use the equation
+    To select the locally appropriate octave, we use the equation
   </script>
   <script id="3631" type="text/markdown">
     ${tex.block`
-    N_{octave} = \left \lceil \log_{D}{\left( m \frac{\left|\nabla f\right|}{|f|} \right)} \right \rceil
-    `}
-  </script>
-  <script id="3632" type="text/markdown">
-    ${tex.block`
-    N_{octave} = \left \lceil \log_{D}{\left( m \frac{\left|\nabla f\right|}{|f|} \right)} \right \rceil
+    N_{\mathrm{octave}} = \left \lceil \log_{D}{\left( m \frac{\left|\nabla f\right|}{|f|} \right)} \right \rceil
     `}
   </script>
   <script id="3633" type="text/markdown">
-    where ${tex`N_{octave}`} is an integer indicating to which octave a given region belongs, ${tex`D`} is the number of divisions per octave, and ${tex`m`} is the minimum spacing, in pixels, between divisions. Note that the term in the inner parentheses is dimensionless.
+    where ${tex`N_{\mathrm{octave}}`} is an integer indicating which octave a given region belongs to, ${tex`D`} is the number of divisions per octave, and ${tex`m`} is the minimum spacing, in pixels, between divisions.
   </script>
-  <script id="3634" type="text/markdown">
-    We then compute the contour spacing ${tex`\delta`} as
-  </script>
-  <script id="3635" type="text/markdown">
-    ${tex.block`
-    \delta = D^{N_{octave}}.
-    `}
-  </script>
-  <script id="3636" type="text/markdown">
-    We'll plot *logarithmically* spaced contours of the function, so in the equation above we've used the [logarithmic derivative](https://en.wikipedia.org/wiki/Logarithmic_derivative), recalling that the derivative of a logarithm is equal to the derivative of the function divided by its value,
+  <script id="3658" type="text/markdown">
+    Why ${tex`|\nabla f| / |f|`} and not just ${tex`|\nabla f|`}? The answer is that we want to place contours at evenly spaced values of ${tex`\log|f|`}, not ${tex`|f|`} itself. Logarithmic spacing places more contours near zeros and poles, which helps reveal the structure of the function. Since we're effectively plotting ${tex`\log|f|`}, we need the gradient of ${tex`\log|f|.`} By the [logarithmic derivative](https://en.wikipedia.org/wiki/Logarithmic_derivative),
   </script>
   <script id="3637" type="text/markdown">
     ${tex.block`
-    \frac{d}{dx} \ln{f(x)} = \frac{1}{f(x)} \frac{d f(x)}{dx}.
+    \left|\nabla \ln{f}\right| = \frac{|\nabla f|}{|f|}.
+    `}
+  </script>
+  <script id="3659" type="text/markdown">
+    This is convenient because it means we don't have to compute the logarithm to get its gradient. We just divide the gradient of ${tex`f`} by ${tex`|f|`}.
+  </script>
+  <script id="3634" type="text/markdown">
+    Once we've determined the octave, we compute the contour spacing ${tex`\delta`} as
+  </script>
+  <script id="3635" type="text/markdown">
+    ${tex.block`
+    \delta = D^{N_{\mathrm{octave}}}.
     `}
   </script>
   <script id="3638" type="text/markdown">
-    We may wish to place contours at evenly *linearly* spaced function values, in which case we would remove division of `screenSpaceGrad` in the function below by `abs(f)` then plot `abs(f)` instead of `log2(abs(f))`.
+    The toggle below lets you switch between logarithmic and linear contour placement. For linear spacing, we remove the division by `abs(f)` and plot `abs(f)` directly instead of `log2(abs(f))`.
   </script>
   <script id="913" type="text/markdown">
-    Whether to place contours linearly or logarithmically is a bit of a subtle decision. Personally, I think linearly spaced contours make more sense, but I observe that when shading is applied, it's easier to tell the difference between roots and poles when contours are placed logarithmically. Fortunately they're both valid and we don't have to commit to a decision.
+    Whether to place contours linearly or logarithmically is a bit of a subtle decision. I think linearly spaced contours often make more sense, but when shading is applied, it's easier to tell the difference between roots and poles when contours are placed logarithmically. Fortunately both are valid and we don't have to commit to just one.
   </script>
   <script id="3639" type="text/markdown">
-    The shader below implements a function which places contours at logarithmically spaced function values, adjusting the spacing to keep contours everywhere nicely spaced.
+    The shader below implements locally scaled contouring. Try enabling the octave visualization to see how the plane is partitioned into regions of equal contour spacing.
   </script>
   <script id="938" type="text/x-typescript">
     const locallyScaledLogContoursGLSL = view(code(`float locallyScaledLogContours (float f,
@@ -933,10 +938,6 @@
       value: 1,
       label: 'Antialiasing width'
     }));
-
-    const scalingType = view(Inputs.radio(["Logarithmic", "Linear"], {
-      value: "Logarithmic"
-    }))
   </script>
   <script id="2499" type="text/x-typescript">
     // Update shadedParams when controls change
@@ -1036,16 +1037,12 @@
       const int octaves = ${octaveCount4};
       const float fOctaves = ${octaveCount4.toFixed(1)};
 
-      float screenSpaceGrad = hypot(vec2(dFdx(f), dFdy(f)))${
-        scalingType === "Linear" ? "" : " / abs(f)"
-      };${scalingType === "Linear" ? "antialiasWidth /= 2.0;" : ""}
+      float screenSpaceGrad = hypot(vec2(dFdx(f), dFdy(f))) / abs(f);
 
       float localOctave = log2(screenSpaceGrad * minSpacing) / log2(octaveDivisions);
       float contourSpacing = pow(octaveDivisions, ceil(localOctave));
 
-      float plotVar = ${
-        scalingType === "Logarithmic" ? "log2(abs(f))" : "abs(f)"
-      } / contourSpacing;
+      float plotVar = log2(abs(f)) / contourSpacing;
       float widthScale = contourSpacing / screenSpaceGrad;
 
       float contourSum = 0.0;
