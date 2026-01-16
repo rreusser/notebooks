@@ -12,3 +12,15 @@ This repository publishes Observable notebooks as a static website using Observa
 npm start        # Start dev server with live reload
 npm run build    # Build static site to docs/
 ```
+
+## Debugging techniques
+
+- To make plots, use the techniques in src/plot-with-zoom/index.html as a good reference.
+
+- Always assign unique and useful IDs to HTML elements and plot elements to make them easier to find and query.
+
+- Use the Notebook MCP server to aid debugging. If it reports that the notebook disconnects while working, the most likely reason is a recent syntax error which prevents vite from building. Stop immediately and locate the syntax error, then refresh.
+
+- DO NOT import from `../lib`. Instead, symlink src/lib into src/notebook-name/lib and import from `./lib`.
+
+- DO NOT import external modules in imported javascript files. Import external modules like npm: or observable: imports from the notebook, then inject them if necessary into library functions.
