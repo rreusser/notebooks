@@ -328,7 +328,18 @@
       const regl = stack.elements.regl.value;
       if (!regl) return;
 
-      const positionsBuffer = regl.buffer(trajectory.position);
+      // Create buffer with sentinel values at start and end for proper line caps
+      const SENTINEL = 1e10;
+      const n = trajectory.t.length;
+      const positionsWithSentinels = new Float32Array(9 + trajectory.position.length + 9);
+      // Start sentinel
+      positionsWithSentinels.fill(SENTINEL, 0, 9);
+      // Copy trajectory data
+      positionsWithSentinels.set(trajectory.position, 9);
+      // End sentinel
+      positionsWithSentinels.fill(SENTINEL, 9 + trajectory.position.length);
+
+      const positionsBuffer = regl.buffer(positionsWithSentinels);
       const pointsBufferData = new Float32Array(9);
       const pointsBuffer = regl.buffer(pointsBufferData);
 
@@ -345,6 +356,8 @@
           uniform float width;
 
           vec4 getPosition(vec3 p) {
+            // Detect sentinel value and return vec4(0) to trigger line cap
+            if (p.x > 1e9) return vec4(0);
             return view * vec4(p.xy, (p.z * timeScale - timeShift) * 2.0 - 1.0, 1.0);
           }
 
@@ -442,16 +455,20 @@
         if (drawingParams.animate) frozenTime = ctx.time;
         const ts = currentTime * drawingParams.speed;
         // timeShift ranges -1 to 1: at -1 lines are above clip (entering), at 1 below (exiting)
-        const timeShift = ((ts % (tPeriod * 2)) / tPeriod) - 1;
-        const timeScale = 1 / tPeriod;
+        // When not animating, adjust scale/shift to keep z in [-0.999, 0.999] to avoid clip boundary issues
+        const clipEps = 0.0005;
+        const timeShift = drawingParams.animate ? ((ts % (tPeriod * 2)) / tPeriod) - 1 : -clipEps;
+        const timeScale = drawingParams.animate ? (1 / tPeriod) : ((1 - 2 * clipEps) / tPeriod);
 
         regl.clear({ color: [0, 0, 0, 0], depth: 1 });
 
         for (let i = 0; i < 3; i++) {
           drawLines({
             join: 'bevel',
-            vertexCount: trajectory.t.length,
+            insertCaps: true,
+            vertexCount: trajectory.t.length + 2, // +2 for sentinel entries
             vertexAttributes: {
+              // offset: 36 bytes for start sentinel + i*12 for each body
               position: { buffer: positionsBuffer, stride: 36, offset: i * 12 }
             },
             timeScale,
@@ -469,18 +486,21 @@
         const idx1 = Math.min(t.length - 1, idx + 1);
         const frac = (tt - t[idx]) / (t[idx1] - t[idx] || 1);
 
-        for (let j = 0; j < 9; j++) {
-          pointsBufferData[j] = (1 - frac) * y[idx * 9 + j] + frac * y[idx1 * 9 + j];
-        }
-        pointsBuffer.subdata(pointsBufferData);
+        // Only draw points when animating
+        if (drawingParams.animate) {
+          for (let j = 0; j < 9; j++) {
+            pointsBufferData[j] = (1 - frac) * y[idx * 9 + j] + frac * y[idx1 * 9 + j];
+          }
+          pointsBuffer.subdata(pointsBufferData);
 
-        for (let i = 0; i < 3; i++) {
-          drawPoints({
-            offset: i * 12,
-            pointSize: (initialConditions?.pointSize?.[i] || 1) * drawingParams.pointSize,
-            color: drawingParams.color[i],
-            strokeColor: drawingParams.strokeColor[i]
-          });
+          for (let i = 0; i < 3; i++) {
+            drawPoints({
+              offset: i * 12,
+              pointSize: (initialConditions?.pointSize?.[i] || 1) * drawingParams.pointSize,
+              color: drawingParams.color[i],
+              strokeColor: drawingParams.strokeColor[i]
+            });
+          }
         }
 
         if (drawingParams.animate) regl.dirty = true;
