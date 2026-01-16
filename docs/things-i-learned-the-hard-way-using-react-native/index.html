@@ -3,8 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="Things I Learned the Hard Way Using React Native">
+  <meta property="og:title" content="Things I Learned the Hard Way Using React Native">
+  <meta name="twitter:description" content="A collection of lessons learned from eight months of React Native development - environment setup, Redux patterns, performance optimization, and cross-platform gotchas.">
+  <meta name="subject" content="A collection of lessons learned from eight months of React Native development - environment setup, Redux patterns, performance optimization, and cross-platform gotchas.">
+  <meta name="description" content="A collection of lessons learned from eight months of React Native development - environment setup, Redux patterns, performance optimization, and cross-platform gotchas.">
+  <meta property="og:description" content="A collection of lessons learned from eight months of React Native development - environment setup, Redux patterns, performance optimization, and cross-platform gotchas.">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1499,8 +1503,9 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Things I Learned the Hard Way Using React Native</title>  <script type="module" crossorigin src="/notebooks/assets/index-Db7gnlXq.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1511,202 +1516,128 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Things I Learned the Hard Way Using React Native</h1>
     <div class="byline">
-      
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20160505">May 5, 2016</time>
     </div>
     <div class="resource-links">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/things-i-learned-the-hard-way-using-react-native/index.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="plot-with-zoom/">Zoomable Multi-Layer Plots in Notebook Kit</a></h2>
-            <span class="publishedAt">January 13, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/">Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU</a></h2>
-            <span class="publishedAt">January 10, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="wilcoxon-signed-rank-test/">Wilcoxon Signed-Rank Test for Performance Testing</a></h2>
-            <span class="publishedAt">January 6, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="perfectly-matched-layers-for-the-wave-equation/">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <span class="publishedAt">December 31, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="reflecting-on-two-years-of-yoga/">Reflecting on Two Years of Yoga</a></h2>
-            <span class="publishedAt">December 27, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="of-noise-and-neighbors/">Of Noise and Neighbors</a></h2>
-            <span class="publishedAt">September 29, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="regl-canvas/">REGL in Observable Notebooks 2.0</a></h2>
-            <span class="publishedAt">August 12, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="clifford-and-de-jong-attractors/">Clifford and de Jong Attractors</a></h2>
-            <span class="publishedAt">May 16, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="chaotic-magnetic-pendulum/">Chaotic Magnetic Pendulum</a></h2>
-            <span class="publishedAt">August 7, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="spring-training/">Spring Training on the Treadmill</a></h2>
-            <span class="publishedAt">June 8, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="speed-climbing-world-record-progression/">Speed Climbing World Record Progression</a></h2>
-            <span class="publishedAt">May 3, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/">Series Acceleration with Shanks Transformation</a></h2>
-            <span class="publishedAt">September 23, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="cubic-basis-vs-hermite-interpolation/">Cubic basis vs. Hermite interpolation</a></h2>
-            <span class="publishedAt">May 13, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="bicubic-texture-interpolation-using-linear-filtering/">Bicubic Texture Interpolation using Linear Filtering</a></h2>
-            <span class="publishedAt">January 6, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">November 16, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="fast-generalized-winding-numbers-in-2d/">Fast Generalized Winding Numbers in 2D</a></h2>
-            <span class="publishedAt">September 7, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">May 24, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="double-pendulum-map/">The Double Pendulum Map</a></h2>
-            <span class="publishedAt">May 14, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="malkus-waterwheel/">Malkus Waterwheel</a></h2>
-            <span class="publishedAt">February 13, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="point-cloud-point-opacity/">Selecting the Right Opacity for 2D Point Clouds</a></h2>
-            <span class="publishedAt">December 8, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="adaptive-contouring-in-fragment-shaders/">Adaptive Contouring in Fragment Shaders</a></h2>
-            <span class="publishedAt">November 21, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="integers-in-single-precision-floating-point/">Visualizing Integers in Floating-Point</a></h2>
-            <span class="publishedAt">February 9, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="periodic-planar-three-body-orbits/">Periodic Planar Three-Body Orbits</a></h2>
-            <span class="publishedAt">September 1, 2019</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="aligning-3d-scans/">Aligning 3D Scans</a></h2>
-            <span class="publishedAt">July 28, 2018</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="things-i-learned-the-hard-way-using-react-native/">Things I Learned the Hard Way Using React Native</a></h2>
-            <span class="publishedAt">May 5, 2016</span>
-          </div>
-          
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p><em>Hello from 2026 where this post is a full decade out of date! React Native looks very different today. I’m leaving this article for the sake of history but not much more.</em></p>
+  <script id="1" type="text/markdown">
+# Things I Learned the Hard Way Using React Native</script></div></div><div id="cell-2" class="observablehq observablehq--cell"><div><h2 id="the-tl-dr" tabindex="-1"><a href="#the-tl-dr">the tl;dr:</a></h2>
+<p>This post exists because I wish someone had sat me down and told me half of these things on Day One of using React Native.</p>
+</div></div><div id="cell-3" class="observablehq observablehq--cell"><div><h2 id="the-kinda-long-might-read" tabindex="-1"><a href="#the-kinda-long-might-read">The kinda long; might read:</a></h2>
+<p>I am decidedly not an expert in <a href="http://facebook.github.io/react-native/">React Native</a>, but that doesn’t mean I haven’t learned a lot of difficult lessons over the last <a href="http://www.thefoodstand.com">eight months</a>. And earlier today I had the chance to introduce a couple developers to React Native. They had JavaScript experience and knew their way around mobile apps, but React Native was a new beast. It made me recall what a foreign set of concepts <a href="https://facebook.github.io/react/">React</a> and <a href="http://facebook.github.io/react-native">React Native</a> were when we started out.</p>
+<p>This post is a loose collection of the things I wish someone had just told me from the beginning. Some are obvious; some aren’t. The original gist is <a href="https://gist.github.com/rreusser/c673bb3ec5316cf3bd46a18d4777eff3">here</a>. I’ve surely missed a lot of good information. So it’s not everything, but hopefully it’s mostly valid information that can save someone else some of the time it took us to discover all of these things. If there’s something that’s changed your life (dev-wise), please let me know in the comments section and I’d be glad to add it to the list!</p>
+<p><em>Update:</em> Great recommendations based on twitter replies/searches (Thanks, <a href="https://twitter.com/sseraphini">sseraphini</a>!):</p>
+<ul>
+<li><a href="https://github.com/yelouafi/redux-saga">redux-saga</a></li>
+<li><a href="https://github.com/gaearon/redux-thunk">redux-thunk</a></li>
+<li><a href="https://github.com/lelandrichardson/react-native-mock">react-native-mock</a></li>
+<li><a href="https://github.com/airbnb/enzyme">enzyme</a></li>
+<li><a href="https://twitter.com/JI/status/728696866343243777">Sentry and Crashlytics</a></li>
+</ul>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"><div><h2 id="the-thoughts" tabindex="-1"><a href="#the-thoughts">The thoughts:</a></h2>
+<p><strong>Set up your environment carefully</strong>: It’s important to have <em>one</em> canonical source of truth per environment, per platform. (i.e. iOS Development, iOS Testflight, iOS Production, ditto Android.) Every time you build, your config should propagate values from one input source (per env) to either Java/JavaScript or Objective-C/JavaScript. <a href="https://gist.github.com/rreusser/77c18ca38a6848876c22a00d3fed99a9">Here’s what we did for Android</a> and <a href="https://gist.github.com/rreusser/283e032fb1bb5f59256fd5b96f8b8e6c">here’s what we did for iOS</a>. I don’t doubt that you can do better. <em>Please do better.</em> But you can’t say that we didn’t have one canonical source of truth that worked very simply and effectively throughout the development process.</p>
+<p><strong>Don’t wait until the end to develop Android and iOS concurrently:</strong> Even if you’re not actively focusing on both platforms, don’t assume that “RN is cross platform… we can develop iOS and flip the Android switch when we’re done.” It’s mostly cross-platform. But there’s lots of little stuff like iOS and Android handling margins on text differently. Small quirks, but not the sort of stuff you want to completely refactor at the end.</p>
+<p><strong>Use a linter:</strong> I like <a href="https://github.com/Flet/semistandard">semistandard</a>. We ran into lots of frustrating issues where we had duplicate keys in hashes that didn’t fail until we moved to the web platform. A linter can be annoying, but it’s not so bad if you get on board early. Prevents you from doing lots of stupid invalid stuff that doesn’t actually cause errors.</p>
+</div></div><div id="cell-5" class="observablehq observablehq--cell"><div><p><strong>Learning Redux</strong>: If you use it. It was useful to read the source itself. It’s actually relatively concise. <a href="https://gist.github.com/gaearon/1d19088790e70ac32ea636c025ba424e#file-connect-js">Here’s Dan Abramov deconstructing it</a>. It helped clear up my understanding of what’s going on. Understanding exactly why components get updated helped us improve performance dramatically. <a href="https://github.com/reactjs/react-redux/blob/master/src/components/connect.js#L283">I think these are the lines that do it in redux</a>. (<em>&lt;-- fixed this link because hadn’t looked at this in a while and so didn’t look deep enough</em>). As for connecting components, we debated whether to connect giant parts of the state tree or lots of little values. Also whether to connect tons of little components or just the big components. Short answer: understand why things get re-rendered and a happy medium is probably best because either extreme has tradeoffs. Connecting <strong>every</strong> component seems silly and expensive, and it’s probably overkill and unnecessarily verbose to unpack tons of values in every <code>mapStateToProps</code>. Happy medium, I think.</p>
+<p><strong>But what’s the right data store???</strong> <em>The right data store is one that you understand.</em> We stored our stuff in some weird key-value store (for historical reasons, a glorified <code>{users: {...}, ...}</code> object). It worked pretty well, but what would have made it better would have been either to understand better what triggers updates from the start or maybe to take the plunge and get on board with immutablejs from the start. But there’s no one true answer. Ours worked fine. If you use a library for your datastore, mainly try to understand <em>why</em> it does what it does (which doesn’t necessarily include worrying about the internal workings). So just pick one. Don’t worry. <a href="http://techcrunch.com/2014/10/18/you-too-may-be-a-victim-of-developaralysis/">You’ll be fine</a>.</p>
+<p><strong>Put <code>console.logs</code> in your render statements and figure out just how often things are getting rendered.</strong> You can get away with a lot for a while using react. It’s magic. Until it feels laggy. The second major release of our iOS app was mainly a giant audit of why there was so much extra rendering going on. Performance increased dramatically.</p>
+</div></div><div id="cell-6" class="observablehq observablehq--cell"><div><p><strong>Follow people on twitter:</strong> <a href="https://twitter.com/dan_abramov">@dan_abramov</a>, <a href="https://twitter.com/JI">@JI</a>, <a href="https://twitter.com/ReactJSNews">@ReactJSNews</a>, <a href="https://twitter.com/Vjeux">@Vjeux</a>. Lots more. A good way to be a fly on the wall and find out about trendy stuff without getting sucked into a hacker-news sort of rabbit hole.</p>
+<p><strong>React universal template</strong> The future is upon us. Web, iOS, Android, Server. One codebase. And Windows Phone, soonish. <a href="https://github.com/este/este">este/este.js</a></p>
+<p><strong>My template</strong> which isn’t great but maybe has a couple things going for it regarding redux + immutable setup. Generally speaking, don’t just copy the setup blindly though. Understand it. <a href="https://github.com/rreusser/react-native-with-everything">react-native-with-everything</a></p>
+<p><strong>Live on the bleeding edge</strong>: It’s a calculated risk when you’re trying to run a business, but we never got bitten by upgrading early and often. On the contrary, the bugfixes and frequent updates prevented our code from getting stale. It meant submitting lots of little PRs to different repos, but it was time well spent. When the community indicates the direction they’re going, take a hint. So yeah, it’s probably all NavigatorExperimental moving forward.</p>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"><div><p><strong>This stuff is outstanding</strong>:</p>
+<ul>
+<li><a href="https://github.com/oblador/react-native-animatable">oblador/react-native-animatable</a></li>
+<li><a href="https://github.com/oblador/react-native-vector-icons">oblador/react-native-vector-icons</a></li>
+</ul>
+<p><strong>Corollary</strong>: <a href="https://icomoon.io/">icomoon.io</a> is the best thing ever for managing icons.</p>
+<p><strong>We didn’t do much testing.</strong> There. I said it. We didn’t do much testing. It felt horrible. I’m embarrassed. There are some little unit tests for tricky logic, and the server-side code has pretty good coverage, but there’s not really any mobile integration testing. Honestly, good redux middleware made debugging and reasoning about state so easy that there was just never a time when it was a top priority to lock down functionality with tests before we ripped features out and replaced them. We had a couple minor regressions, but 80% of the challenges we had were obscure, untestable things like a weird layering bug with the twitter native share dialog. (And once we hooked up <a href="https://microsoft.github.io/code-push/">CodePush</a>, we could <a href="https://www.youtube.com/watch?v=O_HyZ5aW76c">do it live</a> anyway.) That said, you should always test your code.</p>
+<p><strong>Keyboard spacer</strong>: I <em>highly</em> recommend a single keyboard spacer at the bottom of your top-level view. Or at least very few as high up in the DOM as possible. No need to add them all over the place (it’s a mess), and best to avoid fixing the height of anything to the height of the viewport (Android and the in-call status bar will make your life unpleasant).
+<a href="https://www.npmjs.com/package/react-native-keyboard-spacer">react-native-keyboard-spacer</a></p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"><div><p><strong>Steer clear of negative margins.</strong> On iOS it’s the same useful trick you web devs are used to. On Android (unless there’s a trick I wasn’t able to find), they all get clipped. If you want content to sit outside its parent container, use a larger parent container with <a href="http://facebook.github.io/react-native/docs/view.html#pointerevents"><code>pointerEvents="box-none"</code></a>.</p>
+<p><strong>Margins and padding on text components</strong> more or less don’t have much of an effect on Android, so really try to avoid them if you start with iOS!</p>
+<p><strong>Higher order components</strong> (enhancing behavior without mixins or class inheritance):
+<a href="https://gist.github.com/sebmarkbage/ef0bf1f338a7182b6775">https://gist.github.com/sebmarkbage/ef0bf1f338a7182b6775</a></p>
+<p><strong>This is useful</strong>: Premature optimization is bad, but good to get a handle on what optimization means: <a href="https://github.com/garbles/why-did-you-update">garbles/why-did-you-update</a></p>
+<p><strong><a href="https://facebook.github.io/react/blog/2015/10/07/react-v0.14.html#stateless-functional-components">Stateless functional components</a></strong>: Good for components that can have no internal state.</p>
+<pre data-language="js"><code class="language-javascript"><span class="tok-keyword">var</span> <span class="tok-definition">Button</span> = (<span class="tok-definition">props</span>) =&gt; {
+  <span class="tok-keyword">return</span> &lt;<span class="tok-variable">View</span>&gt;&lt;<span class="tok-variable">Text</span>&gt;{<span class="tok-definition">props</span>.<span class="tok-definition">label</span>}&lt;<span class="tok-string">/Text&gt;&lt;/</span><span class="tok-variable">View</span>&gt;
+}
+</code></pre>
+</div></div><div id="cell-9" class="observablehq observablehq--cell"><div><p><strong>But be careful with those because:</strong> An interesting discussion on avoiding re-rendering the entire app on every state update: <a href="https://medium.com/@esamatti/react-js-pure-render-performance-anti-pattern-fb88c101332f#.u3tqgdf47">Pure Render Performance Anti-Pattern</a></p>
+<p><strong>Or just forget understanding optimization and use this:</strong></p>
+<ul>
+<li><a href="https://github.com/thejameskyle/babel-react-optimize">thejameskyle/babel-react-optimize</a></li>
+</ul>
+<p><strong>A trivial optimization that may actually be noticable</strong>:</p>
+<p>Instead of this:</p>
+<pre data-language="js"><code class="language-javascript"><span class="tok-keyword">return</span> &lt;<span class="tok-variable">TextInput </span><span class="tok-variable">onChange</span>={() =&gt; { <span class="tok-keyword">do</span> <span class="tok-variable">something </span><span class="tok-variable">inline</span>}}/&gt;
+</code></pre>
+<p>Do this:</p>
+<pre data-language="js"><code class="language-javascript"><span class="tok-variable">_handleChange</span> = () =&gt; {
+  <span class="tok-variable">same </span><span class="tok-variable">thing </span><span class="tok-variable">but </span><span class="tok-variable">not </span><span class="tok-variable">inline</span>
+};
+
+<span class="tok-variable">render</span> () {
+  <span class="tok-keyword">return</span> &lt;<span class="tok-variable">TextInput </span><span class="tok-variable">onChange</span>={<span class="tok-definition">this</span>.<span class="tok-definition">_handleChange</span>}<span class="tok-string">/&gt;</span>
+}
+</code></pre>
+<p>Subtle, but (and thanks, Scott Kyle for correcting my obvious oversight on this one!!) in the first version, the <code>TextInput</code> gets a new callback every time and so gets re-rendered. The second passes the reference to the same callback, hence no re-render.</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"><div><p><strong>Rendering arrays:</strong></p>
+<p>Except for the final <code>render</code> which needs to return a single node, you can always deal with arrays of keyed nodes instead of jamming everything together into wrapper views all over the place, e.g.:</p>
+<pre data-language="js"><code class="language-javascript"><span class="tok-variable">renderSomePart</span> = () =&gt; {
+  <span class="tok-keyword">return</span> [
+    &lt;<span class="tok-variable">View </span><span class="tok-variable">key</span>=<span class="tok-string">"item-1"</span>/&gt;,
+    &lt;<span class="tok-variable">View </span><span class="tok-variable">key</span>=<span class="tok-string">"item-2"</span>/&gt;
+  ];
+};
+</code></pre>
+<p>Or:</p>
+<pre data-language="js"><code class="language-javascript"><span class="tok-variable">renderItem</span> = (<span class="tok-definition">item</span>, <span class="tok-definition">i</span>) =&gt; (
+  &lt;<span class="tok-variable">View </span><span class="tok-variable">key</span>=<span class="tok-string">`item-`</span>&gt; ... &lt;<span class="tok-string">/View&gt;</span>
+)
+
+<span class="tok-variable">renderSomePart</span> = () =&gt; {
+  <span class="tok-keyword">return</span> <span class="tok-keyword">this</span>.<span class="tok-definition">props</span>.<span class="tok-definition">someDataItems</span>.<span class="tok-definition">map</span>(<span class="tok-keyword">this</span>.<span class="tok-definition">renderItem</span>);
+};
+</code></pre>
+</div></div><div id="cell-11" class="observablehq observablehq--cell"><div><p>And text nodes can contain other text nodes. Our first attempt at a paragraph with mentions was to split text by whitespace and lay out nodes with flexbox. That’s crazy. You can just nest text nodes and make some of them pressable. Sounds obscure, but it wasn’t immediately obvious, and if you need it, it’s life-changing.</p>
+<pre data-language="js"><code class="language-javascript"><span class="tok-variable">render</span> () {
+  <span class="tok-keyword">return</span> &lt;<span class="tok-variable">View</span>&gt;{[
+    &lt;<span class="tok-keyword">Text</span> key=<span class="tok-string">"1"</span>&gt;Hello, &lt;<span class="tok-string">/Text&gt;,</span>
+    &lt;<span class="tok-variable">Text </span><span class="tok-variable">key</span>=<span class="tok-string">"2"</span>&gt;{[
+      &lt;<span class="tok-keyword">Text</span> key=<span class="tok-string">"3"</span> onPress={...}&gt;<span class="tok-keyword">this</span> <span class="tok-variable">is </span><span class="tok-variable">a </span><span class="tok-variable">link</span>&lt;<span class="tok-string">/Text&gt;,</span>
+      &lt;<span class="tok-variable">Text </span><span class="tok-variable">key</span>=<span class="tok-string">"4"</span>&gt;, <span class="tok-variable">and </span><span class="tok-keyword">this</span> <span class="tok-variable">is </span><span class="tok-variable">just </span><span class="tok-variable">regular </span><span class="tok-variable">text</span>&lt;<span class="tok-string">/Text&gt;</span>
+    ]}&lt;<span class="tok-string">/Text&gt;</span>
+  ]}&lt;<span class="tok-string">/View&gt;;</span>
+}
+</code></pre>
+<p><strong>Loading overlays and z-ordering:</strong>
+Absolutely position the overlay top/right/left/bottom: 0 and make sure it’s <em>after</em> the rest of the content it needs to overlay. Draw order is last-on-top:</p>
+<pre data-language="js"><code class="language-javascript">&lt;<span class="tok-variable">View</span>&gt;
+  &lt;...&gt;
+  &lt;<span class="tok-variable">LoadingOverlay</span>&gt;
+&lt;<span class="tok-string">/View&gt;</span>
+</code></pre>
+</div></div><div id="cell-12" class="observablehq observablehq--cell"><div><p><strong>Android installation (Genymotion)</strong>
+Omitted for brevity, but you can see it in the original gist <a href="https://gist.github.com/rreusser/c673bb3ec5316cf3bd46a18d4777eff3">here</a>. Android Studio 2.0 seems better these days though. Great emulator.</p>
+</div></div><div id="cell-13" class="observablehq observablehq--cell"><div><h2 id="conclusion" tabindex="-1"><a href="#conclusion">Conclusion</a></h2>
+<p>That’s all for now! At the end here, I’m clearly kinda scraping the bottom of the barrel. There’s nothing profound here, but talking to new React Native devs made me realize how much time we could have saved if someone had been there to walk us through a few basics and warn us ahead of time where we’d dig the deepest holes for ourselves. Overall we had nothing but good fortune to have taken a gamble and found ourselves working among an outstanding, welcoming, active community of developers. If you need a mobile platform, I highly recommend that you <a href="http://facebook.github.io/react-native/">give it a try!</a></p>
+</div></div></main>
+  </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
 
