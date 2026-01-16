@@ -64,7 +64,7 @@ The vector form of Newton's law of gravitation for the force on body 2 exerted b
           <dt>Sequence</dt><dd><a href="${d[c]?.[b]||"#"}">${S}${s?" (unequal mass)":""}</a></dd>
           <dt>Orbit</dt><dd>${f.url?n`<a href="${f.url}">${o`${a.name}`}</a>`:o`${a.name}`}</dd>
           <dt>Initial positions</dt><dd>${o`((${h[0][0]}, ${h[0][1]}), (${h[1][0]}, ${h[1][1]}), (${h[2][0]}, ${h[2][1]}))`}</dd>
-          <dt>Initial velocities</dt><dd>${o`((${x[0][0]}, ${x[0][1]}), (${x[1][0]}, ${x[1][1]}), (${x[2][0]}, ${x[2][1]}))`}</dd>
+          <dt>Initial velocities</dt><dd>${o`\begin{aligned}&(${x[0][0]}, ${x[0][1]}),\\&(${x[1][0]}, ${x[1][1]}),\\&(${x[2][0]}, ${x[2][1]})\end{aligned}`}</dd>
           <dt>Masses</dt><dd>${o`(${w[0]}, ${w[1]}, ${w[2]})`}</dd>
           <dt>Free group element</dt><dd style="word-break:break-all;">${u}</dd>
           <dt>Period</dt><dd>${f.T}</dd>
