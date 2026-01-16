@@ -53,27 +53,35 @@
   </script>
   <script id="4" type="module">
     // Controls
-    const lineWidthInput = Inputs.range([1, 50], { label: 'Line width', value: 20, step: 0.5 });
+    const lineWidthInput = Inputs.range([1, 50], { label: 'Line width', value: 50, step: 0.5 });
     const lineWidth = view(lineWidthInput);
 
-    const joinTypeInput = Inputs.select(['bevel', 'miter', 'round'], { label: 'Join type', value: 'round' });
+    const joinTypeInput = Inputs.select(['bevel', 'miter', 'round'], { label: 'Join type', value: 'miter' });
     const joinType = view(joinTypeInput);
 
     const patternInput = Inputs.select(['wave', 'zigzag', 'spiral'], { label: 'Pattern', value: 'zigzag' });
     const pattern = view(patternInput);
 
-    const miterLimitInput = Inputs.range([1, 10], { label: 'Miter limit', value: 4, step: 0.1 });
+    const miterLimitInput = Inputs.range([1, 10], { label: 'Miter limit', value: 1, step: 0.1 });
     const miterLimit = view(miterLimitInput);
 
     const joinResolutionInput = Inputs.range([2, 16], { label: 'Round join resolution', value: 8, step: 1 });
     const joinResolution = view(joinResolutionInput);
 
+    const capTypeInput = Inputs.select(['round', 'square', 'none'], { label: 'Cap type', value: 'round' });
+    const capType = view(capTypeInput);
+
+    const capResolutionInput = Inputs.range([2, 16], { label: 'Round cap resolution', value: 8, step: 1 });
+    const capResolution = view(capResolutionInput);
+
     display(html`<div style="display: flex; gap: 20px; flex-wrap: wrap;">
       ${lineWidthInput}
       ${joinTypeInput}
+      ${capTypeInput}
       ${patternInput}
       ${miterLimitInput}
       ${joinResolutionInput}
+      ${capResolutionInput}
     </div>`);
   </script>
   <script id="5" type="module">
@@ -84,13 +92,13 @@
 
     function generatePattern(patternType) {
       if (patternType === 'zigzag') {
-        // Zigzag pattern with sharp angles
-        const numPoints = 12;
+        // Simpler zigzag pattern for debugging
+        const numPoints = 6;
         const positions = new Float32Array(numPoints * 4);
         for (let i = 0; i < numPoints; i++) {
           const t = i / (numPoints - 1);
-          const x = -0.8 + t * 1.6;
-          const y = (i % 2 === 0 ? 0.3 : -0.3);
+          const x = -0.6 + t * 1.2;
+          const y = (i % 2 === 0 ? 0.2 : -0.2);
           positions[i * 4 + 0] = x;
           positions[i * 4 + 1] = y;
           positions[i * 4 + 2] = 0;
@@ -141,14 +149,16 @@
     invalidation.then(() => positionBuffer.destroy());
   </script>
   <script id="6" type="module">
-    // Recreate pipeline when join type or resolution changes
-    joinType; joinResolution; miterLimit;
+    // Recreate pipeline when join/cap type or resolution changes
+    joinType; joinResolution; miterLimit; capType; capResolution;
 
     const gpuLines = createGPULines(device, {
       format: canvasFormat,
       join: joinType,
       joinResolution: joinResolution,
       miterLimit: miterLimit,
+      cap: capType,
+      capResolution: capResolution,
       vertexShaderBody: /* wgsl */`
         // User vertex shader code can go here
         // Access to: positions array, uniforms
@@ -157,7 +167,7 @@
         fn getColor(lineCoord: vec3f) -> vec4f {
           // lineCoord.x: along the line (for dashes)
           // lineCoord.y: across the line (-1 to 1, 0 at center)
-          // lineCoord.z: 1 if outside main segment (in join extrapolation)
+          // lineCoord.z: 1 if outside main segment (in join extrapolation) or cap
 
           // Simple solid color with slight edge darkening
           let edge = 1.0 - 0.3 * abs(lineCoord.y);
@@ -172,8 +182,20 @@
     // Render loop
     let frameId = null;
 
+    const drawProps = {
+      positionBuffer,
+      vertexCount: numPoints,
+      width: lineWidth,
+      resolution: [canvas.width, canvas.height]
+    };
+
     function render() {
+      drawProps.width = lineWidth;
+
       const encoder = device.createCommandEncoder();
+
+      // Run compute passes for endpoint detection (must be before render pass)
+      gpuLines.prepareFrame(encoder, drawProps);
 
       const pass = encoder.beginRenderPass({
         colorAttachments: [{
@@ -184,12 +206,7 @@
         }]
       });
 
-      gpuLines.draw(pass, {
-        positionBuffer,
-        vertexCount: numPoints,
-        width: lineWidth,
-        resolution: [canvas.width, canvas.height]
-      });
+      gpuLines.draw(pass, drawProps);
 
       pass.end();
       device.queue.submit([encoder.finish()]);

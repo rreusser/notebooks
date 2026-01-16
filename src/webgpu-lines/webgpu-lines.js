@@ -8,7 +8,11 @@
  * - Uses 4-point windows: A (previous), B (start), C (end), D (next)
  * - Triangle strip covers: half of join at B, segment B→C, half of join at C
  * - Index-based vertex generation in the vertex shader
+ * - End caps are rendered via compute shader + indirect draw
  */
+
+import { createCapVertexShader, createCapFragmentShader } from './cap-shaders.js';
+import { createFindEndpointsShader, createUpdateIndirectShader } from './cap-compute.js';
 
 /**
  * Create a WebGPU lines renderer
@@ -21,6 +25,8 @@
  * @param {string} [options.join='bevel'] - Join type: 'bevel', 'miter', or 'round'
  * @param {number} [options.joinResolution=8] - Resolution for round joins
  * @param {number} [options.miterLimit=4] - Miter limit before switching to bevel
+ * @param {string} [options.cap='round'] - Cap type: 'round', 'square', or 'none'
+ * @param {number} [options.capResolution=8] - Resolution for round caps
  */
 export function createGPULines(device, options) {
   const {
@@ -30,16 +36,32 @@ export function createGPULines(device, options) {
     join = 'bevel',
     joinResolution = 8,
     miterLimit = 4,
+    cap = 'round',
+    capResolution = 8,
   } = options;
 
   const isRound = join === 'round';
+  const isBevel = join === 'bevel';
   const joinRes2 = isRound ? joinResolution * 2 : 2;
+
+  // For bevel joins, set miterLimit to 0 so isBevel is always true in shader
+  // This makes all joins flat instead of using the miter limit calculation
+  const effectiveMiterLimit = isBevel ? 0 : miterLimit;
 
   // Number of vertices per instance in the triangle strip
   // Structure: [first half join] [miter point] [segment] [second half join mirrored]
   // For bevel: joinRes2 = 2, so v = 2 + 3 = 5 per half, total = 10
   const vertCnt = joinRes2 + 3;
   const vertexCount = vertCnt * 2;
+
+  // Cap configuration
+  // We always need the cap pass to draw boundary segments (0→1 and (N-2)→(N-1))
+  // The cap TYPE controls whether we draw semicircular caps or flat ends
+  // - 'round'/'square': mirror pA=pC for semicircular cap
+  // - 'none': extrapolate pA=2*pB-pC for flat end (degenerate cap geometry)
+  const insertCaps = cap !== 'none';  // Whether to mirror (true) or extrapolate (false)
+  // Cap vertex count is same as main (they draw full segments with joins)
+  const capVertexCount = vertexCount;
 
   const vertexShader = createVertexShader(vertexShaderBody, isRound);
   const fragmentShader = createFragmentShader(fragmentShaderBody);
@@ -119,9 +141,275 @@ export function createGPULines(device, options) {
     ]
   });
 
+  // ===== CAP RENDERING INFRASTRUCTURE =====
+
+  // Cap-related resources (created lazily on first draw with caps)
+  let capPipeline = null;
+  let capUniformBuffer = null;
+  let capUniformBindGroup = null;
+  let findEndpointsPipeline = null;
+  let updateIndirectPipeline = null;
+  let endpointBuffer = null;
+  let counterBuffer = null;
+  let indirectBuffer = null;
+  let computeParamsBuffer = null;
+  let computeBindGroup = null;
+  let indirectBindGroup = null;
+  let capDataBindGroup = null;
+  let currentMaxPoints = 0;
+
+  function initCapResources(pointCount) {
+    // Always need cap resources for boundary segments
+    // Only recreate if point count increased
+    if (pointCount <= currentMaxPoints) return;
+    currentMaxPoints = Math.max(pointCount, currentMaxPoints * 2 || 256);
+
+    // Destroy old buffers if they exist
+    if (endpointBuffer) endpointBuffer.destroy();
+    if (counterBuffer) counterBuffer.destroy();
+    if (indirectBuffer) indirectBuffer.destroy();
+    if (computeParamsBuffer) computeParamsBuffer.destroy();
+
+    // Create endpoint buffer: pairs of (pointIndex, capType)
+    // Max endpoints = 2 * number of possible line breaks + 2 endpoints
+    const maxEndpoints = currentMaxPoints;
+    endpointBuffer = device.createBuffer({
+      label: 'cap-endpoints',
+      size: maxEndpoints * 2 * 4,  // u32 pairs
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+
+    // Atomic counter buffer
+    counterBuffer = device.createBuffer({
+      label: 'cap-counter',
+      size: 4,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST
+    });
+
+    // Indirect draw buffer
+    indirectBuffer = device.createBuffer({
+      label: 'cap-indirect',
+      size: 16,  // 4 x u32
+      usage: GPUBufferUsage.INDIRECT | GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+
+    // Compute params buffer
+    computeParamsBuffer = device.createBuffer({
+      label: 'cap-compute-params',
+      size: 4,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+  }
+
+  function initCapPipelines() {
+    // Always need cap pipelines for boundary segments
+    if (capPipeline) return;
+
+    // Create cap shader modules
+    const capVertexModule = device.createShaderModule({
+      label: 'gpu-lines-cap-vertex',
+      code: createCapVertexShader(isRound)
+    });
+
+    const capFragmentModule = device.createShaderModule({
+      label: 'gpu-lines-cap-fragment',
+      code: createCapFragmentShader(fragmentShaderBody)
+    });
+
+    const findEndpointsModule = device.createShaderModule({
+      label: 'gpu-lines-find-endpoints',
+      code: createFindEndpointsShader()
+    });
+
+    const updateIndirectModule = device.createShaderModule({
+      label: 'gpu-lines-update-indirect',
+      code: createUpdateIndirectShader(capVertexCount)
+    });
+
+    // Create bind group layout for compute shader (find endpoints)
+    const computeBindGroupLayout = device.createBindGroupLayout({
+      label: 'cap-compute-layout',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },  // positions
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // endpoints
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },           // counter
+        { binding: 3, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } },           // params
+      ]
+    });
+
+    // Create bind group layout for indirect update compute
+    const indirectBindGroupLayout = device.createBindGroupLayout({
+      label: 'cap-indirect-layout',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // counter
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },  // indirect
+      ]
+    });
+
+    // Create compute pipeline for finding endpoints
+    findEndpointsPipeline = device.createComputePipeline({
+      label: 'find-endpoints',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [computeBindGroupLayout] }),
+      compute: {
+        module: findEndpointsModule,
+        entryPoint: 'findEndpoints'
+      }
+    });
+
+    // Create compute pipeline for updating indirect buffer
+    updateIndirectPipeline = device.createComputePipeline({
+      label: 'update-indirect',
+      layout: device.createPipelineLayout({ bindGroupLayouts: [indirectBindGroupLayout] }),
+      compute: {
+        module: updateIndirectModule,
+        entryPoint: 'updateIndirect'
+      }
+    });
+
+    // Create cap uniform bind group layout (same as main for simplicity)
+    const capUniformBindGroupLayout = device.createBindGroupLayout({
+      label: 'cap-uniforms-layout',
+      entries: [
+        {
+          binding: 0,
+          visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+          buffer: { type: 'uniform' }
+        }
+      ]
+    });
+
+    // Create cap data bind group layout
+    const capDataBindGroupLayout = device.createBindGroupLayout({
+      label: 'cap-data-layout',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },  // positions
+        { binding: 1, visibility: GPUShaderStage.VERTEX, buffer: { type: 'read-only-storage' } },  // endpoints
+      ]
+    });
+
+    // Create cap render pipeline
+    capPipeline = device.createRenderPipeline({
+      label: 'gpu-lines-caps',
+      layout: device.createPipelineLayout({
+        bindGroupLayouts: [capUniformBindGroupLayout, capDataBindGroupLayout]
+      }),
+      vertex: {
+        module: capVertexModule,
+        entryPoint: 'capVertexMain',
+      },
+      fragment: {
+        module: capFragmentModule,
+        entryPoint: 'capFragmentMain',
+        targets: [{ format }]
+      },
+      primitive: {
+        topology: 'triangle-strip',
+        stripIndexFormat: undefined
+      }
+    });
+
+    // Create cap uniform buffer
+    // CapUniforms: resolution (vec2f), vertCnt2 (vec2f), miterLimit (f32), isRound (u32), width (f32), pointCount (u32), insertCaps (u32)
+    capUniformBuffer = device.createBuffer({
+      label: 'cap-uniforms',
+      size: 48,  // Increased for insertCaps + alignment
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    // Create cap uniform bind group
+    capUniformBindGroup = device.createBindGroup({
+      layout: capUniformBindGroupLayout,
+      entries: [
+        { binding: 0, resource: { buffer: capUniformBuffer } }
+      ]
+    });
+  }
+
+  function updateCapBindGroups(positionBuffer) {
+    // Always update for boundary segment rendering
+
+    // Update compute bind group
+    computeBindGroup = device.createBindGroup({
+      layout: findEndpointsPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: positionBuffer } },
+        { binding: 1, resource: { buffer: endpointBuffer } },
+        { binding: 2, resource: { buffer: counterBuffer } },
+        { binding: 3, resource: { buffer: computeParamsBuffer } },
+      ]
+    });
+
+    // Update indirect bind group
+    indirectBindGroup = device.createBindGroup({
+      layout: updateIndirectPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: counterBuffer } },
+        { binding: 1, resource: { buffer: indirectBuffer } },
+      ]
+    });
+
+    // Update cap data bind group
+    capDataBindGroup = device.createBindGroup({
+      layout: capPipeline.getBindGroupLayout(1),
+      entries: [
+        { binding: 0, resource: { buffer: positionBuffer } },
+        { binding: 1, resource: { buffer: endpointBuffer } },
+      ]
+    });
+  }
+
+  // Track last position buffer for bind group caching
+  let lastPositionBuffer = null;
+
   return {
     /**
-     * Draw lines
+     * Prepare frame by running compute passes for endpoint detection
+     * Must be called before beginRenderPass if caps are enabled
+     *
+     * @param {GPUCommandEncoder} encoder - Command encoder
+     * @param {object} props - Properties
+     * @param {GPUBuffer} props.positionBuffer - Buffer with vec4 positions
+     * @param {number} props.vertexCount - Number of vertices in the line
+     */
+    prepareFrame(encoder, props) {
+      // Always prepare for boundary segment rendering
+      const { positionBuffer, vertexCount: pointCount } = props;
+
+      // Initialize pipelines on first call
+      initCapPipelines();
+
+      // Initialize/resize buffers if needed
+      initCapResources(pointCount);
+
+      // Update bind groups if position buffer changed
+      if (positionBuffer !== lastPositionBuffer) {
+        updateCapBindGroups(positionBuffer);
+        lastPositionBuffer = positionBuffer;
+      }
+
+      // Reset counter to 0
+      device.queue.writeBuffer(counterBuffer, 0, new Uint32Array([0]));
+
+      // Update compute params
+      device.queue.writeBuffer(computeParamsBuffer, 0, new Uint32Array([pointCount]));
+
+      // Run compute shader to find endpoints
+      const computePass = encoder.beginComputePass({ label: 'find-endpoints' });
+      computePass.setPipeline(findEndpointsPipeline);
+      computePass.setBindGroup(0, computeBindGroup);
+      computePass.dispatchWorkgroups(Math.ceil(pointCount / 64));
+      computePass.end();
+
+      // Update indirect buffer with endpoint count
+      const indirectPass = encoder.beginComputePass({ label: 'update-indirect' });
+      indirectPass.setPipeline(updateIndirectPipeline);
+      indirectPass.setBindGroup(0, indirectBindGroup);
+      indirectPass.dispatchWorkgroups(1);
+      indirectPass.end();
+    },
+
+    /**
+     * Draw lines (segments + caps)
      * @param {GPURenderPassEncoder} pass - Render pass
      * @param {object} props - Draw properties
      * @param {GPUBuffer} props.positionBuffer - Buffer with vec4 positions
@@ -140,7 +428,7 @@ export function createGPULines(device, options) {
       f32[1] = resolution[1];
       f32[2] = joinRes2;
       f32[3] = joinRes2;
-      f32[4] = miterLimit * miterLimit;
+      f32[4] = effectiveMiterLimit * effectiveMiterLimit;
       u32[5] = isRound ? 1 : 0;
       f32[6] = width;
       device.queue.writeBuffer(uniformBuffer, 0, uniformData);
@@ -156,16 +444,45 @@ export function createGPULines(device, options) {
       // Number of instances = pointCount - 3 (need 4 points per segment window)
       const instanceCount = Math.max(0, pointCount - 3);
 
-      if (instanceCount <= 0) return;
+      // Draw segments
+      if (instanceCount > 0) {
+        pass.setPipeline(pipeline);
+        pass.setBindGroup(0, uniformBindGroup);
+        pass.setBindGroup(1, dataBindGroup);
+        pass.draw(vertexCount, instanceCount);
+      }
 
-      pass.setPipeline(pipeline);
-      pass.setBindGroup(0, uniformBindGroup);
-      pass.setBindGroup(1, dataBindGroup);
-      pass.draw(vertexCount, instanceCount);
+      // Draw boundary segments (with optional caps) using indirect draw
+      if (capPipeline && capDataBindGroup) {
+        // Update cap uniforms - same structure as main uniforms plus pointCount and insertCaps
+        const capUniformData = new ArrayBuffer(48);
+        const capF32 = new Float32Array(capUniformData);
+        const capU32 = new Uint32Array(capUniformData);
+        capF32[0] = resolution[0];
+        capF32[1] = resolution[1];
+        capF32[2] = joinRes2;
+        capF32[3] = joinRes2;
+        capF32[4] = effectiveMiterLimit * effectiveMiterLimit;
+        capU32[5] = isRound ? 1 : 0;
+        capF32[6] = width;
+        capU32[7] = pointCount;
+        capU32[8] = insertCaps ? 1 : 0;  // Whether to mirror (cap) or extrapolate (no cap)
+        device.queue.writeBuffer(capUniformBuffer, 0, capUniformData);
+
+        pass.setPipeline(capPipeline);
+        pass.setBindGroup(0, capUniformBindGroup);
+        pass.setBindGroup(1, capDataBindGroup);
+        pass.drawIndirect(indirectBuffer, 0);
+      }
     },
 
     destroy() {
       uniformBuffer.destroy();
+      if (capUniformBuffer) capUniformBuffer.destroy();
+      if (endpointBuffer) endpointBuffer.destroy();
+      if (counterBuffer) counterBuffer.destroy();
+      if (indirectBuffer) indirectBuffer.destroy();
+      if (computeParamsBuffer) computeParamsBuffer.destroy();
     }
   };
 }
@@ -349,11 +666,11 @@ fn vertexMain(
     if (i % 2.0 == 0.0) {
       // Outer joint points
       if (roundOrCap || i != 0.0) {
-        // Round joins
+        // Round joins (or non-first outer points for miter/bevel)
         let theta = -0.5 * (acos(cosB) * (clamp(i, 0.0, res) / res) - pi);
         xy = vec2f(cos(theta), sin(theta));
       } else {
-        // Miter/bevel joins
+        // Miter/bevel joins - first outer point only (i == 0)
         yBasis = select(miter, vec2f(0.0), bIsHairpin);
         xy.y = select(1.0 / m2, 1.0, isBevel);
       }
