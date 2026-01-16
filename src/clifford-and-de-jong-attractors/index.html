@@ -157,10 +157,13 @@
     }));
   </script>
   <script id="650" type="text/x-typescript">
-    const floatFormat = view(Inputs.radio(["float", "half float"], {
-      value: canWriteToFBOOfType(regl, "float") ? "float" : "half float",
-      label: html`Floating format<br><em><small>switch to half float on mobile if float doesn't work</small></em>`
-    }));
+    const supportedFormats = ["float", "half float"].filter(fmt => canWriteToFBOOfType(regl, fmt));
+    const floatFormat = supportedFormats.length > 0
+      ? view(Inputs.radio(supportedFormats, {
+          value: supportedFormats[0],
+          label: "Float format"
+        }))
+      : (() => { throw new Error("Neither float nor half-float framebuffers are supported on this device"); })();
   </script>
   <script id="1753" type="application/vnd.observable.javascript">
     link = {
@@ -863,12 +866,75 @@
       return Object.fromEntries(new URLSearchParams(str.startsWith('?') ? str.slice(1) : str));
     }
     function canWriteToFBOOfType(regl, type) {
+      type = type || "float";
+      if (!regl.hasExtension(`oes_texture_${type.replace(" ", "_")}`)) return false;
+      let floatFBO, uintFBO, draw, transfer;
       try {
-        const fbo = regl.framebuffer({width: 1, height: 1, colorType: type});
-        fbo.destroy();
-        return true;
+        floatFBO = regl.framebuffer({
+          colorType: type,
+          colorFormat: "rgba",
+          radius: 1
+        });
+
+        uintFBO = regl.framebuffer({
+          colorType: "uint8",
+          colorFormat: "rgba",
+          radius: 1
+        });
+
+        draw = regl({
+          vert: `
+          precision highp float;
+          attribute vec2 aXY;
+          void main () {
+            gl_Position = vec4(aXY, 0, 1);
+            gl_PointSize = 1.0;
+          }`,
+          frag: `
+          precision highp float;
+          void main () {
+            gl_FragColor = vec4(1, 0, 0, 1);
+          }`,
+          primitive: "points",
+          count: 1,
+          attributes: { aXY: [0, 0] },
+          framebuffer: regl.prop("dst"),
+          depth: { enable: false }
+        });
+
+        transfer = regl({
+          vert: `
+          precision highp float;
+          attribute vec2 aXY;
+          void main () {
+            gl_Position = vec4(aXY, 0, 1);
+          }`,
+          frag: `
+          precision highp float;
+          uniform sampler2D src;
+          void main () {
+            gl_FragColor = texture2D(src, vec2(0.5));
+          }`,
+          attributes: { aXY: [-4, -4, 4, -4, 0, 4] },
+          uniforms: { src: regl.prop("src") },
+          framebuffer: regl.prop("dst"),
+          count: 3,
+          primitive: "triangles",
+          depth: { enable: false }
+        });
+
+        draw({ dst: floatFBO });
+        transfer({ src: floatFBO, dst: uintFBO });
+        const data = regl.read({ framebuffer: uintFBO });
+
+        return data[0] !== 0 && data[1] === 0 && data[2] === 0 && data[3] !== 0;
       } catch (e) {
         return false;
+      } finally {
+        if (floatFBO) floatFBO.destroy();
+        if (uintFBO) uintFBO.destroy();
+        if (draw) draw.destroy();
+        if (transfer) transfer.destroy();
       }
     }
   </script>
