@@ -7,7 +7,8 @@
  * @param {number} options.height - Default height when collapsed
  * @param {number[]} [options.toggleOffset=[8,8]] - Offset [right, top] for the toggle button
  * @param {Function} [options.onResize] - Optional callback when dimensions change: (content, width, height, expanded) => void
- * @param {string} [options.controls] - CSS selector for controls element that floats over the expanded content
+ * @param {string|HTMLElement|Array<string|HTMLElement>} [options.controls] - Controls to float over expanded content.
+ *   Can be a CSS selector string, an HTMLElement, or an array of either.
  * @returns {HTMLElement} The expandable container
  */
 export function expandable(content, { width, height, toggleOffset = [8, 8], onResize, controls }) {
@@ -20,11 +21,16 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
   let isDragging = false;
   let dragStart = { x: 0, y: 0 };
 
-  // Track original location of controls for restoration
-  let controlsEl = null;
-  let controlsOriginalParent = null;
-  let controlsOriginalNextSibling = null;
-  let controlsPlaceholder = null;
+  // Normalize controls to array
+  const controlsArray = controls
+    ? (Array.isArray(controls) ? controls : [controls])
+    : [];
+
+  // Track original locations of controls for restoration (one entry per control)
+  const controlsState = [];
+
+  // MutationObserver to detect when Observable recreates elements while expanded
+  let controlsObserver = null;
 
   // Outer container maintains document flow
   const container = document.createElement('div');
@@ -61,7 +67,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
   overlay.addEventListener('click', () => collapse());
 
   // Create floating panel for controls (created once, reused)
-  if (controls) {
+  if (controlsArray.length > 0) {
     floatingPanel = document.createElement('div');
     floatingPanel.className = 'expandable-controls-panel';
     floatingPanel.style.cssText = `display: none;`;
@@ -126,11 +132,6 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
 
     floatingPanel.appendChild(panelHeader);
     floatingPanel.appendChild(panelContent);
-
-    // Placeholder to maintain space when controls are moved
-    controlsPlaceholder = document.createElement('div');
-    controlsPlaceholder.className = 'expandable-controls-placeholder';
-    controlsPlaceholder.style.cssText = `display: none;`;
 
     // Drag functionality
     panelHeader.addEventListener('mousedown', (e) => {
@@ -216,22 +217,98 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     }
   }
 
-  // Restore controls to their original location
+  // Restore all controls to their original locations
   function restoreControls() {
-    if (controlsEl && controlsOriginalParent) {
+    // Restore in reverse order to maintain correct sibling relationships
+    for (let i = controlsState.length - 1; i >= 0; i--) {
+      const state = controlsState[i];
+      if (!state) continue;
+
       // Remove placeholder if it exists
-      if (controlsPlaceholder && controlsPlaceholder.parentNode) {
-        controlsPlaceholder.parentNode.removeChild(controlsPlaceholder);
+      if (state.placeholder && state.placeholder.parentNode) {
+        state.placeholder.parentNode.removeChild(state.placeholder);
       }
-      // Move controls back
-      if (controlsOriginalNextSibling) {
-        controlsOriginalParent.insertBefore(controlsEl, controlsOriginalNextSibling);
-      } else {
-        controlsOriginalParent.appendChild(controlsEl);
+
+      // Check if Observable recreated this element while we had it in the panel
+      // If a new element with the same selector exists, don't restore the stale one
+      if (state.selector) {
+        const existingElement = document.querySelector(state.selector);
+        if (existingElement && existingElement !== state.element) {
+          // Observable created a new element - just remove our stale one from panel
+          if (state.element.parentNode) {
+            state.element.parentNode.removeChild(state.element);
+          }
+          continue;
+        }
       }
-      controlsEl = null;
-      controlsOriginalParent = null;
-      controlsOriginalNextSibling = null;
+
+      // Move control back to original location
+      if (state.element && state.originalParent) {
+        if (state.originalNextSibling) {
+          state.originalParent.insertBefore(state.element, state.originalNextSibling);
+        } else {
+          state.originalParent.appendChild(state.element);
+        }
+      }
+    }
+    controlsState.length = 0;
+  }
+
+  // Start observing for element recreation (Observable reactivity)
+  function startControlsObserver() {
+    if (controlsObserver) return;
+
+    controlsObserver = new MutationObserver((mutations) => {
+      if (!expanded || !floatingPanel) return;
+
+      const panelContent = floatingPanel.querySelector('.expandable-controls-content');
+      if (!panelContent) return;
+
+      // Check each selector-based control for recreation
+      for (const state of controlsState) {
+        if (!state.selector) continue;
+
+        // Look for a new element matching the selector that isn't our current one
+        const newElement = document.querySelector(state.selector);
+        if (newElement && newElement !== state.element && !panelContent.contains(newElement)) {
+          // Observable recreated this element - swap it into the panel
+          const oldElement = state.element;
+
+          // Update state to track new element
+          state.element = newElement;
+          state.originalParent = newElement.parentNode;
+          state.originalNextSibling = newElement.nextSibling;
+
+          // Create new placeholder for the new element's location
+          const newPlaceholder = document.createElement('div');
+          newPlaceholder.className = 'expandable-controls-placeholder';
+          newPlaceholder.style.display = 'none';
+          newElement.parentNode.insertBefore(newPlaceholder, newElement);
+
+          // Remove old placeholder
+          if (state.placeholder && state.placeholder.parentNode) {
+            state.placeholder.parentNode.removeChild(state.placeholder);
+          }
+          state.placeholder = newPlaceholder;
+
+          // Move new element to panel where old one was
+          if (oldElement.parentNode === panelContent) {
+            panelContent.insertBefore(newElement, oldElement);
+            panelContent.removeChild(oldElement);
+          } else {
+            panelContent.appendChild(newElement);
+          }
+        }
+      }
+    });
+
+    controlsObserver.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function stopControlsObserver() {
+    if (controlsObserver) {
+      controlsObserver.disconnect();
+      controlsObserver = null;
     }
   }
 
@@ -319,6 +396,9 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     // Hide overlay
     overlay.style.opacity = '0';
     overlay.style.pointerEvents = 'none';
+
+    // Stop watching for element recreation
+    stopControlsObserver();
 
     // Hide floating panel and restore controls
     if (floatingPanel) {
@@ -429,25 +509,41 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     }
 
     // Show floating controls panel
-    if (controls && floatingPanel) {
-      controlsEl = document.querySelector(controls);
-      if (controlsEl && controlsEl.parentNode) {
-        const panelContent = floatingPanel.querySelector('.expandable-controls-content');
-        if (panelContent) {
-          // Store original location
-          controlsOriginalParent = controlsEl.parentNode;
-          controlsOriginalNextSibling = controlsEl.nextSibling;
+    if (controlsArray.length > 0 && floatingPanel) {
+      const panelContent = floatingPanel.querySelector('.expandable-controls-content');
+      if (panelContent) {
+        // Process each control
+        for (const ctrl of controlsArray) {
+          // Resolve control to element
+          const el = typeof ctrl === 'string'
+            ? document.querySelector(ctrl)
+            : ctrl;
 
-          // Insert placeholder to maintain layout
-          controlsPlaceholder.style.height = `${controlsEl.offsetHeight}px`;
-          controlsPlaceholder.style.display = 'block';
-          controlsOriginalParent.insertBefore(controlsPlaceholder, controlsEl);
+          if (!el || !el.parentNode) continue;
 
-          // Move controls to panel
-          panelContent.appendChild(controlsEl);
+          // Create placeholder for this control
+          const placeholder = document.createElement('div');
+          placeholder.className = 'expandable-controls-placeholder';
+          placeholder.style.height = `${el.offsetHeight}px`;
+          placeholder.style.display = 'block';
+
+          // Store state for restoration (include selector for duplicate detection)
+          controlsState.push({
+            element: el,
+            selector: typeof ctrl === 'string' ? ctrl : null,
+            originalParent: el.parentNode,
+            originalNextSibling: el.nextSibling,
+            placeholder
+          });
+
+          // Insert placeholder and move control to panel
+          el.parentNode.insertBefore(placeholder, el);
+          panelContent.appendChild(el);
         }
+      }
 
-        // Add panel to body and show
+      // Add panel to body and show (only if we moved at least one control)
+      if (controlsState.length > 0) {
         if (!floatingPanel.parentNode) {
           document.body.appendChild(floatingPanel);
         }
@@ -458,7 +554,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
           border-radius: 8px;
           box-shadow: 0 4px 20px rgba(0,0,0,0.3);
           overflow: hidden;
-          max-width: calc(100vw - 32px);
+          max-width: min(350px, calc(100vw - 32px));
           max-height: calc(100vh - 100px);
           left: ${controlsPanelPosition.x}px;
           top: ${controlsPanelPosition.y}px;
@@ -486,6 +582,9 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     }
 
     updateExpandedPosition();
+
+    // Start watching for element recreation (Observable reactivity)
+    startControlsObserver();
   }
 
   toggleBtn.addEventListener('click', (e) => {
@@ -518,6 +617,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     if (!document.contains(container)) {
       document.removeEventListener('keydown', handleKeydown);
       window.removeEventListener('resize', handleResize);
+      stopControlsObserver();
       if (overlay.parentNode) overlay.remove();
       // Restore controls before removing panel
       restoreControls();

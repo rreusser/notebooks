@@ -1,4 +1,5 @@
-publishedAt: "January 13, 2026"
-description: "Interactive mathematical plotting in Observable Notebook Kit"
+publishedAt: "January 15, 2026"
+description: "An interactive walkthrough of 2700 planar periodic three body orbits, and means of classifying them"
 maxWidth: 640px
-image: https://rreusser.github.io/notebooks/meta/plot-with-zoom.jpg
+image: https://rreusser.github.io/notebooks/meta/periodic-planar-three-body-orbits.jpg
+observableUrl: 'https://observablehq.com/@rreusser/periodic-planar-three-body-orbits'

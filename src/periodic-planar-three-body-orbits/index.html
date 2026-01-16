@@ -1,18 +1,17 @@
 <!doctype html>
 <notebook theme="air">
   <title>Periodic Planar Three-Body Orbits</title>
-
   <script id="1" type="text/markdown">
     # Periodic Planar Three-Body Orbits
   </script>
-
-  <script id="imports" type="text/x-typescript">
+  <script id="2" type="text/x-typescript">
     import createREGL from 'npm:regl@2.1.1';
     import createDrawLines from 'npm:regl-gpu-lines@2.4.1';
-    import { createElementStack } from '../lib/element-stack.js';
-    import { reglElement, reglAxesViewport } from '../lib/regl-canvas.js';
-    import { createZoomableAxes } from '../lib/zoomable-axes.js';
-    import { expandable } from '../lib/expandable.js';
+    import { createElementStack } from './lib/element-stack.js';
+    import { reglElement, reglAxesViewport } from './lib/regl-canvas.js';
+    import { createZoomableAxes } from './lib/zoomable-axes.js';
+    import { expandable } from './lib/expandable.js';
+
     import {
       planarThreeBodyDerivative,
       computeShape,
@@ -26,8 +25,7 @@
     import { createShapeSphere, createOrbitShapeSphere, createIcosphere, getCollisionPoints } from './shape-sphere.js';
     import { createShapeProjection2D, computeProjectedBounds } from './shape-projection.js';
   </script>
-
-  <script id="obs-imports" type="text/x-typescript">
+  <script id="3" type="text/x-typescript">
     import { ode45 } from 'observable:@rreusser/integration';
     import {
       threeBodyInitialConditions,
@@ -35,8 +33,7 @@
       sequenceUrls
     } from 'observable:@rreusser/periodic-three-body-initial-conditions';
   </script>
-
-  <script id="2" type="text/x-typescript">
+  <script id="4" type="text/x-typescript">
     const orbitCount = Object.keys(threeBodyInitialConditions)
       .flatMap(group => Object.keys(threeBodyInitialConditions[group])
         .flatMap(seq => Object.keys(threeBodyInitialConditions[group][seq]).length))
@@ -44,27 +41,44 @@
 
     display(md`This notebook collects ${orbitCount.toLocaleString()} periodic solutions of the planar [three-body problem](https://en.wikipedia.org/wiki/Three-body_problem) in which three bodies experience mutual gravitational attraction according to [Newton's law of universal gravitation](https://en.wikipedia.org/wiki/Newton%27s_law_of_universal_gravitation), ${tex.block`F=G{\frac {m_{1}m_{2}}{r^{2}}}.`}
 
-Three-body orbits don't have a closed-form analytical solution and aren't in general periodic, but by reducing the dimensionality of the problem through symmetries and performing a lot of numerical searching, a number of authors have found and published large sets of initial conditions for periodic solutions.`);
+    Three-body orbits don't have a closed-form analytical solution and aren't in general periodic, but by reducing the dimensionality of the problem through symmetries and performing a lot of numerical searching, a number of authors have found and published large sets of initial conditions for periodic solutions.`);
   </script>
-
-  <script id="3" type="text/markdown">
+  <script id="5" type="text/markdown">
     ## Governing equations
 
     The vector form of Newton's law of gravitation for the force on body 2 exerted by body 1 is ${tex.block`\mathbf{F}_2 = m_2\mathbf{\ddot{x}}_{2} = -\frac{Gm_1m_2(\mathbf{x}_2 - \mathbf{x}_1)}{||\mathbf{x}_2 - \mathbf{x}_1||^3},`} where ${tex`\mathbf{x}_1`} and ${tex`\mathbf{x}_2`} and ${tex`m_1`} and ${tex`m_2`} are the vector positions and masses of bodies ${tex`1`} and ${tex`2`}, respectively, and ${tex`\mathbf{\ddot{x}}_{2}`} is the acceleration of body ${tex`2`}. Given state ${tex`\mathbf{y}`}, we compute the time derivative ${tex`\mathbf{\dot{y}}`}.
   </script>
-
-  <script id="5" type="text/markdown">
+  <script id="6" type="text/markdown">
     ## Time integration
 
-    Since we only seek to integrate a single period of the orbit, we use an adaptive [Cash-Karp](https://en.wikipedia.org/wiki/Cash–Karp_method) Runge-Kutta scheme with fifth order accuracy.
+    Since we only seek to integrate a single period of the orbit, we don't require excessive accuracy and opt for an adaptive Runge-Kutta scheme which adjusts the time step to maintain a specified accuracy. Since the bodies move very slowly when far apart but very quickly when passing by each other, adaptive methods are dramatically more efficient than fixed step methods.
 
-    Please note that essentially *all* periodic, planar, three-body orbits except for some figure eights are unstable! For visualization, this notebook tabulates a single period and repeats it.
+    In particular, we use the [Butcher tableau](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#Explicit_Runge.E2.80.93Kutta_methods) of the [Cash-Karp](https://en.wikipedia.org/wiki/Cash–Karp_method) scheme to integrate with fifth order accuracy with a fourth order embedded error estimate. "Embedded" means the same derivative evaluations can be combined differently to produce both fourth and fifth order estimates of the next time step. The difference between the two yields an estimate of the accuracy, which in turn tells how much we should increase or decrease the size of the time step to maintain the same overall accuracy.
+
+    This scheme is adequate for integrating the trajectories with reasonable accuracy and efficiency, but a higher order scheme or more advanced techniques might be worthwhile if we actually wanted to *locate* periodic orbits.
+
+    Please note that essentially *all* periodic, planar, three-body orbits except for some figure eights are unstable! For the convenience of visualization, this notebook tabulates a single period and repeats it. Therefore the orbits on this page repeat infinitely, while actual ongoing time integration would show relatively fast divergence.
   </script>
-
   <script id="8" type="text/markdown">
     ## Initial conditions
   </script>
-
+  <script id="9" type="text/x-typescript">
+    // Initial conditions figure showing bodies with velocity arrows
+    (() => {
+      if (!initialConditions) return;
+      const figure = document.createElement('figure');
+      figure.style.maxWidth = '350px';
+      figure.style.margin = '0 auto';
+      const svg = createInitialConditionsFigure(d3, initialConditions, drawingParams, {
+        width: Math.min(width, 350)
+      });
+      figure.appendChild(svg);
+      const caption = document.createElement('figcaption');
+      caption.innerHTML = `Initial conditions for the ${initialConditions.name} planar three-body orbit.`;
+      figure.appendChild(caption);
+      display(figure);
+    })();
+  </script>
   <script id="11" type="text/x-typescript">
     const selectedConditionsInput = (() => {
       const form = document.createElement('form');
@@ -158,11 +172,15 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
     })();
 
     const selectedConditions = Generators.input(selectedConditionsInput);
-    display(selectedConditionsInput);
   </script>
+  <script id="902" type="text/markdown">
+    The initial conditions in this notebook are obtained from Milovan Šuvakov's [Three-body Gallery](http://three-body.ipb.ac.rs/) as well as from the listing of [Xiaoming Li and Shijun Liao](http://numericaltank.sjtu.edu.cn/three-body/three-body.htm). The initial conditions presented here fall into a few couple categories but all have zero net translational and angular momentum.
 
+    For more information as well as an excellent and approachable overview of the techniques used to locate the orbits, see Šuvakov and Dmitrašinović's [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S).
+  </script>
   <script id="102" type="text/x-typescript">
     const drawingParams = {
+      animate: true,
       lineOpacity: 1.0,
       lineWidth: 2.5,
       lineBorderWidth: 1,
@@ -173,7 +191,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       strokeColor: [[1, 1, 1], [1, 1, 1], [1, 1, 1]]
     };
   </script>
-
   <script id="12" type="text/x-typescript">
     const initialConditions = (() => {
       const { group, sequence, orbit } = selectedConditions;
@@ -181,11 +198,9 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       return parseInitialConditions(conditions, orbit, drawingParams.color);
     })();
   </script>
-
   <script id="7" type="text/x-typescript">
     const trajectory = integrateTrajectory(ode45, initialConditions);
   </script>
-
   <script id="202" type="text/x-typescript">
     const shapeTrajectory = (() => {
       const result = [];
@@ -196,81 +211,37 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       return result;
     })();
   </script>
-
   <script id="204" type="text/x-typescript">
     const freeGroupWord = computeFreeGroupWord(shapeTrajectory);
   </script>
-
-  <script id="13" type="text/x-typescript">
-    (() => {
-      const { group, sequence, orbit } = selectedConditions;
-      const conditions = threeBodyInitialConditions[group]?.[sequence]?.[orbit];
-      if (!conditions) return;
-
-      const p = conditions.x;
-      const v = conditions.v;
-      const m = conditions.m || [1, 1, 1];
-      const ref = references[conditions.ref];
-      const isUnequalMass = m[0] !== m[1] || m[0] !== m[2];
-
-      const hashValue = `#group=${encodeURIComponent(group)}&sequence=${encodeURIComponent(sequence)}&orbit=${encodeURIComponent(orbit)}`;
-      const seqName = `${group} - ${sequence.replace(/i\.c\./, 'isosceles collinear')}`;
-
-      display(html`<div style="border:1px solid #ccc;padding:0 10px;max-width:640px;box-sizing:border-box;">
-        <small><dl class="inline-flex">
-          <dt>Sequence</dt><dd><a href="${sequenceUrls[group]?.[sequence] || '#'}">${seqName}${isUnequalMass ? ' (unequal mass)' : ''}</a></dd>
-          <dt>Orbit</dt><dd>${conditions.url ? html`<a href="${conditions.url}">${tex`${initialConditions.name}`}</a>` : tex`${initialConditions.name}`}</dd>
-          <dt>Initial positions</dt><dd>${tex`((${p[0][0]}, ${p[0][1]}), (${p[1][0]}, ${p[1][1]}), (${p[2][0]}, ${p[2][1]}))`}</dd>
-          <dt>Masses</dt><dd>${tex`(${m[0]}, ${m[1]}, ${m[2]})`}</dd>
-          <dt>Free group element</dt><dd style="word-break:break-all;">${freeGroupWord}</dd>
-          <dt>Period</dt><dd>${conditions.T}</dd>
-          <dt>Discovered</dt><dd>${conditions.year}</dd>
-          <dt>Reference</dt><dd>${ref.authors}, <em>${ref.title}</em></dd>
-          <dt>Share</dt><dd><a href="${hashValue}">link to this orbit</a></dd>
-        </dl></small>
-      </div>`);
-    })();
-  </script>
-
-  <script id="14" type="text/x-typescript">
-    // Initial conditions figure showing bodies with velocity arrows
-    (() => {
-      if (!initialConditions) return;
-      const figure = document.createElement('figure');
-      figure.style.maxWidth = '350px';
-      const svg = createInitialConditionsFigure(d3, initialConditions, drawingParams, {
-        width: Math.min(width, 350)
-      });
-      figure.appendChild(svg);
-      const caption = document.createElement('figcaption');
-      caption.innerHTML = `Initial conditions for the ${initialConditions.name} planar three-body orbit.`;
-      figure.appendChild(caption);
-      display(figure);
-    })();
-  </script>
-
   <script id="101" type="text/x-typescript">
-    const controlsContainer = html`<div class="plot-controls"></div>`;
+    const controlsContainer = html`<div class="plot-controls">
+      <details>
+        <summary style="cursor:pointer;font-size:0.85em;color:#666;">Display options</summary>
+        <div class="controls-inner" style="padding-top:0.5em;"></div>
+      </details>
+    </div>`;
 
+    const controlsInner = controlsContainer.querySelector('.controls-inner');
     function ctrl(input) {
-      controlsContainer.appendChild(input);
+      controlsInner.appendChild(input);
       return Generators.input(input);
     }
 
+    const animate = ctrl(Inputs.toggle({ label: 'Animate', value: true }));
     const lineOpacity = ctrl(Inputs.range([0, 1], { label: 'Line opacity', value: 0.7, step: 0.01 }));
+    const lineWidth = ctrl(Inputs.range([0.5, 6], { label: 'Line width', value: 2.5, step: 0.1 }));
     const pointSize = ctrl(Inputs.range([4, 20], { label: 'Point size', value: 10, step: 1 }));
     const animSpeed = ctrl(Inputs.range([0.05, 20], { label: 'Speed', value: 5, step: 0.05 }));
-
-    display(controlsContainer);
   </script>
-
   <script id="103" type="text/x-typescript">
+    drawingParams.animate = animate;
     drawingParams.lineOpacity = lineOpacity;
+    drawingParams.lineWidth = lineWidth;
     drawingParams.pointSize = pointSize;
     drawingParams.speed = animSpeed;
     if (stack?.elements?.regl?.value) stack.elements.regl.value.dirty = true;
   </script>
-
   <script id="104" type="text/x-typescript">
     function createPlot(width, height, xDomain = [-2, 2], yDomain = [-2, 2]) {
       return Plot.plot({
@@ -290,7 +261,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       });
     }
   </script>
-
   <script id="105" type="text/x-typescript">
     const stack = createElementStack({
       layers: [{
@@ -315,7 +285,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       }]
     });
   </script>
-
   <script id="106" type="text/x-typescript">
     const axes = createZoomableAxes({
       d3,
@@ -333,11 +302,14 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       }
     });
   </script>
-
+  <script id="205" type="text/x-typescript">
+    display(selectedConditionsInput);
+  </script>
   <script id="107" type="text/x-typescript">
     display(expandable(stack.element, {
       width: Math.min(width, 640),
       height: Math.min(480, width * 0.7),
+      controls: ['.orbit-selector', '.orbit-metadata', '.plot-controls'],
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(stack.elements.plot.scale('x'), stack.elements.plot.scale('y'));
@@ -345,7 +317,12 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       }
     }));
   </script>
-
+  <script id="904" type="text/x-typescript">
+    display(metadataContainer);
+  </script>
+  <script id="903" type="text/x-typescript">
+    display(controlsContainer);
+  </script>
   <script id="108" type="text/x-typescript">
     (() => {
       const regl = stack.elements.regl.value;
@@ -454,13 +431,16 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       }
 
       regl.dirty = true;
+      let frozenTime = 0;
 
       const frame = regl.frame(ctx => {
         if (!regl.dirty) return;
         regl.dirty = false;
 
         const tPeriod = trajectory.t[trajectory.t.length - 1];
-        const ts = ctx.time * drawingParams.speed;
+        const currentTime = drawingParams.animate ? ctx.time : frozenTime;
+        if (drawingParams.animate) frozenTime = ctx.time;
+        const ts = currentTime * drawingParams.speed;
         // timeShift ranges -1 to 1: at -1 lines are above clip (entering), at 1 below (exiting)
         const timeShift = ((ts % (tPeriod * 2)) / tPeriod) - 1;
         const timeScale = 1 / tPeriod;
@@ -503,31 +483,67 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
           });
         }
 
-        regl.dirty = true;
+        if (drawingParams.animate) regl.dirty = true;
       });
 
       invalidation.then(() => frame.cancel());
     })();
   </script>
+  <script id="109" type="text/x-typescript">
+    const metadataContainer = (() => {
+      const { group, sequence, orbit } = selectedConditions;
+      const conditions = threeBodyInitialConditions[group]?.[sequence]?.[orbit];
+      if (!conditions) return html`<div class="orbit-metadata"></div>`;
 
+      const p = conditions.x;
+      const m = conditions.m || [1, 1, 1];
+      const ref = references[conditions.ref];
+      const isUnequalMass = m[0] !== m[1] || m[0] !== m[2];
+
+      const hashValue = `#group=${encodeURIComponent(group)}&sequence=${encodeURIComponent(sequence)}&orbit=${encodeURIComponent(orbit)}`;
+      const seqName = `${group} - ${sequence.replace(/i\.c\./, 'isosceles collinear')}`;
+
+      return html`<div class="orbit-metadata">
+        <details open="">
+          <summary style="cursor:pointer;font-size:0.85em;color:#666;">Orbit details</summary>
+          <div style="border:1px solid #ccc;padding:0 10px;margin-top:0.5em;box-sizing:border-box;max-width:100%;">
+            <small><dl class="inline-flex">
+              <dt>Sequence</dt><dd><a href="${sequenceUrls[group]?.[sequence] || '#'}">${seqName}${isUnequalMass ? ' (unequal mass)' : ''}</a></dd>
+              <dt>Orbit</dt><dd>${conditions.url ? html`<a href="${conditions.url}">${tex`${initialConditions.name}`}</a>` : tex`${initialConditions.name}`}</dd>
+              <dt>Initial positions</dt><dd>${tex`((${p[0][0]}, ${p[0][1]}), (${p[1][0]}, ${p[1][1]}), (${p[2][0]}, ${p[2][1]}))`}</dd>
+              <dt>Masses</dt><dd>${tex`(${m[0]}, ${m[1]}, ${m[2]})`}</dd>
+              <dt>Free group element</dt><dd style="word-break:break-all;">${freeGroupWord}</dd>
+              <dt>Period</dt><dd>${conditions.T}</dd>
+              <dt>Discovered</dt><dd>${conditions.year}</dd>
+              <dt>Reference</dt><dd>${ref.authors}, <em>${ref.title}</em></dd>
+              <dt>Share</dt><dd><a href="${hashValue}">link to this orbit</a></dd>
+            </dl></small>
+          </div>
+        </details>
+      </div>`;
+    })();
+  </script>
   <script id="200" type="text/markdown">
     ## Orbit classification
 
-    The orbits can be classified using the topological approach described by Montgomery. We transform to [Jacobi coordinates](https://en.wikipedia.org/wiki/Jacobi_coordinates) and compute a shape vector ${tex`\mathbf{n}`} that lives on the unit sphere, invariant to rotation, translation, and overall size. The trajectory on this "shape sphere" never passes through three collision points (punctures). By tracking crossings of the equator, we compute a [free group word](https://en.wikipedia.org/wiki/Free_group) that identifies the orbit topologically.
-  </script>
+    It'd be fine to stop right here, but the rest of this notebook will try to communicate how we start to talk about classifying the orbits since without some means of classification, we really just have a large puddle of orbits. We'll use the topological approach described by Montgomery in [The N-body problem, the braid group, and action-minimizing periodic solutions](https://ui.adsabs.harvard.edu/abs/1998Nonli..11..363M/abstract), though I've found [the works of Šuvakov, Dmitrašinović, et al.](http://three-body.ipb.ac.rs/ref.php) much more helpful and approachable.
 
+    Since the interesting aspects of a particular orbit are invariant under translation, rotation, and scaling, we seek a representation which removes the uninteresting aspects. We therefore start with a commonly used coordinate system for n-body problems called [*Jacobi coordinates*](https://en.wikipedia.org/wiki/Jacobi_coordinates). To compute Jacobi coordinates, we start with a single body and aggregate the remaining bodies one at a time, computing as each successive Jacobi coordinate the vector from one additional body to the center of mass of the currently aggregated bodies. The final coordinate is the center of mass of the whole system (which we discard since the overall system, at worst, moves with constant velocity).
+  </script>
   <script id="201" type="text/markdown">
     ### Shape space
 
-    Since the interesting aspects of a particular orbit are invariant under translation, rotation, and scaling, we seek a representation which removes these. We use [Jacobi coordinates](https://en.wikipedia.org/wiki/Jacobi_coordinates) and define a shape vector ${tex.block`
-    \mathbf{n} = \left( \frac{2 \mathbf{r}_1 \cdot \mathbf{r}_2}{R^2}, \frac{r_1^2 - r_2^2}{R^2}, \frac{2 (\mathbf{r}_1 \times \mathbf{r}_2) \cdot \mathbf{e}_z}{R^2}\right)
-    `} where ${tex`\mathbf{r}_1`} and ${tex`\mathbf{r}_2`} are the Jacobi coordinates and ${tex`R = \sqrt{r_1^2 + r_2^2}`}. The vector ${tex`\mathbf{n}`} lives on the unit sphere.
+    Jacobi coordinates remove net translation and reduce the degrees of freedom in position from six to four. We can further reduce the dimensionality to two by defining the *shape vector* ${tex.block`
+    \begin{aligned}
+    \mathbf{n} &= (n_x, n_y, n_z) \\
+    &= \left( \frac{2 \mathbf{r}_1 \cdot \mathbf{r}_2}{R^2}, \frac{r_1^2 - r_2^2}{R^2}, \frac{2 (\mathbf{r}_1 \times \mathbf{r}_2) \cdot \mathbf{e}_z}{R^2}\right)
+    \end{aligned}
+    `} where ${tex`\mathbf{r}_1`} and ${tex`\mathbf{r}_2`} are the Jacobi coordinates, ${tex`\mathbf{e}_z`} is the unit vector along the z-axis, and ${tex`R = \sqrt{r_1^2 + r_2^2}`}. The vector ${tex`\mathbf{n}`} lives on the unit sphere and describes the configuration of the system in a manner invariant to rotation, translation and overall size.
 
     Move the points below and observe a corresponding behavior on the shape sphere:
-    - Pairwise collisions place the shape at one of three puncture points marked in color
-    - Collinear configurations (syzygies) lie on the equator
+    - Pairwise collisions place the shape at one of three points, marked on the shape sphere in red, green, and blue
+    - Collinear configurations, called *syzygies*, lie on the equator
   </script>
-
   <script id="210" type="text/x-typescript">
     // Interactive Jacobi coordinates figure linked to shape sphere
     (() => {
@@ -619,13 +635,11 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       });
     })();
   </script>
-
   <script id="211" type="text/markdown">
-    We return to the ${tex`${initialConditions?.name || ''}`} orbit and plot it on the shape sphere below. Since all orbits here are collision-free, the trajectory meanders about on the surface of the sphere but never passes through any of the three pairwise collision points (punctures).
+    We return to the ${tex`${initialConditions?.name || ''}`} orbit and plot it on the shape sphere below.
 
-    Three dimensional space is still a bit much to work with, so we additionally turn the shape sphere on its side and project the orbit stereographically about one puncture onto a plane below. Two punctures are visible while the third (about which we projected) is removed to infinity.
+    Since all orbits here are collision-free, the trajectory meanders about on the surface of the sphere but never passes through any of the three pairwise collision points. In fact we can imagine continuously deforming a trajectory to find similar nearby orbits just as long as we don't ever pass over the collision points and create an invalid orbit. In topology, these forbidden missing points are called *punctures*, and a family of orbits we can obtain through continuous deformation without passing over the punctures corresponds the concept of the [*fundamental group*](https://en.wikipedia.org/wiki/Fundamental_group) from algebraic topology. Algebraic topology is a topic well beyond my expertise, so I'll tread lightly here and not pretend to know more about it.
   </script>
-
   <script id="212" type="text/x-typescript">
     // Shape sphere with orbit trajectory and stereographic projection
     (() => {
@@ -689,7 +703,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       });
     })();
   </script>
-
   <script id="213" type="text/x-typescript">
     // Compute bounds for the shape projection plot
     const projBounds = trajectory && initialConditions
@@ -705,7 +718,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
     const projXDomain = [projCenterX - projRange / 2, projCenterX + projRange / 2];
     const projYDomain = [projCenterY - projRange / 2, projCenterY + projRange / 2];
   </script>
-
   <script id="214" type="text/x-typescript">
     function createProjPlot(width, height, xDomain = projXDomain, yDomain = projYDomain) {
       return Plot.plot({
@@ -725,7 +737,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       });
     }
   </script>
-
   <script id="215" type="text/x-typescript">
     const projStack = createElementStack({
       layers: [{
@@ -740,7 +751,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       }]
     });
   </script>
-
   <script id="216" type="text/x-typescript">
     const projAxes = createZoomableAxes({
       d3,
@@ -758,7 +768,11 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       }
     });
   </script>
+  <script id="907" type="text/markdown">
+    Three dimensional space is still a bit much to work with, so we additionally turn the shape sphere on its side and project the orbit stereographically about one puncture onto a plane below. Two punctures are visible while the third (about which we projected) is removed to infinity.
 
+    The figure below shows the orbit projected into the two-dimensional plane. Two punctures are visible while the the puncture about which we projected is removed to infinity. The shape trajectory now lies in a flat two dimensional plane, looping around the two projected punctures but never passing through them.
+  </script>
   <script id="217" type="text/x-typescript">
     const projFigure = document.createElement('figure');
     projFigure.appendChild(projStack.element);
@@ -776,7 +790,6 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       }
     }));
   </script>
-
   <script id="218" type="text/x-typescript">
     // Render the 2D shape projection
     (() => {
@@ -809,19 +822,180 @@ Three-body orbits don't have a closed-form analytical solution and aren't in gen
       });
     })();
   </script>
+  <script id="219" type="text/markdown">
+    ### Free group word
 
-  <script id="205" type="text/x-typescript">
-    display(md`For the ${tex`${initialConditions?.name || ''}`} orbit, the free group word is: *${freeGroupWord}*.
-
-Figure-eight orbits follow a repeating *BabA* pattern. For more details, see [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S).`);
+    From here, our task is conceptually simple. We walk along the projected shape of the orbit and note every time it completes a loop, either clockwise or counterclockwise, around one of the two punctures. The result is a [*free group word*](https://en.wikipedia.org/wiki/Free_group) and (at last!) identifies our orbit in the topological sense. We record an ${tex`a`} for clockwise loops around the righthand puncture and ${tex`a^{-1}`} (which we abbreviate as ${tex`A`}) for counterclockwise loops. Similarly we record ${tex`b`} and ${tex`B`}, respectively, for counterclockwise and clockwise loops around the lefthand puncture.
   </script>
+  <script id="220" type="text/x-typescript">
+    // Free group elements diagram
+    (() => {
+      const w = Math.min(width, 350);
+      const h = Math.floor(w * 0.7);
 
-  <script id="300" type="text/markdown">
-    ## License
+      const svg = d3.create('svg')
+        .attr('id', 'free-group-elements')
+        .attr('width', w)
+        .attr('height', h)
+        .style('max-width', '100%')
+        .style('height', 'auto');
 
-    Code is MIT Licensed. Written content is [CC BY-NC 4.0](http://creativecommons.org/licenses/by-nc/4.0/).
+      const lineColor = '#49a1c9';
+      const axisColor = '#666';
+
+      // Create arrowheads
+      const arrowId = `arrow-fg-${Math.random().toString(36).slice(2)}`;
+      const axisArrowId = `arrow-ax-${Math.random().toString(36).slice(2)}`;
+      const defs = svg.append('defs');
+
+      defs.append('marker')
+        .attr('id', arrowId)
+        .attr('viewBox', '0 -5.5 13 11')
+        .attr('refX', 12)
+        .attr('refY', 0)
+        .attr('markerWidth', 13)
+        .attr('markerHeight', 11)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-5.5L13,0L0,5.5')
+        .attr('fill', lineColor);
+
+      defs.append('marker')
+        .attr('id', axisArrowId)
+        .attr('viewBox', '0 -4 10 8')
+        .attr('refX', 9)
+        .attr('refY', 0)
+        .attr('markerWidth', 10)
+        .attr('markerHeight', 8)
+        .attr('orient', 'auto')
+        .append('path')
+        .attr('d', 'M0,-4L10,0L0,4')
+        .attr('fill', axisColor);
+
+      const xrange = 3;
+      const axisExtent = 0.9;
+      const x = d3.scaleLinear().domain([-xrange, xrange]).range([0, w]);
+      const y = d3.scaleLinear().domain([-xrange * h / w, xrange * h / w]).range([h, 0]);
+      const line = d3.line().x(d => x(d[0])).y(d => y(d[1]));
+
+      // Axes
+      svg.append('g')
+        .selectAll('path')
+        .data([
+          [[-xrange * axisExtent, 0], [xrange * axisExtent, 0]],
+          [[0, -xrange * axisExtent * h / w], [0, xrange * axisExtent * h / w]]
+        ])
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', axisColor)
+        .attr('fill', 'none')
+        .attr('stroke-width', 1)
+        .attr('marker-start', `url(#${axisArrowId})`)
+        .attr('marker-end', `url(#${axisArrowId})`);
+
+      // Circle strokes (white background)
+      svg.append('g')
+        .selectAll('circle')
+        .data([[-1, 0], [1, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', x(1) - x(0))
+        .attr('stroke', 'white')
+        .attr('stroke-width', 5)
+        .attr('fill', 'none');
+
+      // Circles
+      svg.append('g')
+        .selectAll('circle')
+        .data([[-1, 0], [1, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', x(1) - x(0))
+        .attr('stroke', lineColor)
+        .attr('stroke-width', 2)
+        .attr('fill', 'none');
+
+      // Puncture points
+      svg.append('g')
+        .selectAll('circle')
+        .data([[-1, 0], [1, 0]])
+        .join('circle')
+        .attr('cx', d => x(d[0]))
+        .attr('cy', d => y(d[1]))
+        .attr('r', 6)
+        .attr('fill', (d, i) => i === 0 ? '#e6332a' : '#33cc55')
+        .attr('stroke', 'white')
+        .attr('stroke-width', 2);
+
+      // Center point
+      svg.append('circle')
+        .attr('cx', x(0))
+        .attr('cy', y(0))
+        .attr('r', 4)
+        .attr('fill', lineColor);
+
+      // Arrowheads on circles
+      svg.append('g')
+        .selectAll('path')
+        .data([
+          [[1, 1], [1.001, 1]],
+          [[-1, 1], [-1.001, 1]],
+          [[-1, -1], [-0.999, -1]],
+          [[1, -1], [0.999, -1]]
+        ])
+        .join('path')
+        .attr('d', line)
+        .attr('stroke', lineColor)
+        .attr('fill', 'none')
+        .attr('stroke-width', 1.5)
+        .attr('marker-end', `url(#${arrowId})`);
+
+      // Labels
+      svg.append('g')
+        .selectAll('text')
+        .data([{ xy: [-1, 1], text: 'b' }, { xy: [1, 1], text: 'a' }])
+        .join('text')
+        .text(d => d.text)
+        .attr('x', d => x(d.xy[0]))
+        .attr('y', d => y(d.xy[1]))
+        .attr('font-size', '17px')
+        .attr('font-family', 'serif')
+        .attr('font-style', 'italic')
+        .attr('dx', -3)
+        .attr('dy', -10);
+
+      const figure = document.createElement('figure');
+      figure.appendChild(svg.node());
+      const caption = document.createElement('figcaption');
+      caption.innerHTML = `Our free group elements, <em>a</em> and <em>b</em>.`;
+      figure.appendChild(caption);
+
+      display(figure);
+    })();
   </script>
+  <script id="206" type="text/markdown">
+    Though conceptually simple, reading these elements is somewhat tedious. In their paper [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S), Šuvakov and Dmitrašinović present a "free group word reading algorithm". Following the algorithm, we track every crossing of the shape sphere equator, which corresponds to collinear configurations (*syzygies*). We track the direction of each crossing and which body is in the middle, then convert the information via a lookup table into the free group word.
+  </script>
+  <script id="207" type="text/x-typescript">
+    display(md`For the ${tex`${initialConditions?.name || ''}`} orbit, we compute the free group word: *<span style="word-break:break-all">${freeGroupWord}</span>*.
 
+    Many patterns lie within. Figure-eight orbits, for example, follow a repeating *BabA* pattern. Other classes of orbits follow more complicated patterns. To preempt an issue you may have noticed, *yes*, there is indeed ambiguity in this classification. We could have chosen one of the other puncture points about which to project. For some families of orbits this makes a difference; for others it does not. Orbits are similarly equivalent under time reversal so that the free group word *Ab* is equivalent to *Ba*. Šuvakov and Dmitrašinović have a much more detailed discussion of these considerations in their paper [Linear stability of periodic three-body orbits with zero angular momentum and topological dependence of Kepler's third law: a numerical test](https://arxiv.org/abs/1705.03728). It's worth a read!`);
+  </script>
+  <script id="906" type="text/markdown">
+    ## Future work
+  </script>
+  <script id="905" type="text/markdown">
+
+    In a future notebook, I'd love to implement a search algorithm to actually locate periodic orbits. From the abstract of the paper mentioned above, [A guide to hunting periodic three-body orbits](https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S),
+
+    > The recent discovery of thirteen new and distinct three-body periodic planar orbits suggests that many more such orbits remain undiscovered. Searches in two-dimensional subspaces of the full four-dimensional space of initial conditions require computing resources that are available to many students, and the required level of computational and numerical expertise is also at the advanced undergraduate level. We discuss the methods for solving the planar three-body equations of motion, as well as some basic strategies and tactics for searches of periodic orbits. Our discussion should allow interested undergraduates to start their own searches. Users can submit new three-body orbits to a wiki-based website.
+
+    The [wiki appears either defunct or in progress](http://www.orbitopedia.org/), but the exploration sounds fun!
+
+    Comments? Question? [Let me know](https://twitter.com/rickyreusser/status/1185354588280348672).
+  </script>
   <script id="900" type="text/x-typescript">
     display(html`<style>
       .observablehq dl.inline-flex {
@@ -848,5 +1022,4 @@ Figure-eight orbits follow a repeating *BabA* pattern. For more details, see [A 
       }
     </style>`);
   </script>
-
 </notebook>

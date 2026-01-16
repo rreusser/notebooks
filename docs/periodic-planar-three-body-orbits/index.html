@@ -3,12 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Clifford and de Jong Attractors">
-  <meta property="og:title" content="Clifford and de Jong Attractors">
-  <meta name="twitter:description" content="Visualize the strange attractors of Clifford and de Jong.">
-  <meta name="subject" content="Visualize the strange attractors of Clifford and de Jong.">
-  <meta name="description" content="Visualize the strange attractors of Clifford and de Jong.">
-  <meta property="og:description" content="Visualize the strange attractors of Clifford and de Jong.">
+  <meta name="twitter:title" content="Periodic Planar Three-Body Orbits">
+  <meta property="og:title" content="Periodic Planar Three-Body Orbits">
+  <meta name="twitter:description" content="An interactive walkthrough of 2700 planar periodic three body orbits, and means of classifying them">
+  <meta name="subject" content="An interactive walkthrough of 2700 planar periodic three body orbits, and means of classifying them">
+  <meta name="description" content="An interactive walkthrough of 2700 planar periodic three body orbits, and means of classifying them">
+  <meta property="og:description" content="An interactive walkthrough of 2700 planar periodic three body orbits, and means of classifying them">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/periodic-planar-three-body-orbits.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/periodic-planar-three-body-orbits.jpg">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1503,8 +1506,8 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Clifford and de Jong Attractors</title>  <script type="module" crossorigin src="/notebooks/assets/index-Kfalw8m_.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Periodic Planar Three-Body Orbits</title>  <script type="module" crossorigin src="/notebooks/assets/index-BfghAAqT.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1516,20 +1519,20 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Clifford and de Jong Attractors</h1>
+    <h1>Periodic Planar Three-Body Orbits</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20250516">May 16, 2025</time>
+      <time pubdate="" datetime="20260115">January 15, 2026</time>
     </div>
     <div class="resource-links">
-        <a href="https://observablehq.com/@rreusser/clifford-and-de-jong-attractors-revised-coloring" class="resource-link">
+        <a href="https://observablehq.com/@rreusser/periodic-planar-three-body-orbits" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" fill="white"></circle>
             <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
           </svg>
           Live notebook
         </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/clifford-and-de-jong-attractors/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/periodic-planar-three-body-orbits/index.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1539,12 +1542,41 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1251" class="observablehq observablehq--cell"><div><p>This notebook visualizes the strange attractors of <a href="http://paulbourke.net/fractals/clifford/">Clifford Pickover</a> and <a href="http://paulbourke.net/fractals/peterdejong/">Peter de Jong</a>. You can pan and zoom with the mouse or a touch screen. Clifford attractors are defined by</p>
-<p>while de Jong attractors are defined by</p>
-<p>A grid of points is randomly offset and iterated many times. The results are accumulated onto a WebGL texture, effectively computing a histogram of the attractor. Single precision isn’t quite adequate, so you can switch to CPU mode for a final render if you’re willing to wait a bit longer for it to converge. Point density is computed using the formula in <a href="https://observablehq.com/@rreusser/selecting-the-right-opacity-for-2d-point-clouds?collection=@rreusser/writeups">this notebook</a>.</p>
-<p>Color comes from the distance traveled by the most recent iteration. Each pixel accumulates both the RGB color and a hit count. Lightness is computed in the <a href="https://en.wikipedia.org/wiki/YUV">YUV color space</a> from the logarithm of the hit count, while the hue comes from the average accumulated color.</p>
-<p>For more on computing attractors in WebGL, Mike Bostock’s <a href="https://observablehq.com/@mbostock/making-webgl-dance">Making WebGL Dance</a> is a great walkthrough. See also his <a href="https://observablehq.com/@mbostock/clifford-attractor">Clifford Attractor</a> series and Yuri Vishnevsky’s <a href="https://observablehq.com/@twitter/strange-attractors">Strange Attractors</a>.</p>
-</div></div><div id="cell-1252" class="observablehq observablehq--cell"></div><div id="cell-365" class="observablehq observablehq--cell"></div><div id="cell-81" class="observablehq observablehq--cell"></div><div id="cell-1253" class="observablehq observablehq--cell"></div><div id="cell-1254" class="observablehq observablehq--cell"></div><div id="cell-649" class="observablehq observablehq--cell"></div><div id="cell-650" class="observablehq observablehq--cell"></div><div id="cell-1753" class="observablehq observablehq--cell"></div><div id="cell-1594" class="observablehq observablehq--cell"></div><div id="cell-162" class="observablehq observablehq--cell"></div><div id="cell-157" class="observablehq observablehq--cell"></div><div id="cell-865" class="observablehq observablehq--cell"></div><div id="cell-1767" class="observablehq observablehq--cell"></div><div id="cell-1702" class="observablehq observablehq--cell"></div><div id="cell-1288" class="observablehq observablehq--cell"></div><div id="cell-1478" class="observablehq observablehq--cell"></div><div id="cell-1485" class="observablehq observablehq--cell"></div><div id="cell-1473" class="observablehq observablehq--cell"></div><div id="cell-1515" class="observablehq observablehq--cell"></div><div id="cell-1496" class="observablehq observablehq--cell"></div><div id="cell-906" class="observablehq observablehq--cell"></div><div id="cell-824" class="observablehq observablehq--cell"></div><div id="cell-41" class="observablehq observablehq--cell"></div><div id="cell-754" class="observablehq observablehq--cell"></div><div id="cell-934" class="observablehq observablehq--cell"></div><div id="cell-875" class="observablehq observablehq--cell"></div><div id="cell-166" class="observablehq observablehq--cell"></div><div id="cell-71" class="observablehq observablehq--cell"></div><div id="cell-1365" class="observablehq observablehq--cell"></div><div id="cell-59" class="observablehq observablehq--cell"></div><div id="cell-90" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-752" class="observablehq observablehq--cell"></div><div id="cell-748" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-790" class="observablehq observablehq--cell"></div><div id="cell-780" class="observablehq observablehq--cell"></div><div id="cell-2118" class="observablehq observablehq--cell"></div><div id="cell-2119" class="observablehq observablehq--cell"></div></main>
+    <main><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"><div><h2 id="governing-equations" tabindex="-1"><a href="#governing-equations">Governing equations</a></h2>
+<p>The vector form of Newton’s law of gravitation for the force on body 2 exerted by body 1 is  where  and  and  and  are the vector positions and masses of bodies  and , respectively, and  is the acceleration of body . Given state , we compute the time derivative .</p>
+</div></div><div id="cell-6" class="observablehq observablehq--cell"><div><h2 id="time-integration" tabindex="-1"><a href="#time-integration">Time integration</a></h2>
+<p>Since we only seek to integrate a single period of the orbit, we don’t require excessive accuracy and opt for an adaptive Runge-Kutta scheme which adjusts the time step to maintain a specified accuracy. Since the bodies move very slowly when far apart but very quickly when passing by each other, adaptive methods are dramatically more efficient than fixed step methods.</p>
+<p>In particular, we use the <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#Explicit_Runge.E2.80.93Kutta_methods">Butcher tableau</a> of the <a href="https://en.wikipedia.org/wiki/Cash%E2%80%93Karp_method">Cash-Karp</a> scheme to integrate with fifth order accuracy with a fourth order embedded error estimate. “Embedded” means the same derivative evaluations can be combined differently to produce both fourth and fifth order estimates of the next time step. The difference between the two yields an estimate of the accuracy, which in turn tells how much we should increase or decrease the size of the time step to maintain the same overall accuracy.</p>
+<p>This scheme is adequate for integrating the trajectories with reasonable accuracy and efficiency, but a higher order scheme or more advanced techniques might be worthwhile if we actually wanted to <em>locate</em> periodic orbits.</p>
+<p>Please note that essentially <em>all</em> periodic, planar, three-body orbits except for some figure eights are unstable! For the convenience of visualization, this notebook tabulates a single period and repeats it. Therefore the orbits on this page repeat infinitely, while actual ongoing time integration would show relatively fast divergence.</p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"><div><h2 id="initial-conditions" tabindex="-1"><a href="#initial-conditions">Initial conditions</a></h2>
+</div></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-902" class="observablehq observablehq--cell"><div><p>The initial conditions in this notebook are obtained from Milovan Šuvakov’s <a href="http://three-body.ipb.ac.rs/">Three-body Gallery</a> as well as from the listing of <a href="http://numericaltank.sjtu.edu.cn/three-body/three-body.htm">Xiaoming Li and Shijun Liao</a>. The initial conditions presented here fall into a few couple categories but all have zero net translational and angular momentum.</p>
+<p>For more information as well as an excellent and approachable overview of the techniques used to locate the orbits, see Šuvakov and Dmitrašinović’s <a href="https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S">A guide to hunting periodic three-body orbits</a>.</p>
+</div></div><div id="cell-102" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-202" class="observablehq observablehq--cell"></div><div id="cell-204" class="observablehq observablehq--cell"></div><div id="cell-101" class="observablehq observablehq--cell"></div><div id="cell-103" class="observablehq observablehq--cell"></div><div id="cell-104" class="observablehq observablehq--cell"></div><div id="cell-105" class="observablehq observablehq--cell"></div><div id="cell-106" class="observablehq observablehq--cell"></div><div id="cell-205" class="observablehq observablehq--cell"></div><div id="cell-107" class="observablehq observablehq--cell"></div><div id="cell-904" class="observablehq observablehq--cell"></div><div id="cell-903" class="observablehq observablehq--cell"></div><div id="cell-108" class="observablehq observablehq--cell"></div><div id="cell-109" class="observablehq observablehq--cell"></div><div id="cell-200" class="observablehq observablehq--cell"><div><h2 id="orbit-classification" tabindex="-1"><a href="#orbit-classification">Orbit classification</a></h2>
+<p>It’d be fine to stop right here, but the rest of this notebook will try to communicate how we start to talk about classifying the orbits since without some means of classification, we really just have a large puddle of orbits. We’ll use the topological approach described by Montgomery in <a href="https://ui.adsabs.harvard.edu/abs/1998Nonli..11..363M/abstract">The N-body problem, the braid group, and action-minimizing periodic solutions</a>, though I’ve found <a href="http://three-body.ipb.ac.rs/ref.php">the works of Šuvakov, Dmitrašinović, et al.</a> much more helpful and approachable.</p>
+<p>Since the interesting aspects of a particular orbit are invariant under translation, rotation, and scaling, we seek a representation which removes the uninteresting aspects. We therefore start with a commonly used coordinate system for n-body problems called <a href="https://en.wikipedia.org/wiki/Jacobi_coordinates"><em>Jacobi coordinates</em></a>. To compute Jacobi coordinates, we start with a single body and aggregate the remaining bodies one at a time, computing as each successive Jacobi coordinate the vector from one additional body to the center of mass of the currently aggregated bodies. The final coordinate is the center of mass of the whole system (which we discard since the overall system, at worst, moves with constant velocity).</p>
+</div></div><div id="cell-201" class="observablehq observablehq--cell"><div><h3 id="shape-space" tabindex="-1"><a href="#shape-space">Shape space</a></h3>
+<p>Jacobi coordinates remove net translation and reduce the degrees of freedom in position from six to four. We can further reduce the dimensionality to two by defining the <em>shape vector</em>  where  and  are the Jacobi coordinates,  is the unit vector along the z-axis, and . The vector  lives on the unit sphere and describes the configuration of the system in a manner invariant to rotation, translation and overall size.</p>
+<p>Move the points below and observe a corresponding behavior on the shape sphere:</p>
+<ul>
+<li>Pairwise collisions place the shape at one of three points, marked on the shape sphere in red, green, and blue</li>
+<li>Collinear configurations, called <em>syzygies</em>, lie on the equator</li>
+</ul>
+</div></div><div id="cell-210" class="observablehq observablehq--cell"></div><div id="cell-211" class="observablehq observablehq--cell"><div><p>We return to the  orbit and plot it on the shape sphere below.</p>
+<p>Since all orbits here are collision-free, the trajectory meanders about on the surface of the sphere but never passes through any of the three pairwise collision points. In fact we can imagine continuously deforming a trajectory to find similar nearby orbits just as long as we don’t ever pass over the collision points and create an invalid orbit. In topology, these forbidden missing points are called <em>punctures</em>, and a family of orbits we can obtain through continuous deformation without passing over the punctures corresponds the concept of the <a href="https://en.wikipedia.org/wiki/Fundamental_group"><em>fundamental group</em></a> from algebraic topology. Algebraic topology is a topic well beyond my expertise, so I’ll tread lightly here and not pretend to know more about it.</p>
+</div></div><div id="cell-212" class="observablehq observablehq--cell"></div><div id="cell-213" class="observablehq observablehq--cell"></div><div id="cell-214" class="observablehq observablehq--cell"></div><div id="cell-215" class="observablehq observablehq--cell"></div><div id="cell-216" class="observablehq observablehq--cell"></div><div id="cell-907" class="observablehq observablehq--cell"><div><p>Three dimensional space is still a bit much to work with, so we additionally turn the shape sphere on its side and project the orbit stereographically about one puncture onto a plane below. Two punctures are visible while the third (about which we projected) is removed to infinity.</p>
+<p>The figure below shows the orbit projected into the two-dimensional plane. Two punctures are visible while the the puncture about which we projected is removed to infinity. The shape trajectory now lies in a flat two dimensional plane, looping around the two projected punctures but never passing through them.</p>
+</div></div><div id="cell-217" class="observablehq observablehq--cell"></div><div id="cell-218" class="observablehq observablehq--cell"></div><div id="cell-219" class="observablehq observablehq--cell"><div><h3 id="free-group-word" tabindex="-1"><a href="#free-group-word">Free group word</a></h3>
+<p>From here, our task is conceptually simple. We walk along the projected shape of the orbit and note every time it completes a loop, either clockwise or counterclockwise, around one of the two punctures. The result is a <a href="https://en.wikipedia.org/wiki/Free_group"><em>free group word</em></a> and (at last!) identifies our orbit in the topological sense. We record an  for clockwise loops around the righthand puncture and  (which we abbreviate as ) for counterclockwise loops. Similarly we record  and , respectively, for counterclockwise and clockwise loops around the lefthand puncture.</p>
+</div></div><div id="cell-220" class="observablehq observablehq--cell"></div><div id="cell-206" class="observablehq observablehq--cell"><div><p>Though conceptually simple, reading these elements is somewhat tedious. In their paper <a href="https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S">A guide to hunting periodic three-body orbits</a>, Šuvakov and Dmitrašinović present a “free group word reading algorithm”. Following the algorithm, we track every crossing of the shape sphere equator, which corresponds to collinear configurations (<em>syzygies</em>). We track the direction of each crossing and which body is in the middle, then convert the information via a lookup table into the free group word.</p>
+</div></div><div id="cell-207" class="observablehq observablehq--cell"></div><div id="cell-906" class="observablehq observablehq--cell"><div><h2 id="future-work" tabindex="-1"><a href="#future-work">Future work</a></h2>
+</div></div><div id="cell-905" class="observablehq observablehq--cell"><div><p>In a future notebook, I’d love to implement a search algorithm to actually locate periodic orbits. From the abstract of the paper mentioned above, <a href="https://ui.adsabs.harvard.edu/abs/2014AmJPh..82..609S">A guide to hunting periodic three-body orbits</a>,</p>
+<blockquote>
+<p>The recent discovery of thirteen new and distinct three-body periodic planar orbits suggests that many more such orbits remain undiscovered. Searches in two-dimensional subspaces of the full four-dimensional space of initial conditions require computing resources that are available to many students, and the required level of computational and numerical expertise is also at the advanced undergraduate level. We discuss the methods for solving the planar three-body equations of motion, as well as some basic strategies and tactics for searches of periodic orbits. Our discussion should allow interested undergraduates to start their own searches. Users can submit new three-body orbits to a wiki-based website.</p>
+</blockquote>
+<p>The <a href="http://www.orbitopedia.org/">wiki appears either defunct or in progress</a>, but the exploration sounds fun!</p>
+<p>Comments? Question? <a href="https://twitter.com/rickyreusser/status/1185354588280348672">Let me know</a>.</p>
+</div></div><div id="cell-900" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 
