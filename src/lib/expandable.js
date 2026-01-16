@@ -128,6 +128,9 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
       padding: 12px;
       overflow-y: auto;
       max-height: calc(100vh - 200px);
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
     `;
 
     floatingPanel.appendChild(panelHeader);

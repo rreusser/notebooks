@@ -510,6 +510,10 @@
       invalidation.then(() => frame.cancel());
     })();
   </script>
+  <script id="1090" type="text/x-typescript">
+    // Track metadata details open/closed state across re-renders (use object to allow mutation)
+    const metadataState = { detailsOpen: true };
+  </script>
   <script id="109" type="text/x-typescript">
     const metadataContainer = (() => {
       const { group, sequence, orbit } = selectedConditions;
@@ -524,8 +528,8 @@
       const hashValue = `#group=${encodeURIComponent(group)}&sequence=${encodeURIComponent(sequence)}&orbit=${encodeURIComponent(orbit)}`;
       const seqName = `${group} - ${sequence.replace(/i\.c\./, 'isosceles collinear')}`;
 
-      return html`<div class="orbit-metadata">
-        <details open="">
+      const container = html`<div class="orbit-metadata">
+        <details>
           <summary style="cursor:pointer;font-size:0.85em;color:#666;">Orbit details</summary>
           <div style="border:1px solid #ccc;padding:0 10px;margin-top:0.5em;box-sizing:border-box;max-width:100%;">
             <small><dl class="inline-flex">
@@ -542,6 +546,15 @@
           </div>
         </details>
       </div>`;
+
+      // Restore and track toggle state
+      const details = container.querySelector('details');
+      details.open = metadataState.detailsOpen;
+      details.addEventListener('toggle', () => {
+        metadataState.detailsOpen = details.open;
+      });
+
+      return container;
     })();
   </script>
   <script id="200" type="text/markdown">
