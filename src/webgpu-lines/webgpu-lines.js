@@ -511,6 +511,12 @@ fn vertexMain(
   let useC = select(0.0, 1.0, mirror) + dx * (width / lBC);
   lineCoord.z = select(0.0, 1.0, useC < 0.0 || useC > 1.0);
 
+  // Compute lineCoord.x as position along the line (in pixels from segment midpoint)
+  // dx is offset along tangent, width scales it to pixels
+  if (!isCap) {
+    lineCoord.x = dx * width;
+  }
+
   // Final position
   var pos = pB;
   pos.x = pos.x + width * dP.x;
