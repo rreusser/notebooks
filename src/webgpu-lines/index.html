@@ -83,12 +83,15 @@
       xScale: d3.scaleLinear().domain([-1, 1]).range([0, canvasWidth]),
       yScale: d3.scaleLinear().domain([-1, 1]).range([canvasHeight, 0]),
       aspectRatio: 1,
-      onChange: () => { renderState.dirty = true; }
+      onChange: () => {
+        renderState.dirty = true;
+        stack.dispatchEvent(new CustomEvent('update'));
+      }
     });
 
     const figure = html`<figure style="margin: 0;">
       ${stack.element}
-      <figcaption>Drag to pan, scroll to zoom.</figcaption>
+      <figcaption>Drag handles to edit vertices. Drag background to pan, scroll to zoom.</figcaption>
     </figure>`;
     figure.style.border = '1px solid #ccc';
     figure.style.display = 'inline-block';
@@ -118,11 +121,8 @@
     const capResolutionInput = Inputs.range([2, 16], { label: 'Round cap resolution', value: 8, step: 1 });
     const capResolution = view(capResolutionInput);
 
-    const sdfModeInput = Inputs.toggle({ label: 'SDF stroke outline', value: false });
-    const sdfMode = view(sdfModeInput);
-
-    const borderWidthInput = Inputs.range([1, 10], { label: 'Border width', value: 4, step: 0.5 });
-    const borderWidth = view(borderWidthInput);
+    const sdfStrokeWidthInput = Inputs.range([0, 15], { label: 'SDF stroke width', value: 0, step: 0.5 });
+    const sdfStrokeWidth = view(sdfStrokeWidthInput);
 
     const lineBreakInput = Inputs.toggle({ label: 'Line break', value: false });
     const lineBreak = view(lineBreakInput);
@@ -135,8 +135,7 @@
       ${miterLimitInput}
       ${joinResolutionInput}
       ${capResolutionInput}
-      ${sdfModeInput}
-      ${borderWidthInput}
+      ${sdfStrokeWidthInput}
       ${lineBreakInput}
     </div>`);
   </script>
@@ -156,7 +155,7 @@
           const t = i / (n - 1);
           const x = -0.6 + t * 1.2;
           const y = (i % 2 === 0 ? 0.2 : -0.2);
-          basePoints.push([x, y, 0, 1]);
+          basePoints.push({ x, y, z: 0, w: 1 });
         }
       } else if (patternType === 'spiral') {
         const n = 80;
@@ -165,7 +164,7 @@
           const t = i / (n - 1);
           const angle = t * Math.PI * 6;
           const r = 0.1 + t * 0.6;
-          basePoints.push([r * Math.cos(angle), r * Math.sin(angle), 0, 1]);
+          basePoints.push({ x: r * Math.cos(angle), y: r * Math.sin(angle), z: 0, w: 1 });
         }
       } else {
         // Wave pattern (default)
@@ -175,30 +174,36 @@
           const t = i / (n - 1);
           const x = -0.8 + t * 1.6;
           const y = 0.3 * Math.sin(t * Math.PI * 4) + 0.2 * Math.cos(t * Math.PI * 7);
-          basePoints.push([x, y, 0, 1]);
+          basePoints.push({ x, y, z: 0, w: 1 });
         }
       }
 
       // Insert line break sentinel (w=0) in the middle if requested
       if (insertLineBreak) {
         const midIndex = Math.floor(basePoints.length / 2);
-        basePoints.splice(midIndex, 0, [0, 0, 0, 0]); // sentinel: w=0
+        basePoints.splice(midIndex, 0, { x: 0, y: 0, z: 0, w: 0 }); // sentinel: w=0
       }
 
-      // Convert to Float32Array
-      const numPoints = basePoints.length;
-      const positions = new Float32Array(numPoints * 4);
-      for (let i = 0; i < numPoints; i++) {
-        positions[i * 4 + 0] = basePoints[i][0];
-        positions[i * 4 + 1] = basePoints[i][1];
-        positions[i * 4 + 2] = basePoints[i][2];
-        positions[i * 4 + 3] = basePoints[i][3];
-      }
-
-      return { positions, numPoints };
+      return basePoints;
     }
 
-    const { positions, numPoints } = generatePattern(pattern, lineBreak);
+    // Generate points as mutable objects
+    const points = generatePattern(pattern, lineBreak);
+    const numPoints = points.length;
+
+    // Create Float32Array from points
+    function pointsToFloat32Array(pts) {
+      const arr = new Float32Array(pts.length * 4);
+      for (let i = 0; i < pts.length; i++) {
+        arr[i * 4 + 0] = pts[i].x;
+        arr[i * 4 + 1] = pts[i].y;
+        arr[i * 4 + 2] = pts[i].z;
+        arr[i * 4 + 3] = pts[i].w;
+      }
+      return arr;
+    }
+
+    const positions = pointsToFloat32Array(points);
 
     // Create position buffer
     const positionBuffer = device.createBuffer({
@@ -208,12 +213,70 @@
     });
     device.queue.writeBuffer(positionBuffer, 0, positions);
 
+    // Function to update GPU buffer when points change
+    function updatePositionBuffer() {
+      const newPositions = pointsToFloat32Array(points);
+      device.queue.writeBuffer(positionBuffer, 0, newPositions);
+      renderState.dirty = true;
+    }
+
     invalidation.then(() => positionBuffer.destroy());
   </script>
+  <script id="5b" type="module">
+    // SVG handles for vertex editing
+    const svg = d3.select(stack.elements.svg);
+
+    // Filter out sentinel points (w=0) for display
+    const editablePoints = points.map((p, i) => ({ point: p, index: i }))
+                                 .filter(d => d.point.w !== 0);
+
+    // Create circles for each editable vertex
+    const circles = svg.selectAll('circle.vertex-handle')
+      .data(editablePoints, d => d.index)
+      .join('circle')
+      .attr('class', 'vertex-handle')
+      .attr('r', 5)
+      .attr('fill', 'white')
+      .attr('stroke', '#333')
+      .attr('stroke-width', 1.5)
+      .attr('cursor', 'move')
+      .call(d3.drag()
+        .on('start', function() {
+          d3.select(this).attr('stroke', '#0066cc').attr('stroke-width', 2);
+        })
+        .on('drag', function(event, d) {
+          // Convert screen coords to data coords
+          d.point.x = axes.xScale.invert(event.x);
+          d.point.y = axes.yScale.invert(event.y);
+          // Update circle position
+          d3.select(this)
+            .attr('cx', event.x)
+            .attr('cy', event.y);
+          // Update GPU buffer
+          updatePositionBuffer();
+        })
+        .on('end', function() {
+          d3.select(this).attr('stroke', '#333').attr('stroke-width', 1.5);
+        })
+      );
+
+    // Update circle positions (for zoom/pan and initial render)
+    function updateHandlePositions() {
+      circles
+        .attr('cx', d => axes.xScale(d.point.x))
+        .attr('cy', d => axes.yScale(d.point.y));
+    }
+
+    updateHandlePositions();
+    stack.addEventListener('update', updateHandlePositions);
+  </script>
   <script id="6" type="module">
-    // Recreate pipeline when join/cap type, resolution, or SDF mode changes
+    // Recreate pipeline when join/cap type, resolution, or SDF stroke width changes
     // Note: lineWidth is included because SDF shader embeds width value
-    joinType; joinResolution; miterLimit; capType; capResolution; sdfMode; borderWidth; lineWidth;
+    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; lineWidth;
+
+    // SDF mode is enabled when stroke width > 0
+    const useSdfMode = sdfStrokeWidth > 0;
 
     // Standard fragment shader - solid color with edge darkening
     const standardFragmentShader = /* wgsl */`
@@ -235,7 +298,7 @@
       }
       fn getColor(lineCoord: vec3f) -> vec4f {
         let width = ${lineWidth.toFixed(1)};
-        let border = ${borderWidth.toFixed(1)};
+        let strokeWidth = ${sdfStrokeWidth.toFixed(1)};
 
         // SDF: distance from center in screen pixels
         let sdf = 0.5 * width * length(lineCoord.xy);
@@ -243,13 +306,13 @@
         // Anti-aliased edge
         let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
 
-        // Border region (starts at border pixels from edge)
-        let borderMask = linearstep(width * 0.5 - border - 0.5, width * 0.5 - border + 0.5, sdf);
+        // Stroke region (starts at strokeWidth pixels from edge)
+        let strokeMask = linearstep(width * 0.5 - strokeWidth - 0.5, width * 0.5 - strokeWidth + 0.5, sdf);
 
-        // Fill color (light blue) with darker border
+        // Fill color (light blue) with darker stroke
         let fillColor = vec3f(0.4, 0.7, 1.0);
-        let borderColor = vec3f(0.1, 0.3, 0.6);
-        let color = mix(fillColor, borderColor, borderMask);
+        let strokeColor = vec3f(0.1, 0.3, 0.6);
+        let color = mix(fillColor, strokeColor, strokeMask);
 
         return vec4f(color, aa);
       }
@@ -263,9 +326,9 @@
       cap: capType,
       capResolution: capResolution,
       vertexShaderBody: '',
-      fragmentShaderBody: sdfMode ? sdfFragmentShader : standardFragmentShader,
+      fragmentShaderBody: useSdfMode ? sdfFragmentShader : standardFragmentShader,
       // Alpha blending for SDF mode
-      blend: sdfMode ? {
+      blend: useSdfMode ? {
         color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
       } : null
