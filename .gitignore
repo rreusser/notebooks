@@ -2,3 +2,4 @@ node_modules
 .DS_Store
 icebox
 .notebookkit-debug
+src/webgpu-lines/regl-gpu-lines

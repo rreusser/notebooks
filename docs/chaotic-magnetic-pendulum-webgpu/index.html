@@ -3,15 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Chaotic Magnetic Pendulum">
-  <meta property="og:title" content="Chaotic Magnetic Pendulum">
-  <meta name="twitter:description" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.">
-  <meta name="subject" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.">
-  <meta name="description" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.">
-  <meta property="og:description" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.">
-  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/chaotic-magnetic-pendulum.png">
+  <meta name="twitter:title" content="Chaotic Magnetic Pendulum in WebGPU">
+  <meta property="og:title" content="Chaotic Magnetic Pendulum in WebGPU">
+  <meta name="twitter:description" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics, implemented using WebGPU.">
+  <meta name="subject" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics, implemented using WebGPU.">
+  <meta name="description" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics, implemented using WebGPU.">
+  <meta property="og:description" content="Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics, implemented using WebGPU.">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/chaotic-magnetic-pendulum-webgpu.png">
   <meta name="twitter:card" content="summary_large_image">
-  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/chaotic-magnetic-pendulum.png">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/chaotic-magnetic-pendulum-webgpu.png">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1507,9 +1507,8 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Chaotic Magnetic Pendulum</title>  <script type="module" crossorigin src="/notebooks/assets/index-NJ6FRpnn.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Chaotic Magnetic Pendulum in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-CKLBImcF.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
-  <link rel="modulepreload" crossorigin href="/notebooks/assets/comments-I77vOiCB.js">
 </head>
 <body>
   <nav class="menu">
@@ -1520,7 +1519,7 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Chaotic Magnetic Pendulum</h1>
+    <h1>Chaotic Magnetic Pendulum in WebGPU</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
       <time pubdate="" datetime="20240807">August 7, 2024</time>
@@ -1533,7 +1532,7 @@ main h6 {
           </svg>
           Live notebook
         </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/chaotic-magnetic-pendulum/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/chaotic-magnetic-pendulum-webgpu/index.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1543,7 +1542,7 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p><em>See also the <a href="../chaotic-magnetic-pendulum-webgpu/">WebGPU version</a>.</em></p>
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p><em>See also the <a href="../chaotic-magnetic-pendulum/">WebGL version</a>.</em></p>
 </div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-30" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"><div><p>The plot above represents a top-down view of a chaotic <a href="https://simple.wikipedia.org/wiki/Magnetic_pendulum">magnetic pendulum</a>. The black dots represent attracting magnets. Click and drag to move them. Each point on the plot represents the starting position of a pendulum. A pendulum is released from rest, and a bit of friction ensures it eventually comes to rest at one of the magnets. Color indicates which.</p>
 </div></div><div id="cell-10" class="observablehq observablehq--cell"><div><p>For two-dimensional position , friction , and magnets , the pendulum moves according to the equations</p>
 </div></div><div id="cell-11" class="observablehq observablehq--cell"><div></div></div><div id="cell-12" class="observablehq observablehq--cell"><div><p>Pendulum height  means the bottom of the pendulum is elevated slightly above the magnets so that it doesn’t experience infinite acceleration when it gets close.</p>
@@ -1553,83 +1552,65 @@ main h6 {
 </div></div><div id="cell-40" class="observablehq observablehq--cell"><div><p>In both formats, the biggest challenge is computing trajectories efficiently. The pendulum may change direction quickly and so needs a small time step, but the pendulum can take a long time to come to a rest. These competing priorities make efficient evaluation essential.</p>
 </div></div><div id="cell-39" class="observablehq observablehq--cell"><div><p>Both therefore use the adaptive RK4(5) method. The CPU variant is implemented in <a href="https://observablehq.com/@rreusser/integration#ode45">@rreusser/integration#ode45</a>. Adaptive means that the timestep is modified on each step to maximize the step size while controlling the error. This is done through careful construction of the <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods">Runge-Kutta</a> method using coefficients of the <a href="https://en.wikipedia.org/wiki/Cash%E2%80%93Karp_method">Cash-Karp method</a>. The coefficients allow the same derivative evaluations to produce both a fifth order and so-called <em>embedded</em> fourth order estimate of the next state. The difference between the estimates produces an error estimate, which can subsequently be worked backwards into the timestep required to achieve a specified error threshold.</p>
 </div></div><div id="cell-50" class="observablehq observablehq--cell"><div><p>To get started, we define the derivative function</p>
-</div></div><div id="cell-49" class="observablehq observablehq--cell"></div><div id="cell-55" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">
+</div></div><div id="cell-49" class="observablehq observablehq--cell"></div><div id="cell-55" class="observablehq observablehq--cell"><div><pre data-language="wgsl"><code class="language-wgsl">
 </code></pre>
-</div></div><div id="cell-47" class="observablehq observablehq--cell"><div><p>The GLSL variant of <code>ode45</code> is reproduced below. It’s mostly equivalent to the CPU variant except modified for the limitations of GLSL control flow.</p>
-</div></div><div id="cell-42" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">const float safety = 0.95;
-const float maxDecrease = 0.02;
-const float maxIncrease = 50.0;
+</div></div><div id="cell-47" class="observablehq observablehq--cell"><div><p>The WGSL variant of <code>rk45</code> is reproduced below. It’s mostly equivalent to the CPU variant except modified for the limitations of WGSL control flow.</p>
+</div></div><div id="cell-42" class="observablehq observablehq--cell"><div><pre data-language="wgsl"><code class="language-wgsl">const safety: f32 = 0.95;
+const maxDecrease: f32 = 0.02;
+const maxIncrease: f32 = 50.0;
 
-vec4 ode45 (vec4 y, inout float dt) {
+struct RK45Result {
+  y: vec4&lt;f32&gt;,
+  dt: f32,
+};
+
+fn rk45(y_in: vec4&lt;f32&gt;, dt_in: f32) -&gt; RK45Result {
+  var y = y_in;
+  var dt = dt_in;
+
   // Fifth order estimate using constants for the Cash-Karp method
-  vec4 k1 = deriv(y);
-  vec4 k2 = deriv(y + dt * 0.2 * k1);
-  vec4 k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
-  vec4 k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
-  vec4 k5 = deriv(y + dt * (
-    -0.203703703703703703 * k1 +
-    2.5 * k2 -
-    2.592592592592592592 * k3 +
-    1.296296296296296296 * k4
-  ));
-  vec4 k6 = deriv(y + dt * (
-    0.029495804398148148 * k1 +
-    0.341796875 * k2 +
-    0.041594328703703703 * k3 +
-    0.400345413773148148 * k4 +
-    0.061767578125 * k5
-  ));
+  let k1 = deriv(y);
+  let k2 = deriv(y + dt * 0.2 * k1);
+  let k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
+  let k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
+  let k5 = deriv(y + dt * (-0.203703703703703703 * k1 + 2.5 * k2 - 2.592592592592592592 * k3 + 1.296296296296296296 * k4));
+  let k6 = deriv(y + dt * (0.029495804398148148 * k1 + 0.341796875 * k2 + 0.041594328703703703 * k3 + 0.400345413773148148 * k4 + 0.061767578125 * k5));
 
   // Estimate the error using the embedded fourth order method
-  vec4 tmp = dt * (
-    0.004293774801587301 * k1 -
-    0.018668586093857832 * k3 +
-    0.034155026830808080 * k4 +
-    0.019321986607142857 * k5 -
-    0.039102202145680406 * k6
-  );
-  float err2 = dot(tmp, tmp);
+  let tmp = dt * (0.004293774801587301 * k1 - 0.018668586093857832 * k3 + 0.034155026830808080 * k4 + 0.019321986607142857 * k5 - 0.039102202145680406 * k6);
+  let err2 = dot(tmp, tmp);
 
-  // Wasteful, but only accept the step if error is within tolerance
-  bool accept = err2 &lt;= tol2;
-  if (accept) y += dt * (
-    0.097883597883597883 * k1 +
-    0.402576489533011272 * k3 +
-    0.210437710437710437 * k4 +
-    0.289102202145680406 * k6
-  );
+  // Accept the step if error is within tolerance
+  let accept = err2 &lt;= uniforms.tol2;
+  if (accept || uniforms.discardFails == 0u) {
+    y = y + dt * (0.097883597883597883 * k1 + 0.402576489533011272 * k3 + 0.210437710437710437 * k4 + 0.289102202145680406 * k6);
+  }
 
-  // Either way, adjust dt according to the estimate
-  dt *= clamp(
-    safety * pow(tol2 / err2, accept ? 0.125 : 0.1),
-    maxDecrease,
-    maxIncrease
-  );
+  // Adjust dt according to the estimate
+  let exp = select(0.1, 0.125, accept);
+  dt = dt * clamp(safety * pow(uniforms.tol2 / err2, exp), maxDecrease, maxIncrease);
 
-  return y;
+  return RK45Result(y, dt);
 }
 </code></pre>
 </div></div><div id="cell-48" class="observablehq observablehq--cell"><div><p>Note that if the error threshold is not achieved (that is, if we need to reduce the time step to keep error under control), then we simply throw out the timestep entirely. This is very wasteful! <em>C’est la vie</em>.</p>
-</div></div><div id="cell-43" class="observablehq observablehq--cell"><div><p>Given zero velocity and starting position <code>xy</code>, the final iteration loop is reproduced below. We start by packing the state into a <code>vec4</code>. We update the state  times, overwriting the state and mutating <code>dt</code> on each step. The iteration is quite straightfoward, but GLSL 1.00 does not permit loop bounds to be computed at runtime, so we have to hard-code the loop extents into the shader.</p>
-</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">vec4 y = vec4(xy, vec2(0));
-float dt = 0.01;
-for (int i = 0; i &lt; ; i++) y = ode45(y, dt);
+</div></div><div id="cell-43" class="observablehq observablehq--cell"><div><p>Given zero velocity and starting position <code>xy</code>, the final iteration loop is reproduced below. We start by packing the state into a <code>vec4&lt;f32&gt;</code>. We update the state  times, overwriting the state and mutating <code>dt</code> on each step.</p>
+</div></div><div id="cell-45" class="observablehq observablehq--cell"><div><pre data-language="wgsl"><code class="language-wgsl">var y = vec4&lt;f32&gt;(xy, 0.0, 0.0);
+var dt = 0.01;
+for (var i = 0; i &lt; ; i++) {
+  let result = rk45(y, dt);
+  y = result.y;
+  dt = result.dt;
+}
 </code></pre>
-</div></div><div id="cell-52" class="observablehq observablehq--cell"><div><p>The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of GLSL fragment shaders, we can’t really know, so we just do our best and go with it.</p>
+</div></div><div id="cell-52" class="observablehq observablehq--cell"><div><p>The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of fragment shaders, we can’t really know, so we just do our best and go with it.</p>
 <p>I’ve chosen a rainbow color palette from <a href="https://iquilezles.org/articles/palettes/">Inigo Quilez</a> and used a <a href="https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/">quasirandom sequence</a> from Martin Roberts to distribute the colors somewhat randomly so that adjacent colors around the unit circle aren’t also adjacent around the color wheel.</p>
-</div></div><div id="cell-67" class="observablehq observablehq--cell"></div><div id="cell-68" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">
+</div></div><div id="cell-67" class="observablehq observablehq--cell"></div><div id="cell-68" class="observablehq observablehq--cell"><div><pre data-language="wgsl"><code class="language-wgsl">
 </code></pre>
-</div></div><div id="cell-69" class="observablehq observablehq--cell"><div><pre data-language="glsl"><code class="language-glsl">
+</div></div><div id="cell-69" class="observablehq observablehq--cell"><div><pre data-language="wgsl"><code class="language-wgsl">
 </code></pre>
 </div></div><div id="cell-53" class="observablehq observablehq--cell"><div><p>That’s it. Once in place, adaptive methods are just great. It’s a pretty handy function which you’re free to lift and use. (The source is MIT Licensed.) You can view the live notebook <a href="https://observablehq.com/@rreusser/magnetic-pendulum">on Observable</a>.</p>
-</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-29" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-59" class="observablehq observablehq--cell"></div><div id="cell-60" class="observablehq observablehq--cell"></div></main>
-      <style>
-        #comment-root {
-          margin: auto;
-          max-width: 640px;
-        }
-      </style>
-      <div id="comment-root" data-post-id="115869829462565357"></div>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-29" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-59" class="observablehq observablehq--cell"></div><div id="cell-60" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 

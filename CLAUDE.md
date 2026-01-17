@@ -26,3 +26,14 @@ npm run build    # Build static site to docs/
 
 - DO NOT import external modules in imported javascript files. Import external modules like npm: or observable: imports from the notebook, then inject them if necessary into library functions.
 
+- **Mutable state across cells**: Observable notebooks don't allow reassigning variables defined in other cells. If you need mutable state that multiple cells can modify, wrap it in an object:
+  ```javascript
+  // Cell 1: Define state object
+  const renderState = { dirty: true };
+
+  // Cell 2: Can modify properties (NOT reassign the variable)
+  renderState.dirty = true;  // OK
+  // dirty = true;           // ERROR: "Assignment to external variable"
+  ```
+  This pattern is required for render loops, dirty flags, animation state, etc.
+

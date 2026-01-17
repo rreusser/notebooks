@@ -1,10 +1,10 @@
 <!doctype html>
 <notebook theme="air">
-  <title>Chaotic Magnetic Pendulum</title>
+  <title>Chaotic Magnetic Pendulum in WebGPU</title>
   <script id="1" type="text/markdown">
-    # Chaotic Magnetic Pendulum
+    # Chaotic Magnetic Pendulum in WebGPU
 
-    *See also the [WebGPU version](../chaotic-magnetic-pendulum-webgpu/).*
+    *See also the [WebGL version](../chaotic-magnetic-pendulum/).*
   </script>
   <script id="4" type="text/x-typescript">
     const figure = html`<figure>
@@ -23,7 +23,7 @@
           stack.elements.plot.scale("x"),
           stack.elements.plot.scale("y")
         );
-        regl.dirty = true;
+        renderState.dirty = true;
       }
     }));
   </script>
@@ -45,7 +45,7 @@
       label: "tolerance",
       value: 3e-4
     }))
-    const steps = ctrl(Inputs.range([0, 200], {
+    const steps = ctrl(Inputs.range([0, 400], {
       label: "integration steps",
       value: 120,
       step: 1
@@ -107,66 +107,51 @@
     }`
   </script>
   <script id="55" type="text/markdown">
-    ```glsl
-    ${glslDeriv}
+    ```wgsl
+    ${wgslDeriv}
     ```
   </script>
   <script id="47" type="text/markdown">
-    The GLSL variant of `ode45` is reproduced below. It's mostly equivalent to the CPU variant except modified for the limitations of GLSL control flow.
+    The WGSL variant of `rk45` is reproduced below. It's mostly equivalent to the CPU variant except modified for the limitations of WGSL control flow.
   </script>
   <script id="42" type="text/markdown">
-    ```glsl
-    const float safety = 0.95;
-    const float maxDecrease = 0.02;
-    const float maxIncrease = 50.0;
+    ```wgsl
+    const safety: f32 = 0.95;
+    const maxDecrease: f32 = 0.02;
+    const maxIncrease: f32 = 50.0;
 
-    vec4 ode45 (vec4 y, inout float dt) {
+    struct RK45Result {
+      y: vec4<f32>,
+      dt: f32,
+    };
+
+    fn rk45(y_in: vec4<f32>, dt_in: f32) -> RK45Result {
+      var y = y_in;
+      var dt = dt_in;
+
       // Fifth order estimate using constants for the Cash-Karp method
-      vec4 k1 = deriv(y);
-      vec4 k2 = deriv(y + dt * 0.2 * k1);
-      vec4 k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
-      vec4 k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
-      vec4 k5 = deriv(y + dt * (
-        -0.203703703703703703 * k1 +
-        2.5 * k2 -
-        2.592592592592592592 * k3 +
-        1.296296296296296296 * k4
-      ));
-      vec4 k6 = deriv(y + dt * (
-        0.029495804398148148 * k1 +
-        0.341796875 * k2 +
-        0.041594328703703703 * k3 +
-        0.400345413773148148 * k4 +
-        0.061767578125 * k5
-      ));
+      let k1 = deriv(y);
+      let k2 = deriv(y + dt * 0.2 * k1);
+      let k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
+      let k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
+      let k5 = deriv(y + dt * (-0.203703703703703703 * k1 + 2.5 * k2 - 2.592592592592592592 * k3 + 1.296296296296296296 * k4));
+      let k6 = deriv(y + dt * (0.029495804398148148 * k1 + 0.341796875 * k2 + 0.041594328703703703 * k3 + 0.400345413773148148 * k4 + 0.061767578125 * k5));
 
       // Estimate the error using the embedded fourth order method
-      vec4 tmp = dt * (
-        0.004293774801587301 * k1 -
-        0.018668586093857832 * k3 +
-        0.034155026830808080 * k4 +
-        0.019321986607142857 * k5 -
-        0.039102202145680406 * k6
-      );
-      float err2 = dot(tmp, tmp);
+      let tmp = dt * (0.004293774801587301 * k1 - 0.018668586093857832 * k3 + 0.034155026830808080 * k4 + 0.019321986607142857 * k5 - 0.039102202145680406 * k6);
+      let err2 = dot(tmp, tmp);
 
-      // Wasteful, but only accept the step if error is within tolerance
-      bool accept = err2 <= tol2;
-      if (accept) y += dt * (
-        0.097883597883597883 * k1 +
-        0.402576489533011272 * k3 +
-        0.210437710437710437 * k4 +
-        0.289102202145680406 * k6
-      );
+      // Accept the step if error is within tolerance
+      let accept = err2 <= uniforms.tol2;
+      if (accept || uniforms.discardFails == 0u) {
+        y = y + dt * (0.097883597883597883 * k1 + 0.402576489533011272 * k3 + 0.210437710437710437 * k4 + 0.289102202145680406 * k6);
+      }
 
-      // Either way, adjust dt according to the estimate
-      dt *= clamp(
-        safety * pow(tol2 / err2, accept ? 0.125 : 0.1),
-        maxDecrease,
-        maxIncrease
-      );
+      // Adjust dt according to the estimate
+      let exp = select(0.1, 0.125, accept);
+      dt = dt * clamp(safety * pow(uniforms.tol2 / err2, exp), maxDecrease, maxIncrease);
 
-      return y;
+      return RK45Result(y, dt);
     }
     ```
   </script>
@@ -174,17 +159,21 @@
     Note that if the error threshold is not achieved (that is, if we need to reduce the time step to keep error under control), then we simply throw out the timestep entirely. This is very wasteful! *C'est la vie*.
   </script>
   <script id="43" type="text/markdown">
-    Given zero velocity and starting position `xy`, the final iteration loop is reproduced below. We start by packing the state into a `vec4`. We update the state ${steps} times, overwriting the state and mutating `dt` on each step. The iteration is quite straightfoward, but GLSL 1.00 does not permit loop bounds to be computed at runtime, so we have to hard-code the loop extents into the shader.
+    Given zero velocity and starting position `xy`, the final iteration loop is reproduced below. We start by packing the state into a `vec4<f32>`. We update the state ${steps} times, overwriting the state and mutating `dt` on each step.
   </script>
   <script id="45" type="text/markdown">
-    ```glsl
-    vec4 y = vec4(xy, vec2(0));
-    float dt = 0.01;
-    for (int i = 0; i < ${steps}; i++) y = ode45(y, dt);
+    ```wgsl
+    var y = vec4<f32>(xy, 0.0, 0.0);
+    var dt = 0.01;
+    for (var i = 0; i < ${steps}; i++) {
+      let result = rk45(y, dt);
+      y = result.y;
+      dt = result.dt;
+    }
     ```
   </script>
   <script id="52" type="text/markdown">
-    The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of GLSL fragment shaders, we can't really know, so we just do our best and go with it.
+    The final step is to choose a weighted average of color depending on how close it ends up to each magnet at the end of the integration loop. Has it actually come to a rest? Is it close to any of the magnets? Who knows! Or more specifically, subject to the reasonable limitations of fragment shaders, we can't really know, so we just do our best and go with it.
 
     I've chosen a rainbow color palette from [Inigo Quilez](https://iquilezles.org/articles/palettes/) and used a [quasirandom sequence](https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/) from Martin Roberts to distribute the colors somewhat randomly so that adjacent colors around the unit circle aren't also adjacent around the color wheel.
   </script>
@@ -217,27 +206,31 @@
     }`;
   </script>
   <script id="68" type="text/markdown">
-    ```glsl
-    ${glslPalette}
+    ```wgsl
+    ${wgslPalette}
     ```
   </script>
   <script id="69" type="text/markdown">
-    ```glsl
-    ${glslScheme}
+    ```wgsl
+    ${wgslScheme}
     ```
   </script>
   <script id="53" type="text/markdown">
     That's it. Once in place, adaptive methods are just great. It's a pretty handy function which you're free to lift and use. (The source is MIT Licensed.) You can view the live notebook [on Observable](https://observablehq.com/@rreusser/magnetic-pendulum).
   </script>
   <script id="7" type="text/x-typescript">
-    import createREGL from 'npm:regl'
     import { ode45 } from "observable:@rreusser/integration"
   </script>
   <script id="2" type="text/x-typescript">
     import { createElementStack } from './lib/element-stack.js'
-    import { reglElement, reglAxesViewport } from './lib/regl-canvas.js'
+    import { createWebGPUContext, webgpuElement, webgpuAxesViewport } from './lib/webgpu-canvas.js'
     import { createZoomableAxes } from './lib/zoomable-axes.js'
     import { expandable } from './lib/expandable.js'
+  </script>
+  <script id="3" type="text/x-typescript">
+    // Initialize WebGPU
+    const { device, canvasFormat } = await createWebGPUContext();
+    invalidation.then(() => device.destroy());
   </script>
   <script id="29" type="text/x-typescript">
     function createPlot(width, height, xDomain = [-3, 3], yDomain = [-3, 3]) {
@@ -257,10 +250,8 @@
   <script id="5" type="text/x-typescript">
     const stack = createElementStack({
       layers: [{
-        id: 'regl',
-        element: reglElement(createREGL, {
-          attributes: { depthStencil: false, preserveDrawingBuffer: true }
-        })
+        id: 'webgpu',
+        element: webgpuElement(device, canvasFormat, { alphaMode: 'premultiplied' })
       }, {
         id: 'plot',
         element: ({ width, height }) => createPlot(width, height)
@@ -282,7 +273,7 @@
       yScale: stack.elements.plot.scale("y"),
       aspectRatio: 1,
       onChange: ({ xDomain, yDomain }) => {
-        regl.dirty = true;
+        renderState.dirty = true;
         const newPlot = createPlot(stack.width, stack.height, xDomain, yDomain);
         stack.elements.plot.replaceWith(newPlot);
         stack.elements.plot = newPlot;
@@ -291,8 +282,8 @@
     });
   </script>
   <script id="18" type="text/x-typescript">
-    const regl = stack.elements.regl.value;
-    regl.dirty = true;
+    const gpuContext = stack.elements.webgpu._gpuContext;
+    const renderState = { dirty: true };
   </script>
   <script id="27" type="text/x-typescript">
     const magnets = Array.from({length: N}).map((_, i) => ({
@@ -437,7 +428,7 @@
                     d.y = axes.yScale.invert(event.y);
                     updatePositions();
                     updateTrajectory([]);
-                    regl.dirty = true;
+                    renderState.dirty = true;
                   })
                   .on('end', function() { d3.select(this).attr('cursor', 'move'); })
               )
@@ -451,103 +442,280 @@
     }
   </script>
   <script id="21" type="text/x-typescript">
-    const magnetUniforms = {};
-    for (let i = 0; i < N; i++) {
-      magnetUniforms[`p${i}`] = (_, { magnets }) => [magnets[i].x, magnets[i].y];
+    // Generate WGSL derivative function (magnets stored as vec4, use .xy)
+    const wgslDeriv = `fn deriv(y: vec4<f32>) -> vec4<f32> {
+      let pos = y.xy;
+      let vel = y.zw;
+      ${iDeriv.map(i => `let r${i} = uniforms.magnets[${i}].xy - pos;`).join('\n      ')}
+      ${iDeriv.map(i => `let d${i} = dot(r${i}, r${i}) + uniforms.h2;`).join('\n      ')}
+      let force = ${iDeriv.map(i => `r${i} / (d${i} * d${i} * sqrt(d${i}))`).join(' +\n                 ')};
+      return vec4<f32>(vel, force - uniforms.b * vel - pos);
+    }`;
+
+    // Generate WGSL palette functions
+    const wgslPalette = `fn quasirandom(n: i32) -> f32 {
+      return fract(0.5 + ${1.0 / 1.6180339887498948482} * f32(n));
     }
+    fn palette(t: f32) -> vec3<f32> {
+      let a = vec3<f32>(0.5, 0.5, 0.5);
+      let b = vec3<f32>(0.5, 0.5, 0.5);
+      let c = vec3<f32>(1.0, 1.0, 1.0);
+      let d = vec3<f32>(0.00, 0.33, 0.67);
+      return a + b * cos(6.283185 * (c * t + d));
+    }`;
 
-    const drawField = regl({
-      vert: `
-        precision highp float;
-        attribute vec2 uv;
-        varying vec2 xy;
-        uniform mat4 viewInverse;
-        void main () {
-          xy = (viewInverse * vec4(uv, 0, 1)).xy;
-          gl_Position = vec4(uv, 0, 1);
-        }`,
-      frag: `
-        precision highp float;
-        varying vec2 xy;
-        uniform float h2, b, tol2;
-        uniform vec2 ${Object.keys(magnetUniforms).join(', ')};
-        uniform bool discardFails;
+    const wgslScheme = `fn computeWeightedColor(y: vec2<f32>) -> vec3<f32> {
+      ${iPalette.map(i => `let r${i} = y - uniforms.magnets[${i}].xy;`).join('\n      ')}
+      ${iPalette.map(i => `var w${i} = 1.0 / dot(r${i}, r${i}); w${i} *= w${i};`).join('\n      ')}
+      return (
+        ${iPalette.map(i => `w${i} * mix(palette(0.63 + quasirandom(${i})), vec3<f32>(0.9), 0.35)`).join(' +\n        ')}
+      ) / (${iPalette.map(i => `w${i}`).join(' + ')});
+    }`;
 
-        ${glslDeriv}
+    // WGSL shader code
+    const shaderCode = `
+      struct Uniforms {
+        viewInverse: mat4x4<f32>,
+        h2: f32,
+        b: f32,
+        tol2: f32,
+        discardFails: u32,
+        magnets: array<vec4<f32>, ${N}>,  // Only .xy used, but vec4 required for 16-byte alignment
+      };
 
-        const float safety = 0.95;
-        const float maxDecrease = 0.02;
-        const float maxIncrease = 50.0;
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-        vec4 rk45 (vec4 y, inout float dt) {
-          // Fifth order estimate using constants for the Cash-Karp method
-          vec4 k1 = deriv(y);
-          vec4 k2 = deriv(y + dt * 0.2 * k1);
-          vec4 k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
-          vec4 k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
-          vec4 k5 = deriv(y + dt * (-0.203703703703703703 * k1 + 2.5 * k2 - 2.592592592592592592 * k3 + 1.296296296296296296 * k4));
-          vec4 k6 = deriv(y + dt * (0.029495804398148148 * k1 + 0.341796875 * k2 + 0.041594328703703703 * k3 + 0.400345413773148148 * k4 + 0.061767578125 * k5));
+      struct VertexOutput {
+        @builtin(position) position: vec4<f32>,
+        @location(0) xy: vec2<f32>,
+      };
 
-          // Estimate the error using the embedded fourth order method
-          vec4 tmp = dt * (0.004293774801587301 * k1 - 0.018668586093857832 * k3 + 0.034155026830808080 * k4 + 0.019321986607142857 * k5 - 0.039102202145680406 * k6);
-          float err2 = dot(tmp, tmp);
+      @vertex
+      fn vertex(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+        // Generate fullscreen triangle covering clip space
+        // Vertices: (-1,-1), (3,-1), (-1,3)
+        let x = f32((vertexIndex << 1u) & 2u) * 2.0 - 1.0;
+        let y = f32(vertexIndex & 2u) * 2.0 - 1.0;
 
-          // Wasteful, but only accept the step if error is within tolerance
-          bool accept = err2 <= tol2;
-          if (accept || !discardFails) y += dt * (0.097883597883597883 * k1 + 0.402576489533011272 * k3 + 0.210437710437710437 * k4 + 0.289102202145680406 * k6);
+        var output: VertexOutput;
+        // Transform through viewInverse to get data coordinates
+        let dataCoord = uniforms.viewInverse * vec4<f32>(x, y, 0.0, 1.0);
+        output.xy = dataCoord.xy;
+        // WebGPU clips space has Y up, framebuffer has Y down - the viewport handles this
+        output.position = vec4<f32>(x, y, 0.0, 1.0);
+        return output;
+      }
 
-          // Either way, adjust dt according to the estimate
-          dt *= clamp(safety * pow(tol2 / err2, accept ? 0.125 : 0.1), maxDecrease, maxIncrease);
+      ${wgslDeriv}
 
-          return y;
+      const safety: f32 = 0.95;
+      const maxDecrease: f32 = 0.02;
+      const maxIncrease: f32 = 50.0;
+
+      struct RK45Result {
+        y: vec4<f32>,
+        dt: f32,
+      };
+
+      fn rk45(y_in: vec4<f32>, dt_in: f32) -> RK45Result {
+        var y = y_in;
+        var dt = dt_in;
+
+        // Fifth order estimate using constants for the Cash-Karp method
+        let k1 = deriv(y);
+        let k2 = deriv(y + dt * 0.2 * k1);
+        let k3 = deriv(y + dt * (0.075 * k1 + 0.225 * k2));
+        let k4 = deriv(y + dt * (0.3 * k1 - 0.9 * k2 + 1.2 * k3));
+        let k5 = deriv(y + dt * (-0.203703703703703703 * k1 + 2.5 * k2 - 2.592592592592592592 * k3 + 1.296296296296296296 * k4));
+        let k6 = deriv(y + dt * (0.029495804398148148 * k1 + 0.341796875 * k2 + 0.041594328703703703 * k3 + 0.400345413773148148 * k4 + 0.061767578125 * k5));
+
+        // Estimate the error using the embedded fourth order method
+        let tmp = dt * (0.004293774801587301 * k1 - 0.018668586093857832 * k3 + 0.034155026830808080 * k4 + 0.019321986607142857 * k5 - 0.039102202145680406 * k6);
+        let err2 = dot(tmp, tmp);
+
+        // Accept the step if error is within tolerance
+        let accept = err2 <= uniforms.tol2;
+        if (accept || uniforms.discardFails == 0u) {
+          y = y + dt * (0.097883597883597883 * k1 + 0.402576489533011272 * k3 + 0.210437710437710437 * k4 + 0.289102202145680406 * k6);
         }
 
-        ${glslPalette}
-        ${glslScheme}
+        // Adjust dt according to the estimate
+        let exp = select(0.1, 0.125, accept);
+        dt = dt * clamp(safety * pow(uniforms.tol2 / err2, exp), maxDecrease, maxIncrease);
 
-        void main () {
-          vec4 y = vec4(xy, vec2(0));
-          float dtCurrent = 0.01;
-          for (int i = 0; i < ${steps}; i++) y = rk45(y, dtCurrent);
-          gl_FragColor = vec4(computeWeightedColor(y.xy), 1);
-        }`,
-      attributes: {
-        uv: [-4, -4, 4, -4, 0, 4]
+        return RK45Result(y, dt);
+      }
+
+      ${wgslPalette}
+      ${wgslScheme}
+
+      @fragment
+      fn fragment(@location(0) xy: vec2<f32>) -> @location(0) vec4<f32> {
+        var y = vec4<f32>(xy, 0.0, 0.0);
+        var dt = 0.01;
+        for (var i = 0; i < ${steps}; i++) {
+          let result = rk45(y, dt);
+          y = result.y;
+          dt = result.dt;
+        }
+        return vec4<f32>(computeWeightedColor(y.xy), 1.0);
+      }
+    `;
+
+    // Create shader module
+    const shaderModule = device.createShaderModule({
+      label: 'magnetic-pendulum-shader',
+      code: shaderCode,
+    });
+
+    // Create bind group layout
+    const bindGroupLayout = device.createBindGroupLayout({
+      label: 'magnetic-pendulum-bind-group-layout',
+      entries: [{
+        binding: 0,
+        visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+        buffer: { type: 'uniform' },
+      }],
+    });
+
+    // Create pipeline layout
+    const pipelineLayout = device.createPipelineLayout({
+      label: 'magnetic-pendulum-pipeline-layout',
+      bindGroupLayouts: [bindGroupLayout],
+    });
+
+    // Create render pipeline
+    const pipeline = device.createRenderPipeline({
+      label: 'magnetic-pendulum-pipeline',
+      layout: pipelineLayout,
+      vertex: {
+        module: shaderModule,
+        entryPoint: 'vertex',
       },
-      uniforms: {
-        viewInverse: regl.prop('viewInverse'),
-        h2: (_, { h }) => h * h,
-        b: regl.prop("b"),
-        tol2: (_, { tolerance }) => tolerance * tolerance,
-        discardFails: regl.prop('discard'),
-        ...magnetUniforms
+      fragment: {
+        module: shaderModule,
+        entryPoint: 'fragment',
+        targets: [{ format: canvasFormat }],
       },
-      depth: { enable: false },
-      scissor: { enable: true, box: reglAxesViewport(axes) },
-      viewport: reglAxesViewport(axes),
-      count: 3
-    })
+      primitive: {
+        topology: 'triangle-list',
+      },
+    });
+
+    // Calculate uniform buffer size (must be multiple of 16)
+    // mat4x4 (64) + h2 (4) + b (4) + tol2 (4) + discardFails (4) + magnets (N * 16)
+    // = 80 + N * 16, rounded up to multiple of 16
+    const uniformBufferSize = Math.ceil((80 + N * 16) / 16) * 16;
+
+    // Create uniform buffer
+    const uniformBuffer = device.createBuffer({
+      label: 'magnetic-pendulum-uniforms',
+      size: uniformBufferSize,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+
+    // Create bind group
+    const bindGroup = device.createBindGroup({
+      label: 'magnetic-pendulum-bind-group',
+      layout: bindGroupLayout,
+      entries: [{
+        binding: 0,
+        resource: { buffer: uniformBuffer },
+      }],
+    });
+
+    // Helper to update uniforms
+    function updateUniforms(viewInverse, h, b, tolerance, magnets, discardFails) {
+      const data = new ArrayBuffer(uniformBufferSize);
+      const floatView = new Float32Array(data);
+      const uintView = new Uint32Array(data);
+
+      // viewInverse matrix (16 floats = 64 bytes)
+      floatView.set(viewInverse, 0);
+
+      // h2, b, tol2, discardFails (at byte 64)
+      floatView[16] = h * h;
+      floatView[17] = b;
+      floatView[18] = tolerance * tolerance;
+      uintView[19] = discardFails ? 1 : 0;
+
+      // magnets array (starting at byte 80, vec4 per magnet for alignment)
+      for (let i = 0; i < magnets.length; i++) {
+        floatView[20 + i * 4] = magnets[i].x;
+        floatView[20 + i * 4 + 1] = magnets[i].y;
+        floatView[20 + i * 4 + 2] = 0; // unused z
+        floatView[20 + i * 4 + 3] = 0; // unused w
+      }
+
+      device.queue.writeBuffer(uniformBuffer, 0, data);
+    }
+
+    // Render function
+    function drawField(params) {
+      updateUniforms(
+        params.viewInverse,
+        params.h,
+        params.b,
+        params.tolerance,
+        params.magnets,
+        params.discard
+      );
+
+      const encoder = device.createCommandEncoder();
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: gpuContext.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 0 },
+        }],
+      });
+
+      // Set viewport and scissor to match axes
+      const canvas = stack.elements.webgpu;
+      const vp = webgpuAxesViewport(axes, devicePixelRatio, canvas.height);
+      pass.setViewport(vp.x, vp.y, vp.width, vp.height, 0, 1);
+      pass.setScissorRect(Math.floor(vp.x), Math.floor(vp.y), Math.floor(vp.width), Math.floor(vp.height));
+
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(3);
+      pass.end();
+
+      device.queue.submit([encoder.finish()]);
+    }
   </script>
   <script id="20" type="text/x-typescript">
-    regl.dirty = true;
-    let loop = regl.frame(() => {
-      if (!regl.dirty) return;
+    renderState.dirty = true;
+    let animFrameId = null;
+
+    function renderLoop() {
+      if (!renderState.dirty) {
+        animFrameId = requestAnimationFrame(renderLoop);
+        return;
+      }
       try {
         drawField({
           viewInverse: axes.viewInverse,
           h, b, magnets, tolerance,
           discard: !opts.includes('Use steps which exceed tolerance')
         });
-        regl.dirty = false;
+        renderState.dirty = false;
       } catch (e) {
         console.error(e);
-        if (loop) loop.cancel();
-        loop = null;
+        animFrameId = null;
+        return;
       }
-    });
+      animFrameId = requestAnimationFrame(renderLoop);
+    }
+
+    animFrameId = requestAnimationFrame(renderLoop);
+
     invalidation.then(() => {
-      if (loop) loop.cancel();
-      loop = null;
+      if (animFrameId !== null) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
     });
   </script>
   <script id="59" type="text/x-typescript">
