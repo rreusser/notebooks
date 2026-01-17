@@ -74,8 +74,16 @@ async function run() {
     vertexShaderBody: '',
     fragmentShaderBody: /* wgsl */`
       fn getColor(lineCoord: vec3f) -> vec4f {
-        let edge = 1.0 - 0.3 * abs(lineCoord.y);
-        return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
+        // Distinct colors: yellow center -> red edges
+        // lineCoord.y: -1 to 1 across the line (0 at center)
+        let t = abs(lineCoord.y);  // 0 at center, 1 at edges
+
+        // Yellow (1,1,0) at center -> Red (1,0,0) at edges
+        let r = 1.0;
+        let g = 1.0 - t;
+        let b = 0.0;
+
+        return vec4f(r, g, b, 1.0);
       }
     `
   });
@@ -142,19 +150,25 @@ async function run() {
       process.exit(1);
     }
 
+    // Always save actual image for inspection
+    savePNG(getActualPath(name), pixels, canvasWidth, canvasHeight);
+
     const expected = loadPNG(expectedPath);
     const result = compareImages(pixels, expected.pixels, canvasWidth, canvasHeight, 0.1);
 
+    // Always save diff image for inspection
+    savePNG(getDiffPath(name), result.diffImage, canvasWidth, canvasHeight);
+
     if (result.match) {
-      console.log(JSON.stringify({ status: 'pass', name }));
+      console.log(JSON.stringify({ status: 'pass', name, actualPath: getActualPath(name), diffPath: getDiffPath(name) }));
     } else {
-      savePNG(getActualPath(name), pixels, canvasWidth, canvasHeight);
-      savePNG(getDiffPath(name), result.diffImage, canvasWidth, canvasHeight);
       console.log(JSON.stringify({
         status: 'fail',
         name,
         diffPixels: result.diffPixels,
-        diffPercent: result.diffPercent
+        diffPercent: result.diffPercent,
+        actualPath: getActualPath(name),
+        diffPath: getDiffPath(name)
       }));
       process.exit(1);
     }

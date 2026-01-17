@@ -27,6 +27,7 @@ struct CapUniforms {
   width: f32,
   pointCount: u32,
   insertCaps: u32,  // 1 = mirror for cap, 0 = extrapolate for flat end
+  capScale: vec2f,  // [1,1] for round, [2, 2/sqrt(3)] for square
 }
 
 @group(0) @binding(0) var<uniform> uniforms: CapUniforms;
@@ -132,6 +133,21 @@ fn capVertexMain(
     let tmp2 = pD; pD = pA; pA = tmp2;
   }
 
+  // After swap, if pA ≈ pB (degenerate geometry from N < 3), fix by extrapolation.
+  // For the mirrored half (drawing the segment, not the cap), we want straight geometry.
+  // Extrapolate: pA = 2*pB - pC creates a straight continuation (cosB = 1)
+  let lABpre = length(pB.xy - pA.xy);
+  if (lABpre < 0.001) {
+    pA = 2.0 * pB - pC;
+  }
+
+  // Similarly fix pD if it equals pC (degenerate at the far end)
+  // Extrapolate for straight geometry at C
+  let lCDpre = length(pD.xy - pC.xy);
+  if (lCDpre < 0.001) {
+    pD = 2.0 * pC - pB;
+  }
+
   // Tangent and normal vectors
   var tBC = pC.xy - pB.xy;
   let lBC = length(tBC);
@@ -178,10 +194,6 @@ fn capVertexMain(
   // Clamp to valid range
   i = max(0.0, i);
 
-  // Basis vectors
-  var xBasis = tBC;
-  var yBasis = nBC * dirB;
-
   // Default vertex offset
   var xy = vec2f(0.0);
 
@@ -195,6 +207,10 @@ fn capVertexMain(
   let isCap = !mirror && uniforms.insertCaps == 1u;
   let roundOrCap = uniforms.isRound == 1u || isCap;
 
+  // Basis vectors (same as main shader)
+  var xBasis = tBC;
+  var yBasis = nBC * dirB;
+
   if (i == res + 1.0) {
     // Interior miter point
     let m = select((tAB.x * tBC.y - tAB.y * tBC.x) / (1.0 + cosB), 0.0, cosB <= -0.9999);
@@ -204,6 +220,7 @@ fn capVertexMain(
     // Join geometry
     let m2 = dot(miter, miter);
     let lm = sqrt(m2);
+    // Use miter-based basis for all cases (including caps)
     if (lm > 0.0) {
       yBasis = miter / lm;
       xBasis = dirB * vec2f(yBasis.y, -yBasis.x);
@@ -214,15 +231,31 @@ fn capVertexMain(
       // Outer joint points
       if (roundOrCap || i != 0.0) {
         // Round joins (or non-first outer points for miter/bevel)
-        // Use theta-based approach from reference
-        // For caps: multiply by 2.0 to cover full 180° instead of 90°
-        let theta = -0.5 * (acos(cosB) * (clamp(i, 0.0, res) / res) - pi) * select(1.0, 2.0, isCap);
+        let t = clamp(i, 0.0, res) / res;
+        var theta: f32;
+
+        // Use same formula for joins and caps, with 2x multiplier for caps
+        // For caps (cosB = -1, acos = pi), this gives:
+        //   theta = -0.5 * (pi * t - pi) * 2 = pi - pi*t = pi*(1-t)
+        //   t=0: theta=pi → xy=(-1,0)  backward (cap tip)
+        //   t=0.5: theta=pi/2 → xy=(0,1)  perpendicular (edge)
+        //   t=1: theta=0 → xy=(1,0)  forward (into segment)
+        let capMult = select(1.0, 2.0, isCap);
+        theta = -0.5 * (acos(cosB) * t - pi) * capMult;
+
         xy = vec2f(cos(theta), sin(theta));
 
-        // Adjust lineCoord for caps (for correct SDF)
+        // For caps, apply capScale to transform round into square
+        // (only scale when not on centerline, i.e., xy.y > 0)
         if (isCap) {
-          lineCoord.x = xy.y * lineCoord.y;
-          lineCoord.y = xy.x * lineCoord.y;
+          if (xy.y > 0.001) {
+            xy = xy * uniforms.capScale;
+          }
+          // Swap lineCoord.x and lineCoord.y based on xy
+          // Reference: lineCoord.xy = xy.yx * lineCoord.y
+          let prevLineCoordY = lineCoord.y;
+          lineCoord.x = xy.y * prevLineCoordY;
+          lineCoord.y = xy.x * prevLineCoordY;
         }
       } else {
         // Miter/bevel joins - first outer point only (i == 0)
@@ -248,12 +281,6 @@ fn capVertexMain(
   let useC = select(0.0, 1.0, mirror) + dx * (width / lBC);
   lineCoord.z = select(0.0, 1.0, useC < 0.0 || useC > 1.0);
 
-  // Flip lineCoord orientation for end caps
-  // This matches the reference: if (_orientation == CAP_END) lineCoord.xy = -lineCoord.xy;
-  if (segmentType == 1u) {
-    lineCoord.x = -lineCoord.x;
-    lineCoord.y = -lineCoord.y;
-  }
 
   // Final position
   var pos = pB;
