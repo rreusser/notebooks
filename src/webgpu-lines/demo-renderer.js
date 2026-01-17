@@ -40,13 +40,32 @@ export function createDemoRenderer(device, context, canvas, format) {
       cap = 'round',
       capResolution = 8,
       sdfStrokeWidth = 0,
-      lineWidth = 20
+      lineWidth = 20,
+      fragmentShaderBody: customShader = null,
+      blend: customBlend = null
     } = config;
 
     const useSdfMode = sdfStrokeWidth > 0;
 
+    // Vertex shader body with position buffer and view matrix
+    const vertexShaderBody = /* wgsl */`
+      @group(1) @binding(0) var<storage, read> positions: array<vec4f>;
+      @group(1) @binding(1) var<uniform> viewMatrix: mat4x4f;
+
+      struct Vertex {
+        position: vec4f,
+        width: f32,
+      }
+
+      fn getVertex(index: u32) -> Vertex {
+        let p = positions[index];
+        let projected = viewMatrix * vec4f(p.xyz, 1.0);
+        return Vertex(vec4f(projected.xyz, p.w * projected.w), ${lineWidth.toFixed(1)});
+      }
+    `;
+
     const standardFragmentShader = /* wgsl */`
-      fn getColor(lineCoord: vec3f) -> vec4f {
+      fn getColor(lineCoord: vec2f) -> vec4f {
         let edge = 1.0 - 0.3 * abs(lineCoord.y);
         return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
       }
@@ -56,7 +75,7 @@ export function createDemoRenderer(device, context, canvas, format) {
       fn linearstep(a: f32, b: f32, x: f32) -> f32 {
         return clamp((x - a) / (b - a), 0.0, 1.0);
       }
-      fn getColor(lineCoord: vec3f) -> vec4f {
+      fn getColor(lineCoord: vec2f) -> vec4f {
         let width = ${lineWidth.toFixed(1)};
         let strokeWidth = ${sdfStrokeWidth.toFixed(1)};
         let sdf = 0.5 * width * length(lineCoord.xy);
@@ -69,6 +88,29 @@ export function createDemoRenderer(device, context, canvas, format) {
       }
     `;
 
+    // Determine fragment shader: custom > SDF > standard
+    let fragmentShader;
+    if (customShader) {
+      fragmentShader = customShader;
+    } else if (useSdfMode) {
+      fragmentShader = sdfFragmentShader;
+    } else {
+      fragmentShader = standardFragmentShader;
+    }
+
+    // Determine blend state: custom > SDF default > none
+    let blend;
+    if (customBlend !== null) {
+      blend = customBlend;
+    } else if (useSdfMode) {
+      blend = {
+        color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
+      };
+    } else {
+      blend = null;
+    }
+
     const gpuLines = createGPULines(device, {
       format,
       join,
@@ -76,12 +118,9 @@ export function createDemoRenderer(device, context, canvas, format) {
       miterLimit,
       cap,
       capResolution,
-      vertexShaderBody: '',
-      fragmentShaderBody: useSdfMode ? sdfFragmentShader : standardFragmentShader,
-      blend: useSdfMode ? {
-        color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
-      } : null
+      vertexShaderBody,
+      fragmentShaderBody: fragmentShader,
+      blend
     });
 
     pipelineCache.set(key, gpuLines);
@@ -239,7 +278,9 @@ export function createDemoRenderer(device, context, canvas, format) {
       height = 200,
       points: customPoints = null,
       viewMatrix = null,
-      clearColor = { r: 0.95, g: 0.95, b: 0.95, a: 1 }
+      clearColor = { r: 0.95, g: 0.95, b: 0.95, a: 1 },
+      fragmentShaderBody = null,
+      blend = null
     } = options;
 
     // Resize canvas if needed (use devicePixelRatio for crisp rendering)
@@ -257,7 +298,9 @@ export function createDemoRenderer(device, context, canvas, format) {
       cap,
       capResolution,
       sdfStrokeWidth,
-      lineWidth
+      lineWidth,
+      fragmentShaderBody,
+      blend
     });
 
     // Generate or use custom points
@@ -272,18 +315,26 @@ export function createDemoRenderer(device, context, canvas, format) {
     });
     device.queue.writeBuffer(positionBuffer, 0, positionData);
 
+    // Create view matrix uniform buffer
+    const viewMatrixData = viewMatrix || new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    const viewMatrixBuffer = device.createBuffer({
+      label: 'demo-view-matrix',
+      size: 64, // mat4x4f = 16 floats * 4 bytes
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(viewMatrixBuffer, 0, viewMatrixData);
+
+    // Create bind group for user data (group 1)
+    const dataBindGroup = device.createBindGroup({
+      layout: gpuLines.getBindGroupLayout(1),
+      entries: [
+        { binding: 0, resource: { buffer: positionBuffer } },
+        { binding: 1, resource: { buffer: viewMatrixBuffer } }
+      ]
+    });
+
     // Render
     const encoder = device.createCommandEncoder();
-
-    const drawProps = {
-      positionBuffer,
-      vertexCount: points.length,
-      width: lineWidth,
-      resolution: [canvas.width, canvas.height],
-      viewMatrix: viewMatrix || new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1])
-    };
-
-    gpuLines.prepareFrame(encoder, drawProps);
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [{
@@ -294,13 +345,19 @@ export function createDemoRenderer(device, context, canvas, format) {
       }]
     });
 
-    gpuLines.draw(pass, drawProps);
+    gpuLines.draw(pass, {
+      vertexCount: points.length,
+      width: lineWidth,
+      resolution: [canvas.width, canvas.height]
+    }, [dataBindGroup]);
+
     pass.end();
 
     device.queue.submit([encoder.finish()]);
 
-    // Clean up position buffer
+    // Clean up buffers
     positionBuffer.destroy();
+    viewMatrixBuffer.destroy();
 
     // Wait for GPU to finish
     await device.queue.onSubmittedWorkDone();

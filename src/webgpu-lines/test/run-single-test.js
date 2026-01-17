@@ -55,7 +55,7 @@ function getPatternPositions(pattern) {
 
 // Default fragment shader for tests without custom shader
 const defaultFragmentShader = /* wgsl */`
-  fn getColor(lineCoord: vec3f) -> vec4f {
+  fn getColor(lineCoord: vec2f) -> vec4f {
     // Distinct colors: yellow center -> red edges
     // lineCoord.y: -1 to 1 across the line (0 at center)
     let t = abs(lineCoord.y);  // 0 at center, 1 at edges
@@ -68,6 +68,23 @@ const defaultFragmentShader = /* wgsl */`
     return vec4f(r, g, b, 1.0);
   }
 `;
+
+// Vertex shader body that provides position buffer access
+function createVertexShaderBody(lineWidth) {
+  return /* wgsl */`
+    @group(1) @binding(0) var<storage, read> positions: array<vec4f>;
+
+    struct Vertex {
+      position: vec4f,
+      width: f32,
+    }
+
+    fn getVertex(index: u32) -> Vertex {
+      let p = positions[index];
+      return Vertex(p, ${lineWidth.toFixed(1)});
+    }
+  `;
+}
 
 async function run() {
   ensureDirectories();
@@ -93,7 +110,7 @@ async function run() {
   const gpuLines = createGPULines(device, {
     format,
     ...options,
-    vertexShaderBody: '',
+    vertexShaderBody: createVertexShaderBody(width),
     fragmentShaderBody: fragmentShader || defaultFragmentShader,
     blend: blend || null
   });
@@ -106,16 +123,16 @@ async function run() {
   });
   device.queue.writeBuffer(positionBuffer, 0, positions);
 
-  const drawProps = {
-    positionBuffer,
-    vertexCount: positions.length / 4,
-    width,
-    resolution: [canvasWidth, canvasHeight]
-  };
+  // Create bind group for position data
+  const dataBindGroup = device.createBindGroup({
+    layout: gpuLines.getBindGroupLayout(1),
+    entries: [
+      { binding: 0, resource: { buffer: positionBuffer } }
+    ]
+  });
 
   // Render
   const encoder = device.createCommandEncoder();
-  gpuLines.prepareFrame(encoder, drawProps);
 
   const pass = encoder.beginRenderPass({
     colorAttachments: [{
@@ -126,7 +143,11 @@ async function run() {
     }]
   });
 
-  gpuLines.draw(pass, drawProps);
+  gpuLines.draw(pass, {
+    vertexCount: positions.length / 4,
+    width,
+    resolution: [canvasWidth, canvasHeight]
+  }, [dataBindGroup]);
   pass.end();
 
   encoder.copyTextureToBuffer(

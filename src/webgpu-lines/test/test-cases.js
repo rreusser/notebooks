@@ -123,7 +123,7 @@ export const testCases = [
       fn linearstep(a: f32, b: f32, x: f32) -> f32 {
         return clamp((x - a) / (b - a), 0.0, 1.0);
       }
-      fn getColor(lineCoord: vec3f) -> vec4f {
+      fn getColor(lineCoord: vec2f) -> vec4f {
         let width = 30.0;
         // SDF: distance from center in screen pixels
         let sdf = 0.5 * width * length(lineCoord.xy);
@@ -153,7 +153,7 @@ export const testCases = [
       fn linearstep(a: f32, b: f32, x: f32) -> f32 {
         return clamp((x - a) / (b - a), 0.0, 1.0);
       }
-      fn getColor(lineCoord: vec3f) -> vec4f {
+      fn getColor(lineCoord: vec2f) -> vec4f {
         let width = 30.0;
         // For miter joins, use max for rectangular SDF
         let sdf = 0.5 * width * max(abs(lineCoord.x), abs(lineCoord.y));

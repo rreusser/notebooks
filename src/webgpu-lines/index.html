@@ -10,7 +10,7 @@
     - Instanced rendering with triangle strips for high performance
     - Screen-space line width (constant pixel width regardless of zoom)
     - Bevel, miter, and round joins
-    - Round, square, and flat end caps
+    - Round, square, and butt end caps
     - Line breaks via sentinel values
     - SDF-based stroke outlines with anti-aliasing
   </script>
@@ -50,6 +50,7 @@
   <script id="interactive-canvas" type="module">
     import { createElementStack } from './lib/element-stack.js'
     import { createZoomableAxes } from './lib/zoomable-axes.js'
+    import { expandable } from './lib/expandable.js'
 
     const dpr = window.devicePixelRatio || 1;
     const canvasWidth = Math.min(640, width);
@@ -107,41 +108,81 @@
       ${stack.element}
       <figcaption>Drag handles to edit vertices. Drag background to pan, scroll to zoom.</figcaption>
     </figure>`;
-    figure.style.border = '1px solid #ccc';
-    figure.style.display = 'inline-block';
 
-    display(figure);
+    display(expandable(figure, {
+      width: canvasWidth,
+      height: canvasHeight,
+      controls: '.lines-controls',
+      onResize(el, w, h) {
+        stack.resize(w, h);
+        axes.updateScales(
+          d3.scaleLinear().domain([-1, 1]).range([0, w]),
+          d3.scaleLinear().domain([-1, 1]).range([h, 0])
+        );
+        renderState.dirty = true;
+        stack.dispatchEvent(new CustomEvent('update'));
+      }
+    }));
   </script>
 
-  <script id="interactive-controls" type="module">
-    const lineWidthInput = Inputs.range([1, 50], { label: 'Line width', value: 50, step: 0.5 });
+  <script id="interactive-controls-basic" type="module">
+    const lineWidthInput = Inputs.range([1, 200], { label: 'Line width', value: 50, step: 0.5 });
     const lineWidth = view(lineWidthInput);
 
     const joinTypeInput = Inputs.select(['bevel', 'miter', 'round'], { label: 'Join type', value: 'miter' });
     const joinType = view(joinTypeInput);
 
-    const patternInput = Inputs.select(['wave', 'zigzag', 'spiral'], { label: 'Pattern', value: 'zigzag' });
-    const pattern = view(patternInput);
-
-    const miterLimitInput = Inputs.range([1, 10], { label: 'Miter limit', value: 1, step: 0.1 });
-    const miterLimit = view(miterLimitInput);
-
-    const joinResolutionInput = Inputs.range([2, 16], { label: 'Round join resolution', value: 8, step: 1 });
-    const joinResolution = view(joinResolutionInput);
-
     const capTypeInput = Inputs.select(['round', 'square', 'none'], { label: 'Cap type', value: 'round' });
     const capType = view(capTypeInput);
 
-    const capResolutionInput = Inputs.range([2, 16], { label: 'Round cap resolution', value: 8, step: 1 });
-    const capResolution = view(capResolutionInput);
+    const patternInput = Inputs.select(['wave', 'zigzag', 'spiral'], { label: 'Pattern', value: 'zigzag' });
+    const pattern = view(patternInput);
 
     const sdfStrokeWidthInput = Inputs.range([0, 15], { label: 'SDF stroke width', value: 0, step: 0.5 });
     const sdfStrokeWidth = view(sdfStrokeWidthInput);
 
+    const alphaInput = Inputs.range([0, 1], { label: 'Alpha', value: 1, step: 0.01 });
+    const alpha = view(alphaInput);
+
     const lineBreakInput = Inputs.toggle({ label: 'Line break', value: false });
     const lineBreak = view(lineBreakInput);
 
-    display(html`<div style="display: flex; gap: 20px; flex-wrap: wrap;">
+    const stripesInput = Inputs.toggle({ label: 'Stripes', value: false });
+    const stripes = view(stripesInput);
+  </script>
+
+  <script id="interactive-controls-miter" type="module">
+    const miterLimitInput = Inputs.range([1, 10], {
+      label: 'Miter limit',
+      value: 4,
+      step: 0.1,
+      disabled: joinType !== 'miter'
+    });
+    const miterLimit = view(miterLimitInput);
+  </script>
+
+  <script id="interactive-controls-join-resolution" type="module">
+    const joinResolutionInput = Inputs.range([2, 16], {
+      label: 'Round join resolution',
+      value: 8,
+      step: 1,
+      disabled: joinType !== 'round'
+    });
+    const joinResolution = view(joinResolutionInput);
+  </script>
+
+  <script id="interactive-controls-cap-resolution" type="module">
+    const capResolutionInput = Inputs.range([2, 16], {
+      label: 'Round cap resolution',
+      value: 8,
+      step: 1,
+      disabled: capType !== 'round'
+    });
+    const capResolution = view(capResolutionInput);
+  </script>
+
+  <script id="interactive-controls-display" type="module">
+    display(html`<div class="lines-controls" style="display: flex; gap: 20px; flex-wrap: wrap;">
       ${lineWidthInput}
       ${joinTypeInput}
       ${capTypeInput}
@@ -150,7 +191,9 @@
       ${joinResolutionInput}
       ${capResolutionInput}
       ${sdfStrokeWidthInput}
+      ${alphaInput}
       ${lineBreakInput}
+      ${stripesInput}
     </div>`);
   </script>
 
@@ -212,7 +255,26 @@
       return arr;
     }
 
+    // Compute cumulative distance along the line
+    function computeDistances(pts) {
+      const distances = new Float32Array(pts.length);
+      let cumDist = 0;
+      for (let i = 0; i < pts.length; i++) {
+        if (pts[i].w === 0) {
+          // Line break - reset distance
+          cumDist = 0;
+        } else if (i > 0 && pts[i - 1].w !== 0) {
+          const dx = pts[i].x - pts[i - 1].x;
+          const dy = pts[i].y - pts[i - 1].y;
+          cumDist += Math.sqrt(dx * dx + dy * dy);
+        }
+        distances[i] = cumDist;
+      }
+      return distances;
+    }
+
     const positions = pointsToFloat32Array(points);
+    const distances = computeDistances(points);
 
     const positionBuffer = device.createBuffer({
       label: 'line-positions',
@@ -221,13 +283,25 @@
     });
     device.queue.writeBuffer(positionBuffer, 0, positions);
 
-    function updatePositionBuffer() {
+    const distanceBuffer = device.createBuffer({
+      label: 'line-distances',
+      size: distances.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(distanceBuffer, 0, distances);
+
+    function updateBuffers() {
       const newPositions = pointsToFloat32Array(points);
+      const newDistances = computeDistances(points);
       device.queue.writeBuffer(positionBuffer, 0, newPositions);
+      device.queue.writeBuffer(distanceBuffer, 0, newDistances);
       renderState.dirty = true;
     }
 
-    invalidation.then(() => positionBuffer.destroy());
+    invalidation.then(() => {
+      positionBuffer.destroy();
+      distanceBuffer.destroy();
+    });
   </script>
 
   <script id="interactive-handles" type="module">
@@ -255,7 +329,7 @@
           d3.select(this)
             .attr('cx', event.x)
             .attr('cy', event.y);
-          updatePositionBuffer();
+          updateBuffers();
         })
         .on('end', function() {
           d3.select(this).attr('stroke', '#333').attr('stroke-width', 1.5);
@@ -273,29 +347,82 @@
   </script>
 
   <script id="interactive-pipeline" type="module">
-    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; lineWidth;
+    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; alpha; stripes;
 
     const useSdfMode = sdfStrokeWidth > 0;
+    const useBlend = useSdfMode || alpha < 1;
 
-    const standardFragmentShader = /* wgsl */`
-      fn getColor(lineCoord: vec3f) -> vec4f {
-        let edge = 1.0 - 0.3 * abs(lineCoord.y);
-        return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
+    // Vertex shader body with position buffer, distance buffer, and view matrix
+    const vertexShaderBody = /* wgsl */`
+      @group(1) @binding(0) var<storage, read> positions: array<vec4f>;
+      @group(1) @binding(1) var<storage, read> distances: array<f32>;
+      @group(1) @binding(2) var<uniform> viewMatrix: mat4x4f;
+
+      struct Vertex {
+        position: vec4f,
+        width: f32,
+        dist: f32,  // cumulative distance along line - becomes a varying
+      }
+
+      fn getVertex(index: u32) -> Vertex {
+        let p = positions[index];
+        let d = distances[index];
+        let projected = viewMatrix * vec4f(p.xyz, 1.0);
+        return Vertex(vec4f(projected.xyz, p.w * projected.w), uniforms.width, d);
       }
     `;
 
-    const sdfFragmentShader = /* wgsl */`
+    // Fragment shader with distance varying for stripes
+    const standardFragmentShader = stripes ? /* wgsl */`
+      fn getColor(lineCoord: vec2f, dist: f32) -> vec4f {
+        let stripeFreq = 20.0;  // stripes per unit distance
+        let stripe = step(0.5, fract(dist * stripeFreq));
+        let baseColor = vec3f(0.4, 0.7, 1.0);
+        let stripeColor = vec3f(0.1, 0.2, 0.4);
+        let color = mix(baseColor, stripeColor, stripe);
+        return vec4f(color, ${alpha.toFixed(2)});
+      }
+    ` : /* wgsl */`
+      fn getColor(lineCoord: vec2f, dist: f32) -> vec4f {
+        return vec4f(0.4, 0.7, 1.0, ${alpha.toFixed(2)});
+      }
+    `;
+
+    // SDF distance function: round uses length, square uses max(abs)
+    const sdfDistFn = capType === 'square'
+      ? 'max(abs(lineCoord.x), abs(lineCoord.y))'
+      : 'length(lineCoord.xy)';
+
+    const sdfFragmentShader = stripes ? /* wgsl */`
       fn linearstep(a: f32, b: f32, x: f32) -> f32 {
         return clamp((x - a) / (b - a), 0.0, 1.0);
       }
-      fn getColor(lineCoord: vec3f) -> vec4f {
-        let width = ${lineWidth.toFixed(1)};
+      fn getColor(lineCoord: vec2f, dist: f32) -> vec4f {
+        let width = uniforms.width;
         let strokeWidth = ${sdfStrokeWidth.toFixed(1)};
-        let sdf = 0.5 * width * length(lineCoord.xy);
-        let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
+        let sdf = 0.5 * width * ${sdfDistFn};
+        let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf) * ${alpha.toFixed(2)};
+        let strokeMask = linearstep(width * 0.5 - strokeWidth - 0.5, width * 0.5 - strokeWidth + 0.5, sdf);
+        // Stripes based on distance
+        let stripeFreq = 20.0;
+        let stripe = step(0.5, fract(dist * stripeFreq));
+        let fillColor = mix(vec3f(0.4, 0.7, 1.0), vec3f(0.1, 0.2, 0.4), stripe);
+        let strokeColor = vec3f(0.1, 0.2, 0.4);
+        let color = mix(fillColor, strokeColor, strokeMask);
+        return vec4f(color, aa);
+      }
+    ` : /* wgsl */`
+      fn linearstep(a: f32, b: f32, x: f32) -> f32 {
+        return clamp((x - a) / (b - a), 0.0, 1.0);
+      }
+      fn getColor(lineCoord: vec2f, dist: f32) -> vec4f {
+        let width = uniforms.width;
+        let strokeWidth = ${sdfStrokeWidth.toFixed(1)};
+        let sdf = 0.5 * width * ${sdfDistFn};
+        let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf) * ${alpha.toFixed(2)};
         let strokeMask = linearstep(width * 0.5 - strokeWidth - 0.5, width * 0.5 - strokeWidth + 0.5, sdf);
         let fillColor = vec3f(0.4, 0.7, 1.0);
-        let strokeColor = vec3f(0.1, 0.3, 0.6);
+        let strokeColor = vec3f(0.1, 0.2, 0.4);
         let color = mix(fillColor, strokeColor, strokeMask);
         return vec4f(color, aa);
       }
@@ -308,37 +435,48 @@
       miterLimit: miterLimit,
       cap: capType,
       capResolution: capResolution,
-      vertexShaderBody: '',
+      vertexShaderBody,
       fragmentShaderBody: useSdfMode ? sdfFragmentShader : standardFragmentShader,
-      blend: useSdfMode ? {
+      blend: useBlend ? {
         color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
       } : null
     });
 
-    invalidation.then(() => gpuLines.destroy());
+    // Create view matrix buffer
+    const viewMatrixBuffer = device.createBuffer({
+      label: 'view-matrix',
+      size: 64, // mat4x4f
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    // Create bind group for user data (group 1)
+    const dataBindGroup = device.createBindGroup({
+      layout: gpuLines.getBindGroupLayout(1),
+      entries: [
+        { binding: 0, resource: { buffer: positionBuffer } },
+        { binding: 1, resource: { buffer: distanceBuffer } },
+        { binding: 2, resource: { buffer: viewMatrixBuffer } }
+      ]
+    });
+
+    invalidation.then(() => {
+      gpuLines.destroy();
+      viewMatrixBuffer.destroy();
+    });
   </script>
 
   <script id="interactive-render" type="module">
+    import { createFrameLoop } from './lib/frame-loop.js';
+
     lineWidth; renderState.dirty = true;
 
-    let frameId = null;
-
-    const drawProps = {
-      positionBuffer,
-      vertexCount: numPoints,
-      width: lineWidth,
-      resolution: [canvas.width, canvas.height],
-      viewMatrix: axes.view
-    };
-
-    function render() {
+    const loop = createFrameLoop(() => {
       if (renderState.dirty) {
-        drawProps.width = lineWidth;
-        drawProps.viewMatrix = axes.view;
+        // Update view matrix buffer
+        device.queue.writeBuffer(viewMatrixBuffer, 0, axes.view);
 
         const encoder = device.createCommandEncoder();
-        gpuLines.prepareFrame(encoder, drawProps);
 
         const pass = encoder.beginRenderPass({
           colorAttachments: [{
@@ -349,22 +487,19 @@
           }]
         });
 
-        gpuLines.draw(pass, drawProps);
+        gpuLines.draw(pass, {
+          vertexCount: numPoints,
+          width: lineWidth,
+          resolution: [canvas.width, canvas.height]
+        }, [dataBindGroup]);
+
         pass.end();
         device.queue.submit([encoder.finish()]);
         renderState.dirty = false;
       }
-
-      frameId = requestAnimationFrame(render);
-    }
-
-    frameId = requestAnimationFrame(render);
-
-    invalidation.then(() => {
-      if (frameId !== null) {
-        cancelAnimationFrame(frameId);
-      }
     });
+
+    invalidation.then(() => loop.cancel());
   </script>
 
   <script id="api-header" type="text/markdown">
@@ -380,7 +515,7 @@
     - `device` - WebGPU device
     - `options` - Configuration object (see below)
 
-    **Returns:** Line renderer object with `draw()`, `prepareFrame()`, and `destroy()` methods.
+    **Returns:** Line renderer object with `draw()`, `getBindGroupLayout()`, and `destroy()` methods.
   </script>
 
   <script id="api-options-header" type="text/markdown">
@@ -580,142 +715,72 @@
     The fragment shader controls how lines are colored. Your code must define a `getColor` function:
 
     ```wgsl
-    fn getColor(lineCoord: vec3f) -> vec4f {
+    fn getColor(lineCoord: vec2f) -> vec4f {
       // Return RGBA color (0-1 range)
       return vec4f(0.2, 0.5, 0.9, 1.0);
     }
     ```
 
-    The `lineCoord` parameter provides spatial information about the current fragment:
+    The `lineCoord` parameter provides spatial information about the current fragment (see below).
+
+    **Varyings:** Any fields in your `Vertex` struct beyond `position` and `width` become varyings, interpolated across the line and passed as additional parameters to `getColor`. For example, if your struct includes `dist: f32`, your function signature becomes `fn getColor(lineCoord: vec2f, dist: f32) -> vec4f`.
   </script>
 
   <script id="doc-linecoord" type="text/markdown">
     #### `lineCoord` Values
 
-    | Component | Range | Description |
-    |-----------|-------|-------------|
-    | `lineCoord.x` | varies | Position along the line direction (in pixels from segment start). Useful for dashed lines or distance-based effects. |
-    | `lineCoord.y` | -1 to 1 | Position across the line width. 0 at center, ±1 at edges. Useful for gradients, edge highlighting, or SDF effects. |
-    | `lineCoord.z` | 0 or 1 | Extrapolation flag. 1 when in a join or cap region (outside the line segment proper), 0 otherwise. |
+    | Component | Segments/Joins | Caps | Description |
+    |-----------|----------------|------|-------------|
+    | `lineCoord.x` | 0 | sin(θ) × sign | For segments: always 0. For caps: varies around the semicircle. |
+    | `lineCoord.y` | -1 to 1 | cos(θ) × sign | Position across the line. 0 at center, ±1 at edges. |
 
-    **Note:** In cap regions, `lineCoord.xy` are transformed to represent position within the cap's semicircular coordinate space.
+    The `lineCoord` values are designed for **SDF (signed distance field)** rendering:
+    - `length(lineCoord)` gives radial distance from line center (0 at center, 1 at edge)
+    - For segments: `length(lineCoord) = abs(lineCoord.y)` since x=0
+    - For caps: `length(lineCoord) = 1` on the outer edge (unit circle)
+
+    **Dashed lines:** `lineCoord.x` does NOT provide distance along the line. To implement dashes, add a cumulative distance field to your `Vertex` struct. It will be interpolated and passed to `getColor` as an extra parameter. See the interactive demo's "Stripes" option for an example.
   </script>
 
   <script id="demo-linecoord" type="module">
-    import { createGPULines as createGPULinesLC } from './webgpu-lines.js';
-
-    // Explicit dependency
-    demoRenderer;
-
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
 
       const lcX = createDemoCanvas('demo-lc-x');
       const lcY = createDemoCanvas('demo-lc-y');
-      const lcZ = createDemoCanvas('demo-lc-z');
 
       display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
         <figure style="margin: 0; text-align: center;">
           ${lcX}
-          <figcaption><code>lineCoord.x</code> (along line)</figcaption>
+          <figcaption><code>lineCoord.x</code> (0 on segments, varies in caps)</figcaption>
         </figure>
         <figure style="margin: 0; text-align: center;">
           ${lcY}
           <figcaption><code>lineCoord.y</code> (across line)</figcaption>
         </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${lcZ}
-          <figcaption><code>lineCoord.z</code> (extrapolation)</figcaption>
-        </figure>
       </div>`);
 
       const shaderX = /* wgsl */`
-        fn getColor(lineCoord: vec3f) -> vec4f {
-          let t = fract(lineCoord.x * 0.02);
-          return vec4f(t, t * 0.5, 1.0 - t, 1.0);
+        fn getColor(lineCoord: vec2f) -> vec4f {
+          // lineCoord.x is 0 for segments, varies in caps (sin(theta))
+          let t = abs(lineCoord.x);
+          // Blue for segments (x=0), orange gradient in caps
+          return vec4f(t, 0.4 * (1.0 - t), 1.0 - t, 1.0);
         }
       `;
 
       const shaderY = /* wgsl */`
-        fn getColor(lineCoord: vec3f) -> vec4f {
+        fn getColor(lineCoord: vec2f) -> vec4f {
           let t = lineCoord.y * 0.5 + 0.5;
           return vec4f(t, 0.3, 1.0 - t, 1.0);
         }
       `;
 
-      const shaderZ = /* wgsl */`
-        fn getColor(lineCoord: vec3f) -> vec4f {
-          let inJoinOrCap = lineCoord.z;
-          return vec4f(inJoinOrCap, 0.4, 1.0 - inJoinOrCap * 0.5, 1.0);
-        }
-      `;
-
-      const renderCustomShader = async (canvas, shader, opts = {}) => {
-        const dpr = window.devicePixelRatio || 1;
-        const cssWidth = opts.width || 200;
-        const cssHeight = opts.height || 120;
-        canvas.width = Math.floor(cssWidth * dpr);
-        canvas.height = Math.floor(cssHeight * dpr);
-        canvas.style.width = `${cssWidth}px`;
-        canvas.style.height = `${cssHeight}px`;
-
-        const points = demoRenderer.generateDemoPoints(opts.pattern || 'shader-demo');
-        const positionData = new Float32Array(points.length * 4);
-        for (let i = 0; i < points.length; i++) {
-          positionData[i * 4 + 0] = points[i].x;
-          positionData[i * 4 + 1] = points[i].y;
-          positionData[i * 4 + 2] = points[i].z;
-          positionData[i * 4 + 3] = points[i].w;
-        }
-
-        const gpuLines = createGPULinesLC(demoRenderer.device, {
-          format: navigator.gpu.getPreferredCanvasFormat(),
-          join: opts.join || 'round',
-          cap: opts.cap || 'round',
-          vertexShaderBody: '',
-          fragmentShaderBody: shader
-        });
-
-        const ctx = canvas.getContext('webgpu');
-        ctx.configure({
-          device: demoRenderer.device,
-          format: navigator.gpu.getPreferredCanvasFormat(),
-          alphaMode: 'premultiplied'
-        });
-
-        const positionBuffer = demoRenderer.device.createBuffer({
-          size: positionData.byteLength,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-        });
-        demoRenderer.device.queue.writeBuffer(positionBuffer, 0, positionData);
-
-        const encoder = demoRenderer.device.createCommandEncoder();
-        gpuLines.prepareFrame(encoder, {});
-        const pass = encoder.beginRenderPass({
-          colorAttachments: [{
-            view: ctx.getCurrentTexture().createView(),
-            loadOp: 'clear',
-            storeOp: 'store',
-            clearValue: { r: 0.95, g: 0.95, b: 0.95, a: 1 }
-          }]
-        });
-        gpuLines.draw(pass, {
-          positionBuffer,
-          vertexCount: points.length,
-          width: opts.lineWidth || 28,
-          resolution: [canvas.width, canvas.height]
-        });
-        pass.end();
-        demoRenderer.device.queue.submit([encoder.finish()]);
-
-        positionBuffer.destroy();
-        gpuLines.destroy();
-      };
-
-      await renderCustomShader(lcX, shaderX, { pattern: 'shader-demo', lineWidth: 28 });
-      await renderCustomShader(lcY, shaderY, { pattern: 'shader-demo', lineWidth: 28 });
-      await renderCustomShader(lcZ, shaderZ, { pattern: 'shader-demo', lineWidth: 28 });
+      const capOpts = { pattern: 'cap-demo', lineWidth: 35, join: 'round', cap: 'round', width: 200, height: 120 };
+      const baseOpts = { pattern: 'shader-demo', lineWidth: 28, join: 'round', cap: 'round', width: 200, height: 120 };
+      await demoRenderer.renderToCanvas(lcX, { ...capOpts, fragmentShaderBody: shaderX });
+      await demoRenderer.renderToCanvas(lcY, { ...baseOpts, fragmentShaderBody: shaderY });
     }
   </script>
 
@@ -724,20 +789,18 @@
 
     **Solid color with edge darkening:**
     ```wgsl
-    fn getColor(lineCoord: vec3f) -> vec4f {
+    fn getColor(lineCoord: vec2f) -> vec4f {
       let edge = 1.0 - 0.3 * abs(lineCoord.y);
       return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
     }
     ```
 
-    **Dashed line:**
+    **Cross-line stripes** (using `lineCoord.y`):
     ```wgsl
-    fn getColor(lineCoord: vec3f) -> vec4f {
-      let dashLen = 10.0;  // pixels
-      let gapLen = 5.0;    // pixels
-      let t = lineCoord.x % (dashLen + gapLen);
-      if (t > dashLen) { discard; }
-      return vec4f(0.2, 0.5, 0.9, 1.0);
+    fn getColor(lineCoord: vec2f) -> vec4f {
+      // Stripes perpendicular to line direction
+      let stripe = step(0.0, lineCoord.y);
+      return vec4f(stripe * 0.2, 0.5, 0.9 - stripe * 0.4, 1.0);
     }
     ```
 
@@ -746,10 +809,11 @@
     fn linearstep(a: f32, b: f32, x: f32) -> f32 {
       return clamp((x - a) / (b - a), 0.0, 1.0);
     }
-    fn getColor(lineCoord: vec3f) -> vec4f {
+    fn getColor(lineCoord: vec2f) -> vec4f {
       let width = 20.0;
       let strokeWidth = 4.0;
-      let sdf = 0.5 * width * length(lineCoord.xy);
+      // length(lineCoord) works for both segments and caps
+      let sdf = 0.5 * width * length(lineCoord);
       let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
       let strokeMask = linearstep(
         width * 0.5 - strokeWidth - 0.5,
@@ -774,23 +838,18 @@
   </script>
 
   <script id="demo-shader-examples" type="module">
-    import { createGPULines as createGPULinesSE } from './webgpu-lines.js';
-
-    // Explicit dependency
-    demoRenderer;
-
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
 
-      const dashed = createDemoCanvas('demo-dashed');
+      const stripes = createDemoCanvas('demo-stripes');
       const gradient = createDemoCanvas('demo-gradient');
       const sdfStroke = createDemoCanvas('demo-sdf-stroke');
 
       display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
         <figure style="margin: 0; text-align: center;">
-          ${dashed}
-          <figcaption>Dashed line</figcaption>
+          ${stripes}
+          <figcaption>Cross-line stripes</figcaption>
         </figure>
         <figure style="margin: 0; text-align: center;">
           ${gradient}
@@ -802,19 +861,16 @@
         </figure>
       </div>`);
 
-      const shaderDashed = /* wgsl */`
-        fn getColor(lineCoord: vec3f) -> vec4f {
-          let dashLen = 12.0;
-          let gapLen = 6.0;
-          let cycle = dashLen + gapLen;
-          let t = lineCoord.x - floor(lineCoord.x / cycle) * cycle;
-          if (t > dashLen) { discard; }
-          return vec4f(0.2, 0.5, 0.9, 1.0);
+      const shaderStripes = /* wgsl */`
+        fn getColor(lineCoord: vec2f) -> vec4f {
+          // Cross-line stripes using lineCoord.y
+          let stripe = step(0.0, lineCoord.y);
+          return vec4f(stripe * 0.2, 0.5, 0.9 - stripe * 0.4, 1.0);
         }
       `;
 
       const shaderGradient = /* wgsl */`
-        fn getColor(lineCoord: vec3f) -> vec4f {
+        fn getColor(lineCoord: vec2f) -> vec4f {
           let t = lineCoord.y * 0.5 + 0.5;
           let top = vec3f(1.0, 0.4, 0.2);
           let bottom = vec3f(0.2, 0.4, 1.0);
@@ -827,10 +883,12 @@
         fn linearstep(a: f32, b: f32, x: f32) -> f32 {
           return clamp((x - a) / (b - a), 0.0, 1.0);
         }
-        fn getColor(lineCoord: vec3f) -> vec4f {
+        fn getColor(lineCoord: vec2f) -> vec4f {
           let width = 28.0;
           let strokeWidth = 5.0;
-          let sdf = 0.5 * width * length(lineCoord.xy);
+          // For SDF, use abs(y) which is -1 to 1 across the line
+          let dist = abs(lineCoord.y);
+          let sdf = 0.5 * width * dist;
           let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
           let strokeMask = linearstep(width * 0.5 - strokeWidth - 0.5, width * 0.5 - strokeWidth + 0.5, sdf);
           let fillColor = vec3f(0.4, 0.7, 1.0);
@@ -840,120 +898,89 @@
         }
       `;
 
-      const renderCustomShader = async (canvas, shader, opts = {}) => {
-        const dpr = window.devicePixelRatio || 1;
-        const cssWidth = opts.width || 200;
-        const cssHeight = opts.height || 120;
-        canvas.width = Math.floor(cssWidth * dpr);
-        canvas.height = Math.floor(cssHeight * dpr);
-        canvas.style.width = `${cssWidth}px`;
-        canvas.style.height = `${cssHeight}px`;
-
-        const points = demoRenderer.generateDemoPoints(opts.pattern || 'shader-demo');
-        const positionData = new Float32Array(points.length * 4);
-        for (let i = 0; i < points.length; i++) {
-          positionData[i * 4 + 0] = points[i].x;
-          positionData[i * 4 + 1] = points[i].y;
-          positionData[i * 4 + 2] = points[i].z;
-          positionData[i * 4 + 3] = points[i].w;
-        }
-
-        const gpuLines = createGPULinesSE(demoRenderer.device, {
-          format: navigator.gpu.getPreferredCanvasFormat(),
-          join: opts.join || 'round',
-          cap: opts.cap || 'round',
-          vertexShaderBody: '',
-          fragmentShaderBody: shader,
-          blend: opts.blend || null
-        });
-
-        const ctx = canvas.getContext('webgpu');
-        ctx.configure({
-          device: demoRenderer.device,
-          format: navigator.gpu.getPreferredCanvasFormat(),
-          alphaMode: 'premultiplied'
-        });
-
-        const positionBuffer = demoRenderer.device.createBuffer({
-          size: positionData.byteLength,
-          usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-        });
-        demoRenderer.device.queue.writeBuffer(positionBuffer, 0, positionData);
-
-        const encoder = demoRenderer.device.createCommandEncoder();
-        gpuLines.prepareFrame(encoder, {});
-        const pass = encoder.beginRenderPass({
-          colorAttachments: [{
-            view: ctx.getCurrentTexture().createView(),
-            loadOp: 'clear',
-            storeOp: 'store',
-            clearValue: { r: 0.95, g: 0.95, b: 0.95, a: 1 }
-          }]
-        });
-        gpuLines.draw(pass, {
-          positionBuffer,
-          vertexCount: points.length,
-          width: opts.lineWidth || 28,
-          resolution: [canvas.width, canvas.height]
-        });
-        pass.end();
-        demoRenderer.device.queue.submit([encoder.finish()]);
-
-        positionBuffer.destroy();
-        gpuLines.destroy();
-      };
-
       const blend = {
         color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
       };
 
-      await renderCustomShader(dashed, shaderDashed, { pattern: 'shader-demo', lineWidth: 20, blend });
-      await renderCustomShader(gradient, shaderGradient, { pattern: 'shader-demo', lineWidth: 28 });
-      await renderCustomShader(sdfStroke, shaderSDF, { pattern: 'shader-demo', lineWidth: 28, blend });
+      const baseOpts = { pattern: 'shader-demo', join: 'round', cap: 'round', width: 200, height: 120 };
+      await demoRenderer.renderToCanvas(stripes, { ...baseOpts, lineWidth: 28, fragmentShaderBody: shaderStripes });
+      await demoRenderer.renderToCanvas(gradient, { ...baseOpts, lineWidth: 28, fragmentShaderBody: shaderGradient });
+      await demoRenderer.renderToCanvas(sdfStroke, { ...baseOpts, lineWidth: 28, fragmentShaderBody: shaderSDF, blend });
     }
   </script>
 
   <script id="doc-vertex-shader" type="text/markdown">
-    #### `vertexShaderBody` - Custom Positioning
+    #### `vertexShaderBody` - Custom Vertex Data
 
-    The vertex shader body is inserted before the main vertex function. You can define helper functions that could be called from a modified fragment shader, but the vertex position calculation is handled internally by the library.
+    The vertex shader body defines how line positions and per-vertex data are computed. You provide:
+    1. **Bind group declarations** (group 1+) for your data (buffers, textures, etc.)
+    2. **A struct** defining the vertex output (position, optional width, and any varyings)
+    3. **A vertex function** that returns the struct given a point index
 
-    **Available uniforms in vertex shader:**
+    ```wgsl
+    @group(1) @binding(0) var<storage, read> positions: array<vec4f>;
+    @group(1) @binding(1) var<uniform> viewMatrix: mat4x4f;
+
+    struct Vertex {
+      position: vec4f,  // Required: clip-space position (w component controls line breaks)
+      width: f32,       // Optional: per-vertex line width
+      // Additional fields become varyings passed to fragment shader
+    }
+
+    fn getVertex(index: u32) -> Vertex {
+      let p = positions[index];
+      let projected = viewMatrix * vec4f(p.xyz, 1.0);
+      return Vertex(vec4f(projected.xyz, p.w * projected.w), 20.0);
+    }
+    ```
+
+    **Options for customization:**
+    - `vertexFunction` - Name of your vertex function (default: `'getVertex'`)
+    - `positionField` - Name of position field in struct (default: `'position'`)
+    - `widthField` - Name of width field in struct (default: `'width'`)
+
+    **Available library uniforms:**
     - `uniforms.resolution: vec2f` - Canvas resolution in pixels
-    - `uniforms.width: f32` - Line width in pixels
-    - `uniforms.viewMatrix: mat4x4f` - View/projection matrix
-    - `uniforms.pointCount: u32` - Number of points in the buffer
-
-    **Position buffer:**
-    - `positions: array<vec4f>` - Read-only storage buffer of vertex positions
-
-    For most use cases, the fragment shader customization is sufficient. Vertex shader customization is an advanced feature for specialized needs.
+    - `uniforms.width: f32` - Fallback line width (if no per-vertex width)
+    - `uniforms.pointCount: u32` - Number of points
   </script>
 
   <script id="doc-draw" type="text/markdown">
     ### Drawing
 
-    #### `gpuLines.draw(pass, props)`
+    #### `gpuLines.draw(pass, props, bindGroups)`
 
     Draws lines in a render pass.
 
     **Props:**
-    - `positionBuffer` - GPU buffer containing position data (vec4: x, y, z, w)
-    - `vertexCount` - Number of points in the buffer
-    - `width` - Line width in pixels
+    - `vertexCount` - Number of points in the line
+    - `width` - Line width in pixels (fallback if no per-vertex width)
     - `resolution` - Canvas resolution as `[width, height]`
-    - `viewMatrix` - Optional 4x4 view/projection matrix (Float32Array)
+
+    **bindGroups** - Array of user bind groups for groups 1, 2, etc.
+
+    #### `gpuLines.getBindGroupLayout(index)`
+
+    Returns the bind group layout for the specified group index. Use this to create bind groups for your data.
 
     ```javascript
+    // Create bind group for user data
+    const dataBindGroup = device.createBindGroup({
+      layout: gpuLines.getBindGroupLayout(1),
+      entries: [
+        { binding: 0, resource: { buffer: positionBuffer } },
+        { binding: 1, resource: { buffer: viewMatrixBuffer } }
+      ]
+    });
+
+    // Draw
     const pass = encoder.beginRenderPass({ ... });
     gpuLines.draw(pass, {
-      positionBuffer,
       vertexCount: points.length,
       width: 20,
-      resolution: [canvas.width, canvas.height],
-      viewMatrix: mat4.create() // optional
-    });
+      resolution: [canvas.width, canvas.height]
+    }, [dataBindGroup]);
     pass.end();
     ```
   </script>
@@ -961,8 +988,12 @@
   <script id="doc-data-format" type="text/markdown">
     ### Position Data Format
 
-    Positions are stored as vec4 values in a storage buffer:
+    Your vertex function returns a `vec4f` position:
+    - `x, y` - Position in clip space (-1 to 1)
+    - `z` - Depth value
+    - `w` - Set to `1` for valid points, `0` (or NaN for any component) for line breaks
 
+    Example with a storage buffer:
     ```javascript
     const positions = new Float32Array([
       x0, y0, z0, w0,  // Point 0
@@ -977,9 +1008,7 @@
     device.queue.writeBuffer(buffer, 0, positions);
     ```
 
-    - `x, y` - Position in clip space (-1 to 1) or data coordinates with view matrix
-    - `z` - Depth value
-    - `w` - Set to `1` for valid points, `0` for line breaks
+    Your `getVertex` function can read from any source (buffers, textures, procedural) and transform to clip space however you like.
   </script>
 
   <script id="doc-architecture" type="text/markdown">
@@ -989,10 +1018,10 @@
 
     The renderer uses instanced rendering where each instance draws one line segment. For a line with N points, there are N-1 instances.
 
-    **Key techniques:**
+    **Techniques:**
     - Triangle strip topology generates join geometry from vertex indices alone
     - Screen-space calculations ensure constant pixel width regardless of zoom
     - Caps are detected automatically at line boundaries (no separate draw calls)
-    - View matrix support enables zoom/pan without regenerating geometry
+    - User-controlled vertex transformation allows zoom/pan without regenerating geometry
   </script>
 </notebook>
