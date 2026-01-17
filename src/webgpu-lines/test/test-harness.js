@@ -171,6 +171,122 @@ export function generateStraightLine(numPoints = 2) {
 }
 
 /**
+ * Generate line breaks pattern using w=0 for invalid points
+ * Creates 3 separate line segments with breaks between them
+ * Matches regl-gpu-lines insert-caps fixture layout
+ */
+export function generateLineBreaksW0() {
+  // Three zigzag lines at different y positions, separated by break points (w=0)
+  const lines = [
+    // Line 1: top
+    [[-0.8, 0.5], [-0.3, 0.7], [0.3, 0.5], [0.8, 0.7]],
+    // Line 2: middle
+    [[-0.8, -0.1], [-0.3, 0.1], [0.3, -0.1], [0.8, 0.1]],
+    // Line 3: bottom
+    [[-0.8, -0.7], [-0.3, -0.5], [0.3, -0.7], [0.8, -0.5]]
+  ];
+
+  // Build position array with break points (w=0) between lines
+  const points = [];
+
+  // Start with a break point
+  points.push([0, 0, 0, 0]);
+
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
+    for (const pt of line) {
+      points.push([pt[0], pt[1], 0, 1]);
+    }
+    // Add break point after each line
+    points.push([0, 0, 0, 0]);
+  }
+
+  const positions = new Float32Array(points.length * 4);
+  for (let i = 0; i < points.length; i++) {
+    positions[i * 4 + 0] = points[i][0];
+    positions[i * 4 + 1] = points[i][1];
+    positions[i * 4 + 2] = points[i][2];
+    positions[i * 4 + 3] = points[i][3];
+  }
+  return positions;
+}
+
+/**
+ * Generate line breaks pattern using NaN for invalid points
+ * Creates 3 separate line segments with breaks between them
+ */
+export function generateLineBreaksNaN() {
+  // Same layout as w=0 version but using NaN instead
+  const lines = [
+    [[-0.8, 0.5], [-0.3, 0.7], [0.3, 0.5], [0.8, 0.7]],
+    [[-0.8, -0.1], [-0.3, 0.1], [0.3, -0.1], [0.8, 0.1]],
+    [[-0.8, -0.7], [-0.3, -0.5], [0.3, -0.7], [0.8, -0.5]]
+  ];
+
+  const points = [];
+
+  // Start with NaN break point
+  points.push([NaN, NaN, 0, 1]);
+
+  for (let lineIdx = 0; lineIdx < lines.length; lineIdx++) {
+    const line = lines[lineIdx];
+    for (const pt of line) {
+      points.push([pt[0], pt[1], 0, 1]);
+    }
+    // Add NaN break point after each line
+    points.push([NaN, NaN, 0, 1]);
+  }
+
+  const positions = new Float32Array(points.length * 4);
+  for (let i = 0; i < points.length; i++) {
+    positions[i * 4 + 0] = points[i][0];
+    positions[i * 4 + 1] = points[i][1];
+    positions[i * 4 + 2] = points[i][2];
+    positions[i * 4 + 3] = points[i][3];
+  }
+  return positions;
+}
+
+/**
+ * Generate degenerate test pattern with zero-length segments
+ * Tests handling of repeated points and hairpin turns
+ * Matches regl-gpu-lines degenerate fixture
+ */
+export function generateDegenerate() {
+  // Star pattern with all lines meeting at center (0,0)
+  // Each pair goes: center -> point -> center
+  const points = [
+    [0, 0],     // center
+    [0.8, 0],   // right
+    [0, 0],     // center (zero-length segment)
+    [0, -0.8],  // down
+    [0, 0],
+    [-0.8, 0],  // left
+    [0, 0],
+    [0, 0.8],   // up
+    [0, 0],
+    [0.6, 0.6], // diagonal
+    [0, 0],
+    [-0.6, 0.6],
+    [0, 0],
+    [-0.6, -0.6],
+    [0, 0],
+    [0.6, -0.6],
+    [0, 0],
+    [-0.1, 0.1] // small offset
+  ];
+
+  const positions = new Float32Array(points.length * 4);
+  for (let i = 0; i < points.length; i++) {
+    positions[i * 4 + 0] = points[i][0];
+    positions[i * 4 + 1] = points[i][1];
+    positions[i * 4 + 2] = 0;
+    positions[i * 4 + 3] = 1;
+  }
+  return positions;
+}
+
+/**
  * Get path to expected image
  */
 export function getExpectedPath(testName) {

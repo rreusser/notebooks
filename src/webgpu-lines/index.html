@@ -30,17 +30,41 @@
     invalidation.then(() => device.destroy());
   </script>
   <script id="3" type="module">
+    import { createElementStack } from './lib/element-stack.js'
+    import { createZoomableAxes } from './lib/zoomable-axes.js'
+
     // Create canvas and configure WebGPU context
     const dpr = window.devicePixelRatio || 1;
     const canvasWidth = Math.min(640, width);
     const canvasHeight = 480;
 
-    const canvas = html`<canvas
-      id="lines-canvas"
-      width="${Math.floor(canvasWidth * dpr)}"
-      height="${Math.floor(canvasHeight * dpr)}"
-      style="width: ${canvasWidth}px; height: ${canvasHeight}px; border: 1px solid #ccc;"
-    ></canvas>`;
+    // Create element stack with WebGPU canvas and SVG overlay for zoom
+    const stack = createElementStack({
+      width: canvasWidth,
+      height: canvasHeight,
+      layers: [{
+        id: 'canvas',
+        element: ({ current, width, height }) => {
+          const canvas = current || document.createElement('canvas');
+          canvas.id = 'lines-canvas';
+          canvas.width = Math.floor(width * dpr);
+          canvas.height = Math.floor(height * dpr);
+          canvas.style.width = `${width}px`;
+          canvas.style.height = `${height}px`;
+          return canvas;
+        }
+      }, {
+        id: 'svg',
+        element: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg"))
+            .attr("width", width)
+            .attr("height", height)
+            .style("cursor", "grab")
+            .node()
+      }]
+    });
+
+    const canvas = stack.elements.canvas;
 
     const gpuContext = canvas.getContext('webgpu');
     gpuContext.configure({
@@ -49,7 +73,27 @@
       alphaMode: 'premultiplied'
     });
 
-    display(canvas);
+    // Render state (mutable object to allow cross-cell updates)
+    const renderState = { dirty: true };
+
+    // Set up zoomable axes with aspect ratio 1 (square pixels)
+    const axes = createZoomableAxes({
+      d3,
+      element: stack.elements.svg,
+      xScale: d3.scaleLinear().domain([-1, 1]).range([0, canvasWidth]),
+      yScale: d3.scaleLinear().domain([-1, 1]).range([canvasHeight, 0]),
+      aspectRatio: 1,
+      onChange: () => { renderState.dirty = true; }
+    });
+
+    const figure = html`<figure style="margin: 0;">
+      ${stack.element}
+      <figcaption>Drag to pan, scroll to zoom.</figcaption>
+    </figure>`;
+    figure.style.border = '1px solid #ccc';
+    figure.style.display = 'inline-block';
+
+    display(figure);
   </script>
   <script id="4" type="module">
     // Controls
@@ -74,6 +118,15 @@
     const capResolutionInput = Inputs.range([2, 16], { label: 'Round cap resolution', value: 8, step: 1 });
     const capResolution = view(capResolutionInput);
 
+    const sdfModeInput = Inputs.toggle({ label: 'SDF stroke outline', value: false });
+    const sdfMode = view(sdfModeInput);
+
+    const borderWidthInput = Inputs.range([1, 10], { label: 'Border width', value: 4, step: 0.5 });
+    const borderWidth = view(borderWidthInput);
+
+    const lineBreakInput = Inputs.toggle({ label: 'Line break', value: false });
+    const lineBreak = view(lineBreakInput);
+
     display(html`<div style="display: flex; gap: 20px; flex-wrap: wrap;">
       ${lineWidthInput}
       ${joinTypeInput}
@@ -82,61 +135,70 @@
       ${miterLimitInput}
       ${joinResolutionInput}
       ${capResolutionInput}
+      ${sdfModeInput}
+      ${borderWidthInput}
+      ${lineBreakInput}
     </div>`);
   </script>
   <script id="5" type="module">
     import { createGPULines } from './webgpu-lines.js';
 
-    // Regenerate line data when pattern changes
-    pattern;
+    // Regenerate line data when pattern or lineBreak changes
+    pattern; lineBreak;
 
-    function generatePattern(patternType) {
+    function generatePattern(patternType, insertLineBreak) {
+      // Generate base points first
+      let basePoints;
       if (patternType === 'zigzag') {
-        // Simpler zigzag pattern for debugging
-        const numPoints = 6;
-        const positions = new Float32Array(numPoints * 4);
-        for (let i = 0; i < numPoints; i++) {
-          const t = i / (numPoints - 1);
+        const n = 6;
+        basePoints = [];
+        for (let i = 0; i < n; i++) {
+          const t = i / (n - 1);
           const x = -0.6 + t * 1.2;
           const y = (i % 2 === 0 ? 0.2 : -0.2);
-          positions[i * 4 + 0] = x;
-          positions[i * 4 + 1] = y;
-          positions[i * 4 + 2] = 0;
-          positions[i * 4 + 3] = 1;
+          basePoints.push([x, y, 0, 1]);
         }
-        return { positions, numPoints };
       } else if (patternType === 'spiral') {
-        // Spiral pattern
-        const numPoints = 80;
-        const positions = new Float32Array(numPoints * 4);
-        for (let i = 0; i < numPoints; i++) {
-          const t = i / (numPoints - 1);
+        const n = 80;
+        basePoints = [];
+        for (let i = 0; i < n; i++) {
+          const t = i / (n - 1);
           const angle = t * Math.PI * 6;
           const r = 0.1 + t * 0.6;
-          positions[i * 4 + 0] = r * Math.cos(angle);
-          positions[i * 4 + 1] = r * Math.sin(angle);
-          positions[i * 4 + 2] = 0;
-          positions[i * 4 + 3] = 1;
+          basePoints.push([r * Math.cos(angle), r * Math.sin(angle), 0, 1]);
         }
-        return { positions, numPoints };
       } else {
         // Wave pattern (default)
-        const numPoints = 100;
-        const positions = new Float32Array(numPoints * 4);
-        for (let i = 0; i < numPoints; i++) {
-          const t = i / (numPoints - 1);
+        const n = 100;
+        basePoints = [];
+        for (let i = 0; i < n; i++) {
+          const t = i / (n - 1);
           const x = -0.8 + t * 1.6;
           const y = 0.3 * Math.sin(t * Math.PI * 4) + 0.2 * Math.cos(t * Math.PI * 7);
-          positions[i * 4 + 0] = x;
-          positions[i * 4 + 1] = y;
-          positions[i * 4 + 2] = 0;
-          positions[i * 4 + 3] = 1;
+          basePoints.push([x, y, 0, 1]);
         }
-        return { positions, numPoints };
       }
+
+      // Insert line break sentinel (w=0) in the middle if requested
+      if (insertLineBreak) {
+        const midIndex = Math.floor(basePoints.length / 2);
+        basePoints.splice(midIndex, 0, [0, 0, 0, 0]); // sentinel: w=0
+      }
+
+      // Convert to Float32Array
+      const numPoints = basePoints.length;
+      const positions = new Float32Array(numPoints * 4);
+      for (let i = 0; i < numPoints; i++) {
+        positions[i * 4 + 0] = basePoints[i][0];
+        positions[i * 4 + 1] = basePoints[i][1];
+        positions[i * 4 + 2] = basePoints[i][2];
+        positions[i * 4 + 3] = basePoints[i][3];
+      }
+
+      return { positions, numPoints };
     }
 
-    const { positions, numPoints } = generatePattern(pattern);
+    const { positions, numPoints } = generatePattern(pattern, lineBreak);
 
     // Create position buffer
     const positionBuffer = device.createBuffer({
@@ -149,8 +211,49 @@
     invalidation.then(() => positionBuffer.destroy());
   </script>
   <script id="6" type="module">
-    // Recreate pipeline when join/cap type or resolution changes
-    joinType; joinResolution; miterLimit; capType; capResolution;
+    // Recreate pipeline when join/cap type, resolution, or SDF mode changes
+    // Note: lineWidth is included because SDF shader embeds width value
+    joinType; joinResolution; miterLimit; capType; capResolution; sdfMode; borderWidth; lineWidth;
+
+    // Standard fragment shader - solid color with edge darkening
+    const standardFragmentShader = /* wgsl */`
+      fn getColor(lineCoord: vec3f) -> vec4f {
+        // lineCoord.x: along the line (for dashes)
+        // lineCoord.y: across the line (-1 to 1, 0 at center)
+        // lineCoord.z: 1 if outside main segment (in join extrapolation) or cap
+
+        // Simple solid color with slight edge darkening
+        let edge = 1.0 - 0.3 * abs(lineCoord.y);
+        return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
+      }
+    `;
+
+    // SDF fragment shader - stroke outline using signed distance field
+    const sdfFragmentShader = /* wgsl */`
+      fn linearstep(a: f32, b: f32, x: f32) -> f32 {
+        return clamp((x - a) / (b - a), 0.0, 1.0);
+      }
+      fn getColor(lineCoord: vec3f) -> vec4f {
+        let width = ${lineWidth.toFixed(1)};
+        let border = ${borderWidth.toFixed(1)};
+
+        // SDF: distance from center in screen pixels
+        let sdf = 0.5 * width * length(lineCoord.xy);
+
+        // Anti-aliased edge
+        let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
+
+        // Border region (starts at border pixels from edge)
+        let borderMask = linearstep(width * 0.5 - border - 0.5, width * 0.5 - border + 0.5, sdf);
+
+        // Fill color (light blue) with darker border
+        let fillColor = vec3f(0.4, 0.7, 1.0);
+        let borderColor = vec3f(0.1, 0.3, 0.6);
+        let color = mix(fillColor, borderColor, borderMask);
+
+        return vec4f(color, aa);
+      }
+    `;
 
     const gpuLines = createGPULines(device, {
       format: canvasFormat,
@@ -159,26 +262,21 @@
       miterLimit: miterLimit,
       cap: capType,
       capResolution: capResolution,
-      vertexShaderBody: /* wgsl */`
-        // User vertex shader code can go here
-        // Access to: positions array, uniforms
-      `,
-      fragmentShaderBody: /* wgsl */`
-        fn getColor(lineCoord: vec3f) -> vec4f {
-          // lineCoord.x: along the line (for dashes)
-          // lineCoord.y: across the line (-1 to 1, 0 at center)
-          // lineCoord.z: 1 if outside main segment (in join extrapolation) or cap
-
-          // Simple solid color with slight edge darkening
-          let edge = 1.0 - 0.3 * abs(lineCoord.y);
-          return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
-        }
-      `
+      vertexShaderBody: '',
+      fragmentShaderBody: sdfMode ? sdfFragmentShader : standardFragmentShader,
+      // Alpha blending for SDF mode
+      blend: sdfMode ? {
+        color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
+      } : null
     });
 
     invalidation.then(() => gpuLines.destroy());
   </script>
   <script id="7" type="module">
+    // Mark dirty when controls change
+    lineWidth; renderState.dirty = true;
+
     // Render loop
     let frameId = null;
 
@@ -186,30 +284,36 @@
       positionBuffer,
       vertexCount: numPoints,
       width: lineWidth,
-      resolution: [canvas.width, canvas.height]
+      resolution: [canvas.width, canvas.height],
+      viewMatrix: axes.view
     };
 
     function render() {
-      drawProps.width = lineWidth;
+      if (renderState.dirty) {
+        drawProps.width = lineWidth;
+        drawProps.viewMatrix = axes.view;
 
-      const encoder = device.createCommandEncoder();
+        const encoder = device.createCommandEncoder();
 
-      // Run compute passes for endpoint detection (must be before render pass)
-      gpuLines.prepareFrame(encoder, drawProps);
+        // Run compute passes for endpoint detection (must be before render pass)
+        gpuLines.prepareFrame(encoder, drawProps);
 
-      const pass = encoder.beginRenderPass({
-        colorAttachments: [{
-          view: gpuContext.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearValue: { r: 0.95, g: 0.95, b: 0.95, a: 1 }
-        }]
-      });
+        const pass = encoder.beginRenderPass({
+          colorAttachments: [{
+            view: gpuContext.getCurrentTexture().createView(),
+            loadOp: 'clear',
+            storeOp: 'store',
+            clearValue: { r: 0.95, g: 0.95, b: 0.95, a: 1 }
+          }]
+        });
 
-      gpuLines.draw(pass, drawProps);
+        gpuLines.draw(pass, drawProps);
 
-      pass.end();
-      device.queue.submit([encoder.finish()]);
+        pass.end();
+        device.queue.submit([encoder.finish()]);
+
+        renderState.dirty = false;
+      }
 
       frameId = requestAnimationFrame(render);
     }

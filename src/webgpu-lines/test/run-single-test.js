@@ -13,6 +13,9 @@ import {
   generateZigzag,
   generateSpiral,
   generateStraightLine,
+  generateLineBreaksW0,
+  generateLineBreaksNaN,
+  generateDegenerate,
   getExpectedPath,
   getActualPath,
   getDiffPath,
@@ -43,15 +46,34 @@ function getPatternPositions(pattern) {
     case 'zigzag': return generateZigzag(6);
     case 'spiral': return generateSpiral(50);
     case 'straight': return generateStraightLine(2);
+    case 'line-breaks-w0': return generateLineBreaksW0();
+    case 'line-breaks-nan': return generateLineBreaksNaN();
+    case 'degenerate': return generateDegenerate();
     default: throw new Error(`Unknown pattern: ${pattern}`);
   }
 }
+
+// Default fragment shader for tests without custom shader
+const defaultFragmentShader = /* wgsl */`
+  fn getColor(lineCoord: vec3f) -> vec4f {
+    // Distinct colors: yellow center -> red edges
+    // lineCoord.y: -1 to 1 across the line (0 at center)
+    let t = abs(lineCoord.y);  // 0 at center, 1 at edges
+
+    // Yellow (1,1,0) at center -> Red (1,0,0) at edges
+    let r = 1.0;
+    let g = 1.0 - t;
+    let b = 0.0;
+
+    return vec4f(r, g, b, 1.0);
+  }
+`;
 
 async function run() {
   ensureDirectories();
 
   const { device, format } = await initWebGPU();
-  const { name, options, pattern, width, canvasSize } = testCase;
+  const { name, options, pattern, width, canvasSize, fragmentShader, blend } = testCase;
   const [canvasWidth, canvasHeight] = canvasSize;
 
   // Create render target
@@ -67,25 +89,13 @@ async function run() {
     usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
   });
 
-  // Create GPU lines renderer
+  // Create GPU lines renderer with custom shader and blend mode if specified
   const gpuLines = createGPULines(device, {
     format,
     ...options,
     vertexShaderBody: '',
-    fragmentShaderBody: /* wgsl */`
-      fn getColor(lineCoord: vec3f) -> vec4f {
-        // Distinct colors: yellow center -> red edges
-        // lineCoord.y: -1 to 1 across the line (0 at center)
-        let t = abs(lineCoord.y);  // 0 at center, 1 at edges
-
-        // Yellow (1,1,0) at center -> Red (1,0,0) at edges
-        let r = 1.0;
-        let g = 1.0 - t;
-        let b = 0.0;
-
-        return vec4f(r, g, b, 1.0);
-      }
-    `
+    fragmentShaderBody: fragmentShader || defaultFragmentShader,
+    blend: blend || null
   });
 
   // Create position buffer

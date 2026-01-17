@@ -149,11 +149,11 @@ export function createGPULines(device, options) {
     }
   });
 
-  // Create uniform buffer (48 bytes for integrated cap rendering)
-  // Layout: resolution(8) + vertCnt2(8) + miterLimit(4) + isRound(4) + width(4) + pointCount(4) + insertCaps(4) + pad(4) + capScale(8)
+  // Create uniform buffer (112 bytes for integrated cap rendering with view matrix)
+  // Layout: resolution(8) + vertCnt2(8) + miterLimit(4) + isRound(4) + width(4) + pointCount(4) + insertCaps(4) + pad(4) + capScale(8) + viewMatrix(64)
   const uniformBuffer = device.createBuffer({
     label: 'gpu-lines-uniforms',
-    size: 48,
+    size: 112,
     usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
   });
 
@@ -183,10 +183,14 @@ export function createGPULines(device, options) {
      * Instance i draws segment i → (i+1), with automatic cap detection at boundaries
      */
     draw(pass, props) {
-      const { positionBuffer, vertexCount: pointCount, width, resolution } = props;
+      const { positionBuffer, vertexCount: pointCount, width, resolution, viewMatrix } = props;
 
-      // Update uniforms (48 bytes)
-      const uniformData = new ArrayBuffer(48);
+      // Identity matrix as default
+      const identity = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+      const view = viewMatrix || identity;
+
+      // Update uniforms (112 bytes)
+      const uniformData = new ArrayBuffer(112);
       const f32 = new Float32Array(uniformData);
       const u32 = new Uint32Array(uniformData);
       f32[0] = resolution[0];
@@ -201,6 +205,10 @@ export function createGPULines(device, options) {
       // u32[9] is padding for vec2f alignment
       f32[10] = capScale[0];                         // Cap scale X
       f32[11] = capScale[1];                         // Cap scale Y
+      // View matrix at offset 48 (12 floats * 4 bytes = 48)
+      for (let i = 0; i < 16; i++) {
+        f32[12 + i] = view[i];
+      }
       device.queue.writeBuffer(uniformBuffer, 0, uniformData);
 
       // Create data bind group for this draw
@@ -249,7 +257,9 @@ struct Uniforms {
   width: f32,
   pointCount: u32,
   insertCaps: u32,       // 1 = mirror for caps, 0 = extrapolate for flat ends
+  _pad: u32,             // padding for vec2f alignment
   capScale: vec2f,       // [1,1] for round, [2, 2/sqrt(3)] for square
+  viewMatrix: mat4x4f,   // View/projection matrix for zoom/pan
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -295,17 +305,24 @@ fn vertexMain(
   var pC = positions[u32(C_idx)];
   var pD = positions[u32(clamp(D_idx, 0, N - 1))];
 
-  // Initialize line coordinate
-  var lineCoord = vec3f(0.0);
-  output.position = pB;
-
-  // Determine invalid states (out of bounds OR invalid point data)
+  // Determine invalid states BEFORE applying view matrix (check raw data)
   let aOutOfBounds = A_idx < 0;
   let dOutOfBounds = D_idx >= N;
   var aInvalid = aOutOfBounds || invalid(pA);
   var dInvalid = dOutOfBounds || invalid(pD);
   let bInvalid = invalid(pB);
   let cInvalid = invalid(pC);
+
+  // Apply view matrix to transform from data coords to clip coords
+  // Only transform valid points (invalid points will be fixed up later)
+  if (!aInvalid) { pA = uniforms.viewMatrix * pA; }
+  pB = uniforms.viewMatrix * pB;
+  pC = uniforms.viewMatrix * pC;
+  if (!dInvalid) { pD = uniforms.viewMatrix * pD; }
+
+  // Initialize line coordinate
+  var lineCoord = vec3f(0.0);
+  output.position = pB;
 
   // Skip degenerate segments (B or C invalid)
   if (bInvalid || cInvalid) {
