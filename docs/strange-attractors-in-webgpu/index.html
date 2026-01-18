@@ -1507,7 +1507,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-DSFlm1Xo.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-Cq3C_ch9.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1555,60 +1555,38 @@ main h6 {
 <li><strong>Copy</strong>: Transfer the temporary column back into the main state texture</li>
 <li><strong>Draw</strong>: Render lines by sampling the state texture in a vertex shader</li>
 </ol>
-<p>WebGPU offers a better primitive for this workload which eliminates the copy step entirely: <strong>storage buffers</strong> with <code>read_write</code> access. This is an easy fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction.</p>
-<h3 id="the-optimized-approach" tabindex="-1"><a href="#the-optimized-approach">The Optimized Approach</a></h3>
-<p>With storage buffers, each frame requires just <strong>two GPU operations</strong>:</p>
+<p>WebGPU offers a better primitive for this workload which eliminates the copy step entirely: storage buffers with <code>read_write</code> access. This is an easy fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction.</p>
+<p>With storage buffers, each frame requires just two GPU operations:</p>
 <ol>
-<li><strong>Integrate</strong> the differential equation, reading the current state and writing the new state directly to the same buffer.</li>
-<li><strong>Draw</strong> all line segments, joins, and caps using instanced triangle strip geometry. Sentinel values separate the lines into multiple contiguous segments.</li>
+<li><strong>Integrate</strong> the differential equation, reading the current state and writing one new state value for each particle.</li>
+<li><strong>Draw</strong> all line segments, joins, and caps using instanced triangle strip geometry.</li>
 </ol>
-<p>This approach reduces GPU dispatches by 33%, eliminates a temporary texture allocation, and simplifies the code substantially.</p>
-</div></div><div id="cell-7" class="observablehq observablehq--cell"><div><h2 id="simulation-method" tabindex="-1"><a href="#simulation-method">Simulation Method</a></h2>
-<p>To simulate strange attractors, we need to solve two challenges: stepping the differential equations and drawing lines.</p>
-<p>For computation, we use WebGPU <strong>compute shaders</strong>. These allow us to dispatch parallel workloads that read from and write to GPU resources directly. Each particle’s state update runs as an independent thread, making the simulation embarrassingly parallel.</p>
-<p>For line rendering, we use the (WIP) <a href="../webgpu-lines/">webgpu-lines</a> module. Lines are notoriously difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.</p>
-</div></div><div id="cell-8" class="observablehq observablehq--cell"><div><h2 id="state-layout" tabindex="-1"><a href="#state-layout">State Layout</a></h2>
+<p>For line rendering, we use the (WIP) <a href="../webgpu-lines/">webgpu-lines</a> module. Lines are difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.</p>
+</div></div><div id="cell-7" class="observablehq observablehq--cell"><div><h2 id="state-layout" tabindex="-1"><a href="#state-layout">State Layout</a></h2>
 <p>The state of our ordinary differential equation (ODE) is represented by the three-component vector . We store these in a flat storage buffer as <code>vec3f</code> elements. The  time step of the  particle is represented by the vector:</p>
-<h3 id="why-storage-buffers" tabindex="-1"><a href="#why-storage-buffers">Why Storage Buffers?</a></h3>
-<p>The WebGL version used a 2D texture where each row was a particle and each column was a time step. Textures are a natural fit when you need 2D spatial locality or hardware filtering, but for our access pattern, a flat buffer is simpler and more efficient.</p>
-<p>Storage buffers offer several advantages over textures for this use case:</p>
-<ul>
-<li><strong><code>read_write</code> access</strong>: Storage buffers can be both read and written in the same compute pass</li>
-<li><strong>Direct indexing</strong>: Index arithmetic replaces texel coordinate calculations with half-pixel offsets</li>
-<li><strong>No intermediate resources</strong>: Eliminate a temporary texture needed for the copy step</li>
-</ul>
-<p>We use <strong>particle-major ordering</strong>: all time steps for particle 0 come first, then all time steps for particle 1, and so on. The buffer index for a given particle and step is simply <code>particle * stepCount + step</code>.</p>
-<h3 id="ring-buffer" tabindex="-1"><a href="#ring-buffer">Ring Buffer</a></h3>
-<p>As we step the ODE, we compute one new history point for each particle track. To avoid having to shift the entire history on every iteration, we treat each particle’s slice as a <strong>ring buffer</strong>. At each time step , we use the previous position, , to compute the next, . When we reach the end of the slice, we loop back to the start, overwriting the oldest time step with the newest.</p>
-<p>This ring buffer approach means we only write one position per particle per frame, regardless of track length.</p>
-</div></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"><div><h2 id="computation" tabindex="-1"><a href="#computation">Computation</a></h2>
-<p>Our computational primitive is the <strong>compute shader</strong>. Unlike fragment shaders which operate on pixels being rasterized, compute shaders are general-purpose: we dispatch a grid of threads and each thread can read from and write to arbitrary locations in GPU resources.</p>
-<p>For our simulation, we dispatch one thread per particle. Each thread reads the current state and writes the updated state.</p>
+<p>We use <strong>particle-major ordering</strong>: all time steps for particle 0 come first, then all time steps for particle 1, and so on. The buffer index for a given particle and step is <code>particle * stepCount + step</code>.</p>
+<p>As we step the ODE, we compute one new history point for each particle track. To avoid shifting the entire history on every iteration, we treat each particle’s slice as a <strong>ring buffer</strong>. At each time step , we use the previous position, , to compute the next, . When we reach the end of the slice, we loop back to the start, overwriting the oldest time step with the newest.</p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"><div><h2 id="computation" tabindex="-1"><a href="#computation">Computation</a></h2>
+<p>Unlike fragment shaders which operate on pixels being rasterized, <strong>compute shaders</strong> dispatch a grid of threads which can read from and write to arbitrary locations in GPU resources.</p>
 <h3 id="initialization" tabindex="-1"><a href="#initialization">Initialization</a></h3>
-<p>We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy <strong>quasirandom</strong> number generator described by Martin Roberts in <em><a href="http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/">The Unreasonable Effectiveness of Quasirandom Sequences</a></em>.</p>
-<p>Initialization writes the same starting position to the entire history of each particle.</p>
-</div></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"><div><h3 id="integration" tabindex="-1"><a href="#integration">Integration</a></h3>
-<p>To step the ODE, we use the <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method">fourth-order Runge-Kutta</a> (RK4) method. RK4 achieves high accuracy by sampling the derivative at four points within each time step and taking a weighted average.</p>
-<p>With a texture-based approach, we’d need two compute passes: one to read from the state texture and write to a temporary texture (since <code>rgba32float</code> doesn’t support simultaneous read/write), then another to copy that column back. That’s two dispatches, two bind groups, and a temporary allocation—all for what should be a simple update.</p>
-<p>Storage buffers let us collapse this into a <strong>single compute pass</strong>. The shader reads from index <code>particle * stepCount + srcColumn</code> and writes to <code>particle * stepCount + dstColumn</code>. Since these are different indices (no particle reads what another particle writes), there are no data races. One dispatch, one bind group, no temporary resources.</p>
-</div></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="line-rendering" tabindex="-1"><a href="#line-rendering">Line Rendering</a></h2>
+<p>For historical reasons which I didn’t see it necessary to change, we initialize particles with a compute shader, although we could write data from the CPU to a buffer just fine.</p>
+<p>We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy quasirandom number generator described by Martin Roberts in <em><a href="http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/">The Unreasonable Effectiveness of Quasirandom Sequences</a></em>.</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"><div><h3 id="integration" tabindex="-1"><a href="#integration">Integration</a></h3>
+<p>To step the ODE, we use the <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method">fourth-order Runge-Kutta</a> (RK4) method. The integration shader reads from index <code>particle * stepCount + srcColumn</code> and writes to <code>particle * stepCount + dstColumn</code>. Since these are different indices (no particle reads what another particle writes), there are no data races.</p>
+</div></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"><div><h2 id="line-rendering" tabindex="-1"><a href="#line-rendering">Line Rendering</a></h2>
 <p>In the timeless words of Matt DesLauriers, <em><a href="https://mattdesl.svbtle.com/drawing-lines-is-hard">Drawing Lines is Hard</a></em>. Browsers limit the built-in line primitive to a single pixel width, so for any reasonably well-rendered lines, we need to build our own geometry.</p>
-<p>The <a href="../webgpu-lines/">webgpu-lines</a> module handles this. It renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus portions of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.</p>
-<p>We don’t pass vertex positions directly. Instead, we provide a <strong>vertex function</strong> that the module calls for each point index. The function samples data from the state buffer. The module handles all the complexity of building smooth joins and round caps.</p>
-<h3 id="buffer-index-lookup" tabindex="-1"><a href="#buffer-index-lookup">Buffer Index Lookup</a></h3>
-<p>Rather than copying positions to vertex buffers each frame, we sample them directly from the storage buffer in the vertex shader. Each vertex index maps to a buffer index:</p>
-<p>where  is the number of time steps,  is the particle index, and  is the step within that particle’s track.</p>
-<p>To handle the ring buffer, we add an offset to the step index that shifts based on which column was most recently written. The oldest data is always at the “start” of the rendered line, and the newest at the end.</p>
+<p>The (WIP) <a href="../webgpu-lines/">webgpu-lines</a> module renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus half of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.</p>
+<p>We don’t pass vertex positions directly. Instead, we provide a vertex function which uses the integer vertex ID to read particle buffer data. To handle the ring buffer, we add an offset to the step index that shifts based on which column was most recently written. The oldest data is always at the “start” of the rendered line, and the newest at the end.</p>
 <h3 id="line-breaks" tabindex="-1"><a href="#line-breaks">Line Breaks</a></h3>
 <p>Multiple particle tracks are rendered in a single draw call. We separate them using sentinel values of <code>w = 0</code> in clip space. When the vertex function returns a position with <code>w = 0</code>, the line renderer interprets this as a break, skipping one instance and reworking adjacent joins into end caps.</p>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"><div><h2 id="draw-loop" tabindex="-1"><a href="#draw-loop">Draw Loop</a></h2>
+</div></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"><div><h2 id="draw-loop" tabindex="-1"><a href="#draw-loop">Draw Loop</a></h2>
 <p>Finally, we put it all together into a frame loop. For each frame:</p>
 <ol>
 <li>dispatch the integrate compute shader to compute new particle positions</li>
 <li>Update the buffer offset uniform so lines render from oldest to newest</li>
 <li>Draw lines by calling into the webgpu-lines module</li>
 </ol>
-</div></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
+</div></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
 <p>I’m thrilled that my new WebGPU line rendering module worked out so well. It fills a big gap in what I need WebGPU for, and I’m eager to keep using it.</p>
 <p>The switch from hacky WebGL workarounds to proper WebGPU primitives turned out well. I haven’t done the full timing analysis I should have, but we went from three passes (integrate, copy, render) to just two (integrate, render).</p>
 <p>And of course, the techniques here generalize beyond our strange attractors test case. Any particle system where you want to visualize trails—fluid simulations, n-body systems, gradient flows—can use this same ring buffer approach for efficient GPU-based track rendering.</p>

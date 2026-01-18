@@ -171,25 +171,14 @@ A naive WebGPU port would preserve this texture-based approach, replacing fragme
 2. **Copy**: Transfer the temporary column back into the main state texture
 3. **Draw**: Render lines by sampling the state texture in a vertex shader
 
-WebGPU offers a better primitive for this workload which eliminates the copy step entirely: **storage buffers** with `read_write` access. This is an easy fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction.
+WebGPU offers a better primitive for this workload which eliminates the copy step entirely: storage buffers with `read_write` access. This is an easy fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction.
 
-### The Optimized Approach
+With storage buffers, each frame requires just two GPU operations:
 
-With storage buffers, each frame requires just **two GPU operations**:
+1. **Integrate** the differential equation, reading the current state and writing one new state value for each particle.
+2. **Draw** all line segments, joins, and caps using instanced triangle strip geometry.
 
-1. **Integrate** the differential equation, reading the current state and writing the new state directly to the same buffer.
-2. **Draw** all line segments, joins, and caps using instanced triangle strip geometry. Sentinel values separate the lines into multiple contiguous segments.
-
-This approach reduces GPU dispatches by 33%, eliminates a temporary texture allocation, and simplifies the code substantially.
-  </script>
-  <script id="simulation-method" type="text/markdown">
-## Simulation Method
-
-To simulate strange attractors, we need to solve two challenges: stepping the differential equations and drawing lines.
-
-For computation, we use WebGPU **compute shaders**. These allow us to dispatch parallel workloads that read from and write to GPU resources directly. Each particle's state update runs as an independent thread, making the simulation embarrassingly parallel.
-
-For line rendering, we use the (WIP) [webgpu-lines](../webgpu-lines/) module. Lines are notoriously difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
+For line rendering, we use the (WIP) [webgpu-lines](../webgpu-lines/) module. Lines are difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
   </script>
   <script id="explanation-state" type="text/markdown">
 ## State Layout
@@ -198,23 +187,9 @@ The state of our ordinary differential equation (ODE) is represented by the thre
 
 ${tex.block`\mathbf{p}_j^{(i)} = (x_j^{(i)}, y_j^{(i)}, z_j^{(i)})`}
 
-### Why Storage Buffers?
+We use **particle-major ordering**: all time steps for particle 0 come first, then all time steps for particle 1, and so on. The buffer index for a given particle and step is `particle * stepCount + step`.
 
-The WebGL version used a 2D texture where each row was a particle and each column was a time step. Textures are a natural fit when you need 2D spatial locality or hardware filtering, but for our access pattern, a flat buffer is simpler and more efficient.
-
-Storage buffers offer several advantages over textures for this use case:
-
-- **`read_write` access**: Storage buffers can be both read and written in the same compute pass
-- **Direct indexing**: Index arithmetic replaces texel coordinate calculations with half-pixel offsets
-- **No intermediate resources**: Eliminate a temporary texture needed for the copy step
-
-We use **particle-major ordering**: all time steps for particle 0 come first, then all time steps for particle 1, and so on. The buffer index for a given particle and step is simply `particle * stepCount + step`.
-
-### Ring Buffer
-
-As we step the ODE, we compute one new history point for each particle track. To avoid having to shift the entire history on every iteration, we treat each particle's slice as a **ring buffer**. At each time step ${tex`j`}, we use the previous position, ${tex`p_{j-1}^{(i)}`}, to compute the next, ${tex`p_j^{(i)}`}. When we reach the end of the slice, we loop back to the start, overwriting the oldest time step with the newest.
-
-This ring buffer approach means we only write one position per particle per frame, regardless of track length.
+As we step the ODE, we compute one new history point for each particle track. To avoid shifting the entire history on every iteration, we treat each particle's slice as a **ring buffer**. At each time step ${tex`j`}, we use the previous position, ${tex`p_{j-1}^{(i)}`}, to compute the next, ${tex`p_j^{(i)}`}. When we reach the end of the slice, we loop back to the start, overwriting the oldest time step with the newest.
   </script>
   <script id="state-buffer" type="module">
 particleCount; stepCount; restart;
@@ -240,15 +215,13 @@ invalidation.then(() => {
   <script id="explanation-init" type="text/markdown">
 ## Computation
 
-Our computational primitive is the **compute shader**. Unlike fragment shaders which operate on pixels being rasterized, compute shaders are general-purpose: we dispatch a grid of threads and each thread can read from and write to arbitrary locations in GPU resources.
-
-For our simulation, we dispatch one thread per particle. Each thread reads the current state and writes the updated state.
+Unlike fragment shaders which operate on pixels being rasterized, **compute shaders** dispatch a grid of threads which can read from and write to arbitrary locations in GPU resources.
 
 ### Initialization
 
-We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy **quasirandom** number generator described by Martin Roberts in *[The Unreasonable Effectiveness of Quasirandom Sequences](http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/)*.
+For historical reasons which I didn't see it necessary to change, we initialize particles with a compute shader, although we could write data from the CPU to a buffer just fine.
 
-Initialization writes the same starting position to the entire history of each particle.
+We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy quasirandom number generator described by Martin Roberts in *[The Unreasonable Effectiveness of Quasirandom Sequences](http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/)*.
   </script>
   <script id="init-shader" type="module">
 // Compute shader to initialize particle state
@@ -356,11 +329,7 @@ invalidation.then(() => {
   <script id="explanation-integration" type="text/markdown">
 ### Integration
 
-To step the ODE, we use the [fourth-order Runge-Kutta](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method) (RK4) method. RK4 achieves high accuracy by sampling the derivative at four points within each time step and taking a weighted average.
-
-With a texture-based approach, we'd need two compute passes: one to read from the state texture and write to a temporary texture (since `rgba32float` doesn't support simultaneous read/write), then another to copy that column back. That's two dispatches, two bind groups, and a temporary allocation—all for what should be a simple update.
-
-Storage buffers let us collapse this into a **single compute pass**. The shader reads from index `particle * stepCount + srcColumn` and writes to `particle * stepCount + dstColumn`. Since these are different indices (no particle reads what another particle writes), there are no data races. One dispatch, one bind group, no temporary resources.
+To step the ODE, we use the [fourth-order Runge-Kutta](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method) (RK4) method. The integration shader reads from index `particle * stepCount + srcColumn` and writes to `particle * stepCount + dstColumn`. Since these are different indices (no particle reads what another particle writes), there are no data races.
   </script>
   <script id="attractor-wgsl" type="module">
 // The strange attractor equations
@@ -467,19 +436,9 @@ invalidation.then(() => {
 
 In the timeless words of Matt DesLauriers, *[Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard)*. Browsers limit the built-in line primitive to a single pixel width, so for any reasonably well-rendered lines, we need to build our own geometry.
 
-The [webgpu-lines](../webgpu-lines/) module handles this. It renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus portions of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.
+The (WIP) [webgpu-lines](../webgpu-lines/) module renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus half of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.
 
-We don't pass vertex positions directly. Instead, we provide a **vertex function** that the module calls for each point index. The function samples data from the state buffer. The module handles all the complexity of building smooth joins and round caps.
-
-### Buffer Index Lookup
-
-Rather than copying positions to vertex buffers each frame, we sample them directly from the storage buffer in the vertex shader. Each vertex index maps to a buffer index:
-
-${tex.block`\text{bufferIdx} = i \cdot M + ((j + \text{offset}) \mod M)`}
-
-where ${tex`M`} is the number of time steps, ${tex`i`} is the particle index, and ${tex`j`} is the step within that particle's track.
-
-To handle the ring buffer, we add an offset to the step index that shifts based on which column was most recently written. The oldest data is always at the "start" of the rendered line, and the newest at the end.
+We don't pass vertex positions directly. Instead, we provide a vertex function which uses the integer vertex ID to read particle buffer data. To handle the ring buffer, we add an offset to the step index that shifts based on which column was most recently written. The oldest data is always at the "start" of the rendered line, and the newest at the end.
 
 ### Line Breaks
 
