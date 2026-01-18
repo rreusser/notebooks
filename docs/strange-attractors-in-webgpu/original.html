@@ -3,15 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="WebGPU Lines">
-  <meta property="og:title" content="WebGPU Lines">
-  <meta name="twitter:description" content="GPU-accelerated line rendering for WebGPU with instanced triangle strips">
-  <meta name="subject" content="GPU-accelerated line rendering for WebGPU with instanced triangle strips">
-  <meta name="description" content="GPU-accelerated line rendering for WebGPU with instanced triangle strips">
-  <meta property="og:description" content="GPU-accelerated line rendering for WebGPU with instanced triangle strips">
-  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.jpg">
+  <meta name="twitter:title" content="Strange Attractors on the GPU, Part 1: Implementation">
+  <meta property="og:title" content="Strange Attractors on the GPU, Part 1: Implementation">
+  <meta name="twitter:description" content="Integrating strange attractors in WebGPU">
+  <meta name="subject" content="Integrating strange attractors in WebGPU">
+  <meta name="description" content="Integrating strange attractors in WebGPU">
+  <meta property="og:description" content="Integrating strange attractors in WebGPU">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/strange-attractors-in-webgpu.jpg">
   <meta name="twitter:card" content="summary_large_image">
-  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.jpg">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/strange-attractors-in-webgpu.jpg">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1506,8 +1506,8 @@ main h6 {
   }
 }
   </style>
-  <style> main { max-width: 720px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Lines</title>  <script type="module" crossorigin src="/notebooks/assets/index-C8yL5Pbd.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors on the GPU, Part 1: Implementation</title>  <script type="module" crossorigin src="/notebooks/assets/original-C38eF3Mb.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1519,13 +1519,20 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>WebGPU Lines</h1>
+    <h1>Strange Attractors on the GPU, Part 1: Implementation</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20260116">January 16, 2026</time>
+      <time pubdate="" datetime="20260117">January 17, 2026</time>
     </div>
     <div class="resource-links">
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/webgpu-lines/index.html" class="resource-link">
+        <a href="https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="white"></circle>
+            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
+          </svg>
+          Live notebook
+        </a>
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/strange-attractors-in-webgpu/original.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1535,215 +1542,53 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This module implements high-performance, flexible GPU-accelerated line rendering for WebGPU. It is a direct port of <a href="https://github.com/rreusser/regl-gpu-lines">regl-gpu-lines</a> to WebGPU. The focus is on speed and customizability rather than sophisticated stroke expansion algorithms. For background on GPU line rendering, see Matt DesLauriers’ <a href="https://mattdesl.svbtle.com/drawing-lines-is-hard">Drawing Lines is Hard</a> and Rye Terrell’s <a href="https://wwwtyro.net/2019/11/18/instanced-lines.html">Instanced Line Rendering</a>. This library is a work in progress. You can find the <a href="https://github.com/rreusser/notebooks/tree/main/src/webgpu-lines">source on GitHub</a>, and it will eventually be published as a standalone NPM module.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"><div><h2 id="interactive-demo" tabindex="-1"><a href="#interactive-demo">Interactive Demo</a></h2>
-<p>Explore the line rendering options with interactive demo below. Drag handles to edit vertices, drag the background to pan, and scroll to zoom. Enable <strong>Debug view</strong> to see the underlying triangle strip structure. Alternating colors indicate separate instances.</p>
-</div></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="how-it-works" tabindex="-1"><a href="#how-it-works">How It Works</a></h2>
-<h3 id="background" tabindex="-1"><a href="#background">Background</a></h3>
-<p>The renderer uses <strong>instanced rendering</strong> with triangle strips. For a line with N points, it draws N-1 instances, where each instance renders one line segment plus half of the join geometry on each end. End caps are simply joins stretched around to form a cap.</p>
-<p>The geometry is carefully generated to optimize for high-performance rendering without the full rigor of stroke expansion algorithms, which handle self-intersection more carefully. The <code>lineCoord</code> varying is constructed so that <code>length(lineCoord)</code> gives consistent radial distance from the line center across both segments and caps, permitting uniform stroke widths.</p>
-<h3 id="features" tabindex="-1"><a href="#features">Features</a></h3>
-<ul>
-<li>Instanced rendering with triangle strips</li>
-<li>Screen-projected lines using a custom vertex function that can read geometry from buffers, textures, or procedural computation. The vertex function also defines varying values, line widths, and vertex projection at runtime in the shader.</li>
-<li>Bevel, miter, and round joins</li>
-<li>Round, square, and butt end caps</li>
-<li>Line breaks via <code>w = 0</code> sentinel value</li>
-<li>A <code>lineCoord</code> varying that can be used to construct SDF stroke outlines with anti-aliasing</li>
-</ul>
-<h3 id="limitations" tabindex="-1"><a href="#limitations">Limitations</a></h3>
-<ul>
-<li>The library does not handle self-intersecting lines.</li>
-<li>Rapidly varying line widths render incorrectly.</li>
-<li>World-space line widths require custom work in the vertex shader function.</li>
-</ul>
-<h3 id="shader-interface" tabindex="-1"><a href="#shader-interface">Shader Interface</a></h3>
-<p>You provide two pieces of WGSL code.</p>
-<p><strong><code>vertexShaderBody</code></strong> defines how to fetch and transform vertex data. You write bind group declarations (<code>@group(1)</code> and higher) for your data, a struct containing <code>position: vec4f</code>, <code>width: f32</code>, and any custom varyings, and a function (default name <code>getVertex</code>) that takes a point index and returns your struct.</p>
-<p><strong><code>fragmentShaderBody</code></strong> defines how to color the line. You write a <code>getColor</code> function that receives <code>lineCoord: vec2f</code> plus any varyings from your struct.</p>
-<p>The library parses your struct to identify the position, width, and varying fields automatically. The library reserves <code>@group(0)</code> for its internal uniforms. Your shader code should use <code>@group(1)</code> and higher for your own data.</p>
-<p>Example:</p>
-<pre data-language="wgsl"><code class="language-wgsl">// In vertexShaderBody:
-@group(1) @binding(0) var&lt;storage, read&gt; positions: array&lt;vec4f&gt;;
+    <main><div id="cell-453" class="observablehq observablehq--cell"></div><div id="cell-697" class="observablehq observablehq--cell"></div><div id="cell-215" class="observablehq observablehq--cell"></div><div id="cell-199" class="observablehq observablehq--cell"></div><div id="cell-40" class="observablehq observablehq--cell"></div><div id="cell-41" class="observablehq observablehq--cell"></div><div id="cell-174" class="observablehq observablehq--cell"></div><div id="cell-590" class="observablehq observablehq--cell"></div><div id="cell-349" class="observablehq observablehq--cell"></div><div id="cell-363" class="observablehq observablehq--cell"></div><div id="cell-688" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-353" class="observablehq observablehq--cell"></div><div id="cell-472" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-726" class="observablehq observablehq--cell"></div><div id="cell-356" class="observablehq observablehq--cell"></div><div id="cell-332" class="observablehq observablehq--cell"></div><div id="cell-370" class="observablehq observablehq--cell"></div><div id="cell-38" class="observablehq observablehq--cell"></div><div id="cell-66" class="observablehq observablehq--cell"></div><div id="cell-84" class="observablehq observablehq--cell"></div><div id="cell-149" class="observablehq observablehq--cell"></div><div id="cell-286" class="observablehq observablehq--cell"></div><div id="cell-329" class="observablehq observablehq--cell"></div><div id="cell-378" class="observablehq observablehq--cell"></div><div id="cell-381" class="observablehq observablehq--cell"></div><div id="cell-45" class="observablehq observablehq--cell"></div><div id="cell-47" class="observablehq observablehq--cell"></div><div id="cell-386" class="observablehq observablehq--cell"></div><div id="cell-144" class="observablehq observablehq--cell"></div><div id="cell-69" class="observablehq observablehq--cell"></div><div id="cell-389" class="observablehq observablehq--cell"></div><div id="cell-80" class="observablehq observablehq--cell"></div><div id="cell-340" class="observablehq observablehq--cell"></div><div id="cell-167" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">reglLines = require('https://unpkg.com/regl-gpu-lines@2.2.0')</code></pre><div id="cell-423" class="observablehq observablehq--cell"></div><div id="cell-323" class="observablehq observablehq--cell"></div><div id="cell-426" class="observablehq observablehq--cell"></div><div id="cell-747" class="observablehq observablehq--cell"></div><div id="cell-437" class="observablehq observablehq--cell"></div><div id="cell-759" class="observablehq observablehq--cell"></div><div id="cell-469" class="observablehq observablehq--cell"></div><div id="cell-170" class="observablehq observablehq--cell"></div><div id="cell-465" class="observablehq observablehq--cell"></div><div id="cell-90" class="observablehq observablehq--cell"></div><div id="cell-92" class="observablehq observablehq--cell"></div><div id="cell-100" class="observablehq observablehq--cell"></div><div id="cell-834" class="observablehq observablehq--cell"></div><div id="cell-396" class="observablehq observablehq--cell"></div><div id="cell-189" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">mainDrawLoop = {
+  initializeState;
+  camera.taint();
+  const simulate = ~opts.indexOf('Simulate');
+  let frame = regl.frame(() =&gt; {
+    try {
+      if (simulate) {
+        integrate({
+          src: state,
+          dst: tmpStateColumn,
+          srcColumn: mutable currentColumn,
+          dt,
+          t: mutable t
+        });
 
-struct Vertex {
-  position: vec4f,    // Required
-  width: f32,         // Required
-  distance: f32,      // Varying - passed to getColor
-}
+        mutable t += dt;
+        mutable currentColumn = (mutable currentColumn + 1) % stepCount;
 
-fn getVertex(index: u32) -&gt; Vertex {
-  let p = positions[index];
-  return Vertex(p, 10.0, f32(index));
-}
+        copyStateColumn({
+          src: tmpStateColumn,
+          dst: state,
+          dstColumn: mutable currentColumn
+        });
+      }
 
-// In fragmentShaderBody:
-fn getColor(lineCoord: vec2f, distance: f32) -&gt; vec4f {
-  return vec4f(0.2, 0.5, 0.9, 1.0);
-}
-</code></pre>
-<h3 id="line-breaks" tabindex="-1"><a href="#line-breaks">Line Breaks</a></h3>
-<p>To create a line break (splitting one line into multiple segments with separate end caps), have your <code>getVertex</code> function return a position with <code>w = 0</code> (or <code>NaN</code> in any component). The library detects these sentinel values and inserts caps on adjacent segments.</p>
-<h3 id="vertex-window" tabindex="-1"><a href="#vertex-window">Vertex Window</a></h3>
-<p>Internally, each instance calls <code>getVertex</code> for a 4-point window of adjacent vertices. Points <strong>A</strong> (previous) and <strong>D</strong> (next) provide direction for computing join angles. Points <strong>B</strong> (start) and <strong>C</strong> (end) define the segment being drawn.</p>
-<p>Within each instance, a vertex index (0 to ~30, depending on join/cap resolution) expands into the triangle strip vertices. The vertex shader uses this index to compute screen-space offsets perpendicular to the line direction, forming the segment body, joins, and caps.</p>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><hr>
-<h2 id="api-reference" tabindex="-1"><a href="#api-reference">API Reference</a></h2>
-<h3 id="create-gpu-lines-device-options" tabindex="-1"><a href="#create-gpu-lines-device-options"><code>createGPULines(device, options)</code></a></h3>
-<p>Creates a new line renderer instance.</p>
-<p><strong>Parameters:</strong></p>
-<ul>
-<li><code>device</code> - WebGPU device</li>
-<li><code>options</code> - Configuration object (see below)</li>
-</ul>
-<p><strong>Returns:</strong> Line renderer object with <code>draw()</code>, <code>getBindGroupLayout()</code>, and <code>destroy()</code> methods.</p>
-</div></div><div id="cell-17" class="observablehq observablehq--cell"><div><h3 id="options" tabindex="-1"><a href="#options">Options</a></h3>
-</div></div><div id="cell-18" class="observablehq observablehq--cell"><div><h4><code>join</code></h4>
-<p>Controls how line segments are connected at vertices. Options are <code>'bevel'</code>, <code>'miter'</code>, and <code>'round'</code>.</p>
-</div></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"><div><h4><code>cap</code></h4>
-<p>Controls how line endpoints are rendered. Options are <code>'round'</code>, <code>'square'</code>, and <code>'none'</code>.</p>
-</div></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"><div><h4><code>miterLimit</code></h4>
-<p>When using <code>join: 'miter'</code>, this controls when sharp angles fall back to bevel joins. Lower values create more bevels. Higher values allow longer miter points. Default is <code>4</code>.</p>
-</div></div><div id="cell-23" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"><div><h4><code>joinResolution</code> and <code>capResolution</code></h4>
-<p>Control the number of triangles used for round joins and caps. Higher values create smoother curves. Default is <code>8</code>.</p>
-</div></div><div id="cell-25" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"><div><h4>Line Breaks</h4>
-<p>Insert a point with <code>w = 0</code> (or <code>NaN</code> for any coordinate) to create a line break. This splits the line into separate segments, each with its own end caps.</p>
-</div></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-28" class="observablehq observablehq--cell"><div><hr>
-<h3 id="custom-shaders" tabindex="-1"><a href="#custom-shaders">Custom Shaders</a></h3>
-<p>The library supports custom WGSL shaders for advanced rendering effects. Provide shader code via the <code>fragmentShaderBody</code> and <code>vertexShaderBody</code> options.</p>
-</div></div><div id="cell-29" class="observablehq observablehq--cell"><div><h4><code>fragmentShaderBody</code></h4>
-<p>The fragment shader controls how lines are colored. Your code must define a <code>getColor</code> function.</p>
-<pre data-language="wgsl"><code class="language-wgsl">fn getColor(lineCoord: vec2f) -&gt; vec4f {
-  // Return RGBA color (0-1 range)
-  return vec4f(0.2, 0.5, 0.9, 1.0);
-}
-</code></pre>
-<p>The <code>lineCoord</code> parameter provides spatial information about the current fragment (see below).</p>
-<p>Any fields in your <code>Vertex</code> struct beyond <code>position</code> and <code>width</code> become varyings, interpolated across the line and passed as additional parameters to <code>getColor</code>. For example, if your struct includes <code>dist: f32</code>, your function signature becomes <code>fn getColor(lineCoord: vec2f, dist: f32) -&gt; vec4f</code>.</p>
-<p>If your shader code references <code>instanceID</code>, the library will automatically pass two additional parameters, <code>instanceID: f32</code> (segment index, negative for end caps) and <code>triStripCoord: vec2f</code> (triangle strip vertex coordinates for wireframe visualization). These are useful for debug views showing the internal triangle strip structure.</p>
-</div></div><div id="cell-30" class="observablehq observablehq--cell"><div><h4><code>lineCoord</code> Values</h4>
-<table>
-<thead>
-<tr>
-<th>Component</th>
-<th>Segments/Joins</th>
-<th>Caps</th>
-<th>Description</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>lineCoord.x</code></td>
-<td>0</td>
-<td>sin(θ) × sign</td>
-<td>Always 0 for segments. Varies around the semicircle for caps.</td>
-</tr>
-<tr>
-<td><code>lineCoord.y</code></td>
-<td>-1 to 1</td>
-<td>cos(θ) × sign</td>
-<td>Position across the line. 0 at center, ±1 at edges.</td>
-</tr>
-</tbody>
-</table>
-<p>The <code>lineCoord</code> values are designed for SDF (signed distance field) rendering. <code>length(lineCoord)</code> gives radial distance from line center (0 at center, 1 at edge). For segments, <code>length(lineCoord) = abs(lineCoord.y)</code> since x=0. For caps, <code>length(lineCoord) = 1</code> on the outer edge (unit circle).</p>
-<p>Note that <code>lineCoord.x</code> does NOT provide distance along the line. To implement dashes, add a cumulative distance field to your <code>Vertex</code> struct. It will be interpolated and passed to <code>getColor</code> as an extra parameter. See the interactive demo’s “Stripes” option for an example.</p>
-</div></div><div id="cell-31" class="observablehq observablehq--cell"></div><div id="cell-32" class="observablehq observablehq--cell"><div><h4>Example Shaders</h4>
-<p>Solid color with edge darkening.</p>
-<pre data-language="wgsl"><code class="language-wgsl">fn getColor(lineCoord: vec2f) -&gt; vec4f {
-  let edge = 1.0 - 0.3 * abs(lineCoord.y);
-  return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
-}
-</code></pre>
-<p>Cross-line stripes using <code>lineCoord.y</code>.</p>
-<pre data-language="wgsl"><code class="language-wgsl">fn getColor(lineCoord: vec2f) -&gt; vec4f {
-  let stripe = step(0.0, lineCoord.y);
-  return vec4f(stripe * 0.2, 0.5, 0.9 - stripe * 0.4, 1.0);
-}
-</code></pre>
-<p>SDF stroke with anti-aliasing.</p>
-<pre data-language="wgsl"><code class="language-wgsl">fn linearstep(a: f32, b: f32, x: f32) -&gt; f32 {
-  return clamp((x - a) / (b - a), 0.0, 1.0);
-}
-fn getColor(lineCoord: vec2f) -&gt; vec4f {
-  let width = 20.0;
-  let strokeWidth = 4.0;
-  let sdf = 0.5 * width * length(lineCoord);
-  let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
-  let strokeMask = linearstep(
-    width * 0.5 - strokeWidth - 0.5,
-    width * 0.5 - strokeWidth + 0.5, sdf);
-  let fillColor = vec3f(0.4, 0.7, 1.0);
-  let strokeColor = vec3f(0.1, 0.3, 0.6);
-  let color = mix(fillColor, strokeColor, strokeMask);
-  return vec4f(color, aa);
-}
-</code></pre>
-<p>When using transparency or <code>discard</code>, enable alpha blending.</p>
-<pre data-language="js"><code class="language-javascript"><span class="tok-variable">createGPULines</span>(<span class="tok-variable">device</span>, {
-  <span class="tok-definition">blend</span>: {
-    <span class="tok-definition">color</span>: { <span class="tok-definition">srcFactor</span>: <span class="tok-string">'src-alpha'</span>, <span class="tok-definition">dstFactor</span>: <span class="tok-string">'one-minus-src-alpha'</span>, <span class="tok-definition">operation</span>: <span class="tok-string">'add'</span> },
-    <span class="tok-definition">alpha</span>: { <span class="tok-definition">srcFactor</span>: <span class="tok-string">'one'</span>, <span class="tok-definition">dstFactor</span>: <span class="tok-string">'one-minus-src-alpha'</span>, <span class="tok-definition">operation</span>: <span class="tok-string">'add'</span> }
-  }
-});
-</code></pre>
-</div></div><div id="cell-33" class="observablehq observablehq--cell"></div><div id="cell-34" class="observablehq observablehq--cell"><div><h4><code>vertexShaderBody</code></h4>
-<p>The vertex shader body defines how line positions and per-vertex data are computed. You provide bind group declarations (group 1+) for your data, a struct defining the vertex output, and a vertex function that returns the struct given a point index.</p>
-<pre data-language="wgsl"><code class="language-wgsl">@group(1) @binding(0) var&lt;storage, read&gt; positions: array&lt;vec4f&gt;;
-@group(1) @binding(1) var&lt;uniform&gt; viewMatrix: mat4x4f;
+      camera(({ dirty }) =&gt; {
+        // Only render if we're currently simulating or if the camera is moved
+        if (!simulate &amp;&amp; !dirty) return;
+        regl.clear({ color: [1, 1, 1, 1], depth: 1 });
 
-struct Vertex {
-  position: vec4f,  // Required, clip-space position (w component controls line breaks)
-  width: f32,       // Optional, per-vertex line width
-  // Additional fields become varyings passed to fragment shader
-}
-
-fn getVertex(index: u32) -&gt; Vertex {
-  let p = positions[index];
-  let projected = viewMatrix * vec4f(p.xyz, 1.0);
-  return Vertex(vec4f(projected.xyz, p.w * projected.w), 20.0);
-}
-</code></pre>
-<p>Options for customization include <code>vertexFunction</code> (name of your vertex function, default <code>'getVertex'</code>), <code>positionField</code> (name of position field in struct, default <code>'position'</code>), and <code>widthField</code> (name of width field in struct, default <code>'width'</code>).</p>
-<p>Available library uniforms are <code>uniforms.resolution</code> (canvas resolution in pixels), <code>uniforms.width</code> (fallback line width if no per-vertex width), and <code>uniforms.pointCount</code> (number of points).</p>
-</div></div><div id="cell-35" class="observablehq observablehq--cell"><div><h3 id="drawing" tabindex="-1"><a href="#drawing">Drawing</a></h3>
-<h4><code>gpuLines.draw(pass, props, bindGroups)</code></h4>
-<p>Draws lines in a render pass. The <code>props</code> object includes <code>vertexCount</code> (number of points in the line), <code>width</code> (line width in pixels, fallback if no per-vertex width), and <code>resolution</code> (canvas resolution as <code>[width, height]</code>). The <code>bindGroups</code> parameter is an array of user bind groups for groups 1, 2, etc.</p>
-<h4><code>gpuLines.getBindGroupLayout(index)</code></h4>
-<p>Returns the bind group layout for the specified group index. Use this to create bind groups for your data.</p>
-<pre data-language="js"><code class="language-javascript"><span class="tok-keyword">const</span> <span class="tok-definition">dataBindGroup</span> = <span class="tok-variable">device</span>.<span class="tok-definition">createBindGroup</span>({
-  <span class="tok-definition">layout</span>: <span class="tok-variable">gpuLines</span>.<span class="tok-definition">getBindGroupLayout</span>(<span class="tok-literal">1</span>),
-  <span class="tok-definition">entries</span>: [
-    { <span class="tok-definition">binding</span>: <span class="tok-literal">0</span>, <span class="tok-definition">resource</span>: { <span class="tok-definition">buffer</span>: <span class="tok-variable">positionBuffer</span> } },
-    { <span class="tok-definition">binding</span>: <span class="tok-literal">1</span>, <span class="tok-definition">resource</span>: { <span class="tok-definition">buffer</span>: <span class="tok-variable">viewMatrixBuffer</span> } }
-  ]
-});
-
-<span class="tok-keyword">const</span> <span class="tok-definition">pass</span> = <span class="tok-variable">encoder</span>.<span class="tok-definition">beginRenderPass</span>({ ... });
-<span class="tok-variable">gpuLines</span>.<span class="tok-definition">draw</span>(<span class="tok-variable">pass</span>, {
-  <span class="tok-definition">vertexCount</span>: <span class="tok-variable">points</span>.<span class="tok-definition">length</span>,
-  <span class="tok-definition">width</span>: <span class="tok-literal">20</span>,
-  <span class="tok-definition">resolution</span>: [<span class="tok-variable">canvas</span>.<span class="tok-definition">width</span>, <span class="tok-variable">canvas</span>.<span class="tok-definition">height</span>]
-}, [<span class="tok-variable">dataBindGroup</span>]);
-<span class="tok-variable">pass</span>.<span class="tok-definition">end</span>();
-</code></pre>
-</div></div><div id="cell-36" class="observablehq observablehq--cell"><div><h3 id="position-data-format" tabindex="-1"><a href="#position-data-format">Position Data Format</a></h3>
-<p>Your vertex function returns a <code>vec4f</code> position. The <code>x</code> and <code>y</code> components are position in clip space (-1 to 1), <code>z</code> is depth, and <code>w</code> should be <code>1</code> for valid points or <code>0</code> (or NaN for any component) for line breaks.</p>
-<p>Example with a storage buffer.</p>
-<pre data-language="js"><code class="language-javascript"><span class="tok-keyword">const</span> <span class="tok-definition">positions</span> = <span class="tok-keyword">new</span> <span class="tok-definition">Float32Array</span>([
-  <span class="tok-variable">x0</span>, <span class="tok-variable">y0</span>, <span class="tok-variable">z0</span>, <span class="tok-variable">w0</span>,  <span class="tok-comment">// Point 0</span>
-  <span class="tok-variable">x1</span>, <span class="tok-variable">y1</span>, <span class="tok-variable">z1</span>, <span class="tok-variable">w1</span>,  <span class="tok-comment">// Point 1</span>
-  <span class="tok-comment">// ...</span>
-]);
-
-<span class="tok-keyword">const</span> <span class="tok-definition">buffer</span> = <span class="tok-variable">device</span>.<span class="tok-definition">createBuffer</span>({
-  <span class="tok-definition">size</span>: <span class="tok-variable">positions</span>.<span class="tok-definition">byteLength</span>,
-  <span class="tok-definition">usage</span>: <span class="tok-variable">GPUBufferUsage</span>.<span class="tok-definition">STORAGE</span> | <span class="tok-variable">GPUBufferUsage</span>.<span class="tok-definition">COPY_DST</span>
-});
-<span class="tok-variable">device</span>.<span class="tok-definition">queue</span>.<span class="tok-definition">writeBuffer</span>(<span class="tok-variable">buffer</span>, <span class="tok-literal">0</span>, <span class="tok-variable">positions</span>);
-</code></pre>
-<p>Your <code>getVertex</code> function can read from any source (buffers, textures, procedural) and transform to clip space however you like.</p>
-</div></div></main>
+        drawLines({
+          ...lineData,
+          src: state,
+          texOffset: (mutable currentColumn - stepCount + 1) / stepCount
+        });
+      });
+    } catch (e) {
+      console.error(e);
+      frame &amp;&amp; frame.cancel();
+      frame = null;
+    }
+  });
+  invalidation.then(() =&gt; {
+    frame &amp;&amp; frame.cancel();
+    frame = null;
+  });
+}</code></pre><div id="cell-475" class="observablehq observablehq--cell"></div><div id="cell-415" class="observablehq observablehq--cell"></div><div id="cell-439" class="observablehq observablehq--cell"></div><div id="cell-435" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 

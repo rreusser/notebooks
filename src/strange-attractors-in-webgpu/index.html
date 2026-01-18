@@ -4,7 +4,7 @@
   <script id="intro" type="text/markdown">
 # Strange Attractors in WebGPU
 
-*This notebook is a 2026 WebGPU update of my previous post, [Strange Attractors on the GPU, Part 1: Implementation](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1).*
+*This notebook is a 2026 WebGPU update of my 2021 post, [Strange Attractors on the GPU, Part 1: Implementation](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1).*
 
 This notebook walks through simulating a strange attractor on the GPU and then rendering particle tracks as lines. The essential feature of this notebook is that it accomplishes both particle updates and rendering to the screen without data ever touching the CPU.
   </script>
@@ -150,7 +150,7 @@ display(controlsContainer);
   <script id="explanation-attractor" type="text/markdown">
 ### The Attractor
 
-A strange attractor is a set of states toward which a dynamical system evolves over time. The particular attractor we're simulating here is defined by the system of ordinary differential equations:
+A strange attractor is a set of states toward which a dynamical system evolves over time. The [Lorenz System](https://en.wikipedia.org/wiki/Lorenz_system) is the canonical example. The particular attractor we're simulating here is defined by the system of ordinary differential equations:
 
 ${tex.block`\begin{aligned}
 \frac{dx}{dt} &= \alpha x(1 - y) - \beta z \\[0.5em]
@@ -194,20 +194,19 @@ For line rendering, we use the (WIP) [webgpu-lines](../webgpu-lines/) module. Li
   <script id="explanation-state" type="text/markdown">
 ## State Layout
 
-The state of our ordinary differential equation (ODE) is represented by the three-component vector ${tex`(x, y, z)`}. We store these in a flat storage buffer as `vec4f` elements. The ${tex`j^{th}`} time step of the ${tex`i^{th}`} particle is represented by the four-component vector:
+The state of our ordinary differential equation (ODE) is represented by the three-component vector ${tex`(x, y, z)`}. We store these in a flat storage buffer as `vec3f` elements. The ${tex`j^{th}`} time step of the ${tex`i^{th}`} particle is represented by the vector:
 
-${tex.block`\mathbf{p}_j^{(i)} = (x_j^{(i)}, y_j^{(i)}, z_j^{(i)}, 1)`}
+${tex.block`\mathbf{p}_j^{(i)} = (x_j^{(i)}, y_j^{(i)}, z_j^{(i)})`}
 
 ### Why Storage Buffers?
 
-The WebGL version used a 2D texture where each row was a particle and each column was a time step. Textures are a natural fit when you need 2D spatial locality or hardware filtering, but for our access pattern—where each particle only touches its own data—a flat buffer is simpler and more efficient.
+The WebGL version used a 2D texture where each row was a particle and each column was a time step. Textures are a natural fit when you need 2D spatial locality or hardware filtering, but for our access pattern, a flat buffer is simpler and more efficient.
 
 Storage buffers offer several advantages over textures for this use case:
 
-- **`read_write` access**: Unlike `rgba32float` textures, storage buffers can be both read and written in the same compute pass
-- **Direct indexing**: Simple arithmetic replaces texel coordinate calculations with half-pixel offsets
-- **No intermediate resources**: We eliminate the temporary texture needed for the copy step
-- **Flexible layout**: We can choose any memory layout that suits our access pattern
+- **`read_write` access**: Storage buffers can be both read and written in the same compute pass
+- **Direct indexing**: Index arithmetic replaces texel coordinate calculations with half-pixel offsets
+- **No intermediate resources**: Eliminate a temporary texture needed for the copy step
 
 We use **particle-major ordering**: all time steps for particle 0 come first, then all time steps for particle 1, and so on. The buffer index for a given particle and step is simply `particle * stepCount + step`.
 
@@ -221,12 +220,13 @@ This ring buffer approach means we only write one position per particle per fram
 particleCount; stepCount; restart;
 
 // Create storage buffer for state
-// Each element stores (x, y, z, 1) as vec4f for one particle at one timestep
+// Each element stores (x, y, z) as vec3f for one particle at one timestep
 // Layout: buffer[particleId * stepCount + stepIndex] = position
 // Using storage buffer with read_write access eliminates the need for a temp buffer
+// Note: array<vec3f> has 16-byte stride due to WGSL alignment rules
 const stateBuffer = device.createBuffer({
   label: 'state-buffer',
-  size: particleCount * stepCount * 16, // vec4f (16 bytes) per position
+  size: particleCount * stepCount * 16, // vec3f with 16-byte stride per position
   usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
 });
 
@@ -242,18 +242,18 @@ invalidation.then(() => {
 
 Our computational primitive is the **compute shader**. Unlike fragment shaders which operate on pixels being rasterized, compute shaders are general-purpose: we dispatch a grid of threads and each thread can read from and write to arbitrary locations in GPU resources.
 
-For our simulation, we dispatch one thread per particle. Each thread reads the current state and writes the updated state. This is a classic parallel map operation.
+For our simulation, we dispatch one thread per particle. Each thread reads the current state and writes the updated state.
 
 ### Initialization
 
 We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy **quasirandom** number generator described by Martin Roberts in *[The Unreasonable Effectiveness of Quasirandom Sequences](http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/)*.
 
-The initialization shader writes the same starting position to every column of each particle's row—filling the entire ring buffer with the initial state.
+Initialization writes the same starting position to the entire history of each particle.
   </script>
   <script id="init-shader" type="module">
 // Compute shader to initialize particle state
 const initShaderCode = /* wgsl */`
-@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec4f>;
+@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec3f>;
 
 struct Uniforms {
   origin: vec3f,
@@ -286,7 +286,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let pos = uniforms.origin + uniforms.scale * sphericalRandom(f32(particle) + 0.5);
   let baseIdx = particle * uniforms.stepCount;
   for (var col = 0u; col < uniforms.stepCount; col++) {
-    stateBuffer[baseIdx + col] = vec4f(pos, 1.0);
+    stateBuffer[baseIdx + col] = pos;
   }
 }
 `;
@@ -381,7 +381,7 @@ fn derivative(x: f32, y: f32, z: f32, t: f32) -> vec3f {
   <script id="integrate-shader" type="module">
 // Integration shader: reads and writes to a single storage buffer
 const integrateShaderCode = /* wgsl */`
-@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec4f>;
+@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec3f>;
 
 struct Uniforms {
   dt: f32,
@@ -406,7 +406,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 
   // Read current state from source column
   let readIdx = particle * uniforms.stepCount + uniforms.srcColumn;
-  let p = stateBuffer[readIdx].xyz;
+  let p = stateBuffer[readIdx];
 
   // RK4 integration
   let dt = uniforms.dt;
@@ -425,7 +425,7 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
 
   // Write to destination column
   let writeIdx = particle * uniforms.stepCount + uniforms.dstColumn;
-  stateBuffer[writeIdx] = vec4f(newP, 1.0);
+  stateBuffer[writeIdx] = newP;
 }
 `;
 
@@ -465,11 +465,11 @@ invalidation.then(() => {
   <script id="explanation-rendering" type="text/markdown">
 ## Line Rendering
 
-In the timeless words of Matt DesLauriers, *[Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard)*. All browsers limit the built-in line primitive to a single pixel width, so for any reasonably well-rendered lines, we need to build our own geometry.
+In the timeless words of Matt DesLauriers, *[Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard)*. Browsers limit the built-in line primitive to a single pixel width, so for any reasonably well-rendered lines, we need to build our own geometry.
 
 The [webgpu-lines](../webgpu-lines/) module handles this. It renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus portions of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.
 
-The key insight is that we don't pass vertex positions directly. Instead, we provide a **vertex function** that the module calls for each point index. This function can sample data from any source—in our case, the state buffer. The module handles all the complexity of building smooth joins and round caps.
+We don't pass vertex positions directly. Instead, we provide a **vertex function** that the module calls for each point index. The function samples data from the state buffer. The module handles all the complexity of building smooth joins and round caps.
 
 ### Buffer Index Lookup
 
@@ -483,7 +483,7 @@ To handle the ring buffer, we add an offset to the step index that shifts based 
 
 ### Line Breaks
 
-Multiple particle tracks are rendered in a single draw call. We separate them using **sentinel values**—vertices with `w = 0` in clip space. When the vertex function returns a position with `w = 0`, the line renderer interprets this as a break between separate lines.
+Multiple particle tracks are rendered in a single draw call. We separate them using sentinel values of `w = 0` in clip space. When the vertex function returns a position with `w = 0`, the line renderer interprets this as a break, skipping one instance and reworking adjacent joins into end caps.
   </script>
   <script id="camera-setup" type="module">
 // Simple orbital camera using mouse drag
@@ -611,7 +611,7 @@ import { createGPULines } from '../webgpu-lines/webgpu-lines.js';
 
 // Vertex shader that samples the state buffer
 const vertexShaderBody = /* wgsl */`
-@group(1) @binding(0) var<storage, read> stateBuffer: array<vec4f>;
+@group(1) @binding(0) var<storage, read> stateBuffer: array<vec3f>;
 @group(1) @binding(1) var<uniform> projViewMatrix: mat4x4f;
 
 struct LineUniforms {
@@ -644,7 +644,7 @@ fn getVertex(index: u32) -> Vertex {
   let bufferIdx = particle * lineUniforms.stepCount + stepIndex;
 
   // Sample position from state buffer
-  let pos = stateBuffer[bufferIdx].xyz;
+  let pos = stateBuffer[bufferIdx];
 
   // Project to clip space
   let projected = projViewMatrix * vec4f(pos, 1.0);
@@ -714,114 +714,14 @@ invalidation.then(() => {
   lineUniformBuffer.destroy();
 });
   </script>
-  <script id="axes-rendering" type="module">
-// Axes renderer - X (red), Y (green), Z (blue)
-// Uses createGPULines from the previous cell
-const axisRange = 5;
-
-// Axes vertex data: 3 axes, 2 points each, with line breaks between
-// Layout: [X start, X end, break, Y start, Y end, break, Z start, Z end]
-const axesPositions = new Float32Array([
-  -axisRange, 0, 0, 1,  // X axis start
-   axisRange, 0, 0, 1,  // X axis end
-  0, 0, 0, 0,           // line break
-  0, -axisRange, 0, 1,  // Y axis start
-  0,  axisRange, 0, 1,  // Y axis end
-  0, 0, 0, 0,           // line break
-  0, 0, -axisRange, 1,  // Z axis start
-  0, 0,  axisRange, 1,  // Z axis end
-]);
-
-// Color index: 0 = X (red), 1 = Y (green), 2 = Z (blue)
-const axesColors = new Float32Array([
-  0, 0, 0, 1, 1, 0, 2, 2
-]);
-
-const axesPositionBuffer = device.createBuffer({
-  label: 'axes-positions',
-  size: axesPositions.byteLength,
-  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-});
-device.queue.writeBuffer(axesPositionBuffer, 0, axesPositions);
-
-const axesColorBuffer = device.createBuffer({
-  label: 'axes-colors',
-  size: axesColors.byteLength,
-  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-});
-device.queue.writeBuffer(axesColorBuffer, 0, axesColors);
-
-const axesVertexShader = /* wgsl */`
-@group(1) @binding(0) var<storage, read> positions: array<vec4f>;
-@group(1) @binding(1) var<storage, read> colorIndices: array<f32>;
-@group(1) @binding(2) var<uniform> projViewMatrix: mat4x4f;
-
-struct Vertex {
-  position: vec4f,
-  width: f32,
-  colorIndex: f32,
-}
-
-fn getVertex(index: u32) -> Vertex {
-  let pos = positions[index];
-  let colorIdx = colorIndices[index];
-  let projected = projViewMatrix * vec4f(pos.xyz, 1.0);
-  return Vertex(vec4f(projected.xyz, pos.w * projected.w), uniforms.width, colorIdx);
-}
-`;
-
-const axesFragmentShader = /* wgsl */`
-fn getColor(lineCoord: vec2f, colorIndex: f32) -> vec4f {
-  // X = red, Y = green, Z = blue
-  var color: vec3f;
-  let idx = i32(colorIndex + 0.5);
-  if (idx == 0) {
-    color = vec3f(0.9, 0.2, 0.2);  // Red for X
-  } else if (idx == 1) {
-    color = vec3f(0.2, 0.8, 0.2);  // Green for Y
-  } else {
-    color = vec3f(0.2, 0.4, 0.9);  // Blue for Z
-  }
-  return vec4f(color, 1.0);
-}
-`;
-
-const axesLines = createGPULines(device, {
-  format: canvasFormat,
-  depthFormat: 'depth24plus',
-  join: 'miter',
-  cap: 'round',
-  capResolution: 4,
-  vertexShaderBody: axesVertexShader,
-  fragmentShaderBody: axesFragmentShader,
-});
-
-const axesBindGroup = device.createBindGroup({
-  layout: axesLines.getBindGroupLayout(1),
-  entries: [
-    { binding: 0, resource: { buffer: axesPositionBuffer } },
-    { binding: 1, resource: { buffer: axesColorBuffer } },
-    { binding: 2, resource: { buffer: projViewBuffer } }  // Reuse projViewBuffer
-  ]
-});
-
-invalidation.then(() => {
-  axesLines.destroy();
-  axesPositionBuffer.destroy();
-  axesColorBuffer.destroy();
-});
-  </script>
   <script id="explanation-draw-loop" type="text/markdown">
 ## Draw Loop
 
-Finally, we put it all together into a frame loop. Each frame:
+Finally, we put it all together into a frame loop. For each frame:
 
-1. If simulating, dispatch the **integrate** compute shader to compute new particle positions
-2. Update the camera's projection-view matrix
-3. Update the buffer offset uniform so lines render from oldest to newest
-4. Begin a render pass and **draw lines** by calling into the webgpu-lines module
-
-The simulation and rendering are decoupled—we can pause simulation while still allowing camera interaction. The `renderState.dirty` flag tracks whether we need to redraw.
+1. dispatch the integrate compute shader to compute new particle positions
+2. Update the buffer offset uniform so lines render from oldest to newest
+3. Draw lines by calling into the webgpu-lines module
   </script>
   <script id="render-loop" type="module">
 import { createFrameLoop } from './lib/frame-loop.js';
@@ -894,13 +794,6 @@ const loop = createFrameLoop(() => {
       }
     });
 
-    // Draw axes first (so they appear behind the attractor)
-    // axesLines.draw(pass, {
-    //   vertexCount: 8,  // 3 axes × 2 points + 2 line breaks
-    //   width: 2 * dpr,
-    //   resolution: [canvas.width, canvas.height]
-    // }, [axesBindGroup]);
-
     // Total vertex count: (stepCount + 1) per particle for line breaks
     const totalVertexCount = particleCount * (stepCount + 1);
 
@@ -929,28 +822,10 @@ initializeState();
   <script id="conclusion" type="text/markdown">
 ## Summary
 
-We've built a complete GPU-based particle simulation with the following components:
+I'm thrilled that my new WebGPU line rendering module worked out so well. It fills a big gap in what I need WebGPU for, and I'm eager to keep using it.
 
-- **State storage**: A flat storage buffer with particle-major ordering, where each particle's history is a ring buffer
-- **Initialization**: A compute shader that fills the state with quasirandom starting positions
-- **Integration**: A compute shader that advances the ODE using RK4, reading and writing directly to the same storage buffer
-- **Rendering**: Instanced line drawing that samples positions directly from the state buffer
+The switch from hacky WebGL workarounds to proper WebGPU primitives turned out well. I haven't done the full timing analysis I should have, but we went from three passes (integrate, copy, render) to just two (integrate, render).
 
-### Optimization Gains
-
-By using WebGPU storage buffers instead of naively porting the WebGL texture-based approach, we achieved:
-
-| Aspect | Texture Approach | Storage Buffer | Improvement |
-|--------|------------------|----------------|-------------|
-| GPU operations/frame | 3 (integrate + copy + render) | 2 (integrate + render) | 33% fewer dispatches |
-| Compute bind groups | 2 (integrate + copy) | 1 (integrate only) | 50% reduction |
-| Temporary resources | 1 column texture | None | Eliminated |
-| Index calculation | Texel center math | Direct array index | Simpler code |
-
-The entire simulation runs on the GPU. The CPU only dispatches work and updates a handful of uniform values each frame. This architecture scales well—you can simulate thousands of particles with long track histories while maintaining interactive frame rates.
-
-### Generalizing
-
-The techniques here generalize beyond strange attractors. Any particle system where you want to visualize trails—fluid simulations, n-body systems, gradient flows—can use this same ring buffer approach for efficient GPU-based track rendering. The key insight is recognizing when your access pattern allows `read_write` storage buffers: if each thread reads and writes to non-overlapping locations, you can collapse multi-pass texture ping-ponging into a single dispatch.
+And of course, the techniques here generalize beyond our strange attractors test case. Any particle system where you want to visualize trails—fluid simulations, n-body systems, gradient flows—can use this same ring buffer approach for efficient GPU-based track rendering. 
   </script>
 </notebook>
