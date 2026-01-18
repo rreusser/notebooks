@@ -1,0 +1,993 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Strange Attractors on the GPU, Part 1: Implementation (WebGPU)</title>
+  <script id="intro" type="text/markdown">
+# Strange Attractors on the GPU, Part 1: Implementation
+
+This notebook walks through simulating a strange attractor on the GPU and then rendering particle tracks as lines. We do this without any of the data ever touching the CPU!
+
+The high level approach is that the state of all particle tracks is stored in a GPU texture where each row is a ring buffer representing the history of each particle. On each frame we step a differential equation and overwrite the oldest element of each particle's history with a new value. Finally, we render particle tracks directly from the texture data.
+
+Each frame of the simulation incurs just three GPU operations:
+
+1. **Integrate** the differential equation, writing a column containing the new state of all particles into a temporary texture.
+2. **Copy** the temporary slice back into full state texture, overwriting the oldest values.
+3. **Draw** all line segments, joins, and caps using instanced triangle strip geometry. Sentinel values separate the lines into multiple contiguous segments.
+
+All of this happens on the GPU. The CPU's only role is to dispatch work and update a few uniform values. The result is a simulation that can handle thousands of particles with long track histories at interactive frame rates.
+  </script>
+  <script id="simulation-method" type="text/markdown">
+## Simulation Method
+
+To simulate strange attractors, we need to solve two challenges: stepping the differential equations and drawing lines.
+
+For computation, we use WebGPU **compute shaders**. These allow us to dispatch parallel workloads that read from and write to GPU resources directly. Each particle's state update runs as an independent thread, making the simulation embarrassingly parallel.
+
+For line rendering, we use the [webgpu-lines](../webgpu-lines/) module. Lines are notoriously difficult to render well—the built-in line primitive in graphics APIs is limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
+  </script>
+  <script id="webgpu-setup" type="module">
+// Check for WebGPU support
+if (!navigator.gpu) {
+  display(html`<p style="color: red;">WebGPU is not supported in this browser.</p>`);
+  throw new Error('WebGPU not supported');
+}
+
+const adapter = await navigator.gpu.requestAdapter();
+if (!adapter) {
+  throw new Error('Failed to get WebGPU adapter');
+}
+
+const device = await adapter.requestDevice();
+const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+invalidation.then(() => device.destroy());
+  </script>
+  <script id="main-canvas" type="module">
+import { createElementStack } from './lib/element-stack.js'
+import { expandable } from './lib/expandable.js'
+
+const dpr = window.devicePixelRatio || 1;
+const canvasWidth = Math.min(800, width);
+const canvasHeight = Math.max(400, canvasWidth * 0.6);
+
+const stack = createElementStack({
+  width: canvasWidth,
+  height: canvasHeight,
+  layers: [{
+    id: 'canvas',
+    element: ({ current, width, height }) => {
+      const canvas = current || document.createElement('canvas');
+      canvas.id = 'attractor-canvas';
+      canvas.width = Math.floor(width * dpr);
+      canvas.height = Math.floor(height * dpr);
+      canvas.style.width = `${width}px`;
+      canvas.style.height = `${height}px`;
+      return canvas;
+    }
+  }, {
+    id: 'svg',
+    element: ({ current, width, height }) =>
+      (current ? d3.select(current) : d3.create("svg"))
+        .attr("width", width)
+        .attr("height", height)
+        .style("cursor", "grab")
+        .node()
+  }]
+});
+
+const canvas = stack.elements.canvas;
+
+const gpuContext = canvas.getContext('webgpu');
+gpuContext.configure({
+  device,
+  format: canvasFormat,
+  alphaMode: 'premultiplied'
+});
+
+// Create depth texture for proper z-ordering
+const depthTexture = device.createTexture({
+  label: 'depth-texture',
+  size: [canvas.width, canvas.height],
+  format: 'depth24plus',
+  usage: GPUTextureUsage.RENDER_ATTACHMENT
+});
+
+const renderState = { dirty: true, depthTexture };
+
+const figure = html`<figure style="margin: 0;" id="main-figure">
+  ${stack.element}
+  <figcaption>Drag to rotate, scroll to zoom. Click restart to reinitialize particles.</figcaption>
+</figure>`;
+
+display(expandable(figure, {
+  width: canvasWidth,
+  height: canvasHeight,
+  controls: '.attractor-controls',
+  onResize(el, w, h) {
+    stack.resize(w, h);
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    // Recreate depth texture at new size
+    renderState.depthTexture.destroy();
+    renderState.depthTexture = device.createTexture({
+      label: 'depth-texture',
+      size: [canvas.width, canvas.height],
+      format: 'depth24plus',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+    renderState.dirty = true;
+    stack.dispatchEvent(new CustomEvent('update'));
+  }
+}));
+  </script>
+  <script id="controls" type="module">
+const controlsContainer = html`<div class="attractor-controls"></div>`;
+
+function ctrl(input) {
+  controlsContainer.appendChild(input);
+  return Generators.input(input);
+}
+
+const restartInput = Inputs.button('Restart');
+const restart = ctrl(restartInput);
+
+const simulateInput = Inputs.toggle({ label: 'Simulate', value: true });
+const simulate = ctrl(simulateInput);
+
+const particleCountInput = Inputs.range([1, 4096], {
+  value: 20,
+  label: 'Particle count',
+  step: 1
+});
+const particleCount = ctrl(particleCountInput);
+
+const stepCountInput = Inputs.range([1, 1024], {
+  label: 'Track length',
+  value: 100,
+  transform: Math.log,
+  step: 1
+});
+const stepCount = ctrl(stepCountInput);
+
+const dtInput = Inputs.range([0.001, 0.1], {
+  value: 0.02,
+  label: 'Time step'
+});
+const dt = ctrl(dtInput);
+
+const lineWidthInput = Inputs.range([1, 20], {
+  value: 5,
+  label: 'Line width',
+  step: 0.5
+});
+const lineWidth = ctrl(lineWidthInput);
+
+display(controlsContainer);
+  </script>
+  <script id="explanation-state" type="text/markdown">
+## State Layout
+
+The state of our ordinary differential equation (ODE) is represented by the three-component vector ${tex`(x, y, z)`}. We store these in a four-channel floating point texture using the format \`rgba32float\`. The ${tex`j^{th}`} time step of the ${tex`i^{th}`} particle is represented by the four-component vector:
+
+${tex.block`\mathbf{p}_j^{(i)} = (x_j^{(i)}, y_j^{(i)}, z_j^{(i)}, 1)`}
+
+We pack these vectors into a texture where each row represents the history of a single particle. The texture dimensions are \`stepCount × particleCount\`—width equals the track length, height equals the number of particles.
+
+As we step the ODE, we compute one new history point for each particle track. To avoid having to shift the entire history over one texel on every iteration, we treat each row as a **ring buffer**. At each time step ${tex`j`}, we use the previous column, ${tex`p_{j-1}^{(i)}`}, to compute the next time step, ${tex`p_j^{(i)}`}. When we reach the end of the row, we loop back to the start, overwriting the oldest time step with the newest.
+
+This ring buffer approach means we only write one column per frame, regardless of track length.
+  </script>
+  <script id="state-textures" type="module">
+particleCount; stepCount; restart;
+
+// Create storage texture for state (RGBA32Float)
+// Each texel stores (x, y, z, 1) for one particle at one timestep
+// Note: rgba32float doesn't support read_write storage, so we use separate read/write
+const stateTexture = device.createTexture({
+  label: 'state-texture',
+  size: [stepCount, particleCount],
+  format: 'rgba32float',
+  usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
+});
+
+// Temporary column texture for integration output
+const tmpColumnTexture = device.createTexture({
+  label: 'tmp-column-texture',
+  size: [1, particleCount],
+  format: 'rgba32float',
+  usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
+});
+
+// Track current column for ring buffer
+const simState = { currentColumn: 0, t: 0 };
+
+invalidation.then(() => {
+  stateTexture.destroy();
+  tmpColumnTexture.destroy();
+});
+  </script>
+  <script id="explanation-init" type="text/markdown">
+## Computation
+
+Our computational primitive is the **compute shader**. Unlike fragment shaders which operate on pixels being rasterized, compute shaders are general-purpose: we dispatch a grid of threads and each thread can read from and write to arbitrary locations in GPU resources.
+
+For our simulation, we dispatch one thread per particle. Each thread reads the current state and writes the updated state. This is a classic parallel map operation.
+
+### Initialization
+
+We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy **quasirandom** number generator described by Martin Roberts in *[The Unreasonable Effectiveness of Quasirandom Sequences](http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/)*.
+
+The initialization shader writes the same starting position to every column of each particle's row—filling the entire ring buffer with the initial state.
+  </script>
+  <script id="init-shader" type="module">
+// Compute shader to initialize particle state
+const initShaderCode = /* wgsl */`
+@group(0) @binding(0) var outputTex: texture_storage_2d<rgba32float, write>;
+
+struct Uniforms {
+  origin: vec3f,
+  scale: f32,
+  stepCount: u32,
+}
+@group(0) @binding(1) var<uniform> uniforms: Uniforms;
+
+// Quasirandom sequence: http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+fn quasirandom(n: f32) -> vec3f {
+  let g = 1.22074408460575947536;
+  return fract(0.5 + n * vec3f(1.0 / g, 1.0 / (g * g), 1.0 / (g * g * g))).zyx;
+}
+
+fn sphericalRandom(n: f32) -> vec3f {
+  let rand = quasirandom(n);
+  let u = rand.x * 2.0 - 1.0;
+  let theta = 6.283185307179586 * rand.y;
+  let r = sqrt(1.0 - u * u);
+  return vec3f(r * cos(theta), r * sin(theta), u) * sqrt(rand.z);
+}
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3u) {
+  let particle = gid.x;
+  let texSize = textureDimensions(outputTex);
+  if (particle >= texSize.y) { return; }
+
+  // Initialize all columns for this particle with the same position
+  let pos = uniforms.origin + uniforms.scale * sphericalRandom(f32(particle) + 0.5);
+  for (var col = 0u; col < uniforms.stepCount; col++) {
+    textureStore(outputTex, vec2u(col, particle), vec4f(pos, 1.0));
+  }
+}
+`;
+
+const initShaderModule = device.createShaderModule({
+  label: 'init-shader',
+  code: initShaderCode
+});
+
+const initPipeline = device.createComputePipeline({
+  label: 'init-pipeline',
+  layout: 'auto',
+  compute: {
+    module: initShaderModule,
+    entryPoint: 'main'
+  }
+});
+
+const initUniformBuffer = device.createBuffer({
+  label: 'init-uniforms',
+  size: 32, // vec3f origin (12) + f32 scale (4) + u32 stepCount (4) + padding
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+});
+
+const initBindGroup = device.createBindGroup({
+  label: 'init-bind-group',
+  layout: initPipeline.getBindGroupLayout(0),
+  entries: [
+    { binding: 0, resource: stateTexture.createView() },
+    { binding: 1, resource: { buffer: initUniformBuffer } }
+  ]
+});
+
+function initializeState() {
+  // Update uniforms
+  const uniformData = new ArrayBuffer(32);
+  const f32 = new Float32Array(uniformData);
+  const u32 = new Uint32Array(uniformData);
+  f32[0] = 0;  // origin.x
+  f32[1] = 1;  // origin.y (center near y=1 for this attractor)
+  f32[2] = 0;  // origin.z
+  f32[3] = 1;  // scale
+  u32[4] = stepCount;
+  device.queue.writeBuffer(initUniformBuffer, 0, uniformData);
+
+  const encoder = device.createCommandEncoder();
+  const pass = encoder.beginComputePass();
+  pass.setPipeline(initPipeline);
+  pass.setBindGroup(0, initBindGroup);
+  pass.dispatchWorkgroups(Math.ceil(particleCount / 64));
+  pass.end();
+  device.queue.submit([encoder.finish()]);
+
+  simState.currentColumn = 0;
+  simState.t = 0;
+  renderState.dirty = true;
+}
+
+// Initialize on load and restart
+initializeState();
+
+invalidation.then(() => {
+  initUniformBuffer.destroy();
+});
+  </script>
+  <script id="explanation-integration" type="text/markdown">
+### Integration
+
+To step the ODE, we use the [fourth-order Runge-Kutta](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method) (RK4) method. RK4 achieves high accuracy by sampling the derivative at four points within each time step and taking a weighted average.
+
+The integration compute shader reads the current state from our main state texture, computes the RK4 step, and writes the result to a temporary single-column texture. We then run a second compute shader to copy that column back into the main state texture at the next ring buffer position.
+
+Why the two-step process? The `rgba32float` texture format doesn't support simultaneous read and write access (`read_write` storage) in WebGPU. We must use separate textures for input and output, then copy the result back.
+  </script>
+  <script id="explanation-attractor" type="text/markdown">
+### The Attractor
+
+A strange attractor is a set of states toward which a dynamical system evolves over time. The particular attractor we're simulating here is defined by the system of differential equations:
+
+${tex.block`\begin{aligned}
+\frac{dx}{dt} &= \alpha x(1 - y) - \beta z \\[0.5em]
+\frac{dy}{dt} &= -\gamma y(1 - x^2) \\[0.5em]
+\frac{dz}{dt} &= \mu x
+\end{aligned}`}
+
+with parameters ${tex`\alpha = 3`}, ${tex`\beta = 2.2`}, ${tex`\gamma = 1`}, ${tex`\mu = 1.51`}. These equations exhibit chaotic behavior—nearby trajectories diverge exponentially, yet remain bounded within the attractor's basin.
+  </script>
+  <script id="attractor-wgsl" type="module">
+// The strange attractor equations
+const attractorWGSL = /* wgsl */`
+fn derivative(x: f32, y: f32, z: f32, t: f32) -> vec3f {
+  let alpha = 3.0;
+  let beta = 2.20;
+  let gamma = 1.0;
+  let mu = 1.510;
+  return vec3f(
+    alpha * x * (1.0 - y) - beta * z,
+    -gamma * y * (1.0 - x * x),
+    mu * x
+  );
+}
+`;
+  </script>
+  <script id="integrate-shader" type="module">
+// Integration shader: reads from state texture, writes to temporary column
+const integrateShaderCode = /* wgsl */`
+@group(0) @binding(0) var stateTex: texture_2d<f32>;
+@group(0) @binding(1) var outputTex: texture_storage_2d<rgba32float, write>;
+
+struct Uniforms {
+  dt: f32,
+  t: f32,
+  srcColumn: u32,
+  particleCount: u32,
+}
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+${attractorWGSL}
+
+fn deriv(p: vec3f, t: f32) -> vec3f {
+  return derivative(p.x, p.y, p.z, t);
+}
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3u) {
+  let particle = gid.x;
+  if (particle >= uniforms.particleCount) { return; }
+
+  // Read current state from source column
+  let srcCoord = vec2u(uniforms.srcColumn, particle);
+  let p = textureLoad(stateTex, srcCoord, 0).xyz;
+
+  // RK4 integration
+  let dt = uniforms.dt;
+  let t = uniforms.t;
+  let k1 = deriv(p, t);
+  let k2 = deriv(p + 0.5 * dt * k1, t + 0.5 * dt);
+  let k3 = deriv(p + 0.5 * dt * k2, t + 0.5 * dt);
+  let k4 = deriv(p + dt * k3, t + dt);
+
+  var newP = p + (dt / 6.0) * (k1 + k4 + 2.0 * (k2 + k3));
+
+  // If particle diverges, reset near origin
+  if (dot(newP, newP) > 1e6) {
+    newP = newP * 0.0001;
+  }
+
+  // Write to temporary column texture (column 0)
+  textureStore(outputTex, vec2u(0, particle), vec4f(newP, 1.0));
+}
+`;
+
+const integrateShaderModule = device.createShaderModule({
+  label: 'integrate-shader',
+  code: integrateShaderCode
+});
+
+const integratePipeline = device.createComputePipeline({
+  label: 'integrate-pipeline',
+  layout: 'auto',
+  compute: {
+    module: integrateShaderModule,
+    entryPoint: 'main'
+  }
+});
+
+const integrateUniformBuffer = device.createBuffer({
+  label: 'integrate-uniforms',
+  size: 16, // f32 dt + f32 t + u32 srcColumn + u32 particleCount
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+});
+
+const integrateBindGroup = device.createBindGroup({
+  label: 'integrate-bind-group',
+  layout: integratePipeline.getBindGroupLayout(0),
+  entries: [
+    { binding: 0, resource: stateTexture.createView() },
+    { binding: 1, resource: tmpColumnTexture.createView() },
+    { binding: 2, resource: { buffer: integrateUniformBuffer } }
+  ]
+});
+
+invalidation.then(() => {
+  integrateUniformBuffer.destroy();
+});
+  </script>
+  <script id="copy-shader" type="module">
+// Copy shader: copies temporary column back to main state texture
+const copyShaderCode = /* wgsl */`
+@group(0) @binding(0) var srcTex: texture_2d<f32>;
+@group(0) @binding(1) var dstTex: texture_storage_2d<rgba32float, write>;
+
+struct Uniforms {
+  dstColumn: u32,
+  particleCount: u32,
+}
+@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+
+@compute @workgroup_size(64)
+fn main(@builtin(global_invocation_id) gid: vec3u) {
+  let particle = gid.x;
+  if (particle >= uniforms.particleCount) { return; }
+
+  let value = textureLoad(srcTex, vec2u(0, particle), 0);
+  textureStore(dstTex, vec2u(uniforms.dstColumn, particle), value);
+}
+`;
+
+const copyShaderModule = device.createShaderModule({
+  label: 'copy-shader',
+  code: copyShaderCode
+});
+
+const copyPipeline = device.createComputePipeline({
+  label: 'copy-pipeline',
+  layout: 'auto',
+  compute: {
+    module: copyShaderModule,
+    entryPoint: 'main'
+  }
+});
+
+const copyUniformBuffer = device.createBuffer({
+  label: 'copy-uniforms',
+  size: 8, // u32 dstColumn + u32 particleCount
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+});
+
+const copyBindGroup = device.createBindGroup({
+  label: 'copy-bind-group',
+  layout: copyPipeline.getBindGroupLayout(0),
+  entries: [
+    { binding: 0, resource: tmpColumnTexture.createView() },
+    { binding: 1, resource: stateTexture.createView() },
+    { binding: 2, resource: { buffer: copyUniformBuffer } }
+  ]
+});
+
+invalidation.then(() => {
+  copyUniformBuffer.destroy();
+});
+  </script>
+  <script id="explanation-rendering" type="text/markdown">
+## Line Rendering
+
+In the timeless words of Matt DesLauriers, *[Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard)*. All browsers limit the built-in line primitive to a single pixel width, so for any reasonably well-rendered lines, we need to build our own geometry.
+
+The [webgpu-lines](../webgpu-lines/) module handles this. It renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus portions of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.
+
+The key insight is that we don't pass vertex positions directly. Instead, we provide a **vertex function** that the module calls for each point index. This function can sample data from any source—in our case, the state texture. The module handles all the complexity of building smooth joins and round caps.
+
+### Texture Coordinate Lookup
+
+Rather than copying positions to vertex buffers each frame, we sample them directly from the state texture in the vertex shader. Each vertex index maps to a texture coordinate:
+
+${tex.block`\mathbf{u}_j^{(i)} = \left(\frac{j + \frac{1}{2}}{M}, \frac{i + \frac{1}{2}}{N}\right)`}
+
+where ${tex`M`} is the number of time steps and ${tex`N`} is the number of particles. The half-texel offset centers coordinates on texel centers for proper sampling.
+
+To handle the ring buffer, we add an offset to the texture coordinate that shifts based on which column was most recently written. The oldest data is always at the "start" of the rendered line, and the newest at the end.
+
+### Line Breaks
+
+Multiple particle tracks are rendered in a single draw call. We separate them using **sentinel values**—vertices with \`w = 0\` in clip space. When the vertex function returns a position with \`w = 0\`, the line renderer interprets this as a break between separate lines.
+  </script>
+  <script id="camera-setup" type="module">
+// Simple orbital camera using mouse drag
+// phi = azimuthal angle (rotation around Y axis)
+// theta = polar angle (elevation from horizontal plane, positive = looking down)
+const cameraState = {
+  phi: 0.8,
+  theta: 0.3,
+  distance: 7,
+  center: [0, 1, 0],
+  fov: Math.PI / 4,
+  near: 0.01,
+  far: 100
+};
+
+function getProjectionViewMatrix(aspectRatio) {
+  const { phi, theta, distance, center, fov, near, far } = cameraState;
+
+  // Camera position in spherical coordinates
+  const x = center[0] + distance * Math.cos(theta) * Math.cos(phi);
+  const y = center[1] + distance * Math.sin(theta);
+  const z = center[2] + distance * Math.cos(theta) * Math.sin(phi);
+
+  // View matrix (lookAt)
+  const eye = [x, y, z];
+  const forward = [center[0] - x, center[1] - y, center[2] - z];
+  const len = Math.sqrt(forward[0]**2 + forward[1]**2 + forward[2]**2);
+  forward[0] /= len; forward[1] /= len; forward[2] /= len;
+
+  const up = [0, 1, 0];
+  const right = [
+    forward[1] * up[2] - forward[2] * up[1],
+    forward[2] * up[0] - forward[0] * up[2],
+    forward[0] * up[1] - forward[1] * up[0]
+  ];
+  const rlen = Math.sqrt(right[0]**2 + right[1]**2 + right[2]**2);
+  right[0] /= rlen; right[1] /= rlen; right[2] /= rlen;
+
+  const newUp = [
+    right[1] * forward[2] - right[2] * forward[1],
+    right[2] * forward[0] - right[0] * forward[2],
+    right[0] * forward[1] - right[1] * forward[0]
+  ];
+
+  // View matrix
+  const view = new Float32Array([
+    right[0], newUp[0], -forward[0], 0,
+    right[1], newUp[1], -forward[1], 0,
+    right[2], newUp[2], -forward[2], 0,
+    -(right[0]*eye[0] + right[1]*eye[1] + right[2]*eye[2]),
+    -(newUp[0]*eye[0] + newUp[1]*eye[1] + newUp[2]*eye[2]),
+    (forward[0]*eye[0] + forward[1]*eye[1] + forward[2]*eye[2]),
+    1
+  ]);
+
+  // Projection matrix (perspective)
+  const f = 1.0 / Math.tan(fov / 2);
+  const rangeInv = 1 / (near - far);
+  const proj = new Float32Array([
+    f / aspectRatio, 0, 0, 0,
+    0, f, 0, 0,
+    0, 0, (near + far) * rangeInv, -1,
+    0, 0, near * far * rangeInv * 2, 0
+  ]);
+
+  // Multiply proj * view
+  const result = new Float32Array(16);
+  for (let i = 0; i < 4; i++) {
+    for (let j = 0; j < 4; j++) {
+      let sum = 0;
+      for (let k = 0; k < 4; k++) {
+        sum += proj[i + k*4] * view[k + j*4];
+      }
+      result[i + j*4] = sum;
+    }
+  }
+
+  return result;
+}
+
+// Wire up mouse drag for camera rotation
+const svg = d3.select(stack.elements.svg);
+let isDragging = false;
+let lastX = 0, lastY = 0;
+
+function onMouseMove(event) {
+  if (!isDragging) return;
+  const dx = event.clientX - lastX;
+  const dy = event.clientY - lastY;
+  cameraState.phi += dx * 0.01;
+  cameraState.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, cameraState.theta + dy * 0.01));
+  lastX = event.clientX;
+  lastY = event.clientY;
+  renderState.dirty = true;
+}
+
+function onMouseUp() {
+  if (!isDragging) return;
+  isDragging = false;
+  svg.style('cursor', 'grab');
+  window.removeEventListener('mousemove', onMouseMove);
+  window.removeEventListener('mouseup', onMouseUp);
+}
+
+svg.on('mousedown', (event) => {
+  event.preventDefault();  // Prevent text selection
+  isDragging = true;
+  lastX = event.clientX;
+  lastY = event.clientY;
+  svg.style('cursor', 'grabbing');
+  // Attach to window so drag continues even when mouse leaves canvas
+  window.addEventListener('mousemove', onMouseMove);
+  window.addEventListener('mouseup', onMouseUp);
+});
+
+svg.on('wheel', (event) => {
+  event.preventDefault();
+  cameraState.distance *= 1 + event.deltaY * 0.001;
+  cameraState.distance = Math.max(1, Math.min(50, cameraState.distance));
+  renderState.dirty = true;
+});
+  </script>
+  <script id="line-rendering" type="module">
+import { createGPULines } from '../webgpu-lines/webgpu-lines.js';
+
+// Vertex shader that samples the state texture
+const vertexShaderBody = /* wgsl */`
+@group(1) @binding(0) var stateTex: texture_2d<f32>;
+@group(1) @binding(1) var<uniform> projViewMatrix: mat4x4f;
+
+struct LineUniforms {
+  texOffset: f32,
+  stepCount: f32,
+  particleCount: f32,
+}
+@group(1) @binding(2) var<uniform> lineUniforms: LineUniforms;
+
+struct Vertex {
+  position: vec4f,
+  width: f32,
+  particleId: f32,
+}
+
+fn getVertex(index: u32) -> Vertex {
+  // Decode texture coordinates from index
+  // Index layout: for each particle, stepCount points, then a break
+  let pointsPerParticle = u32(lineUniforms.stepCount) + 1u; // +1 for line break
+  let particle = index / pointsPerParticle;
+  let step = index % pointsPerParticle;
+
+  // Check if this is a line break point
+  if (step >= u32(lineUniforms.stepCount)) {
+    return Vertex(vec4f(0.0, 0.0, 0.0, 0.0), 0.0, f32(particle));
+  }
+
+  // Compute texture coordinate with ring buffer offset
+  let texU = f32(step) + 0.5;
+  let texV = f32(particle) + 0.5;
+  let offsetU = fract(texU / lineUniforms.stepCount + lineUniforms.texOffset);
+  let texCoord = vec2u(u32(offsetU * lineUniforms.stepCount), particle);
+
+  // Sample position from state texture
+  let pos = textureLoad(stateTex, texCoord, 0).xyz;
+
+  // Project to clip space
+  let projected = projViewMatrix * vec4f(pos, 1.0);
+
+  // Use particle ID for slight z offset to reduce z-fighting
+  var p = projected;
+  let w = p.w;
+  p = p / w;
+  p.z = p.z - 0.0002 * abs(f32(particle) / lineUniforms.particleCount - 0.5);
+  p = p * w;
+
+  return Vertex(p, uniforms.width, f32(particle) / lineUniforms.particleCount);
+}
+`;
+
+const fragmentShaderBody = /* wgsl */`
+fn getColor(lineCoord: vec2f, particleId: f32) -> vec4f {
+  let color1 = vec3f(0.55, 0.89, 0.65);
+  let color2 = vec3f(0.11, 0.32, 0.65);
+  let baseColor = mix(color1, color2, particleId);
+
+  let borderColor = vec3f(1.0);
+  let color = mix(baseColor, borderColor, smoothstep(0.5, 0.9, length(lineCoord.xy)));
+
+  return vec4f(color, 1.0);
+}
+`;
+
+const gpuLines = createGPULines(device, {
+  format: canvasFormat,
+  depthFormat: 'depth24plus',
+  join: 'bevel',
+  cap: 'round',
+  capResolution: 4,
+  vertexShaderBody,
+  fragmentShaderBody,
+});
+
+// Create buffers for line rendering
+const projViewBuffer = device.createBuffer({
+  label: 'proj-view-matrix',
+  size: 64,
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+});
+
+const lineUniformBuffer = device.createBuffer({
+  label: 'line-uniforms',
+  size: 16, // texOffset, stepCount, particleCount + padding
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+});
+
+const lineBindGroup = device.createBindGroup({
+  layout: gpuLines.getBindGroupLayout(1),
+  entries: [
+    { binding: 0, resource: stateTexture.createView() },
+    { binding: 1, resource: { buffer: projViewBuffer } },
+    { binding: 2, resource: { buffer: lineUniformBuffer } }
+  ]
+});
+
+invalidation.then(() => {
+  gpuLines.destroy();
+  projViewBuffer.destroy();
+  lineUniformBuffer.destroy();
+});
+  </script>
+  <script id="axes-rendering" type="module">
+// Axes renderer - X (red), Y (green), Z (blue)
+// Uses createGPULines from the previous cell
+const axisRange = 5;
+
+// Axes vertex data: 3 axes, 2 points each, with line breaks between
+// Layout: [X start, X end, break, Y start, Y end, break, Z start, Z end]
+const axesPositions = new Float32Array([
+  -axisRange, 0, 0, 1,  // X axis start
+   axisRange, 0, 0, 1,  // X axis end
+  0, 0, 0, 0,           // line break
+  0, -axisRange, 0, 1,  // Y axis start
+  0,  axisRange, 0, 1,  // Y axis end
+  0, 0, 0, 0,           // line break
+  0, 0, -axisRange, 1,  // Z axis start
+  0, 0,  axisRange, 1,  // Z axis end
+]);
+
+// Color index: 0 = X (red), 1 = Y (green), 2 = Z (blue)
+const axesColors = new Float32Array([
+  0, 0, 0, 1, 1, 0, 2, 2
+]);
+
+const axesPositionBuffer = device.createBuffer({
+  label: 'axes-positions',
+  size: axesPositions.byteLength,
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+});
+device.queue.writeBuffer(axesPositionBuffer, 0, axesPositions);
+
+const axesColorBuffer = device.createBuffer({
+  label: 'axes-colors',
+  size: axesColors.byteLength,
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+});
+device.queue.writeBuffer(axesColorBuffer, 0, axesColors);
+
+const axesVertexShader = /* wgsl */`
+@group(1) @binding(0) var<storage, read> positions: array<vec4f>;
+@group(1) @binding(1) var<storage, read> colorIndices: array<f32>;
+@group(1) @binding(2) var<uniform> projViewMatrix: mat4x4f;
+
+struct Vertex {
+  position: vec4f,
+  width: f32,
+  colorIndex: f32,
+}
+
+fn getVertex(index: u32) -> Vertex {
+  let pos = positions[index];
+  let colorIdx = colorIndices[index];
+  let projected = projViewMatrix * vec4f(pos.xyz, 1.0);
+  return Vertex(vec4f(projected.xyz, pos.w * projected.w), uniforms.width, colorIdx);
+}
+`;
+
+const axesFragmentShader = /* wgsl */`
+fn getColor(lineCoord: vec2f, colorIndex: f32) -> vec4f {
+  // X = red, Y = green, Z = blue
+  var color: vec3f;
+  let idx = i32(colorIndex + 0.5);
+  if (idx == 0) {
+    color = vec3f(0.9, 0.2, 0.2);  // Red for X
+  } else if (idx == 1) {
+    color = vec3f(0.2, 0.8, 0.2);  // Green for Y
+  } else {
+    color = vec3f(0.2, 0.4, 0.9);  // Blue for Z
+  }
+  return vec4f(color, 1.0);
+}
+`;
+
+const axesLines = createGPULines(device, {
+  format: canvasFormat,
+  depthFormat: 'depth24plus',
+  join: 'miter',
+  cap: 'round',
+  capResolution: 4,
+  vertexShaderBody: axesVertexShader,
+  fragmentShaderBody: axesFragmentShader,
+});
+
+const axesBindGroup = device.createBindGroup({
+  layout: axesLines.getBindGroupLayout(1),
+  entries: [
+    { binding: 0, resource: { buffer: axesPositionBuffer } },
+    { binding: 1, resource: { buffer: axesColorBuffer } },
+    { binding: 2, resource: { buffer: projViewBuffer } }  // Reuse projViewBuffer
+  ]
+});
+
+invalidation.then(() => {
+  axesLines.destroy();
+  axesPositionBuffer.destroy();
+  axesColorBuffer.destroy();
+});
+  </script>
+  <script id="explanation-draw-loop" type="text/markdown">
+## Draw Loop
+
+Finally, we put it all together into a frame loop. Each frame:
+
+1. If simulating, dispatch the **integrate** compute shader to compute new particle positions
+2. Dispatch the **copy** compute shader to write results back to the state texture
+3. Update the camera's projection-view matrix
+4. Update the texture offset uniform so lines render from oldest to newest
+5. Begin a render pass and **draw lines** by calling into the webgpu-lines module
+
+The simulation and rendering are decoupled—we can pause simulation while still allowing camera interaction. The `renderState.dirty` flag tracks whether we need to redraw.
+  </script>
+  <script id="render-loop" type="module">
+import { createFrameLoop } from './lib/frame-loop.js';
+
+lineWidth; simulate; dt;
+
+const loop = createFrameLoop(() => {
+  // Simulation step
+  if (simulate) {
+    // Calculate source and destination columns
+    const srcColumn = simState.currentColumn;
+    const dstColumn = (simState.currentColumn + 1) % stepCount;
+
+    // Update integration uniforms (dt, t, srcColumn, particleCount)
+    const integrateData = new ArrayBuffer(16);
+    const f32 = new Float32Array(integrateData);
+    const u32 = new Uint32Array(integrateData);
+    f32[0] = dt;
+    f32[1] = simState.t;
+    u32[2] = srcColumn;
+    u32[3] = particleCount;
+    device.queue.writeBuffer(integrateUniformBuffer, 0, integrateData);
+
+    // Update copy uniforms (dstColumn, particleCount)
+    const copyData = new ArrayBuffer(8);
+    const copyU32 = new Uint32Array(copyData);
+    copyU32[0] = dstColumn;
+    copyU32[1] = particleCount;
+    device.queue.writeBuffer(copyUniformBuffer, 0, copyData);
+
+    // Run integration and copy in sequence
+    const encoder = device.createCommandEncoder();
+
+    // Step 1: Integrate - read from state, write to temp column
+    const integratePass = encoder.beginComputePass();
+    integratePass.setPipeline(integratePipeline);
+    integratePass.setBindGroup(0, integrateBindGroup);
+    integratePass.dispatchWorkgroups(Math.ceil(particleCount / 64));
+    integratePass.end();
+
+    // Step 2: Copy - read from temp column, write to state
+    const copyPass = encoder.beginComputePass();
+    copyPass.setPipeline(copyPipeline);
+    copyPass.setBindGroup(0, copyBindGroup);
+    copyPass.dispatchWorkgroups(Math.ceil(particleCount / 64));
+    copyPass.end();
+
+    device.queue.submit([encoder.finish()]);
+
+    // Advance time and column
+    simState.t += dt;
+    simState.currentColumn = dstColumn;
+    renderState.dirty = true;
+  }
+
+  // Render
+  if (renderState.dirty) {
+    const aspectRatio = canvas.width / canvas.height;
+    const projView = getProjectionViewMatrix(aspectRatio);
+    device.queue.writeBuffer(projViewBuffer, 0, projView);
+
+    // Update line uniforms
+    const lineData = new ArrayBuffer(16);
+    const f32 = new Float32Array(lineData);
+    f32[0] = (simState.currentColumn - stepCount + 1) / stepCount; // texOffset
+    f32[1] = stepCount;
+    f32[2] = particleCount;
+    device.queue.writeBuffer(lineUniformBuffer, 0, lineData);
+
+    const encoder = device.createCommandEncoder();
+
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: gpuContext.getCurrentTexture().createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+        clearValue: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }
+      }],
+      depthStencilAttachment: {
+        view: renderState.depthTexture.createView(),
+        depthClearValue: 1.0,
+        depthLoadOp: 'clear',
+        depthStoreOp: 'store'
+      }
+    });
+
+    // Draw axes first (so they appear behind the attractor)
+    // axesLines.draw(pass, {
+    //   vertexCount: 8,  // 3 axes × 2 points + 2 line breaks
+    //   width: 2 * dpr,
+    //   resolution: [canvas.width, canvas.height]
+    // }, [axesBindGroup]);
+
+    // Total vertex count: (stepCount + 1) per particle for line breaks
+    const totalVertexCount = particleCount * (stepCount + 1);
+
+    gpuLines.draw(pass, {
+      vertexCount: totalVertexCount,
+      width: lineWidth * dpr,
+      resolution: [canvas.width, canvas.height]
+    }, [lineBindGroup]);
+
+    pass.end();
+    device.queue.submit([encoder.finish()]);
+
+    if (!simulate) {
+      renderState.dirty = false;
+    }
+  }
+});
+
+invalidation.then(() => loop.cancel());
+  </script>
+  <script id="restart-handler" type="module">
+// Handle restart button
+restart;
+initializeState();
+  </script>
+  <script id="conclusion" type="text/markdown">
+## Summary
+
+We've built a complete GPU-based particle simulation with the following components:
+
+- **State storage**: A 2D texture where each row is a particle's history as a ring buffer
+- **Initialization**: A compute shader that fills the state with quasirandom starting positions
+- **Integration**: A compute shader that advances the ODE using RK4, writing to a temporary texture
+- **Copy**: A compute shader that transfers the new column back to the main state texture
+- **Rendering**: Instanced line drawing that samples positions directly from the state texture
+
+The entire simulation runs on the GPU. The CPU only dispatches work and updates a handful of uniform values each frame. This architecture scales well—you can simulate thousands of particles with long track histories while maintaining interactive frame rates.
+
+The techniques here generalize beyond strange attractors. Any particle system where you want to visualize trails—fluid simulations, n-body systems, gradient flows—can use this same ring buffer approach for efficient GPU-based track rendering.
+  </script>
+</notebook>

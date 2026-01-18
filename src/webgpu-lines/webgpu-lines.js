@@ -72,6 +72,7 @@ function findFunctionReturnType(code, functionName) {
  * @param {string} [options.cap='round'] - Cap type: 'round', 'square', or 'none'
  * @param {number} [options.capResolution=8] - Resolution for round caps
  * @param {object} [options.blend] - Optional blend state for alpha blending
+ * @param {GPUTextureFormat} [options.depthFormat] - Optional depth format for depth testing (e.g., 'depth24plus')
  */
 export function createGPULines(device, options) {
   const {
@@ -87,6 +88,7 @@ export function createGPULines(device, options) {
     cap = 'round',
     capResolution: userCapResolution = 8,
     blend = null,
+    depthFormat = null,
   } = options;
 
   // Parse user's vertex struct to find varyings
@@ -179,7 +181,7 @@ export function createGPULines(device, options) {
   });
 
   // Use 'auto' layout so user's bind groups are inferred from shader
-  const pipeline = device.createRenderPipeline({
+  const pipelineDescriptor = {
     label: 'gpu-lines',
     layout: 'auto',
     vertex: {
@@ -195,7 +197,18 @@ export function createGPULines(device, options) {
       topology: 'triangle-strip',
       stripIndexFormat: undefined
     }
-  });
+  };
+
+  // Add depth stencil state if depthFormat is specified
+  if (depthFormat) {
+    pipelineDescriptor.depthStencil = {
+      format: depthFormat,
+      depthWriteEnabled: true,
+      depthCompare: 'less'
+    };
+  }
+
+  const pipeline = device.createRenderPipeline(pipelineDescriptor);
 
   // Uniform buffer layout (48 bytes):
   // resolution(8) + vertCnt2(8) + miterLimit(4) + isRound(4) + width(4) + pointCount(4) + insertCaps(4) + pad(4) + capScale(8)

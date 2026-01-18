@@ -555,15 +555,15 @@
 
     The renderer uses **instanced rendering** with triangle strips. For a line with N points, it draws N-1 instances, where each instance renders one line segment plus half of the join geometry on each end. End caps are simply joins stretched around to form a cap.
 
-    The geometry is carefully generated to optimize for high-performance rendering without the full rigor of stroke expansion algorithms, which handle self-intersection more carefully. It is also designed to permit uniform stroke widths using `lineCoord`—the varying is constructed so that `length(lineCoord)` gives consistent radial distance from the line center across both segments and caps.
+    The geometry is carefully generated to optimize for high-performance rendering without the full rigor of stroke expansion algorithms, which handle self-intersection more carefully. The `lineCoord` varying is constructed so that `length(lineCoord)` gives consistent radial distance from the line center across both segments and caps, permitting uniform stroke widths.
 
     ### Features
     - Instanced rendering with triangle strips
-    - Screen-projected lines using a custom vertex function. The vertex function allows you to input whatever geometry you want—whether computed in-shader, from buffer geometry, or sampled from textures or other sources. It also lets you define how varying values, line widths, and vertex projection are performed, all at runtime in the shader.
+    - Screen-projected lines using a custom vertex function that can read geometry from buffers, textures, or procedural computation. The vertex function also defines varying values, line widths, and vertex projection at runtime in the shader.
     - Bevel, miter, and round joins
     - Round, square, and butt end caps
     - Line breaks via `w = 0` sentinel value
-    - A `lineCoord` varying allows you to construct SDF stroke outlines with anti-aliasing
+    - A `lineCoord` varying that can be used to construct SDF stroke outlines with anti-aliasing
 
     ### Limitations
 
@@ -573,18 +573,13 @@
 
     ### Shader Interface
 
-    You provide two pieces of WGSL code:
+    You provide two pieces of WGSL code.
 
-    1. **`vertexShaderBody`**: Defines how to fetch and transform vertex data. You write:
-       - Bind group declarations (`@group(1)` and higher) for your data
-       - A struct containing `position: vec4f`, `width: f32`, and any custom varyings
-       - A function (default name `getVertex`) that takes a point index and returns your struct
+    **`vertexShaderBody`** defines how to fetch and transform vertex data. You write bind group declarations (`@group(1)` and higher) for your data, a struct containing `position: vec4f`, `width: f32`, and any custom varyings, and a function (default name `getVertex`) that takes a point index and returns your struct.
 
-    2. **`fragmentShaderBody`**: Defines how to color the line. You write a `getColor` function that receives `lineCoord: vec2f` plus any varyings from your struct.
+    **`fragmentShaderBody`** defines how to color the line. You write a `getColor` function that receives `lineCoord: vec2f` plus any varyings from your struct.
 
-    The library parses your struct to identify the position, width, and varying fields automatically.
-
-    **Bind groups**: The library reserves `@group(0)` for its internal uniforms. Your shader code should use `@group(1)` and higher for your own data (position buffers, textures, custom uniforms).
+    The library parses your struct to identify the position, width, and varying fields automatically. The library reserves `@group(0)` for its internal uniforms. Your shader code should use `@group(1)` and higher for your own data.
 
     Example:
     ```wgsl
@@ -614,11 +609,9 @@
 
     ### Vertex Window
 
-    Internally, each instance calls `getVertex` for a **4-point window** of adjacent vertices:
-    - **A** (previous) and **D** (next) provide direction for computing join angles
-    - **B** (start) and **C** (end) define the segment being drawn
+    Internally, each instance calls `getVertex` for a 4-point window of adjacent vertices. Points **A** (previous) and **D** (next) provide direction for computing join angles. Points **B** (start) and **C** (end) define the segment being drawn.
 
-    Within each instance, a **vertex index** (0 to ~30, depending on join/cap resolution) expands into the triangle strip vertices. The vertex shader uses this index to compute screen-space offsets perpendicular to the line direction, forming the segment body, joins, and caps.
+    Within each instance, a vertex index (0 to ~30, depending on join/cap resolution) expands into the triangle strip vertices. The vertex shader uses this index to compute screen-space offsets perpendicular to the line direction, forming the segment body, joins, and caps.
 
   </script>
   <script id="16" type="text/markdown">
@@ -640,9 +633,9 @@
     ### Options
   </script>
   <script id="18" type="text/markdown">
-    #### `join` - Join Type
+    #### `join`
 
-    Controls how line segments are connected at vertices. Options: `'bevel'`, `'miter'`, `'round'`.
+    Controls how line segments are connected at vertices. Options are `'bevel'`, `'miter'`, and `'round'`.
   </script>
   <script id="19" type="module">
     {
@@ -675,9 +668,9 @@
     }
   </script>
   <script id="20" type="text/markdown">
-    #### `cap` - Cap Type
+    #### `cap`
 
-    Controls how line endpoints are rendered. Options: `'round'`, `'square'`, `'none'`.
+    Controls how line endpoints are rendered. Options are `'round'`, `'square'`, and `'none'`.
   </script>
   <script id="21" type="module">
     {
@@ -710,9 +703,9 @@
     }
   </script>
   <script id="22" type="text/markdown">
-    #### `miterLimit` - Miter Limit
+    #### `miterLimit`
 
-    When using `join: 'miter'`, this controls when sharp angles fall back to bevel joins. Lower values create more bevels; higher values allow longer miter points. Default: `4`.
+    When using `join: 'miter'`, this controls when sharp angles fall back to bevel joins. Lower values create more bevels. Higher values allow longer miter points. Default is `4`.
   </script>
   <script id="23" type="module">
     {
@@ -745,9 +738,9 @@
     }
   </script>
   <script id="24" type="text/markdown">
-    #### `joinResolution` / `capResolution`
+    #### `joinResolution` and `capResolution`
 
-    Controls the number of triangles used for round joins and caps. Higher values create smoother curves. Default: `8`.
+    Control the number of triangles used for round joins and caps. Higher values create smoother curves. Default is `8`.
   </script>
   <script id="25" type="module">
     {
@@ -816,9 +809,9 @@
     The library supports custom WGSL shaders for advanced rendering effects. Provide shader code via the `fragmentShaderBody` and `vertexShaderBody` options.
   </script>
   <script id="29" type="text/markdown">
-    #### `fragmentShaderBody` - Custom Coloring
+    #### `fragmentShaderBody`
 
-    The fragment shader controls how lines are colored. Your code must define a `getColor` function:
+    The fragment shader controls how lines are colored. Your code must define a `getColor` function.
 
     ```wgsl
     fn getColor(lineCoord: vec2f) -> vec4f {
@@ -829,24 +822,21 @@
 
     The `lineCoord` parameter provides spatial information about the current fragment (see below).
 
-    **Varyings:** Any fields in your `Vertex` struct beyond `position` and `width` become varyings, interpolated across the line and passed as additional parameters to `getColor`. For example, if your struct includes `dist: f32`, your function signature becomes `fn getColor(lineCoord: vec2f, dist: f32) -> vec4f`.
+    Any fields in your `Vertex` struct beyond `position` and `width` become varyings, interpolated across the line and passed as additional parameters to `getColor`. For example, if your struct includes `dist: f32`, your function signature becomes `fn getColor(lineCoord: vec2f, dist: f32) -> vec4f`.
 
-    **Debug parameters (optional):** If your shader code references `instanceID`, the library will automatically pass two additional parameters: `instanceID: f32` (segment index, negative for end caps) and `triStripCoord: vec2f` (triangle strip vertex coordinates for wireframe visualization). These are useful for debug views showing the internal triangle strip structure.
+    If your shader code references `instanceID`, the library will automatically pass two additional parameters, `instanceID: f32` (segment index, negative for end caps) and `triStripCoord: vec2f` (triangle strip vertex coordinates for wireframe visualization). These are useful for debug views showing the internal triangle strip structure.
   </script>
   <script id="30" type="text/markdown">
     #### `lineCoord` Values
 
     | Component | Segments/Joins | Caps | Description |
     |-----------|----------------|------|-------------|
-    | `lineCoord.x` | 0 | sin(θ) × sign | For segments: always 0. For caps: varies around the semicircle. |
+    | `lineCoord.x` | 0 | sin(θ) × sign | Always 0 for segments. Varies around the semicircle for caps. |
     | `lineCoord.y` | -1 to 1 | cos(θ) × sign | Position across the line. 0 at center, ±1 at edges. |
 
-    The `lineCoord` values are designed for **SDF (signed distance field)** rendering:
-    - `length(lineCoord)` gives radial distance from line center (0 at center, 1 at edge)
-    - For segments: `length(lineCoord) = abs(lineCoord.y)` since x=0
-    - For caps: `length(lineCoord) = 1` on the outer edge (unit circle)
+    The `lineCoord` values are designed for SDF (signed distance field) rendering. `length(lineCoord)` gives radial distance from line center (0 at center, 1 at edge). For segments, `length(lineCoord) = abs(lineCoord.y)` since x=0. For caps, `length(lineCoord) = 1` on the outer edge (unit circle).
 
-    **Dashed lines:** `lineCoord.x` does NOT provide distance along the line. To implement dashes, add a cumulative distance field to your `Vertex` struct. It will be interpolated and passed to `getColor` as an extra parameter. See the interactive demo's "Stripes" option for an example.
+    Note that `lineCoord.x` does NOT provide distance along the line. To implement dashes, add a cumulative distance field to your `Vertex` struct. It will be interpolated and passed to `getColor` as an extra parameter. See the interactive demo's "Stripes" option for an example.
   </script>
   <script id="31" type="module">
     {
@@ -891,7 +881,7 @@
   <script id="32" type="text/markdown">
     #### Example Shaders
 
-    **Solid color with edge darkening:**
+    Solid color with edge darkening.
     ```wgsl
     fn getColor(lineCoord: vec2f) -> vec4f {
       let edge = 1.0 - 0.3 * abs(lineCoord.y);
@@ -899,16 +889,15 @@
     }
     ```
 
-    **Cross-line stripes** (using `lineCoord.y`):
+    Cross-line stripes using `lineCoord.y`.
     ```wgsl
     fn getColor(lineCoord: vec2f) -> vec4f {
-      // Stripes perpendicular to line direction
       let stripe = step(0.0, lineCoord.y);
       return vec4f(stripe * 0.2, 0.5, 0.9 - stripe * 0.4, 1.0);
     }
     ```
 
-    **SDF stroke with anti-aliasing:**
+    SDF stroke with anti-aliasing.
     ```wgsl
     fn linearstep(a: f32, b: f32, x: f32) -> f32 {
       return clamp((x - a) / (b - a), 0.0, 1.0);
@@ -916,7 +905,6 @@
     fn getColor(lineCoord: vec2f) -> vec4f {
       let width = 20.0;
       let strokeWidth = 4.0;
-      // length(lineCoord) works for both segments and caps
       let sdf = 0.5 * width * length(lineCoord);
       let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
       let strokeMask = linearstep(
@@ -929,10 +917,9 @@
     }
     ```
 
-    **Note:** When using transparency or `discard`, enable alpha blending:
+    When using transparency or `discard`, enable alpha blending.
     ```javascript
     createGPULines(device, {
-      // ...
       blend: {
         color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
@@ -1013,20 +1000,17 @@
     }
   </script>
   <script id="34" type="text/markdown">
-    #### `vertexShaderBody` - Custom Vertex Data
+    #### `vertexShaderBody`
 
-    The vertex shader body defines how line positions and per-vertex data are computed. You provide:
-    1. **Bind group declarations** (group 1+) for your data (buffers, textures, etc.)
-    2. **A struct** defining the vertex output (position, optional width, and any varyings)
-    3. **A vertex function** that returns the struct given a point index
+    The vertex shader body defines how line positions and per-vertex data are computed. You provide bind group declarations (group 1+) for your data, a struct defining the vertex output, and a vertex function that returns the struct given a point index.
 
     ```wgsl
     @group(1) @binding(0) var<storage, read> positions: array<vec4f>;
     @group(1) @binding(1) var<uniform> viewMatrix: mat4x4f;
 
     struct Vertex {
-      position: vec4f,  // Required: clip-space position (w component controls line breaks)
-      width: f32,       // Optional: per-vertex line width
+      position: vec4f,  // Required, clip-space position (w component controls line breaks)
+      width: f32,       // Optional, per-vertex line width
       // Additional fields become varyings passed to fragment shader
     }
 
@@ -1037,36 +1021,22 @@
     }
     ```
 
-    **Options for customization:**
-    - `vertexFunction` - Name of your vertex function (default: `'getVertex'`)
-    - `positionField` - Name of position field in struct (default: `'position'`)
-    - `widthField` - Name of width field in struct (default: `'width'`)
+    Options for customization include `vertexFunction` (name of your vertex function, default `'getVertex'`), `positionField` (name of position field in struct, default `'position'`), and `widthField` (name of width field in struct, default `'width'`).
 
-    **Available library uniforms:**
-    - `uniforms.resolution: vec2f` - Canvas resolution in pixels
-    - `uniforms.width: f32` - Fallback line width (if no per-vertex width)
-    - `uniforms.pointCount: u32` - Number of points
+    Available library uniforms are `uniforms.resolution` (canvas resolution in pixels), `uniforms.width` (fallback line width if no per-vertex width), and `uniforms.pointCount` (number of points).
   </script>
   <script id="35" type="text/markdown">
     ### Drawing
 
     #### `gpuLines.draw(pass, props, bindGroups)`
 
-    Draws lines in a render pass.
-
-    **Props:**
-    - `vertexCount` - Number of points in the line
-    - `width` - Line width in pixels (fallback if no per-vertex width)
-    - `resolution` - Canvas resolution as `[width, height]`
-
-    **bindGroups** - Array of user bind groups for groups 1, 2, etc.
+    Draws lines in a render pass. The `props` object includes `vertexCount` (number of points in the line), `width` (line width in pixels, fallback if no per-vertex width), and `resolution` (canvas resolution as `[width, height]`). The `bindGroups` parameter is an array of user bind groups for groups 1, 2, etc.
 
     #### `gpuLines.getBindGroupLayout(index)`
 
     Returns the bind group layout for the specified group index. Use this to create bind groups for your data.
 
     ```javascript
-    // Create bind group for user data
     const dataBindGroup = device.createBindGroup({
       layout: gpuLines.getBindGroupLayout(1),
       entries: [
@@ -1075,7 +1045,6 @@
       ]
     });
 
-    // Draw
     const pass = encoder.beginRenderPass({ ... });
     gpuLines.draw(pass, {
       vertexCount: points.length,
@@ -1088,12 +1057,9 @@
   <script id="36" type="text/markdown">
     ### Position Data Format
 
-    Your vertex function returns a `vec4f` position:
-    - `x, y` - Position in clip space (-1 to 1)
-    - `z` - Depth value
-    - `w` - Set to `1` for valid points, `0` (or NaN for any component) for line breaks
+    Your vertex function returns a `vec4f` position. The `x` and `y` components are position in clip space (-1 to 1), `z` is depth, and `w` should be `1` for valid points or `0` (or NaN for any component) for line breaks.
 
-    Example with a storage buffer:
+    Example with a storage buffer.
     ```javascript
     const positions = new Float32Array([
       x0, y0, z0, w0,  // Point 0
