@@ -1538,17 +1538,20 @@ main h6 {
     <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This module implements high-performance, flexible GPU-accelerated line rendering for WebGPU. It is a direct port of <a href="https://github.com/rreusser/regl-gpu-lines">regl-gpu-lines</a> to WebGPU. The focus is on speed and customizability rather than sophisticated stroke expansion algorithms. For background on GPU line rendering, see Matt DesLauriers’ <a href="https://mattdesl.svbtle.com/drawing-lines-is-hard">Drawing Lines is Hard</a> and Rye Terrell’s <a href="https://wwwtyro.net/2019/11/18/instanced-lines.html">Instanced Line Rendering</a>. This library is a work in progress. You can find the <a href="https://github.com/rreusser/notebooks/tree/main/src/webgpu-lines">source on GitHub</a>, and it will eventually be published as a standalone NPM module.</p>
 <p><strong>Features:</strong></p>
 <ul>
-<li>Instanced rendering with triangle strips for high performance</li>
-<li>Screen-space line width (constant pixel width regardless of zoom)</li>
+<li>Instanced rendering with triangle strips</li>
+<li>Screen-projected lines using a custom vertex function. The vertex function allows you to input whatever geometry you want—whether computed in-shader, from buffer geometry, or sampled from textures or other sources. It also lets you define how varying values, line widths, and vertex projection are performed, all at runtime in the shader.</li>
 <li>Bevel, miter, and round joins</li>
 <li>Round, square, and butt end caps</li>
-<li>Line breaks via sentinel values</li>
-<li>SDF-based stroke outlines with anti-aliasing</li>
+<li>Line breaks via <code>w = 0</code> sentinel value</li>
+<li>A <code>lineCoord</code> varying allows you to construct SDF stroke outlines with anti-aliasing</li>
 </ul>
 </div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"><div><h2 id="interactive-demo" tabindex="-1"><a href="#interactive-demo">Interactive Demo</a></h2>
 <p>Explore the line rendering options with this interactive demo. Drag handles to edit vertices, drag the background to pan, and scroll to zoom.</p>
 </div></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><hr>
 <h2 id="how-it-works" tabindex="-1"><a href="#how-it-works">How It Works</a></h2>
+<h3 id="background" tabindex="-1"><a href="#background">Background</a></h3>
+<p>The renderer uses <strong>instanced rendering</strong> with triangle strips. For a line with N points, it draws N-1 instances, where each instance renders one line segment plus half of the join geometry on each end. End caps are simply joins stretched around to form a cap.</p>
+<p>The geometry is carefully generated to optimize for high-performance rendering without the full rigor of stroke expansion algorithms, which handle self-intersection more carefully. It is also designed to permit uniform stroke widths using <code>lineCoord</code>—the varying is constructed so that <code>length(lineCoord)</code> gives consistent radial distance from the line center across both segments and caps.</p>
 <h3 id="shader-interface" tabindex="-1"><a href="#shader-interface">Shader Interface</a></h3>
 <p>You provide two pieces of WGSL code:</p>
 <ol>
@@ -1588,8 +1591,7 @@ fn getColor(lineCoord: vec2f, distance: f32) -&gt; vec4f {
 </code></pre>
 <h3 id="line-breaks" tabindex="-1"><a href="#line-breaks">Line Breaks</a></h3>
 <p>To create a line break (splitting one line into multiple segments with separate end caps), have your <code>getVertex</code> function return a position with <code>w = 0</code> (or <code>NaN</code> in any component). The library detects these sentinel values and inserts caps on adjacent segments.</p>
-<h3 id="rendering-pipeline" tabindex="-1"><a href="#rendering-pipeline">Rendering Pipeline</a></h3>
-<p>The renderer uses <strong>instanced rendering</strong> with triangle strips. For a line with N points, it draws N-1 instances, where each instance renders one segment plus half of the join geometry on each end.</p>
+<h3 id="vertex-window" tabindex="-1"><a href="#vertex-window">Vertex Window</a></h3>
 <p>Each instance calls <code>getVertex</code> for a <strong>4-point window</strong> of adjacent vertices:</p>
 <ul>
 <li><strong>A</strong> (previous) and <strong>D</strong> (next) provide direction for computing join angles</li>
