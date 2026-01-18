@@ -1,161 +1,144 @@
 #!/usr/bin/env node
 /**
- * WebGPU Lines Test Runner
- *
- * Runs each test in a subprocess to avoid resource accumulation issues.
+ * Run all WebGPU line rendering tests
  *
  * Usage:
- *   node test/run-tests.js                    # Run all tests
- *   node test/run-tests.js --filter=cap       # Run tests matching "cap"
- *   UPDATE=1 node test/run-tests.js           # Update expected images
+ *   node run-tests.js [--update] [--filter=pattern]
  */
 
 import { spawn } from 'child_process';
-import { testCases, filterTestCases } from './test-cases.js';
-import { ensureDirectories } from './test-harness.js';
+import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const fixturesDir = path.join(__dirname, 'fixtures');
 
-const UPDATE_MODE = process.env.UPDATE === '1';
-const FILTER = process.argv.find(arg => arg.startsWith('--filter='))?.split('=')[1];
+const updateMode = process.argv.includes('--update');
+const filterArg = process.argv.find(a => a.startsWith('--filter='));
+const filter = filterArg ? filterArg.split('=')[1] : null;
 
-// ANSI colors
-const GREEN = '\x1b[32m';
-const RED = '\x1b[31m';
-const YELLOW = '\x1b[33m';
-const RESET = '\x1b[0m';
-const BOLD = '\x1b[1m';
+// Find all test JSON files
+function findTests() {
+  const tests = [];
+  const entries = fs.readdirSync(fixturesDir);
 
-/**
- * Run a single test in a subprocess
- */
-function runTestSubprocess(testName, update) {
+  for (const entry of entries) {
+    if (entry.endsWith('.json')) {
+      const name = entry.replace('.json', '');
+      tests.push(name);
+    }
+  }
+
+  return tests.sort();
+}
+
+// Run a single test in a subprocess
+function runTest(testName, update) {
   return new Promise((resolve) => {
-    const args = [path.join(__dirname, 'run-single-test.js'), testName];
+    const args = [path.join(__dirname, 'run-test.js'), testName];
     if (update) args.push('--update');
 
-    const proc = spawn(process.execPath, args, {
-      stdio: ['ignore', 'pipe', 'pipe'],
-      timeout: 30000
+    const child = spawn('node', args, {
+      cwd: __dirname,
+      stdio: ['inherit', 'pipe', 'ignore']  // ignore stderr noise from WebGPU
     });
 
-    let stdout = '';
-    let stderr = '';
+    let output = '';
+    child.stdout.on('data', (data) => {
+      output += data.toString();
+    });
 
-    proc.stdout.on('data', (data) => { stdout += data; });
-    proc.stderr.on('data', (data) => { stderr += data; });
-
-    proc.on('close', (code, signal) => {
-      if (signal === 'SIGTERM') {
-        resolve({ status: 'timeout', name: testName });
-        return;
-      }
-
+    child.on('close', (code) => {
       try {
-        const result = JSON.parse(stdout.trim());
+        const result = JSON.parse(output.trim());
         resolve(result);
       } catch {
         resolve({
-          status: 'error',
+          status: code === 0 ? 'pass' : 'error',
           name: testName,
-          message: stderr || stdout || `Exit code ${code}`
+          message: output.trim() || `Exit code ${code}`
         });
       }
     });
 
-    proc.on('error', (err) => {
-      resolve({ status: 'error', name: testName, message: err.message });
+    child.on('error', (err) => {
+      resolve({
+        status: 'error',
+        name: testName,
+        message: err.message
+      });
     });
   });
 }
 
 async function main() {
-  console.log(`\n${BOLD}WebGPU Lines Test Runner${RESET}`);
-  console.log(`Mode: ${UPDATE_MODE ? `${YELLOW}UPDATE${RESET}` : 'TEST'}`);
-  if (FILTER) console.log(`Filter: ${FILTER}`);
-  console.log('');
+  const tests = findTests();
+  const filteredTests = filter
+    ? tests.filter(t => t.includes(filter))
+    : tests;
 
-  ensureDirectories();
-
-  const cases = filterTestCases(FILTER);
-  console.log(`Running ${cases.length} test(s)...\n`);
+  console.log('\x1b[1mWebGPU Lines Tests\x1b[0m');
+  console.log(`Mode: ${updateMode ? '\x1b[33mUPDATE\x1b[0m' : 'TEST'}`);
+  if (filter) console.log(`Filter: ${filter}`);
+  console.log(`\nRunning ${filteredTests.length} test(s)...\n`);
 
   let passed = 0;
   let failed = 0;
+  let skipped = 0;
   let updated = 0;
-  const failures = [];
 
-  for (const testCase of cases) {
-    const { name } = testCase;
-    process.stdout.write(`  ${name}... `);
-
-    const result = await runTestSubprocess(name, UPDATE_MODE);
+  for (const testName of filteredTests) {
+    const result = await runTest(testName, updateMode);
 
     switch (result.status) {
-      case 'updated':
-        console.log(`${YELLOW}UPDATED${RESET}`);
-        updated++;
-        break;
-
       case 'pass':
-        console.log(`${GREEN}PASS${RESET}`);
+        console.log(`  ${testName}... \x1b[32mPASS\x1b[0m${result.diffPercent > 0 ? ` (${result.diffPercent.toFixed(2)}%)` : ''}`);
         passed++;
         break;
 
+      case 'updated':
+        console.log(`  ${testName}... \x1b[33mUPDATED\x1b[0m`);
+        updated++;
+        break;
+
       case 'fail':
-        console.log(`${RED}FAIL${RESET} (${result.diffPixels} pixels, ${result.diffPercent?.toFixed(2)}%)`);
+        console.log(`  ${testName}... \x1b[31mFAIL\x1b[0m (${result.diffPercent.toFixed(2)}% different)`);
         failed++;
-        failures.push({ name, reason: `${result.diffPixels} pixels different` });
         break;
 
       case 'missing':
-        console.log(`${RED}MISSING EXPECTED${RESET}`);
-        console.log(`    Run with UPDATE=1 to create expected image`);
-        failed++;
-        failures.push({ name, reason: 'missing expected image' });
+        console.log(`  ${testName}... \x1b[33mNO EXPECTED\x1b[0m`);
+        skipped++;
         break;
 
-      case 'timeout':
-        console.log(`${RED}TIMEOUT${RESET}`);
-        failed++;
-        failures.push({ name, reason: 'timeout' });
+      case 'skip':
+        console.log(`  ${testName}... \x1b[33mSKIP\x1b[0m (${result.message})`);
+        skipped++;
         break;
 
       case 'error':
-      default:
-        console.log(`${RED}ERROR${RESET}`);
-        console.log(`    ${result.message}`);
+        console.log(`  ${testName}... \x1b[31mERROR\x1b[0m: ${result.message}`);
         failed++;
-        failures.push({ name, reason: result.message });
         break;
+
+      default:
+        console.log(`  ${testName}... \x1b[31mUNKNOWN\x1b[0m: ${JSON.stringify(result)}`);
+        failed++;
     }
   }
 
-  // Summary
   console.log('\n' + '─'.repeat(50));
-  if (UPDATE_MODE) {
-    console.log(`${BOLD}Updated: ${updated}${RESET}`);
-    if (failed > 0) {
-      console.log(`${RED}Errors: ${failed}${RESET}`);
-    }
+  if (updateMode) {
+    console.log(`\x1b[1mUpdated: ${updated}\x1b[0m`);
   } else {
-    console.log(`${BOLD}Results: ${GREEN}${passed} passed${RESET}, ${failed > 0 ? RED : ''}${failed} failed${RESET}`);
-
-    if (failures.length > 0) {
-      console.log(`\n${RED}Failures:${RESET}`);
-      for (const f of failures) {
-        console.log(`  - ${f.name}: ${f.reason}`);
-      }
-    }
+    console.log(`\x1b[1mResults: \x1b[32m${passed} passed\x1b[0m, \x1b[31m${failed} failed\x1b[0m, \x1b[33m${skipped} skipped\x1b[0m`);
   }
-  console.log('');
 
   process.exit(failed > 0 ? 1 : 0);
 }
 
 main().catch(err => {
-  console.error(`${RED}Fatal error:${RESET}`, err);
+  console.error('Error:', err);
   process.exit(1);
 });

@@ -9,7 +9,7 @@
   },
   "scripts": {
     "test": "node test/run-tests.js",
-    "test:update": "UPDATE=1 node test/run-tests.js"
+    "test:update": "node test/run-tests.js --update"
   },
   "keywords": [
     "webgpu",
