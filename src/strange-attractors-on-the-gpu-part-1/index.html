@@ -1,29 +1,12 @@
 <!doctype html>
 <notebook theme="air">
-  <title>Strange Attractors on the GPU, Part 1: Implementation (WebGPU)</title>
+  <title>Strange Attractors in WebGPU</title>
   <script id="intro" type="text/markdown">
-# Strange Attractors on the GPU, Part 1: Implementation
+# Strange Attractors in WebGPU
 
-This notebook walks through simulating a strange attractor on the GPU and then rendering particle tracks as lines. We do this without any of the data ever touching the CPU!
+*This notebook is a 2026 WebGPU update of my previous post, [Strange Attractors on the GPU, Part 1: Implementation](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1).*
 
-The high level approach is that the state of all particle tracks is stored in a GPU texture where each row is a ring buffer representing the history of each particle. On each frame we step a differential equation and overwrite the oldest element of each particle's history with a new value. Finally, we render particle tracks directly from the texture data.
-
-Each frame of the simulation incurs just three GPU operations:
-
-1. **Integrate** the differential equation, writing a column containing the new state of all particles into a temporary texture.
-2. **Copy** the temporary slice back into full state texture, overwriting the oldest values.
-3. **Draw** all line segments, joins, and caps using instanced triangle strip geometry. Sentinel values separate the lines into multiple contiguous segments.
-
-All of this happens on the GPU. The CPU's only role is to dispatch work and update a few uniform values. The result is a simulation that can handle thousands of particles with long track histories at interactive frame rates.
-  </script>
-  <script id="simulation-method" type="text/markdown">
-## Simulation Method
-
-To simulate strange attractors, we need to solve two challenges: stepping the differential equations and drawing lines.
-
-For computation, we use WebGPU **compute shaders**. These allow us to dispatch parallel workloads that read from and write to GPU resources directly. Each particle's state update runs as an independent thread, making the simulation embarrassingly parallel.
-
-For line rendering, we use the [webgpu-lines](../webgpu-lines/) module. Lines are notoriously difficult to render well—the built-in line primitive in graphics APIs is limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
+This notebook walks through simulating a strange attractor on the GPU and then rendering particle tracks as lines. The essential feature of this notebook is that it accomplishes both particle updates and rendering to the screen without data ever touching the CPU.
   </script>
   <script id="webgpu-setup" type="module">
 // Check for WebGPU support
@@ -96,7 +79,7 @@ const renderState = { dirty: true, depthTexture };
 
 const figure = html`<figure style="margin: 0;" id="main-figure">
   ${stack.element}
-  <figcaption>Drag to rotate, scroll to zoom. Click restart to reinitialize particles.</figcaption>
+  <figcaption>Click <em>Restart</em> to reinitialize particles.</figcaption>
 </figure>`;
 
 display(expandable(figure, {
@@ -164,46 +147,94 @@ const lineWidth = ctrl(lineWidthInput);
 
 display(controlsContainer);
   </script>
+  <script id="explanation-attractor" type="text/markdown">
+### The Attractor
+
+A strange attractor is a set of states toward which a dynamical system evolves over time. The particular attractor we're simulating here is defined by the system of ordinary differential equations:
+
+${tex.block`\begin{aligned}
+\frac{dx}{dt} &= \alpha x(1 - y) - \beta z \\[0.5em]
+\frac{dy}{dt} &= -\gamma y(1 - x^2) \\[0.5em]
+\frac{dz}{dt} &= \mu x
+\end{aligned}`}
+
+with parameters ${tex`\alpha = 3`}, ${tex`\beta = 2.2`}, ${tex`\gamma = 1`}, ${tex`\mu = 1.51`}. These equations exhibit chaotic behavior; nearby trajectories diverge exponentially but remain bounded within the attractor's basin.
+  </script>
+  <script id="explanation-overview" type="text/markdown">
+## From WebGL to WebGPU
+
+[The original WebGL version of this simulation](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1) stored particle state in a floating-point texture. Each row represented a particle's history as a ring buffer. The simulation was designed around the limitations of WebGL, in particular the lack of compute shaders and inability to read and write to the same texture (WebGL 2's [transform feedback](https://webgl2fundamentals.org/webgl/lessons/webgl-gpgpu.html#now-lets-do-it-with-transform-feedback) notwithstanding).
+
+A naive WebGPU port would preserve this texture-based approach, replacing fragment shader hacks with proper compute shaders. That would require **three GPU operations per frame**:
+
+1. **Integrate**: Read from the state texture, write new positions to a temporary texture
+2. **Copy**: Transfer the temporary column back into the main state texture
+3. **Draw**: Render lines by sampling the state texture in a vertex shader
+
+WebGPU offers a better primitive for this workload which eliminates the copy step entirely: **storage buffers** with `read_write` access. This is an easy fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction.
+
+### The Optimized Approach
+
+With storage buffers, each frame requires just **two GPU operations**:
+
+1. **Integrate** the differential equation, reading the current state and writing the new state directly to the same buffer.
+2. **Draw** all line segments, joins, and caps using instanced triangle strip geometry. Sentinel values separate the lines into multiple contiguous segments.
+
+This approach reduces GPU dispatches by 33%, eliminates a temporary texture allocation, and simplifies the code substantially.
+  </script>
+  <script id="simulation-method" type="text/markdown">
+## Simulation Method
+
+To simulate strange attractors, we need to solve two challenges: stepping the differential equations and drawing lines.
+
+For computation, we use WebGPU **compute shaders**. These allow us to dispatch parallel workloads that read from and write to GPU resources directly. Each particle's state update runs as an independent thread, making the simulation embarrassingly parallel.
+
+For line rendering, we use the (WIP) [webgpu-lines](../webgpu-lines/) module. Lines are notoriously difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
+  </script>
   <script id="explanation-state" type="text/markdown">
 ## State Layout
 
-The state of our ordinary differential equation (ODE) is represented by the three-component vector ${tex`(x, y, z)`}. We store these in a four-channel floating point texture using the format \`rgba32float\`. The ${tex`j^{th}`} time step of the ${tex`i^{th}`} particle is represented by the four-component vector:
+The state of our ordinary differential equation (ODE) is represented by the three-component vector ${tex`(x, y, z)`}. We store these in a flat storage buffer as `vec4f` elements. The ${tex`j^{th}`} time step of the ${tex`i^{th}`} particle is represented by the four-component vector:
 
 ${tex.block`\mathbf{p}_j^{(i)} = (x_j^{(i)}, y_j^{(i)}, z_j^{(i)}, 1)`}
 
-We pack these vectors into a texture where each row represents the history of a single particle. The texture dimensions are \`stepCount × particleCount\`—width equals the track length, height equals the number of particles.
+### Why Storage Buffers?
 
-As we step the ODE, we compute one new history point for each particle track. To avoid having to shift the entire history over one texel on every iteration, we treat each row as a **ring buffer**. At each time step ${tex`j`}, we use the previous column, ${tex`p_{j-1}^{(i)}`}, to compute the next time step, ${tex`p_j^{(i)}`}. When we reach the end of the row, we loop back to the start, overwriting the oldest time step with the newest.
+The WebGL version used a 2D texture where each row was a particle and each column was a time step. Textures are a natural fit when you need 2D spatial locality or hardware filtering, but for our access pattern—where each particle only touches its own data—a flat buffer is simpler and more efficient.
 
-This ring buffer approach means we only write one column per frame, regardless of track length.
+Storage buffers offer several advantages over textures for this use case:
+
+- **`read_write` access**: Unlike `rgba32float` textures, storage buffers can be both read and written in the same compute pass
+- **Direct indexing**: Simple arithmetic replaces texel coordinate calculations with half-pixel offsets
+- **No intermediate resources**: We eliminate the temporary texture needed for the copy step
+- **Flexible layout**: We can choose any memory layout that suits our access pattern
+
+We use **particle-major ordering**: all time steps for particle 0 come first, then all time steps for particle 1, and so on. The buffer index for a given particle and step is simply `particle * stepCount + step`.
+
+### Ring Buffer
+
+As we step the ODE, we compute one new history point for each particle track. To avoid having to shift the entire history on every iteration, we treat each particle's slice as a **ring buffer**. At each time step ${tex`j`}, we use the previous position, ${tex`p_{j-1}^{(i)}`}, to compute the next, ${tex`p_j^{(i)}`}. When we reach the end of the slice, we loop back to the start, overwriting the oldest time step with the newest.
+
+This ring buffer approach means we only write one position per particle per frame, regardless of track length.
   </script>
-  <script id="state-textures" type="module">
+  <script id="state-buffer" type="module">
 particleCount; stepCount; restart;
 
-// Create storage texture for state (RGBA32Float)
-// Each texel stores (x, y, z, 1) for one particle at one timestep
-// Note: rgba32float doesn't support read_write storage, so we use separate read/write
-const stateTexture = device.createTexture({
-  label: 'state-texture',
-  size: [stepCount, particleCount],
-  format: 'rgba32float',
-  usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST
-});
-
-// Temporary column texture for integration output
-const tmpColumnTexture = device.createTexture({
-  label: 'tmp-column-texture',
-  size: [1, particleCount],
-  format: 'rgba32float',
-  usage: GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_SRC
+// Create storage buffer for state
+// Each element stores (x, y, z, 1) as vec4f for one particle at one timestep
+// Layout: buffer[particleId * stepCount + stepIndex] = position
+// Using storage buffer with read_write access eliminates the need for a temp buffer
+const stateBuffer = device.createBuffer({
+  label: 'state-buffer',
+  size: particleCount * stepCount * 16, // vec4f (16 bytes) per position
+  usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
 });
 
 // Track current column for ring buffer
 const simState = { currentColumn: 0, t: 0 };
 
 invalidation.then(() => {
-  stateTexture.destroy();
-  tmpColumnTexture.destroy();
+  stateBuffer.destroy();
 });
   </script>
   <script id="explanation-init" type="text/markdown">
@@ -222,12 +253,13 @@ The initialization shader writes the same starting position to every column of e
   <script id="init-shader" type="module">
 // Compute shader to initialize particle state
 const initShaderCode = /* wgsl */`
-@group(0) @binding(0) var outputTex: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec4f>;
 
 struct Uniforms {
   origin: vec3f,
   scale: f32,
   stepCount: u32,
+  particleCount: u32,
 }
 @group(0) @binding(1) var<uniform> uniforms: Uniforms;
 
@@ -248,13 +280,13 @@ fn sphericalRandom(n: f32) -> vec3f {
 @compute @workgroup_size(64)
 fn main(@builtin(global_invocation_id) gid: vec3u) {
   let particle = gid.x;
-  let texSize = textureDimensions(outputTex);
-  if (particle >= texSize.y) { return; }
+  if (particle >= uniforms.particleCount) { return; }
 
   // Initialize all columns for this particle with the same position
   let pos = uniforms.origin + uniforms.scale * sphericalRandom(f32(particle) + 0.5);
+  let baseIdx = particle * uniforms.stepCount;
   for (var col = 0u; col < uniforms.stepCount; col++) {
-    textureStore(outputTex, vec2u(col, particle), vec4f(pos, 1.0));
+    stateBuffer[baseIdx + col] = vec4f(pos, 1.0);
   }
 }
 `;
@@ -275,7 +307,7 @@ const initPipeline = device.createComputePipeline({
 
 const initUniformBuffer = device.createBuffer({
   label: 'init-uniforms',
-  size: 32, // vec3f origin (12) + f32 scale (4) + u32 stepCount (4) + padding
+  size: 32, // vec3f origin (12) + f32 scale (4) + u32 stepCount (4) + u32 particleCount (4) + padding
   usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 });
 
@@ -283,7 +315,7 @@ const initBindGroup = device.createBindGroup({
   label: 'init-bind-group',
   layout: initPipeline.getBindGroupLayout(0),
   entries: [
-    { binding: 0, resource: stateTexture.createView() },
+    { binding: 0, resource: { buffer: stateBuffer } },
     { binding: 1, resource: { buffer: initUniformBuffer } }
   ]
 });
@@ -298,6 +330,7 @@ function initializeState() {
   f32[2] = 0;  // origin.z
   f32[3] = 1;  // scale
   u32[4] = stepCount;
+  u32[5] = particleCount;
   device.queue.writeBuffer(initUniformBuffer, 0, uniformData);
 
   const encoder = device.createCommandEncoder();
@@ -325,22 +358,9 @@ invalidation.then(() => {
 
 To step the ODE, we use the [fourth-order Runge-Kutta](https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method) (RK4) method. RK4 achieves high accuracy by sampling the derivative at four points within each time step and taking a weighted average.
 
-The integration compute shader reads the current state from our main state texture, computes the RK4 step, and writes the result to a temporary single-column texture. We then run a second compute shader to copy that column back into the main state texture at the next ring buffer position.
+With a texture-based approach, we'd need two compute passes: one to read from the state texture and write to a temporary texture (since `rgba32float` doesn't support simultaneous read/write), then another to copy that column back. That's two dispatches, two bind groups, and a temporary allocation—all for what should be a simple update.
 
-Why the two-step process? The `rgba32float` texture format doesn't support simultaneous read and write access (`read_write` storage) in WebGPU. We must use separate textures for input and output, then copy the result back.
-  </script>
-  <script id="explanation-attractor" type="text/markdown">
-### The Attractor
-
-A strange attractor is a set of states toward which a dynamical system evolves over time. The particular attractor we're simulating here is defined by the system of differential equations:
-
-${tex.block`\begin{aligned}
-\frac{dx}{dt} &= \alpha x(1 - y) - \beta z \\[0.5em]
-\frac{dy}{dt} &= -\gamma y(1 - x^2) \\[0.5em]
-\frac{dz}{dt} &= \mu x
-\end{aligned}`}
-
-with parameters ${tex`\alpha = 3`}, ${tex`\beta = 2.2`}, ${tex`\gamma = 1`}, ${tex`\mu = 1.51`}. These equations exhibit chaotic behavior—nearby trajectories diverge exponentially, yet remain bounded within the attractor's basin.
+Storage buffers let us collapse this into a **single compute pass**. The shader reads from index `particle * stepCount + srcColumn` and writes to `particle * stepCount + dstColumn`. Since these are different indices (no particle reads what another particle writes), there are no data races. One dispatch, one bind group, no temporary resources.
   </script>
   <script id="attractor-wgsl" type="module">
 // The strange attractor equations
@@ -359,18 +379,19 @@ fn derivative(x: f32, y: f32, z: f32, t: f32) -> vec3f {
 `;
   </script>
   <script id="integrate-shader" type="module">
-// Integration shader: reads from state texture, writes to temporary column
+// Integration shader: reads and writes to a single storage buffer
 const integrateShaderCode = /* wgsl */`
-@group(0) @binding(0) var stateTex: texture_2d<f32>;
-@group(0) @binding(1) var outputTex: texture_storage_2d<rgba32float, write>;
+@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec4f>;
 
 struct Uniforms {
   dt: f32,
   t: f32,
   srcColumn: u32,
+  dstColumn: u32,
+  stepCount: u32,
   particleCount: u32,
 }
-@group(0) @binding(2) var<uniform> uniforms: Uniforms;
+@group(0) @binding(1) var<uniform> uniforms: Uniforms;
 
 ${attractorWGSL}
 
@@ -384,8 +405,8 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   if (particle >= uniforms.particleCount) { return; }
 
   // Read current state from source column
-  let srcCoord = vec2u(uniforms.srcColumn, particle);
-  let p = textureLoad(stateTex, srcCoord, 0).xyz;
+  let readIdx = particle * uniforms.stepCount + uniforms.srcColumn;
+  let p = stateBuffer[readIdx].xyz;
 
   // RK4 integration
   let dt = uniforms.dt;
@@ -402,8 +423,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     newP = newP * 0.0001;
   }
 
-  // Write to temporary column texture (column 0)
-  textureStore(outputTex, vec2u(0, particle), vec4f(newP, 1.0));
+  // Write to destination column
+  let writeIdx = particle * uniforms.stepCount + uniforms.dstColumn;
+  stateBuffer[writeIdx] = vec4f(newP, 1.0);
 }
 `;
 
@@ -423,7 +445,7 @@ const integratePipeline = device.createComputePipeline({
 
 const integrateUniformBuffer = device.createBuffer({
   label: 'integrate-uniforms',
-  size: 16, // f32 dt + f32 t + u32 srcColumn + u32 particleCount
+  size: 32, // f32 dt + f32 t + u32 srcColumn + u32 dstColumn + u32 stepCount + u32 particleCount + padding
   usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 });
 
@@ -431,70 +453,13 @@ const integrateBindGroup = device.createBindGroup({
   label: 'integrate-bind-group',
   layout: integratePipeline.getBindGroupLayout(0),
   entries: [
-    { binding: 0, resource: stateTexture.createView() },
-    { binding: 1, resource: tmpColumnTexture.createView() },
-    { binding: 2, resource: { buffer: integrateUniformBuffer } }
+    { binding: 0, resource: { buffer: stateBuffer } },
+    { binding: 1, resource: { buffer: integrateUniformBuffer } }
   ]
 });
 
 invalidation.then(() => {
   integrateUniformBuffer.destroy();
-});
-  </script>
-  <script id="copy-shader" type="module">
-// Copy shader: copies temporary column back to main state texture
-const copyShaderCode = /* wgsl */`
-@group(0) @binding(0) var srcTex: texture_2d<f32>;
-@group(0) @binding(1) var dstTex: texture_storage_2d<rgba32float, write>;
-
-struct Uniforms {
-  dstColumn: u32,
-  particleCount: u32,
-}
-@group(0) @binding(2) var<uniform> uniforms: Uniforms;
-
-@compute @workgroup_size(64)
-fn main(@builtin(global_invocation_id) gid: vec3u) {
-  let particle = gid.x;
-  if (particle >= uniforms.particleCount) { return; }
-
-  let value = textureLoad(srcTex, vec2u(0, particle), 0);
-  textureStore(dstTex, vec2u(uniforms.dstColumn, particle), value);
-}
-`;
-
-const copyShaderModule = device.createShaderModule({
-  label: 'copy-shader',
-  code: copyShaderCode
-});
-
-const copyPipeline = device.createComputePipeline({
-  label: 'copy-pipeline',
-  layout: 'auto',
-  compute: {
-    module: copyShaderModule,
-    entryPoint: 'main'
-  }
-});
-
-const copyUniformBuffer = device.createBuffer({
-  label: 'copy-uniforms',
-  size: 8, // u32 dstColumn + u32 particleCount
-  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-});
-
-const copyBindGroup = device.createBindGroup({
-  label: 'copy-bind-group',
-  layout: copyPipeline.getBindGroupLayout(0),
-  entries: [
-    { binding: 0, resource: tmpColumnTexture.createView() },
-    { binding: 1, resource: stateTexture.createView() },
-    { binding: 2, resource: { buffer: copyUniformBuffer } }
-  ]
-});
-
-invalidation.then(() => {
-  copyUniformBuffer.destroy();
 });
   </script>
   <script id="explanation-rendering" type="text/markdown">
@@ -504,21 +469,21 @@ In the timeless words of Matt DesLauriers, *[Drawing Lines is Hard](https://matt
 
 The [webgpu-lines](../webgpu-lines/) module handles this. It renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus portions of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.
 
-The key insight is that we don't pass vertex positions directly. Instead, we provide a **vertex function** that the module calls for each point index. This function can sample data from any source—in our case, the state texture. The module handles all the complexity of building smooth joins and round caps.
+The key insight is that we don't pass vertex positions directly. Instead, we provide a **vertex function** that the module calls for each point index. This function can sample data from any source—in our case, the state buffer. The module handles all the complexity of building smooth joins and round caps.
 
-### Texture Coordinate Lookup
+### Buffer Index Lookup
 
-Rather than copying positions to vertex buffers each frame, we sample them directly from the state texture in the vertex shader. Each vertex index maps to a texture coordinate:
+Rather than copying positions to vertex buffers each frame, we sample them directly from the storage buffer in the vertex shader. Each vertex index maps to a buffer index:
 
-${tex.block`\mathbf{u}_j^{(i)} = \left(\frac{j + \frac{1}{2}}{M}, \frac{i + \frac{1}{2}}{N}\right)`}
+${tex.block`\text{bufferIdx} = i \cdot M + ((j + \text{offset}) \mod M)`}
 
-where ${tex`M`} is the number of time steps and ${tex`N`} is the number of particles. The half-texel offset centers coordinates on texel centers for proper sampling.
+where ${tex`M`} is the number of time steps, ${tex`i`} is the particle index, and ${tex`j`} is the step within that particle's track.
 
-To handle the ring buffer, we add an offset to the texture coordinate that shifts based on which column was most recently written. The oldest data is always at the "start" of the rendered line, and the newest at the end.
+To handle the ring buffer, we add an offset to the step index that shifts based on which column was most recently written. The oldest data is always at the "start" of the rendered line, and the newest at the end.
 
 ### Line Breaks
 
-Multiple particle tracks are rendered in a single draw call. We separate them using **sentinel values**—vertices with \`w = 0\` in clip space. When the vertex function returns a position with \`w = 0\`, the line renderer interprets this as a break between separate lines.
+Multiple particle tracks are rendered in a single draw call. We separate them using **sentinel values**—vertices with `w = 0` in clip space. When the vertex function returns a position with `w = 0`, the line renderer interprets this as a break between separate lines.
   </script>
   <script id="camera-setup" type="module">
 // Simple orbital camera using mouse drag
@@ -644,15 +609,15 @@ svg.on('wheel', (event) => {
   <script id="line-rendering" type="module">
 import { createGPULines } from '../webgpu-lines/webgpu-lines.js';
 
-// Vertex shader that samples the state texture
+// Vertex shader that samples the state buffer
 const vertexShaderBody = /* wgsl */`
-@group(1) @binding(0) var stateTex: texture_2d<f32>;
+@group(1) @binding(0) var<storage, read> stateBuffer: array<vec4f>;
 @group(1) @binding(1) var<uniform> projViewMatrix: mat4x4f;
 
 struct LineUniforms {
-  texOffset: f32,
-  stepCount: f32,
-  particleCount: f32,
+  columnOffset: u32,
+  stepCount: u32,
+  particleCount: u32,
 }
 @group(1) @binding(2) var<uniform> lineUniforms: LineUniforms;
 
@@ -663,25 +628,23 @@ struct Vertex {
 }
 
 fn getVertex(index: u32) -> Vertex {
-  // Decode texture coordinates from index
+  // Decode buffer index from vertex index
   // Index layout: for each particle, stepCount points, then a break
-  let pointsPerParticle = u32(lineUniforms.stepCount) + 1u; // +1 for line break
+  let pointsPerParticle = lineUniforms.stepCount + 1u; // +1 for line break
   let particle = index / pointsPerParticle;
   let step = index % pointsPerParticle;
 
   // Check if this is a line break point
-  if (step >= u32(lineUniforms.stepCount)) {
+  if (step >= lineUniforms.stepCount) {
     return Vertex(vec4f(0.0, 0.0, 0.0, 0.0), 0.0, f32(particle));
   }
 
-  // Compute texture coordinate with ring buffer offset
-  let texU = f32(step) + 0.5;
-  let texV = f32(particle) + 0.5;
-  let offsetU = fract(texU / lineUniforms.stepCount + lineUniforms.texOffset);
-  let texCoord = vec2u(u32(offsetU * lineUniforms.stepCount), particle);
+  // Compute buffer index with ring buffer offset
+  let stepIndex = (step + lineUniforms.columnOffset) % lineUniforms.stepCount;
+  let bufferIdx = particle * lineUniforms.stepCount + stepIndex;
 
-  // Sample position from state texture
-  let pos = textureLoad(stateTex, texCoord, 0).xyz;
+  // Sample position from state buffer
+  let pos = stateBuffer[bufferIdx].xyz;
 
   // Project to clip space
   let projected = projViewMatrix * vec4f(pos, 1.0);
@@ -690,10 +653,10 @@ fn getVertex(index: u32) -> Vertex {
   var p = projected;
   let w = p.w;
   p = p / w;
-  p.z = p.z - 0.0002 * abs(f32(particle) / lineUniforms.particleCount - 0.5);
+  p.z = p.z - 0.0002 * abs(f32(particle) / f32(lineUniforms.particleCount) - 0.5);
   p = p * w;
 
-  return Vertex(p, uniforms.width, f32(particle) / lineUniforms.particleCount);
+  return Vertex(p, uniforms.width, f32(particle) / f32(lineUniforms.particleCount));
 }
 `;
 
@@ -703,8 +666,11 @@ fn getColor(lineCoord: vec2f, particleId: f32) -> vec4f {
   let color2 = vec3f(0.11, 0.32, 0.65);
   let baseColor = mix(color1, color2, particleId);
 
+  // 1-pixel border: lineCoord is in [-1, 1], so 1 pixel = 2/width in normalized coords
+  let borderWidth = 2.0 / uniforms.width;
+  let dist = length(lineCoord.xy);
   let borderColor = vec3f(1.0);
-  let color = mix(baseColor, borderColor, smoothstep(0.5, 0.9, length(lineCoord.xy)));
+  let color = mix(baseColor, borderColor, smoothstep(1.0 - 2.0 * borderWidth, 1.0 - borderWidth, dist));
 
   return vec4f(color, 1.0);
 }
@@ -729,14 +695,14 @@ const projViewBuffer = device.createBuffer({
 
 const lineUniformBuffer = device.createBuffer({
   label: 'line-uniforms',
-  size: 16, // texOffset, stepCount, particleCount + padding
+  size: 16, // columnOffset, stepCount, particleCount + padding
   usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 });
 
 const lineBindGroup = device.createBindGroup({
   layout: gpuLines.getBindGroupLayout(1),
   entries: [
-    { binding: 0, resource: stateTexture.createView() },
+    { binding: 0, resource: { buffer: stateBuffer } },
     { binding: 1, resource: { buffer: projViewBuffer } },
     { binding: 2, resource: { buffer: lineUniformBuffer } }
   ]
@@ -851,10 +817,9 @@ invalidation.then(() => {
 Finally, we put it all together into a frame loop. Each frame:
 
 1. If simulating, dispatch the **integrate** compute shader to compute new particle positions
-2. Dispatch the **copy** compute shader to write results back to the state texture
-3. Update the camera's projection-view matrix
-4. Update the texture offset uniform so lines render from oldest to newest
-5. Begin a render pass and **draw lines** by calling into the webgpu-lines module
+2. Update the camera's projection-view matrix
+3. Update the buffer offset uniform so lines render from oldest to newest
+4. Begin a render pass and **draw lines** by calling into the webgpu-lines module
 
 The simulation and rendering are decoupled—we can pause simulation while still allowing camera interaction. The `renderState.dirty` flag tracks whether we need to redraw.
   </script>
@@ -870,40 +835,25 @@ const loop = createFrameLoop(() => {
     const srcColumn = simState.currentColumn;
     const dstColumn = (simState.currentColumn + 1) % stepCount;
 
-    // Update integration uniforms (dt, t, srcColumn, particleCount)
-    const integrateData = new ArrayBuffer(16);
+    // Update integration uniforms (dt, t, srcColumn, dstColumn, stepCount, particleCount)
+    const integrateData = new ArrayBuffer(32);
     const f32 = new Float32Array(integrateData);
     const u32 = new Uint32Array(integrateData);
     f32[0] = dt;
     f32[1] = simState.t;
     u32[2] = srcColumn;
-    u32[3] = particleCount;
+    u32[3] = dstColumn;
+    u32[4] = stepCount;
+    u32[5] = particleCount;
     device.queue.writeBuffer(integrateUniformBuffer, 0, integrateData);
 
-    // Update copy uniforms (dstColumn, particleCount)
-    const copyData = new ArrayBuffer(8);
-    const copyU32 = new Uint32Array(copyData);
-    copyU32[0] = dstColumn;
-    copyU32[1] = particleCount;
-    device.queue.writeBuffer(copyUniformBuffer, 0, copyData);
-
-    // Run integration and copy in sequence
+    // Run integration (single pass reads and writes to storage buffer)
     const encoder = device.createCommandEncoder();
-
-    // Step 1: Integrate - read from state, write to temp column
     const integratePass = encoder.beginComputePass();
     integratePass.setPipeline(integratePipeline);
     integratePass.setBindGroup(0, integrateBindGroup);
     integratePass.dispatchWorkgroups(Math.ceil(particleCount / 64));
     integratePass.end();
-
-    // Step 2: Copy - read from temp column, write to state
-    const copyPass = encoder.beginComputePass();
-    copyPass.setPipeline(copyPipeline);
-    copyPass.setBindGroup(0, copyBindGroup);
-    copyPass.dispatchWorkgroups(Math.ceil(particleCount / 64));
-    copyPass.end();
-
     device.queue.submit([encoder.finish()]);
 
     // Advance time and column
@@ -918,12 +868,13 @@ const loop = createFrameLoop(() => {
     const projView = getProjectionViewMatrix(aspectRatio);
     device.queue.writeBuffer(projViewBuffer, 0, projView);
 
-    // Update line uniforms
+    // Update line uniforms (columnOffset, stepCount, particleCount as u32)
     const lineData = new ArrayBuffer(16);
-    const f32 = new Float32Array(lineData);
-    f32[0] = (simState.currentColumn - stepCount + 1) / stepCount; // texOffset
-    f32[1] = stepCount;
-    f32[2] = particleCount;
+    const u32 = new Uint32Array(lineData);
+    // columnOffset: the oldest column, so lines render from oldest to newest
+    u32[0] = (simState.currentColumn + 1) % stepCount;
+    u32[1] = stepCount;
+    u32[2] = particleCount;
     device.queue.writeBuffer(lineUniformBuffer, 0, lineData);
 
     const encoder = device.createCommandEncoder();
@@ -980,14 +931,26 @@ initializeState();
 
 We've built a complete GPU-based particle simulation with the following components:
 
-- **State storage**: A 2D texture where each row is a particle's history as a ring buffer
+- **State storage**: A flat storage buffer with particle-major ordering, where each particle's history is a ring buffer
 - **Initialization**: A compute shader that fills the state with quasirandom starting positions
-- **Integration**: A compute shader that advances the ODE using RK4, writing to a temporary texture
-- **Copy**: A compute shader that transfers the new column back to the main state texture
-- **Rendering**: Instanced line drawing that samples positions directly from the state texture
+- **Integration**: A compute shader that advances the ODE using RK4, reading and writing directly to the same storage buffer
+- **Rendering**: Instanced line drawing that samples positions directly from the state buffer
+
+### Optimization Gains
+
+By using WebGPU storage buffers instead of naively porting the WebGL texture-based approach, we achieved:
+
+| Aspect | Texture Approach | Storage Buffer | Improvement |
+|--------|------------------|----------------|-------------|
+| GPU operations/frame | 3 (integrate + copy + render) | 2 (integrate + render) | 33% fewer dispatches |
+| Compute bind groups | 2 (integrate + copy) | 1 (integrate only) | 50% reduction |
+| Temporary resources | 1 column texture | None | Eliminated |
+| Index calculation | Texel center math | Direct array index | Simpler code |
 
 The entire simulation runs on the GPU. The CPU only dispatches work and updates a handful of uniform values each frame. This architecture scales well—you can simulate thousands of particles with long track histories while maintaining interactive frame rates.
 
-The techniques here generalize beyond strange attractors. Any particle system where you want to visualize trails—fluid simulations, n-body systems, gradient flows—can use this same ring buffer approach for efficient GPU-based track rendering.
+### Generalizing
+
+The techniques here generalize beyond strange attractors. Any particle system where you want to visualize trails—fluid simulations, n-body systems, gradient flows—can use this same ring buffer approach for efficient GPU-based track rendering. The key insight is recognizing when your access pattern allows `read_write` storage buffers: if each thread reads and writes to non-overlapping locations, you can collapse multi-pass texture ping-ponging into a single dispatch.
   </script>
 </notebook>
