@@ -21,8 +21,117 @@ export function createDemoRenderer(device, context, canvas, format) {
   // Cache for pipelines with different configurations
   const pipelineCache = new Map();
 
-  // Render queue to prevent race conditions when multiple cells render concurrently
-  let renderQueue = Promise.resolve();
+  // Staging resources for pixel readback (avoids swap chain issues)
+  let stagingTexture = null;
+  let stagingBuffer = null;
+  let stagingWidth = 0;
+  let stagingHeight = 0;
+
+  function ensureStagingResources(width, height) {
+    if (stagingTexture && stagingWidth === width && stagingHeight === height) {
+      return;
+    }
+    // Clean up old resources
+    if (stagingTexture) stagingTexture.destroy();
+    if (stagingBuffer) stagingBuffer.destroy();
+
+    stagingWidth = width;
+    stagingHeight = height;
+
+    // Create render texture
+    stagingTexture = device.createTexture({
+      size: [width, height],
+      format: format,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+    });
+
+    // Create buffer for readback (must be aligned to 256 bytes per row)
+    const bytesPerRow = Math.ceil(width * 4 / 256) * 256;
+    stagingBuffer = device.createBuffer({
+      size: bytesPerRow * height,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    });
+  }
+
+  // Explicit render queue to prevent race conditions when multiple cells render concurrently
+  const pendingRenders = [];
+  let isProcessing = false;
+
+  async function processQueue() {
+    if (isProcessing || pendingRenders.length === 0) return;
+    isProcessing = true;
+
+    while (pendingRenders.length > 0) {
+      const { targetCanvas, options, resolve, reject } = pendingRenders.shift();
+      try {
+        const dpr = window.devicePixelRatio || 1;
+        const cssWidth = options.width || parseInt(targetCanvas.style.width) || targetCanvas.width;
+        const cssHeight = options.height || parseInt(targetCanvas.style.height) || targetCanvas.height;
+        const pixelWidth = Math.floor(cssWidth * dpr);
+        const pixelHeight = Math.floor(cssHeight * dpr);
+
+        // Set canvas buffer size to dpr resolution
+        targetCanvas.width = pixelWidth;
+        targetCanvas.height = pixelHeight;
+        targetCanvas.style.width = `${cssWidth}px`;
+        targetCanvas.style.height = `${cssHeight}px`;
+
+        // Ensure staging resources
+        ensureStagingResources(pixelWidth, pixelHeight);
+
+        // Render to staging texture
+        await renderToTexture(stagingTexture, { ...options, width: cssWidth, height: cssHeight });
+
+        // Copy texture to buffer
+        const bytesPerRow = Math.ceil(pixelWidth * 4 / 256) * 256;
+        const encoder = device.createCommandEncoder();
+        encoder.copyTextureToBuffer(
+          { texture: stagingTexture },
+          { buffer: stagingBuffer, bytesPerRow },
+          [pixelWidth, pixelHeight]
+        );
+        device.queue.submit([encoder.finish()]);
+
+        // Map buffer and read pixels
+        await stagingBuffer.mapAsync(GPUMapMode.READ);
+        const data = new Uint8Array(stagingBuffer.getMappedRange());
+
+        // Copy to ImageData (handle row alignment and BGRA->RGBA conversion)
+        const imageData = new ImageData(pixelWidth, pixelHeight);
+        const isBGRA = format === 'bgra8unorm';
+        for (let y = 0; y < pixelHeight; y++) {
+          for (let x = 0; x < pixelWidth; x++) {
+            const srcOffset = y * bytesPerRow + x * 4;
+            const dstOffset = (y * pixelWidth + x) * 4;
+            if (isBGRA) {
+              // BGRA -> RGBA
+              imageData.data[dstOffset + 0] = data[srcOffset + 2]; // R <- B
+              imageData.data[dstOffset + 1] = data[srcOffset + 1]; // G <- G
+              imageData.data[dstOffset + 2] = data[srcOffset + 0]; // B <- R
+              imageData.data[dstOffset + 3] = data[srcOffset + 3]; // A <- A
+            } else {
+              // RGBA - direct copy
+              imageData.data[dstOffset + 0] = data[srcOffset + 0];
+              imageData.data[dstOffset + 1] = data[srcOffset + 1];
+              imageData.data[dstOffset + 2] = data[srcOffset + 2];
+              imageData.data[dstOffset + 3] = data[srcOffset + 3];
+            }
+          }
+        }
+        stagingBuffer.unmap();
+
+        // Draw to target canvas
+        const ctx = targetCanvas.getContext('2d');
+        ctx.putImageData(imageData, 0, 0);
+
+        resolve();
+      } catch (err) {
+        reject(err);
+      }
+    }
+
+    isProcessing = false;
+  }
 
   /**
    * Get or create a pipeline for the given configuration
@@ -369,52 +478,129 @@ export function createDemoRenderer(device, context, canvas, format) {
   }
 
   /**
+   * Render to a provided texture (for reliable pixel readback)
+   */
+  async function renderToTexture(texture, options = {}) {
+    const {
+      pattern = 'zigzag',
+      lineWidth = 20,
+      join = 'miter',
+      joinResolution = 8,
+      miterLimit = 4,
+      cap = 'round',
+      capResolution = 8,
+      sdfStrokeWidth = 0,
+      lineBreak = false,
+      width = 320,
+      height = 200,
+      points: customPoints = null,
+      viewMatrix = null,
+      clearColor = { r: 0.95, g: 0.95, b: 0.95, a: 1 },
+      fragmentShaderBody = null,
+      blend = null
+    } = options;
+
+    const dpr = window.devicePixelRatio || 1;
+    const pixelWidth = Math.floor(width * dpr);
+    const pixelHeight = Math.floor(height * dpr);
+
+    // Get or create pipeline
+    const gpuLines = getPipeline({
+      join,
+      joinResolution,
+      miterLimit,
+      cap,
+      capResolution,
+      sdfStrokeWidth,
+      lineWidth,
+      fragmentShaderBody,
+      blend
+    });
+
+    // Generate or use custom points
+    const points = customPoints || generateDemoPoints(pattern, { lineBreak });
+    const positionData = pointsToBuffer(points);
+
+    // Create position buffer
+    const positionBuffer = device.createBuffer({
+      label: 'demo-positions',
+      size: positionData.byteLength,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(positionBuffer, 0, positionData);
+
+    // Create view matrix uniform buffer
+    const viewMatrixData = viewMatrix || new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+    const viewMatrixBuffer = device.createBuffer({
+      label: 'demo-view-matrix',
+      size: 64,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(viewMatrixBuffer, 0, viewMatrixData);
+
+    // Create bind group for user data (group 1)
+    const dataBindGroup = device.createBindGroup({
+      layout: gpuLines.getBindGroupLayout(1),
+      entries: [
+        { binding: 0, resource: { buffer: positionBuffer } },
+        { binding: 1, resource: { buffer: viewMatrixBuffer } }
+      ]
+    });
+
+    // Render to provided texture
+    const encoder = device.createCommandEncoder();
+
+    const pass = encoder.beginRenderPass({
+      colorAttachments: [{
+        view: texture.createView(),
+        loadOp: 'clear',
+        storeOp: 'store',
+        clearValue: clearColor
+      }]
+    });
+
+    gpuLines.draw(pass, {
+      vertexCount: points.length,
+      width: lineWidth,
+      resolution: [pixelWidth, pixelHeight]
+    }, [dataBindGroup]);
+
+    pass.end();
+
+    device.queue.submit([encoder.finish()]);
+
+    // Clean up buffers
+    positionBuffer.destroy();
+    viewMatrixBuffer.destroy();
+
+    // Wait for GPU to finish
+    await device.queue.onSubmittedWorkDone();
+  }
+
+  /**
    * Render a demo directly to a target 2D canvas
    * Uses a queue to prevent race conditions when multiple cells render concurrently
    *
    * @param {HTMLCanvasElement} targetCanvas - 2D canvas to render to
    * @param {Object} options - Render options (same as render())
    */
-  async function renderToCanvas(targetCanvas, options = {}) {
-    // Queue this render to prevent race conditions
-    const renderPromise = renderQueue.then(async () => {
-      const dpr = window.devicePixelRatio || 1;
-
-      // Get CSS dimensions from the canvas
-      const cssWidth = options.width || parseInt(targetCanvas.style.width) || targetCanvas.width;
-      const cssHeight = options.height || parseInt(targetCanvas.style.height) || targetCanvas.height;
-
-      // Set canvas buffer size to dpr resolution
-      targetCanvas.width = Math.floor(cssWidth * dpr);
-      targetCanvas.height = Math.floor(cssHeight * dpr);
-
-      // Set CSS size for proper display
-      targetCanvas.style.width = `${cssWidth}px`;
-      targetCanvas.style.height = `${cssHeight}px`;
-
-      // Render to offscreen WebGPU canvas at dpr resolution
-      await render({ ...options, width: cssWidth, height: cssHeight });
-
-      // Copy to target canvas using drawImage
-      const ctx = targetCanvas.getContext('2d');
-      ctx.drawImage(canvas, 0, 0, canvas.width, canvas.height, 0, 0, targetCanvas.width, targetCanvas.height);
+  function renderToCanvas(targetCanvas, options = {}) {
+    return new Promise((resolve, reject) => {
+      pendingRenders.push({ targetCanvas, options, resolve, reject });
+      processQueue();
     });
-
-    // Update queue to include this render
-    renderQueue = renderPromise.catch(() => {});
-
-    // Wait for this specific render to complete
-    return renderPromise;
   }
 
   /**
-   * Destroy cached pipelines
+   * Destroy cached pipelines and staging resources
    */
   function destroy() {
     for (const pipeline of pipelineCache.values()) {
       pipeline.destroy();
     }
     pipelineCache.clear();
+    if (stagingTexture) stagingTexture.destroy();
+    if (stagingBuffer) stagingBuffer.destroy();
   }
 
   return {

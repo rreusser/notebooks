@@ -9,6 +9,9 @@ import { deserialize } from "@observablehq/notebook-kit";
 import { JSDOM } from "jsdom";
 import { debugNotebook } from "@rreusser/mcp-observable-notebookkit-debugger";
 import { metadataWarningPlugin } from "./scripts/metadata-warning-plugin.js";
+import basicSsl from "@vitejs/plugin-basic-ssl";
+
+const useHttps = process.env.HTTPS === "1";
 
 const window = new JSDOM().window;
 const parser = new window.DOMParser();
@@ -86,6 +89,7 @@ async function computeIndex() {
 export default defineConfig({
   ...config(),
   plugins: [
+    useHttps && basicSsl(),
     metadataWarningPlugin({ rootDir: NOTEBOOKS_DIR }),
     debugNotebook(),
     observable({
@@ -136,4 +140,10 @@ export default defineConfig({
   },
   root: "src",
   base: "/notebooks/",
+  server: {
+    host: true,
+    hmr: {
+      host: undefined,
+    },
+  },
 });

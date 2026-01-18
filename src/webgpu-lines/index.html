@@ -1,10 +1,10 @@
 <!doctype html>
 <notebook theme="air">
   <title>WebGPU Lines</title>
-  <script id="intro" type="text/markdown">
+  <script id="1" type="text/markdown">
     # WebGPU Lines
 
-    A GPU-accelerated line rendering library for WebGPU, based on the techniques from [regl-gpu-lines](https://github.com/rreusser/regl-gpu-lines). This library is a work in progress. You can find the [source on GitHub](https://github.com/rreusser/notebooks/tree/main/src/webgpu-lines), and it will eventually be published as a standalone NPM module.
+    This module implements high-performance, flexible GPU-accelerated line rendering for WebGPU. It is a direct port of [regl-gpu-lines](https://github.com/rreusser/regl-gpu-lines) to WebGPU. The focus is on speed and customizability rather than sophisticated stroke expansion algorithms. For background on GPU line rendering, see Matt DesLauriers' [Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard) and Rye Terrell's [Instanced Line Rendering](https://wwwtyro.net/2019/11/18/instanced-lines.html). This library is a work in progress. You can find the [source on GitHub](https://github.com/rreusser/notebooks/tree/main/src/webgpu-lines), and it will eventually be published as a standalone NPM module.
 
     **Features:**
     - Instanced rendering with triangle strips for high performance
@@ -14,8 +14,7 @@
     - Line breaks via sentinel values
     - SDF-based stroke outlines with anti-aliasing
   </script>
-
-  <script id="init-webgpu" type="module">
+  <script id="2" type="module">
     // Initialize WebGPU for interactive demo
     if (!navigator.gpu) {
       display(html`<p style="color: red;">WebGPU is not supported in this browser.</p>`);
@@ -32,22 +31,19 @@
 
     invalidation.then(() => device.destroy());
   </script>
-
-  <script id="init-demo-renderer" type="module">
+  <script id="3" type="module">
     // Initialize offscreen demo renderer for static examples
     import { initDemoRenderer } from './demo-renderer.js';
 
     const demoRenderer = await initDemoRenderer();
     invalidation.then(() => demoRenderer.destroy());
   </script>
-
-  <script id="interactive-header" type="text/markdown">
+  <script id="4" type="text/markdown">
     ## Interactive Demo
 
     Explore the line rendering options with this interactive demo. Drag handles to edit vertices, drag the background to pan, and scroll to zoom.
   </script>
-
-  <script id="interactive-canvas" type="module">
+  <script id="5" type="module">
     import { createElementStack } from './lib/element-stack.js'
     import { createZoomableAxes } from './lib/zoomable-axes.js'
     import { expandable } from './lib/expandable.js'
@@ -124,8 +120,7 @@
       }
     }));
   </script>
-
-  <script id="interactive-controls-basic" type="module">
+  <script id="6" type="module">
     const lineWidthInput = Inputs.range([1, 200], { label: 'Line width', value: 50, step: 0.5 });
     const lineWidth = view(lineWidthInput);
 
@@ -153,8 +148,7 @@
     const varyingWidthInput = Inputs.toggle({ label: 'Varying width', value: false });
     const varyingWidth = view(varyingWidthInput);
   </script>
-
-  <script id="interactive-controls-miter" type="module">
+  <script id="7" type="module">
     const miterLimitInput = Inputs.range([1, 10], {
       label: 'Miter limit',
       value: 4,
@@ -163,8 +157,7 @@
     });
     const miterLimit = view(miterLimitInput);
   </script>
-
-  <script id="interactive-controls-join-resolution" type="module">
+  <script id="8" type="module">
     const joinResolutionInput = Inputs.range([2, 16], {
       label: 'Round join resolution',
       value: 8,
@@ -173,8 +166,7 @@
     });
     const joinResolution = view(joinResolutionInput);
   </script>
-
-  <script id="interactive-controls-cap-resolution" type="module">
+  <script id="9" type="module">
     const capResolutionInput = Inputs.range([2, 16], {
       label: 'Round cap resolution',
       value: 8,
@@ -183,9 +175,8 @@
     });
     const capResolution = view(capResolutionInput);
   </script>
-
-  <script id="interactive-controls-display" type="module">
-    display(html`<div class="lines-controls" style="display: flex; gap: 20px; flex-wrap: wrap;">
+  <script id="10" type="module">
+    display(html`<div class="lines-controls">
       ${lineWidthInput}
       ${joinTypeInput}
       ${capTypeInput}
@@ -200,8 +191,7 @@
       ${varyingWidthInput}
     </div>`);
   </script>
-
-  <script id="interactive-points" type="module">
+  <script id="11" type="module">
     import { createGPULines } from './webgpu-lines.js';
 
     pattern; lineBreak;
@@ -318,50 +308,59 @@
       totalDistanceBuffer.destroy();
     });
   </script>
-
-  <script id="interactive-handles" type="module">
+  <script id="12" type="module">
     const svg = d3.select(stack.elements.svg);
 
     const editablePoints = points.map((p, i) => ({ point: p, index: i }))
                                  .filter(d => d.point.w !== 0);
 
-    const circles = svg.selectAll('circle.vertex-handle')
+    // Use groups with invisible hit area + visible circle
+    const handleGroups = svg.selectAll('g.vertex-handle')
       .data(editablePoints, d => d.index)
-      .join('circle')
+      .join('g')
       .attr('class', 'vertex-handle')
-      .attr('r', 5)
-      .attr('fill', 'white')
-      .attr('stroke', '#333')
-      .attr('stroke-width', 1.5)
       .attr('cursor', 'move')
       .call(d3.drag()
         .on('start', function() {
-          d3.select(this).attr('stroke', '#0066cc').attr('stroke-width', 2);
+          d3.select(this).select('circle.visible')
+            .attr('stroke', '#0066cc').attr('stroke-width', 2);
         })
         .on('drag', function(event, d) {
           d.point.x = axes.xScale.invert(event.x);
           d.point.y = axes.yScale.invert(event.y);
-          d3.select(this)
-            .attr('cx', event.x)
-            .attr('cy', event.y);
+          d3.select(this).attr('transform', `translate(${event.x},${event.y})`);
           updateBuffers();
         })
         .on('end', function() {
-          d3.select(this).attr('stroke', '#333').attr('stroke-width', 1.5);
+          d3.select(this).select('circle.visible')
+            .attr('stroke', '#333').attr('stroke-width', 1.5);
         })
       );
 
+    // Invisible hit area (larger)
+    handleGroups.append('circle')
+      .attr('class', 'hit-area')
+      .attr('r', 20)
+      .attr('fill', 'transparent');
+
+    // Visible circle (smaller)
+    handleGroups.append('circle')
+      .attr('class', 'visible')
+      .attr('r', 5)
+      .attr('fill', 'white')
+      .attr('stroke', '#333')
+      .attr('stroke-width', 1.5)
+      .attr('pointer-events', 'none');
+
     function updateHandlePositions() {
-      circles
-        .attr('cx', d => axes.xScale(d.point.x))
-        .attr('cy', d => axes.yScale(d.point.y));
+      handleGroups.attr('transform', d =>
+        `translate(${axes.xScale(d.point.x)},${axes.yScale(d.point.y)})`);
     }
 
     updateHandlePositions();
     stack.addEventListener('update', updateHandlePositions);
   </script>
-
-  <script id="interactive-pipeline" type="module">
+  <script id="13" type="module">
     joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; alpha; stripes; varyingWidth;
 
     const useSdfMode = sdfStrokeWidth > 0;
@@ -484,8 +483,7 @@
       viewMatrixBuffer.destroy();
     });
   </script>
-
-  <script id="interactive-render" type="module">
+  <script id="14" type="module">
     import { createFrameLoop } from './lib/frame-loop.js';
 
     lineWidth; renderState.dirty = true;
@@ -520,8 +518,7 @@
 
     invalidation.then(() => loop.cancel());
   </script>
-
-  <script id="how-it-works" type="text/markdown">
+  <script id="15" type="text/markdown">
     ---
 
     ## How It Works
@@ -577,8 +574,7 @@
 
     Within each instance, a **vertex index** (0 to ~30, depending on join/cap resolution) expands into the triangle strip vertices. The vertex shader uses this index to compute screen-space offsets perpendicular to the line direction, forming the segment body, joins, and caps.
   </script>
-
-  <script id="api-header" type="text/markdown">
+  <script id="16" type="text/markdown">
     ---
 
     ## API Reference
@@ -593,18 +589,15 @@
 
     **Returns:** Line renderer object with `draw()`, `getBindGroupLayout()`, and `destroy()` methods.
   </script>
-
-  <script id="api-options-header" type="text/markdown">
+  <script id="17" type="text/markdown">
     ### Options
   </script>
-
-  <script id="doc-join" type="text/markdown">
+  <script id="18" type="text/markdown">
     #### `join` - Join Type
 
     Controls how line segments are connected at vertices. Options: `'bevel'`, `'miter'`, `'round'`.
   </script>
-
-  <script id="demo-join" type="module">
+  <script id="19" type="module">
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
@@ -613,7 +606,7 @@
       const joinMiter = createDemoCanvas('demo-join-miter');
       const joinRound = createDemoCanvas('demo-join-round');
 
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
         <figure style="margin: 0; text-align: center;">
           ${joinBevel}
           <figcaption><code>join: 'bevel'</code></figcaption>
@@ -628,20 +621,18 @@
         </figure>
       </div>`);
 
-      const baseOpts = { pattern: 'join-demo', lineWidth: 25, cap: 'round', miterLimit: 10, width: 200, height: 120 };
+      const baseOpts = { pattern: 'join-demo', lineWidth: 50, cap: 'round', miterLimit: 10, width: 200, height: 120 };
       await demoRenderer.renderToCanvas(joinBevel, { ...baseOpts, join: 'bevel' });
       await demoRenderer.renderToCanvas(joinMiter, { ...baseOpts, join: 'miter' });
       await demoRenderer.renderToCanvas(joinRound, { ...baseOpts, join: 'round' });
     }
   </script>
-
-  <script id="doc-cap" type="text/markdown">
+  <script id="20" type="text/markdown">
     #### `cap` - Cap Type
 
     Controls how line endpoints are rendered. Options: `'round'`, `'square'`, `'none'`.
   </script>
-
-  <script id="demo-cap" type="module">
+  <script id="21" type="module">
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
@@ -650,7 +641,7 @@
       const capSquare = createDemoCanvas('demo-cap-square');
       const capNone = createDemoCanvas('demo-cap-none');
 
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
         <figure style="margin: 0; text-align: center;">
           ${capRound}
           <figcaption><code>cap: 'round'</code></figcaption>
@@ -665,20 +656,18 @@
         </figure>
       </div>`);
 
-      const baseOpts = { pattern: 'cap-demo', lineWidth: 35, width: 200, height: 120 };
+      const baseOpts = { pattern: 'cap-demo', lineWidth: 50, width: 200, height: 120 };
       await demoRenderer.renderToCanvas(capRound, { ...baseOpts, cap: 'round' });
       await demoRenderer.renderToCanvas(capSquare, { ...baseOpts, cap: 'square' });
       await demoRenderer.renderToCanvas(capNone, { ...baseOpts, cap: 'none' });
     }
   </script>
-
-  <script id="doc-miter-limit" type="text/markdown">
+  <script id="22" type="text/markdown">
     #### `miterLimit` - Miter Limit
 
     When using `join: 'miter'`, this controls when sharp angles fall back to bevel joins. Lower values create more bevels; higher values allow longer miter points. Default: `4`.
   </script>
-
-  <script id="demo-miter-limit" type="module">
+  <script id="23" type="module">
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
@@ -687,7 +676,7 @@
       const miter4 = createDemoCanvas('demo-miter-4');
       const miter10 = createDemoCanvas('demo-miter-10');
 
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
         <figure style="margin: 0; text-align: center;">
           ${miter1}
           <figcaption><code>miterLimit: 1</code></figcaption>
@@ -702,20 +691,18 @@
         </figure>
       </div>`);
 
-      const baseOpts = { pattern: 'miter-demo', lineWidth: 28, join: 'miter', cap: 'round', width: 200, height: 120 };
+      const baseOpts = { pattern: 'miter-demo', lineWidth: 50, join: 'miter', cap: 'round', width: 200, height: 120 };
       await demoRenderer.renderToCanvas(miter1, { ...baseOpts, miterLimit: 1 });
       await demoRenderer.renderToCanvas(miter4, { ...baseOpts, miterLimit: 4 });
       await demoRenderer.renderToCanvas(miter10, { ...baseOpts, miterLimit: 10 });
     }
   </script>
-
-  <script id="doc-resolution" type="text/markdown">
+  <script id="24" type="text/markdown">
     #### `joinResolution` / `capResolution`
 
     Controls the number of triangles used for round joins and caps. Higher values create smoother curves. Default: `8`.
   </script>
-
-  <script id="demo-resolution" type="module">
+  <script id="25" type="module">
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
@@ -724,7 +711,7 @@
       const res4 = createDemoCanvas('demo-res-4');
       const res16 = createDemoCanvas('demo-res-16');
 
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
         <figure style="margin: 0; text-align: center;">
           ${res2}
           <figcaption><code>joinResolution: 2</code></figcaption>
@@ -739,20 +726,18 @@
         </figure>
       </div>`);
 
-      const baseOpts = { pattern: 'resolution-demo', lineWidth: 35, join: 'round', cap: 'round', width: 200, height: 120 };
+      const baseOpts = { pattern: 'resolution-demo', lineWidth: 50, join: 'round', cap: 'round', width: 200, height: 120 };
       await demoRenderer.renderToCanvas(res2, { ...baseOpts, joinResolution: 2 });
       await demoRenderer.renderToCanvas(res4, { ...baseOpts, joinResolution: 4 });
       await demoRenderer.renderToCanvas(res16, { ...baseOpts, joinResolution: 16 });
     }
   </script>
-
-  <script id="doc-line-breaks" type="text/markdown">
+  <script id="26" type="text/markdown">
     #### Line Breaks
 
     Insert a point with `w = 0` (or `NaN` for any coordinate) to create a line break. This splits the line into separate segments, each with its own end caps.
   </script>
-
-  <script id="demo-line-breaks" type="module">
+  <script id="27" type="module">
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
@@ -760,7 +745,7 @@
       const continuous = createDemoCanvas('demo-continuous');
       const withBreak = createDemoCanvas('demo-with-break');
 
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
         <figure style="margin: 0; text-align: center;">
           ${continuous}
           <figcaption>Continuous line</figcaption>
@@ -771,21 +756,19 @@
         </figure>
       </div>`);
 
-      const baseOpts = { pattern: 'break-demo', lineWidth: 22, join: 'round', cap: 'round', width: 200, height: 120 };
+      const baseOpts = { pattern: 'break-demo', lineWidth: 50, join: 'round', cap: 'round', width: 200, height: 120 };
       await demoRenderer.renderToCanvas(continuous, { ...baseOpts, lineBreak: false });
       await demoRenderer.renderToCanvas(withBreak, { ...baseOpts, lineBreak: true });
     }
   </script>
-
-  <script id="doc-shaders-intro" type="text/markdown">
+  <script id="28" type="text/markdown">
     ---
 
     ### Custom Shaders
 
     The library supports custom WGSL shaders for advanced rendering effects. Provide shader code via the `fragmentShaderBody` and `vertexShaderBody` options.
   </script>
-
-  <script id="doc-fragment-shader" type="text/markdown">
+  <script id="29" type="text/markdown">
     #### `fragmentShaderBody` - Custom Coloring
 
     The fragment shader controls how lines are colored. Your code must define a `getColor` function:
@@ -801,8 +784,7 @@
 
     **Varyings:** Any fields in your `Vertex` struct beyond `position` and `width` become varyings, interpolated across the line and passed as additional parameters to `getColor`. For example, if your struct includes `dist: f32`, your function signature becomes `fn getColor(lineCoord: vec2f, dist: f32) -> vec4f`.
   </script>
-
-  <script id="doc-linecoord" type="text/markdown">
+  <script id="30" type="text/markdown">
     #### `lineCoord` Values
 
     | Component | Segments/Joins | Caps | Description |
@@ -817,8 +799,7 @@
 
     **Dashed lines:** `lineCoord.x` does NOT provide distance along the line. To implement dashes, add a cumulative distance field to your `Vertex` struct. It will be interpolated and passed to `getColor` as an extra parameter. See the interactive demo's "Stripes" option for an example.
   </script>
-
-  <script id="demo-linecoord" type="module">
+  <script id="31" type="module">
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
@@ -826,12 +807,12 @@
       const lcX = createDemoCanvas('demo-lc-x');
       const lcY = createDemoCanvas('demo-lc-y');
 
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
-        <figure style="margin: 0; text-align: center;">
+      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
+        <figure style="margin: 0; max-width: 200px;">
           ${lcX}
           <figcaption><code>lineCoord.x</code> (0 on segments, varies in caps)</figcaption>
         </figure>
-        <figure style="margin: 0; text-align: center;">
+        <figure style="margin: 0; max-width: 200px;">
           ${lcY}
           <figcaption><code>lineCoord.y</code> (across line)</figcaption>
         </figure>
@@ -853,14 +834,12 @@
         }
       `;
 
-      const capOpts = { pattern: 'cap-demo', lineWidth: 35, join: 'round', cap: 'round', width: 200, height: 120 };
-      const baseOpts = { pattern: 'shader-demo', lineWidth: 28, join: 'round', cap: 'round', width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(lcX, { ...capOpts, fragmentShaderBody: shaderX });
+      const baseOpts = { pattern: 'cap-demo', lineWidth: 50, join: 'round', cap: 'round', width: 200, height: 120 };
+      await demoRenderer.renderToCanvas(lcX, { ...baseOpts, fragmentShaderBody: shaderX });
       await demoRenderer.renderToCanvas(lcY, { ...baseOpts, fragmentShaderBody: shaderY });
     }
   </script>
-
-  <script id="doc-shader-examples" type="text/markdown">
+  <script id="32" type="text/markdown">
     #### Example Shaders
 
     **Solid color with edge darkening:**
@@ -912,8 +891,7 @@
     });
     ```
   </script>
-
-  <script id="demo-shader-examples" type="module">
+  <script id="33" type="module">
     {
       const createDemoCanvas = (id, w = 200, h = 120) =>
         html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
@@ -922,7 +900,7 @@
       const gradient = createDemoCanvas('demo-gradient');
       const sdfStroke = createDemoCanvas('demo-sdf-stroke');
 
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px;">
+      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
         <figure style="margin: 0; text-align: center;">
           ${stripes}
           <figcaption>Cross-line stripes</figcaption>
@@ -940,7 +918,7 @@
       const shaderStripes = /* wgsl */`
         fn getColor(lineCoord: vec2f) -> vec4f {
           // Cross-line stripes using lineCoord.y
-          let stripe = step(0.0, lineCoord.y);
+          let stripe = select(0.0, 1.0, lineCoord.y >= 0.0);
           return vec4f(stripe * 0.2, 0.5, 0.9 - stripe * 0.4, 1.0);
         }
       `;
@@ -960,10 +938,10 @@
           return clamp((x - a) / (b - a), 0.0, 1.0);
         }
         fn getColor(lineCoord: vec2f) -> vec4f {
-          let width = 28.0;
+          let width = 50.0;
           let strokeWidth = 5.0;
-          // For SDF, use abs(y) which is -1 to 1 across the line
-          let dist = abs(lineCoord.y);
+          // Use length(lineCoord) for proper SDF on both segments and caps
+          let dist = length(lineCoord);
           let sdf = 0.5 * width * dist;
           let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
           let strokeMask = linearstep(width * 0.5 - strokeWidth - 0.5, width * 0.5 - strokeWidth + 0.5, sdf);
@@ -980,13 +958,12 @@
       };
 
       const baseOpts = { pattern: 'shader-demo', join: 'round', cap: 'round', width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(stripes, { ...baseOpts, lineWidth: 28, fragmentShaderBody: shaderStripes });
-      await demoRenderer.renderToCanvas(gradient, { ...baseOpts, lineWidth: 28, fragmentShaderBody: shaderGradient });
-      await demoRenderer.renderToCanvas(sdfStroke, { ...baseOpts, lineWidth: 28, fragmentShaderBody: shaderSDF, blend });
+      await demoRenderer.renderToCanvas(stripes, { ...baseOpts, lineWidth: 50, fragmentShaderBody: shaderStripes });
+      await demoRenderer.renderToCanvas(gradient, { ...baseOpts, lineWidth: 50, fragmentShaderBody: shaderGradient });
+      await demoRenderer.renderToCanvas(sdfStroke, { ...baseOpts, lineWidth: 50, fragmentShaderBody: shaderSDF, blend });
     }
   </script>
-
-  <script id="doc-vertex-shader" type="text/markdown">
+  <script id="34" type="text/markdown">
     #### `vertexShaderBody` - Custom Vertex Data
 
     The vertex shader body defines how line positions and per-vertex data are computed. You provide:
@@ -1021,8 +998,7 @@
     - `uniforms.width: f32` - Fallback line width (if no per-vertex width)
     - `uniforms.pointCount: u32` - Number of points
   </script>
-
-  <script id="doc-draw" type="text/markdown">
+  <script id="35" type="text/markdown">
     ### Drawing
 
     #### `gpuLines.draw(pass, props, bindGroups)`
@@ -1060,8 +1036,7 @@
     pass.end();
     ```
   </script>
-
-  <script id="doc-data-format" type="text/markdown">
+  <script id="36" type="text/markdown">
     ### Position Data Format
 
     Your vertex function returns a `vec4f` position:
