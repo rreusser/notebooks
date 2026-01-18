@@ -5,14 +5,6 @@
     # WebGPU Lines
 
     This module implements high-performance, flexible GPU-accelerated line rendering for WebGPU. It is a direct port of [regl-gpu-lines](https://github.com/rreusser/regl-gpu-lines) to WebGPU. The focus is on speed and customizability rather than sophisticated stroke expansion algorithms. For background on GPU line rendering, see Matt DesLauriers' [Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard) and Rye Terrell's [Instanced Line Rendering](https://wwwtyro.net/2019/11/18/instanced-lines.html). This library is a work in progress. You can find the [source on GitHub](https://github.com/rreusser/notebooks/tree/main/src/webgpu-lines), and it will eventually be published as a standalone NPM module.
-
-    **Features:**
-    - Instanced rendering with triangle strips
-    - Screen-projected lines using a custom vertex function. The vertex function allows you to input whatever geometry you want—whether computed in-shader, from buffer geometry, or sampled from textures or other sources. It also lets you define how varying values, line widths, and vertex projection are performed, all at runtime in the shader.
-    - Bevel, miter, and round joins
-    - Round, square, and butt end caps
-    - Line breaks via `w = 0` sentinel value
-    - A `lineCoord` varying allows you to construct SDF stroke outlines with anti-aliasing
   </script>
   <script id="2" type="module">
     // Initialize WebGPU for interactive demo
@@ -556,7 +548,6 @@
     invalidation.then(() => loop.cancel());
   </script>
   <script id="15" type="text/markdown">
-    ---
 
     ## How It Works
 
@@ -565,6 +556,20 @@
     The renderer uses **instanced rendering** with triangle strips. For a line with N points, it draws N-1 instances, where each instance renders one line segment plus half of the join geometry on each end. End caps are simply joins stretched around to form a cap.
 
     The geometry is carefully generated to optimize for high-performance rendering without the full rigor of stroke expansion algorithms, which handle self-intersection more carefully. It is also designed to permit uniform stroke widths using `lineCoord`—the varying is constructed so that `length(lineCoord)` gives consistent radial distance from the line center across both segments and caps.
+
+    ### Features
+    - Instanced rendering with triangle strips
+    - Screen-projected lines using a custom vertex function. The vertex function allows you to input whatever geometry you want—whether computed in-shader, from buffer geometry, or sampled from textures or other sources. It also lets you define how varying values, line widths, and vertex projection are performed, all at runtime in the shader.
+    - Bevel, miter, and round joins
+    - Round, square, and butt end caps
+    - Line breaks via `w = 0` sentinel value
+    - A `lineCoord` varying allows you to construct SDF stroke outlines with anti-aliasing
+
+    ### Limitations
+
+    - The library does not handle self-intersecting lines.
+    - Rapidly varying line widths render incorrectly.
+    - World-space line widths require custom work in the vertex shader function.
 
     ### Shader Interface
 
@@ -609,11 +614,12 @@
 
     ### Vertex Window
 
-    Each instance calls `getVertex` for a **4-point window** of adjacent vertices:
+    Internally, each instance calls `getVertex` for a **4-point window** of adjacent vertices:
     - **A** (previous) and **D** (next) provide direction for computing join angles
     - **B** (start) and **C** (end) define the segment being drawn
 
     Within each instance, a **vertex index** (0 to ~30, depending on join/cap resolution) expands into the triangle strip vertices. The vertex shader uses this index to compute screen-space offsets perpendicular to the line direction, forming the segment body, joins, and caps.
+
   </script>
   <script id="16" type="text/markdown">
     ---
