@@ -15,7 +15,7 @@
     display(expandable(figure, {
       width: Math.min(width, 640),
       height: Math.min(640, width),
-      toggleOffset: [-3, -14],
+      toggleOffset: [-14, -32],
       controls: '.magnetic-pendulum-controls',
       onResize(el, w, h) {
         stack.resize(w, h);
@@ -244,10 +244,10 @@
       return Plot.plot({
         width,
         height,
-        marginTop: 5,
+        marginTop: 10,
         marginRight: 10,
-        marginLeft: 30,
-        marginBottom: 20,
+        marginLeft: 40,
+        marginBottom: 30,
         style: { backgroundColor: "transparent", maxWidth: "none", position: "absolute" },
         x: { domain: xDomain, grid: true, tickSpacing: 100 },
         y: { domain: yDomain, grid: true, tickSpacing: 100 }

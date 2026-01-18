@@ -50,7 +50,7 @@
     display(expandable(figure, {
       width: Math.min(width, 640),
       height: Math.min(480, width),
-      toggleOffset: [-6, -33],
+      toggleOffset: [-15, -33],
       controls: '.plot-controls',
       onResize(el, w, h) {
         stack.resize(w, h);
@@ -127,7 +127,7 @@
       return Plot.plot({
         width,
         height,
-        marginTop: 20,
+        marginTop: 10,
         marginRight: 10,
         marginLeft: 40,
         marginBottom: 20,

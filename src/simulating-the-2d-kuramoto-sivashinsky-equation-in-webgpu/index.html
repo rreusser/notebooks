@@ -128,7 +128,7 @@
     display(expandable(figure, {
       width: Math.min(width, 640),
       height: Math.min(width, 640),
-      toggleOffset: [-6, -15],
+      toggleOffset: [-15, -16],
       controls: ['#ks-grid-size', '#ks-controls'],
       onResize(el, w, h) {
         stack.resize(w, h);
@@ -406,7 +406,7 @@
   </script>
   <script id="27" type="module">
     // Plot margins - canvas will be positioned inside these
-    const margins = { top: 20, right: 10, bottom: 30, left: 40 };
+    const margins = { top: 10, right: 10, bottom: 40, left: 40 };
 
     // Create the WebGPU canvas element and context
     // This will be managed by the element stack but we need the context reference

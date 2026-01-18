@@ -6,12 +6,14 @@
  * @param {number} options.width - Default width when collapsed
  * @param {number} options.height - Default height when collapsed
  * @param {number[]} [options.toggleOffset=[8,8]] - Offset [right, top] for the toggle button
+ * @param {number|number[]} [options.margin=0] - Margin from viewport edge when expanded. Single number or [horizontal, vertical].
+ * @param {number|number[]} [options.padding=0] - Padding inside the expanded container. Single number or [horizontal, vertical].
  * @param {Function} [options.onResize] - Optional callback when dimensions change: (content, width, height, expanded) => void
  * @param {string|HTMLElement|Array<string|HTMLElement>} [options.controls] - Controls to float over expanded content.
  *   Can be a CSS selector string, an HTMLElement, or an array of either.
  * @returns {HTMLElement} The expandable container
  */
-export function expandable(content, { width, height, toggleOffset = [8, 8], onResize, controls }) {
+export function expandable(content, { width, height, toggleOffset = [8, 8], margin = 0, padding = 0, onResize, controls }) {
   let expanded = false;
   let currentWidth = width;
   let currentHeight = height;
@@ -420,6 +422,8 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
     contentWrapper.style.left = '';
     contentWrapper.style.transform = '';
     contentWrapper.style.width = '';
+    contentWrapper.style.height = '';
+    contentWrapper.style.overflow = '';
     contentWrapper.style.background = '';
     contentWrapper.style.boxShadow = '';
     contentWrapper.style.padding = '';
@@ -443,36 +447,38 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], onRe
 
     const viewportWidth = window.innerWidth;
     const viewportHeight = window.innerHeight;
-    const isMobile = viewportWidth < 640;
 
-    // On mobile, go full-bleed horizontally with small vertical padding for caption
-    const hPadding = isMobile ? 3 : 16;
-    const vPadding = isMobile ? 8 : 16;
-    const horizontalInset = isMobile ? 0 : 48;
-    const verticalInset = isMobile ? 32 : 48;
-    const expandedWidth = viewportWidth - horizontalInset * 2 - hPadding * 2;
-    const expandedHeight = viewportHeight - verticalInset * 2 - vPadding * 2;
+    // Normalize margin and padding to [horizontal, vertical]
+    const [hMargin, vMargin] = Array.isArray(margin) ? margin : [margin, margin];
+    const [hPadding, vPadding] = Array.isArray(padding) ? padding : [padding, padding];
+
+    const expandedWidth = viewportWidth - hMargin * 2 - hPadding * 2;
+    const expandedHeight = viewportHeight - vMargin * 2 - vPadding * 2;
 
     const outerWidth = expandedWidth + hPadding * 2;
+    const outerHeight = expandedHeight + vPadding * 2;
 
     // Position content wrapper
     contentWrapper.style.position = 'fixed';
     contentWrapper.style.display = 'block';
     contentWrapper.style.width = `${outerWidth}px`;
+    contentWrapper.style.height = `${outerHeight}px`;
+    contentWrapper.style.overflow = 'hidden';
     contentWrapper.style.zIndex = '9999';
 
-    if (isMobile) {
-      // Full-bleed horizontally on mobile, centered vertically
-      contentWrapper.style.top = '50%';
+    const isFullBleed = hMargin === 0 && vMargin === 0;
+    if (isFullBleed) {
+      // Full-bleed: pin to edges, no rounded corners
+      contentWrapper.style.top = '0';
       contentWrapper.style.left = '0';
-      contentWrapper.style.transform = 'translateY(-50%)';
+      contentWrapper.style.transform = 'none';
       contentWrapper.style.borderRadius = '0';
       contentWrapper.style.boxShadow = 'none';
     } else {
-      // Centered with insets on desktop
-      contentWrapper.style.top = '50%';
-      contentWrapper.style.left = '50%';
-      contentWrapper.style.transform = 'translate(-50%, -50%)';
+      // Centered with margins
+      contentWrapper.style.top = `${vMargin}px`;
+      contentWrapper.style.left = `${hMargin}px`;
+      contentWrapper.style.transform = 'none';
       contentWrapper.style.borderRadius = '8px';
       contentWrapper.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
     }

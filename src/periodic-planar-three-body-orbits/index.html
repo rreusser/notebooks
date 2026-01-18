@@ -228,7 +228,7 @@
       return Generators.input(input);
     }
 
-    const animate = ctrl(Inputs.toggle({ label: 'Animate', value: true }));
+    const animate = ctrl(Inputs.toggle({ label: 'Animate lines', value: true }));
     const lineOpacity = ctrl(Inputs.range([0, 1], { label: 'Line opacity', value: 0.7, step: 0.01 }));
     const lineWidth = ctrl(Inputs.range([0.5, 6], { label: 'Line width', value: 2.5, step: 0.1 }));
     const pointSize = ctrl(Inputs.range([4, 20], { label: 'Point size', value: 10, step: 1 }));
@@ -248,9 +248,9 @@
         width,
         height,
         marginTop: 20,
-        marginRight: 10,
+        marginRight: 20,
         marginLeft: 40,
-        marginBottom: 20,
+        marginBottom: 30,
         style: { backgroundColor: 'transparent', maxWidth: 'none', position: 'absolute', top: '0', left: '0' },
         x: { domain: xDomain, tickSpacing: 100 },
         y: { domain: yDomain, tickSpacing: 100 },
@@ -786,7 +786,7 @@
         width,
         height,
         marginTop: 20,
-        marginRight: 10,
+        marginRight: 20,
         marginLeft: 50,
         marginBottom: 40,
         style: { backgroundColor: 'transparent', maxWidth: 'none', position: 'absolute', top: '0', left: '0' },
