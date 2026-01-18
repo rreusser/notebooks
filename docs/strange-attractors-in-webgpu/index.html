@@ -1507,7 +1507,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-Cq3C_ch9.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-C4kRGzid.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1545,7 +1545,7 @@ main h6 {
     <main><div id="cell-1" class="observablehq observablehq--cell"><div><p><em>This notebook is a 2026 WebGPU update of my 2021 post, <a href="https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1">Strange Attractors on the GPU, Part 1: Implementation</a>.</em></p>
 <p>This notebook walks through simulating a strange attractor on the GPU and then rendering particle tracks as lines. The essential feature of this notebook is that it accomplishes both particle updates and rendering to the screen without data ever touching the CPU.</p>
 </div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"><div><h3 id="the-attractor" tabindex="-1"><a href="#the-attractor">The Attractor</a></h3>
-<p>A strange attractor is a set of states toward which a dynamical system evolves over time. The <a href="https://en.wikipedia.org/wiki/Lorenz_system">Lorenz System</a> is the canonical example. The particular attractor we’re simulating here is defined by the system of ordinary differential equations:</p>
+<p>A strange attractor is a set of states toward which a dynamical system evolves over time. The <a href="https://en.wikipedia.org/wiki/Lorenz_system">Lorenz System</a> is the canonical example. The particular attractor we’re simulating here is the <em>Bouali Attractor</em>, described by Safieddine Bouali in <a href="https://arxiv.org/abs/1311.6128">A 3D Strange Attractor with a Distinctive Silhouette. The Butterfly Effect Revisited</a>. It is defined by the system of ordinary differential equations:</p>
 <p>with parameters , , , . These equations exhibit chaotic behavior; nearby trajectories diverge exponentially but remain bounded within the attractor’s basin.</p>
 </div></div><div id="cell-6" class="observablehq observablehq--cell"><div><h2 id="from-web-gl-to-web-gpu" tabindex="-1"><a href="#from-web-gl-to-web-gpu">From WebGL to WebGPU</a></h2>
 <p><a href="https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1">The original WebGL version of this simulation</a> stored particle state in a floating-point texture. Each row represented a particle’s history as a ring buffer. The simulation was designed around the limitations of WebGL, in particular the lack of compute shaders and inability to read and write to the same texture (WebGL 2’s <a href="https://webgl2fundamentals.org/webgl/lessons/webgl-gpgpu.html#now-lets-do-it-with-transform-feedback">transform feedback</a> notwithstanding).</p>

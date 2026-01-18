@@ -79,7 +79,6 @@ const renderState = { dirty: true, depthTexture };
 
 const figure = html`<figure style="margin: 0;" id="main-figure">
   ${stack.element}
-  <figcaption>Click <em>Restart</em> to reinitialize particles.</figcaption>
 </figure>`;
 
 display(expandable(figure, {
@@ -150,7 +149,7 @@ display(controlsContainer);
   <script id="explanation-attractor" type="text/markdown">
 ### The Attractor
 
-A strange attractor is a set of states toward which a dynamical system evolves over time. The [Lorenz System](https://en.wikipedia.org/wiki/Lorenz_system) is the canonical example. The particular attractor we're simulating here is defined by the system of ordinary differential equations:
+A strange attractor is a set of states toward which a dynamical system evolves over time. The [Lorenz System](https://en.wikipedia.org/wiki/Lorenz_system) is the canonical example. The particular attractor we're simulating here is the *Bouali Attractor*, described by Safieddine Bouali in [A 3D Strange Attractor with a Distinctive Silhouette. The Butterfly Effect Revisited](https://arxiv.org/abs/1311.6128). It is defined by the system of ordinary differential equations:
 
 ${tex.block`\begin{aligned}
 \frac{dx}{dt} &= \alpha x(1 - y) - \beta z \\[0.5em]
@@ -452,7 +451,7 @@ const cameraState = {
   phi: 0.8,
   theta: 0.3,
   distance: 7,
-  center: [0, 1, 0],
+  center: [0, 2, 0],
   fov: Math.PI / 4,
   near: 0.01,
   far: 100
@@ -523,7 +522,7 @@ function getProjectionViewMatrix(aspectRatio) {
   return result;
 }
 
-// Wire up mouse drag for camera rotation
+// Wire up mouse/touch drag for camera rotation
 const svg = d3.select(stack.elements.svg);
 let isDragging = false;
 let lastX = 0, lastY = 0;
@@ -548,12 +547,11 @@ function onMouseUp() {
 }
 
 svg.on('mousedown', (event) => {
-  event.preventDefault();  // Prevent text selection
+  event.preventDefault();
   isDragging = true;
   lastX = event.clientX;
   lastY = event.clientY;
   svg.style('cursor', 'grabbing');
-  // Attach to window so drag continues even when mouse leaves canvas
   window.addEventListener('mousemove', onMouseMove);
   window.addEventListener('mouseup', onMouseUp);
 });
@@ -563,6 +561,53 @@ svg.on('wheel', (event) => {
   cameraState.distance *= 1 + event.deltaY * 0.001;
   cameraState.distance = Math.max(1, Math.min(50, cameraState.distance));
   renderState.dirty = true;
+});
+
+// Touch support: single finger to rotate, pinch to zoom
+let lastTouchDist = 0;
+
+svg.on('touchstart', (event) => {
+  event.preventDefault();
+  if (event.touches.length === 1) {
+    isDragging = true;
+    lastX = event.touches[0].clientX;
+    lastY = event.touches[0].clientY;
+  } else if (event.touches.length === 2) {
+    // Pinch-to-zoom: record initial distance between fingers
+    const dx = event.touches[1].clientX - event.touches[0].clientX;
+    const dy = event.touches[1].clientY - event.touches[0].clientY;
+    lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+  }
+});
+
+svg.on('touchmove', (event) => {
+  event.preventDefault();
+  if (event.touches.length === 1 && isDragging) {
+    const dx = event.touches[0].clientX - lastX;
+    const dy = event.touches[0].clientY - lastY;
+    cameraState.phi += dx * 0.01;
+    cameraState.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, cameraState.theta + dy * 0.01));
+    lastX = event.touches[0].clientX;
+    lastY = event.touches[0].clientY;
+    renderState.dirty = true;
+  } else if (event.touches.length === 2) {
+    // Pinch-to-zoom
+    const dx = event.touches[1].clientX - event.touches[0].clientX;
+    const dy = event.touches[1].clientY - event.touches[0].clientY;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    if (lastTouchDist > 0) {
+      const scale = lastTouchDist / dist;
+      cameraState.distance *= scale;
+      cameraState.distance = Math.max(1, Math.min(50, cameraState.distance));
+      renderState.dirty = true;
+    }
+    lastTouchDist = dist;
+  }
+});
+
+svg.on('touchend', (event) => {
+  isDragging = false;
+  lastTouchDist = 0;
 });
   </script>
   <script id="line-rendering" type="module">
