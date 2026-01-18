@@ -154,6 +154,9 @@ export function createGPULines(device, options) {
     varyings,
   });
 
+  // Count user varyings for debug varying locations
+  const debugVaryingStartLocation = varyings.length + 1; // +1 for lineCoord at location 0
+
   // Create shader modules
   const vertexModule = device.createShaderModule({
     label: 'gpu-lines-vertex',
@@ -285,6 +288,9 @@ function createVertexShader({
     `  @location(${i + 1}) ${v.name}: ${v.type},`
   ).join('\n');
 
+  // Library debug varyings come after user varyings
+  const debugVaryingStartLoc = varyings.length + 1;
+
   // Generate varying interpolation code
   const varyingInterpolation = varyings.map(v =>
     `  let ${v.name} = mix(vertexB.${v.name}, vertexC.${v.name}, clamp(useC, 0.0, 1.0));`
@@ -311,11 +317,13 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-// Vertex output (library + user varyings)
+// Vertex output (library + user varyings + debug varyings)
 struct VertexOutput {
   @builtin(position) position: vec4f,
   @location(0) lineCoord: vec2f,
 ${varyingOutputDecls}
+  @location(${debugVaryingStartLoc}) instanceID: f32,
+  @location(${debugVaryingStartLoc + 1}) triStripCoord: vec2f,
 }
 
 // User-provided code (bindings, structs, vertex function)
@@ -402,6 +410,10 @@ fn vertexMain(
     output.lineCoord = lineCoord;
     return output;
   }
+
+  // Compute cap status before mirror swap (for debug varyings)
+  let isStartCap = aInvalid && uniforms.insertCaps == 1u;
+  let isEndCap = dInvalid && uniforms.insertCaps == 1u;
 
   // Swap for mirrored half
   if (mirror) {
@@ -537,6 +549,15 @@ ${varyingInterpolation}
   output.lineCoord = lineCoord;
 ${varyingOutputAssign}
 
+  // Debug varyings: instanceID and triStripCoord
+  // instanceID: segment index (negative for caps to distinguish them)
+  // Note: isStartCap and isEndCap were computed before the mirror swap
+  output.instanceID = select(f32(instanceIndex), -0.5, isStartCap || isEndCap);
+
+  // triStripCoord: encodes position in the triangle strip for wireframe rendering
+  // x: vertex pair index (0, 1, 2, ...), y: top (1) or bottom (0) of strip
+  output.triStripCoord = vec2f(floor(f32(vertexIndex) * 0.5), f32(vertexIndex % 2u));
+
   return output;
 }
 `;
@@ -551,9 +572,16 @@ function createFragmentShader({ userCode, varyings }) {
     `  @location(${i + 1}) ${v.name}: ${v.type},`
   ).join('\n');
 
+  // Library debug varyings come after user varyings
+  const debugVaryingStartLoc = varyings.length + 1;
+
   // Generate varying arguments for getColor call
   const varyingArgs = varyings.map(v => `input.${v.name}`).join(', ');
   const getColorArgs = varyingArgs ? `, ${varyingArgs}` : '';
+
+  // Detect if user's getColor expects debug varyings by checking for instanceID in the code
+  const wantsDebugVaryings = /\binstanceID\b/.test(userCode);
+  const debugArgs = wantsDebugVaryings ? ', input.instanceID, input.triStripCoord' : '';
 
   return /* wgsl */`
 // Library uniforms (shared with vertex shader)
@@ -574,13 +602,15 @@ struct Uniforms {
 struct FragmentInput {
   @location(0) lineCoord: vec2f,
 ${varyingInputDecls}
+  @location(${debugVaryingStartLoc}) instanceID: f32,
+  @location(${debugVaryingStartLoc + 1}) triStripCoord: vec2f,
 }
 
 ${userCode}
 
 @fragment
 fn fragmentMain(input: FragmentInput) -> @location(0) vec4f {
-  return getColor(input.lineCoord${getColorArgs});
+  return getColor(input.lineCoord${getColorArgs}${debugArgs});
 }
 `;
 }

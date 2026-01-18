@@ -121,7 +121,7 @@
     }));
   </script>
   <script id="6" type="module">
-    const lineWidthInput = Inputs.range([1, 200], { label: 'Line width', value: 50, step: 0.5 });
+    const lineWidthInput = Inputs.range([1, 100], { label: 'Line width', value: 50, step: 0.5 });
     const lineWidth = view(lineWidthInput);
 
     const joinTypeInput = Inputs.select(['bevel', 'miter', 'round'], { label: 'Join type', value: 'miter' });
@@ -133,7 +133,7 @@
     const patternInput = Inputs.select(['wave', 'zigzag', 'spiral'], { label: 'Pattern', value: 'zigzag' });
     const pattern = view(patternInput);
 
-    const sdfStrokeWidthInput = Inputs.range([0, 15], { label: 'SDF stroke width', value: 0, step: 0.5 });
+    const sdfStrokeWidthInput = Inputs.range([0, 50], { label: 'SDF stroke width', value: 10, step: 0.5 });
     const sdfStrokeWidth = view(sdfStrokeWidthInput);
 
     const alphaInput = Inputs.range([0, 1], { label: 'Alpha', value: 1, step: 0.01 });
@@ -147,6 +147,9 @@
 
     const varyingWidthInput = Inputs.toggle({ label: 'Varying width', value: false });
     const varyingWidth = view(varyingWidthInput);
+
+    const debugViewInput = Inputs.toggle({ label: 'Debug view', value: 'Debug view' });
+    const debugView = view(debugViewInput);
   </script>
   <script id="7" type="module">
     const miterLimitInput = Inputs.range([1, 10], {
@@ -189,6 +192,7 @@
       ${lineBreakInput}
       ${stripesInput}
       ${varyingWidthInput}
+      ${debugViewInput}
     </div>`);
   </script>
   <script id="11" type="module">
@@ -361,10 +365,10 @@
     stack.addEventListener('update', updateHandlePositions);
   </script>
   <script id="13" type="module">
-    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; alpha; stripes; varyingWidth;
+    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; alpha; stripes; varyingWidth; debugView;
 
     const useSdfMode = sdfStrokeWidth > 0;
-    const useBlend = useSdfMode || alpha < 1;
+    const useBlend = useSdfMode || alpha < 1 || debugView;
 
     // Vertex shader body with position buffer, distance buffer, and view matrix
     const vertexShaderBody = /* wgsl */`
@@ -372,6 +376,11 @@
       @group(1) @binding(1) var<storage, read> distances: array<f32>;
       @group(1) @binding(2) var<uniform> viewMatrix: mat4x4f;
       @group(1) @binding(3) var<uniform> totalDistance: f32;
+      struct DebugUniforms {
+        enabled: u32,
+        dpr: f32,
+      }
+      @group(1) @binding(4) var<uniform> debug: DebugUniforms;
 
       struct Vertex {
         position: vec4f,
@@ -391,56 +400,69 @@
       }
     `;
 
-    // Fragment shader with distance varying for stripes
-    const standardFragmentShader = stripes ? /* wgsl */`
-      fn getColor(lineCoord: vec2f, dist: f32, lineWidth: f32) -> vec4f {
-        let stripeFreq = 20.0;  // stripes per unit distance
-        let stripe = step(0.5, fract(dist * stripeFreq));
-        let baseColor = vec3f(0.4, 0.7, 1.0);
-        let stripeColor = vec3f(0.1, 0.2, 0.4);
-        let color = mix(baseColor, stripeColor, stripe);
-        return vec4f(color, ${alpha.toFixed(2)});
-      }
-    ` : /* wgsl */`
-      fn getColor(lineCoord: vec2f, dist: f32, lineWidth: f32) -> vec4f {
-        return vec4f(0.4, 0.7, 1.0, ${alpha.toFixed(2)});
-      }
-    `;
-
     // SDF distance function: round uses length, square uses max(abs)
     const sdfDistFn = capType === 'square'
       ? 'max(abs(lineCoord.x), abs(lineCoord.y))'
       : 'length(lineCoord.xy)';
 
-    const sdfFragmentShader = stripes ? /* wgsl */`
+    // Unified fragment shader handling all modes
+    const fragmentShaderBody = /* wgsl */`
+      struct DebugUniforms {
+        enabled: u32,
+        dpr: f32,
+      }
+      @group(1) @binding(4) var<uniform> debug: DebugUniforms;
+
       fn linearstep(a: f32, b: f32, x: f32) -> f32 {
         return clamp((x - a) / (b - a), 0.0, 1.0);
       }
-      fn getColor(lineCoord: vec2f, dist: f32, lineWidth: f32) -> vec4f {
-        let strokeWidth = ${sdfStrokeWidth.toFixed(1)};
+
+      // Unit grid lines for wireframe
+      fn grid(parameter: vec3f, width: f32, feather: f32) -> f32 {
+        let w1 = width - feather * 0.5;
+        let d = fwidth(parameter);
+        let looped = 0.5 - abs(parameter % 1.0 - 0.5);
+        let a3 = smoothstep(d * w1, d * (w1 + feather), looped);
+        return min(min(a3.x, a3.y), a3.z);
+      }
+
+      fn getColor(lineCoord: vec2f, dist: f32, lineWidth: f32, instanceID: f32, triStripCoord: vec2f) -> vec4f {
+        let strokeWidth = ${sdfStrokeWidth.toFixed(1)} * debug.dpr;
+        let baseAlpha = ${alpha.toFixed(2)};
+
+        // Compute SDF values
         let sdf = 0.5 * lineWidth * ${sdfDistFn};
-        let aa = linearstep(lineWidth * 0.5, lineWidth * 0.5 - 1.0, sdf) * ${alpha.toFixed(2)};
-        let strokeMask = linearstep(lineWidth * 0.5 - strokeWidth - 0.5, lineWidth * 0.5 - strokeWidth + 0.5, sdf);
-        // Stripes based on distance
+        let aa = select(baseAlpha, linearstep(lineWidth * 0.5, lineWidth * 0.5 - 1.0, sdf) * baseAlpha, strokeWidth > 0.0);
+        let strokeMask = select(0.0, linearstep(lineWidth * 0.5 - strokeWidth - 0.5, lineWidth * 0.5 - strokeWidth + 0.5, sdf), strokeWidth > 0.0);
+
+        // Layer 1: Base fill color (debug instance color or normal color)
+        var baseColor: vec3f;
+        if (debug.enabled == 1u) {
+          let iInstanceID = floor(instanceID + 0.5);
+          if (iInstanceID < 0.0) {
+            baseColor = vec3f(0.8, 0.1, 0.4);  // Red/pink for caps
+          } else {
+            baseColor = select(vec3f(0.8, 0.1, 0.4), vec3f(0.1, 0.7, 1.0), i32(iInstanceID) % 2 == 0);
+          }
+        } else {
+          baseColor = vec3f(0.1, 0.7, 1.0);
+        }
+
+        // Layer 2: Apply stripes on top of base color
         let stripeFreq = 20.0;
         let stripe = step(0.5, fract(dist * stripeFreq));
-        let fillColor = mix(vec3f(0.4, 0.7, 1.0), vec3f(0.1, 0.2, 0.4), stripe);
-        let strokeColor = vec3f(0.1, 0.2, 0.4);
-        let color = mix(fillColor, strokeColor, strokeMask);
-        return vec4f(color, aa);
-      }
-    ` : /* wgsl */`
-      fn linearstep(a: f32, b: f32, x: f32) -> f32 {
-        return clamp((x - a) / (b - a), 0.0, 1.0);
-      }
-      fn getColor(lineCoord: vec2f, dist: f32, lineWidth: f32) -> vec4f {
-        let strokeWidth = ${sdfStrokeWidth.toFixed(1)};
-        let sdf = 0.5 * lineWidth * ${sdfDistFn};
-        let aa = linearstep(lineWidth * 0.5, lineWidth * 0.5 - 1.0, sdf) * ${alpha.toFixed(2)};
-        let strokeMask = linearstep(lineWidth * 0.5 - strokeWidth - 0.5, lineWidth * 0.5 - strokeWidth + 0.5, sdf);
-        let fillColor = vec3f(0.4, 0.7, 1.0);
-        let strokeColor = vec3f(0.1, 0.2, 0.4);
-        let color = mix(fillColor, strokeColor, strokeMask);
+        let stripeColor = baseColor * 0.4;  // Darker version of base
+        var color = ${stripes ? 'mix(baseColor, stripeColor, stripe)' : 'baseColor'};
+
+        // Layer 3: Apply stroke (50% black in debug mode, dark blue in normal mode)
+        color = mix(color, vec3f(0.0), strokeMask * 0.7);
+
+        // Layer 4: Wireframe gridlines (debug only)
+        if (debug.enabled == 1u) {
+          let wire = grid(vec3f(triStripCoord, triStripCoord.x + triStripCoord.y), 0.5 * debug.dpr, 1.0);
+          color = mix(vec3f(1.0), color, wire);
+        }
+
         return vec4f(color, aa);
       }
     `;
@@ -453,7 +475,7 @@
       cap: capType,
       capResolution: capResolution,
       vertexShaderBody,
-      fragmentShaderBody: useSdfMode ? sdfFragmentShader : standardFragmentShader,
+      fragmentShaderBody,
       blend: useBlend ? {
         color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
         alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
@@ -467,6 +489,13 @@
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    // Create debug uniform buffer (8 bytes: u32 enabled + f32 dpr)
+    const debugBuffer = device.createBuffer({
+      label: 'debug-uniform',
+      size: 8,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
     // Create bind group for user data (group 1)
     const dataBindGroup = device.createBindGroup({
       layout: gpuLines.getBindGroupLayout(1),
@@ -474,24 +503,32 @@
         { binding: 0, resource: { buffer: positionBuffer } },
         { binding: 1, resource: { buffer: distanceBuffer } },
         { binding: 2, resource: { buffer: viewMatrixBuffer } },
-        { binding: 3, resource: { buffer: totalDistanceBuffer } }
+        { binding: 3, resource: { buffer: totalDistanceBuffer } },
+        { binding: 4, resource: { buffer: debugBuffer } }
       ]
     });
 
     invalidation.then(() => {
       gpuLines.destroy();
       viewMatrixBuffer.destroy();
+      debugBuffer.destroy();
     });
   </script>
   <script id="14" type="module">
     import { createFrameLoop } from './lib/frame-loop.js';
 
-    lineWidth; renderState.dirty = true;
+    lineWidth; debugView; renderState.dirty = true;
 
     const loop = createFrameLoop(() => {
       if (renderState.dirty) {
         // Update view matrix buffer
         device.queue.writeBuffer(viewMatrixBuffer, 0, axes.view);
+
+        // Update debug uniform (enabled: u32, dpr: f32)
+        const debugData = new ArrayBuffer(8);
+        new Uint32Array(debugData, 0, 1)[0] = debugView ? 1 : 0;
+        new Float32Array(debugData, 4, 1)[0] = dpr;
+        device.queue.writeBuffer(debugBuffer, 0, debugData);
 
         const encoder = device.createCommandEncoder();
 
@@ -500,13 +537,13 @@
             view: gpuContext.getCurrentTexture().createView(),
             loadOp: 'clear',
             storeOp: 'store',
-            clearValue: { r: 0.95, g: 0.95, b: 0.95, a: 1 }
+            clearValue: { r: 1.0, g: 1.0, b: 1.0, a: 1 }
           }]
         });
 
         gpuLines.draw(pass, {
           vertexCount: numPoints,
-          width: lineWidth,
+          width: lineWidth * dpr,
           resolution: [canvas.width, canvas.height]
         }, [dataBindGroup]);
 
@@ -783,6 +820,8 @@
     The `lineCoord` parameter provides spatial information about the current fragment (see below).
 
     **Varyings:** Any fields in your `Vertex` struct beyond `position` and `width` become varyings, interpolated across the line and passed as additional parameters to `getColor`. For example, if your struct includes `dist: f32`, your function signature becomes `fn getColor(lineCoord: vec2f, dist: f32) -> vec4f`.
+
+    **Debug parameters (optional):** If your shader code references `instanceID`, the library will automatically pass two additional parameters: `instanceID: f32` (segment index, negative for end caps) and `triStripCoord: vec2f` (triangle strip vertex coordinates for wireframe visualization). These are useful for debug views showing the internal triangle strip structure.
   </script>
   <script id="30" type="text/markdown">
     #### `lineCoord` Values

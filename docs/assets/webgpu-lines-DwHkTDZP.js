@@ -1,6 +1,6 @@
-function N(t,n){const s=n?new RegExp(`struct\\s+${n}\\s*\\{([^}]+)\\}`,"s"):/struct\s+(\w+)\s*\{([^}]+)\}/s,e=t.match(s);if(!e)return[];const a=n?e[1]:e[2],i=[],u=/(\w+)\s*:\s*([\w<>]+)\s*,?/g;let l;for(;(l=u.exec(a))!==null;)i.push({name:l[1].trim(),type:l[2].trim()});return i}function Y(t,n){const s=new RegExp(`fn\\s+${n}\\s*\\([^)]*\\)\\s*->\\s*(\\w+)`,"s"),e=t.match(s);return e?e[1]:null}function Q(t,n){const{vertexShaderBody:s,fragmentShaderBody:e,format:a,vertexFunction:i="getVertex",positionField:u="position",widthField:l="width",join:f="bevel",joinResolution:y=8,miterLimit:r=4,cap:d="round",capResolution:U=8,blend:A=null}=n,c=Y(s,i);if(!c)throw new Error(`Could not find vertex function '${i}' in vertexShaderBody`);const m=N(s,c);if(m.length===0)throw new Error(`Could not parse struct '${c}' in vertexShaderBody`);const b=m.findIndex(o=>o.name===u);if(b===-1)throw new Error(`Position field '${u}' not found in struct '${c}'`);const $=m.findIndex(o=>o.name===l);if($===-1)throw new Error(`Width field '${l}' not found in struct '${c}'. The vertex struct must include a width field.`);const D=m.filter((o,x)=>x!==b&&x!==$),g=f==="round",j=f==="bevel",R=g?y*2:2,S=j?0:r,E=d!=="none";let v;d==="none"?v=1:d==="square"?v=3:v=U;const M=v*2,O=d==="square"?[2,2/Math.sqrt(3)]:[1,1],T=(Math.max(M,R)+3)*2,z=J({userCode:s,vertexFunction:i,returnType:c,positionField:u,widthField:l,varyings:D,isRound:g}),F=W({userCode:e,varyings:D}),V=t.createShaderModule({label:"gpu-lines-vertex",code:z}),q=t.createShaderModule({label:"gpu-lines-fragment",code:F});t.createBindGroupLayout({label:"gpu-lines-uniforms",entries:[{binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]});const h=t.createRenderPipeline({label:"gpu-lines",layout:"auto",vertex:{module:V,entryPoint:"vertexMain"},fragment:{module:q,entryPoint:"fragmentMain",targets:[A?{format:a,blend:A}:{format:a}]},primitive:{topology:"triangle-strip",stripIndexFormat:void 0}}),w=t.createBuffer({label:"gpu-lines-uniforms",size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}),k=t.createBindGroup({layout:h.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:w}}]});return{getBindGroupLayout(o){return h.getBindGroupLayout(o)},draw(o,x,P=[]){const{vertexCount:L,width:H,resolution:_}=x,I=new ArrayBuffer(48),p=new Float32Array(I),C=new Uint32Array(I);p[0]=_[0],p[1]=_[1],p[2]=M,p[3]=R,p[4]=S*S,C[5]=g?1:0,p[6]=H,C[7]=L,C[8]=E?1:0,C[9]=0,p[10]=O[0],p[11]=O[1],t.queue.writeBuffer(w,0,I);const G=Math.max(0,L-1);if(G>0){o.setPipeline(h),o.setBindGroup(0,k);for(let B=0;B<P.length;B++)o.setBindGroup(B+1,P[B]);o.draw(T,G)}},destroy(){w.destroy()}}}function J({userCode:t,vertexFunction:n,returnType:s,positionField:e,widthField:a,varyings:i,isRound:u}){const l=i.map((r,d)=>`  @location(${d+1}) ${r.name}: ${r.type},`).join(`
-`),f=i.map(r=>`  let ${r.name} = mix(vertexB.${r.name}, vertexC.${r.name}, clamp(useC, 0.0, 1.0));`).join(`
-`),y=i.map(r=>`  output.${r.name} = ${r.name};`).join(`
+function H(e,t){const a=t?new RegExp(`struct\\s+${t}\\s*\\{([^}]+)\\}`,"s"):/struct\s+(\w+)\s*\{([^}]+)\}/s,n=e.match(a);if(!n)return[];const l=t?n[1]:n[2],r=[],d=/(\w+)\s*:\s*([\w<>]+)\s*,?/g;let o;for(;(o=d.exec(l))!==null;)r.push({name:o[1].trim(),type:o[2].trim()});return r}function Y(e,t){const a=new RegExp(`fn\\s+${t}\\s*\\([^)]*\\)\\s*->\\s*(\\w+)`,"s"),n=e.match(a);return n?n[1]:null}function Q(e,t){const{vertexShaderBody:a,fragmentShaderBody:n,format:l,vertexFunction:r="getVertex",positionField:d="position",widthField:o="width",join:u="bevel",joinResolution:f=8,miterLimit:y=4,cap:i="round",capResolution:g=8,blend:$=null}=t,c=Y(a,r);if(!c)throw new Error(`Could not find vertex function '${r}' in vertexShaderBody`);const m=H(a,c);if(m.length===0)throw new Error(`Could not parse struct '${c}' in vertexShaderBody`);const D=m.findIndex(s=>s.name===d);if(D===-1)throw new Error(`Position field '${d}' not found in struct '${c}'`);const S=m.findIndex(s=>s.name===o);if(S===-1)throw new Error(`Width field '${o}' not found in struct '${c}'. The vertex struct must include a width field.`);const h=m.filter((s,x)=>x!==D&&x!==S),w=u==="round",j=u==="bevel",R=w?f*2:2,M=j?0:y,E=i!=="none";let v;i==="none"?v=1:i==="square"?v=3:v=g;const O=v*2,L=i==="square"?[2,2/Math.sqrt(3)]:[1,1],V=(Math.max(O,R)+3)*2,T=J({userCode:a,vertexFunction:r,returnType:c,positionField:d,widthField:o,varyings:h,isRound:w}),z=W({userCode:n,varyings:h});h.length+1;const F=e.createShaderModule({label:"gpu-lines-vertex",code:T}),q=e.createShaderModule({label:"gpu-lines-fragment",code:z});e.createBindGroupLayout({label:"gpu-lines-uniforms",entries:[{binding:0,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]});const I=e.createRenderPipeline({label:"gpu-lines",layout:"auto",vertex:{module:F,entryPoint:"vertexMain"},fragment:{module:q,entryPoint:"fragmentMain",targets:[$?{format:l,blend:$}:{format:l}]},primitive:{topology:"triangle-strip",stripIndexFormat:void 0}}),b=e.createBuffer({label:"gpu-lines-uniforms",size:48,usage:GPUBufferUsage.UNIFORM|GPUBufferUsage.COPY_DST}),k=e.createBindGroup({layout:I.getBindGroupLayout(0),entries:[{binding:0,resource:{buffer:b}}]});return{getBindGroupLayout(s){return I.getBindGroupLayout(s)},draw(s,x,P=[]){const{vertexCount:_,width:N,resolution:G}=x,A=new ArrayBuffer(48),p=new Float32Array(A),C=new Uint32Array(A);p[0]=G[0],p[1]=G[1],p[2]=O,p[3]=R,p[4]=M*M,C[5]=w?1:0,p[6]=N,C[7]=_,C[8]=E?1:0,C[9]=0,p[10]=L[0],p[11]=L[1],e.queue.writeBuffer(b,0,A);const U=Math.max(0,_-1);if(U>0){s.setPipeline(I),s.setBindGroup(0,k);for(let B=0;B<P.length;B++)s.setBindGroup(B+1,P[B]);s.draw(V,U)}},destroy(){b.destroy()}}}function J({userCode:e,vertexFunction:t,returnType:a,positionField:n,widthField:l,varyings:r,isRound:d}){const o=r.map((i,g)=>`  @location(${g+1}) ${i.name}: ${i.type},`).join(`
+`),u=r.length+1,f=r.map(i=>`  let ${i.name} = mix(vertexB.${i.name}, vertexC.${i.name}, clamp(useC, 0.0, 1.0));`).join(`
+`),y=r.map(i=>`  output.${i.name} = ${i.name};`).join(`
 `);return`
 // Library uniforms
 struct Uniforms {
@@ -17,15 +17,17 @@ struct Uniforms {
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
-// Vertex output (library + user varyings)
+// Vertex output (library + user varyings + debug varyings)
 struct VertexOutput {
   @builtin(position) position: vec4f,
   @location(0) lineCoord: vec2f,
-${l}
+${o}
+  @location(${u}) instanceID: f32,
+  @location(${u+1}) triStripCoord: vec2f,
 }
 
 // User-provided code (bindings, structs, vertex function)
-${t}
+${e}
 
 // Check if position is invalid (line break)
 fn invalid(p: vec4f) -> bool {
@@ -50,16 +52,16 @@ fn vertexMain(
   let D_idx = i32(instanceIndex) + 2;
 
   // Call user's vertex function for each point in the window
-  let vertexA = ${n}(u32(clamp(A_idx, 0, N - 1)));
-  let vertexB = ${n}(u32(B_idx));
-  let vertexC = ${n}(u32(C_idx));
-  let vertexD = ${n}(u32(clamp(D_idx, 0, N - 1)));
+  let vertexA = ${t}(u32(clamp(A_idx, 0, N - 1)));
+  let vertexB = ${t}(u32(B_idx));
+  let vertexC = ${t}(u32(C_idx));
+  let vertexD = ${t}(u32(clamp(D_idx, 0, N - 1)));
 
   // Extract positions
-  var pA = vertexA.${e};
-  var pB = vertexB.${e};
-  var pC = vertexC.${e};
-  var pD = vertexD.${e};
+  var pA = vertexA.${n};
+  var pB = vertexB.${n};
+  var pC = vertexC.${n};
+  var pD = vertexD.${n};
 
   // Determine invalid states
   let aOutOfBounds = A_idx < 0;
@@ -108,6 +110,10 @@ fn vertexMain(
     output.lineCoord = lineCoord;
     return output;
   }
+
+  // Compute cap status before mirror swap (for debug varyings)
+  let isStartCap = aInvalid && uniforms.insertCaps == 1u;
+  let isEndCap = dInvalid && uniforms.insertCaps == 1u;
 
   // Swap for mirrored half
   if (mirror) {
@@ -174,7 +180,7 @@ fn vertexMain(
   lineCoord.y = dirB * mirrorSign;
 
   // Get width from vertex struct (computed per-vertex)
-  let width = select(vertexB.${a}, vertexC.${a}, mirror);
+  let width = select(vertexB.${l}, vertexC.${l}, mirror);
   let roundOrCap = uniforms.isRound == 1u || isCap;
 
   if (i == res + 1.0) {
@@ -243,10 +249,19 @@ ${f}
   output.lineCoord = lineCoord;
 ${y}
 
+  // Debug varyings: instanceID and triStripCoord
+  // instanceID: segment index (negative for caps to distinguish them)
+  // Note: isStartCap and isEndCap were computed before the mirror swap
+  output.instanceID = select(f32(instanceIndex), -0.5, isStartCap || isEndCap);
+
+  // triStripCoord: encodes position in the triangle strip for wireframe rendering
+  // x: vertex pair index (0, 1, 2, ...), y: top (1) or bottom (0) of strip
+  output.triStripCoord = vec2f(floor(f32(vertexIndex) * 0.5), f32(vertexIndex % 2u));
+
   return output;
 }
-`}function W({userCode:t,varyings:n}){const s=n.map((i,u)=>`  @location(${u+1}) ${i.name}: ${i.type},`).join(`
-`),e=n.map(i=>`input.${i.name}`).join(", "),a=e?`, ${e}`:"";return`
+`}function W({userCode:e,varyings:t}){const a=t.map((u,f)=>`  @location(${f+1}) ${u.name}: ${u.type},`).join(`
+`),n=t.length+1,l=t.map(u=>`input.${u.name}`).join(", "),r=l?`, ${l}`:"",o=/\binstanceID\b/.test(e)?", input.instanceID, input.triStripCoord":"";return`
 // Library uniforms (shared with vertex shader)
 struct Uniforms {
   resolution: vec2f,
@@ -264,13 +279,15 @@ struct Uniforms {
 
 struct FragmentInput {
   @location(0) lineCoord: vec2f,
-${s}
+${a}
+  @location(${n}) instanceID: f32,
+  @location(${n+1}) triStripCoord: vec2f,
 }
 
-${t}
+${e}
 
 @fragment
 fn fragmentMain(input: FragmentInput) -> @location(0) vec4f {
-  return getColor(input.lineCoord${a});
+  return getColor(input.lineCoord${r}${o});
 }
 `}export{Q as createGPULines};

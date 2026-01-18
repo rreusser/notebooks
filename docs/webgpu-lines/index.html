@@ -9,9 +9,9 @@
   <meta name="subject" content="GPU-accelerated line rendering for WebGPU with instanced triangle strips">
   <meta name="description" content="GPU-accelerated line rendering for WebGPU with instanced triangle strips">
   <meta property="og:description" content="GPU-accelerated line rendering for WebGPU with instanced triangle strips">
-  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.png">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.jpg">
   <meta name="twitter:card" content="summary_large_image">
-  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.png">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.jpg">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1507,7 +1507,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 720px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Lines</title>  <script type="module" crossorigin src="/notebooks/assets/index-D_Vzd77M.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Lines</title>  <script type="module" crossorigin src="/notebooks/assets/index-CC-xm0NK.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1629,6 +1629,7 @@ fn getColor(lineCoord: vec2f, distance: f32) -&gt; vec4f {
 </code></pre>
 <p>The <code>lineCoord</code> parameter provides spatial information about the current fragment (see below).</p>
 <p><strong>Varyings:</strong> Any fields in your <code>Vertex</code> struct beyond <code>position</code> and <code>width</code> become varyings, interpolated across the line and passed as additional parameters to <code>getColor</code>. For example, if your struct includes <code>dist: f32</code>, your function signature becomes <code>fn getColor(lineCoord: vec2f, dist: f32) -&gt; vec4f</code>.</p>
+<p><strong>Debug parameters (optional):</strong> If your shader code references <code>instanceID</code>, the library will automatically pass two additional parameters: <code>instanceID: f32</code> (segment index, negative for end caps) and <code>triStripCoord: vec2f</code> (triangle strip vertex coordinates for wireframe visualization). These are useful for debug views showing the internal triangle strip structure.</p>
 </div></div><div id="cell-30" class="observablehq observablehq--cell"><div><h4><code>lineCoord</code> Values</h4>
 <table>
 <thead>
