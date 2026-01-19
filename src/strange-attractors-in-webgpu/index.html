@@ -180,9 +180,6 @@ With storage buffers, each frame requires just two GPU operations:
 For line rendering, we use the [webgpu-instanced-lines](https://github.com/rreusser/webgpu-instanced-lines) module. Lines are difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
 
   </script>
-  <script id="webgpu-lines-import" type="module" pinned>
-import { createGPULines } from 'npm:webgpu-instanced-lines';
-  </script>
   <script id="perf-note" type="text/markdown">
 **A note on performance**: For reasons I don't understand, this WebGPU implementation performs slightly worse than the [original WebGL 1 version](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1) despite using almost identically the same line rendering implementation. Performance will likely improve as WebGPU implementations mature.
   </script>
@@ -454,9 +451,11 @@ Multiple particle tracks are rendered in a single draw call. We separate them us
 
 ### Code
 
-A selection of the code is presented below.
+A selection of the code is presented below. We import [webgpu-instanced-lines](https://www.npmjs.com/package/webgpu-instanced-lines) from NPM and instantiate a line renderer. The main call and vertex shader are printed below, but for a comprehensive, straightforward example with all the pieces in place, see [this example](https://rreusser.github.io/webgpu-instanced-lines/lorenz.html) from the module.
   </script>
   <script id="gpu-lines-init" type="module" pinned>
+import { createGPULines } from 'npm:webgpu-instanced-lines';
+
 const gpuLines = createGPULines(device, {
   colorTargets: [{ format: canvasFormat }],
   depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
@@ -635,7 +634,8 @@ svg.on('touchend', (event) => {
   </script>
   <script id="line-rendering" type="module">
 // Vertex shader that loads from the state buffer
-const vertexShaderBody = /* wgsl */`
+const vertexShaderBody = /* wgsl */`// vertexShaderBody:
+
 @group(1) @binding(0) var<storage, read> state: array<vec4f>;
 @group(1) @binding(1) var<uniform> projViewMatrix: mat4x4f;
 
