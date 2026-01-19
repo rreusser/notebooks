@@ -67,15 +67,26 @@ gpuContext.configure({
   alphaMode: 'premultiplied'
 });
 
-// Create depth texture for proper z-ordering
+// Create MSAA textures for anti-aliasing
+const sampleCount = 4;
+
+const msaaColorTexture = device.createTexture({
+  label: 'msaa-color-texture',
+  size: [canvas.width, canvas.height],
+  format: canvasFormat,
+  sampleCount,
+  usage: GPUTextureUsage.RENDER_ATTACHMENT
+});
+
 const depthTexture = device.createTexture({
   label: 'depth-texture',
   size: [canvas.width, canvas.height],
   format: 'depth24plus',
+  sampleCount,
   usage: GPUTextureUsage.RENDER_ATTACHMENT
 });
 
-const renderState = { dirty: true, depthTexture };
+const renderState = { dirty: true, depthTexture, msaaColorTexture, sampleCount };
 
 const figure = html`<figure style="margin: 0;" id="main-figure">
   ${stack.element}
@@ -89,12 +100,21 @@ display(expandable(figure, {
     stack.resize(w, h);
     canvas.width = Math.floor(w * dpr);
     canvas.height = Math.floor(h * dpr);
-    // Recreate depth texture at new size
+    // Recreate MSAA textures at new size
+    renderState.msaaColorTexture.destroy();
+    renderState.msaaColorTexture = device.createTexture({
+      label: 'msaa-color-texture',
+      size: [canvas.width, canvas.height],
+      format: canvasFormat,
+      sampleCount: renderState.sampleCount,
+      usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
     renderState.depthTexture.destroy();
     renderState.depthTexture = device.createTexture({
       label: 'depth-texture',
       size: [canvas.width, canvas.height],
       format: 'depth24plus',
+      sampleCount: renderState.sampleCount,
       usage: GPUTextureUsage.RENDER_ATTACHMENT
     });
     renderState.dirty = true;
@@ -138,7 +158,7 @@ const dtInput = Inputs.range([0.001, 0.1], {
 const dt = ctrl(dtInput);
 
 const lineWidthInput = Inputs.range([1, 20], {
-  value: 5,
+  value: 6,
   label: 'Line width',
   step: 0.5
 });
@@ -457,10 +477,25 @@ A selection of the code is presented below. We import [webgpu-instanced-lines](h
 import { createGPULines } from 'npm:webgpu-instanced-lines';
 
 const gpuLines = createGPULines(device, {
-  colorTargets: [{ format: canvasFormat }],
+  colorTargets: [{
+    format: canvasFormat,
+    blend: {
+      color: {
+        srcFactor: 'src-alpha',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add'
+      },
+      alpha: {
+        srcFactor: 'one',
+        dstFactor: 'one-minus-src-alpha',
+        operation: 'add'
+      }
+    }
+  }],
   depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
+  multisample: { count: renderState.sampleCount, alphaToCoverageEnabled: false },
   join: 'bevel',
-  cap: 'square',  // Use square caps + fragment discard for round appearance
+  cap: 'square',
   vertexShaderBody,
   fragmentShaderBody,
 });
@@ -652,6 +687,7 @@ struct Vertex {
   width: f32,
   t: f32,
   velocity: f32,
+  lineWidth: f32,
 }
 
 // Bouali attractor derivative for velocity computation
@@ -675,7 +711,7 @@ fn getVertex(index: u32) -> Vertex {
 
   // Check if this is a line break point
   if (step >= lineUniforms.stepCount) {
-    return Vertex(vec4f(0), 0.0, 0.0, 0.0);
+    return Vertex(vec4f(0), 0.0, 0.0, 0.0, 0.0);
   }
 
   // Compute buffer index with ring buffer offset (modular arithmetic for wrap-around)
@@ -698,7 +734,7 @@ fn getVertex(index: u32) -> Vertex {
   // Line width tapers from thin (old) to thick (new)
   let lineWidth = lineUniforms.width * (0.3 + 0.7 * t);
 
-  return Vertex(projected, lineWidth, t, normalizedVelocity);
+  return Vertex(projected, lineWidth, t, normalizedVelocity, lineWidth);
 }
 `;
 
@@ -722,22 +758,19 @@ fn rainbow(p: vec2f) -> vec3f {
          m2 * vec3f(c, s * c, c * c - s * s);
 }
 
-fn getColor(lineCoord: vec2f, t: f32, velocity: f32) -> vec4f {
-  // Discard fragments outside the line
-  if (length(lineCoord) > 1.0) {
-    discard;
-  }
+fn getColor(lineCoord: vec2f, t: f32, velocity: f32, lineWidth: f32) -> vec4f {
+  let sdf = length(lineCoord) * lineWidth;
+  let isCap = abs(lineCoord.x) > 0.0;
 
   // Rainbow color based on velocity, with saturation from track progress
-  let fillColor = rainbow(vec2f(velocity, t));
+  var color = rainbow(vec2f(velocity, t));
+
+  if (isCap && dot(lineCoord, lineCoord) > 1.0) { discard; }
 
   // Dark border effect
-  let width = 10.0;
-  let borderWidth = 1.0;
-  let sdf = length(lineCoord) * width * 0.5;
-  let borderStart = width * 0.5 - borderWidth;
-  let borderMask = smoothstep(borderStart - 0.5, borderStart + 0.5, sdf);
-  let color = mix(fillColor, vec3f(0.0), borderMask);
+  let borderWidth = 4.0;
+  let borderMask = smoothstep(lineWidth - borderWidth - 0.75, lineWidth - borderWidth + 0.75, sdf);
+  color = mix(color, vec3f(0.0), borderMask * 0.8);
 
   return vec4f(color, 1.0);
 }
@@ -860,7 +893,8 @@ const loop = createFrameLoop(() => {
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [{
-        view: gpuContext.getCurrentTexture().createView(),
+        view: renderState.msaaColorTexture.createView(),
+        resolveTarget: gpuContext.getCurrentTexture().createView(),
         loadOp: 'clear',
         storeOp: 'store',
         clearValue: { r: 1.0, g: 1.0, b: 1.0, a: 1.0 }

@@ -1507,7 +1507,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-DRBVSXW2.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-BmNCqcdJ.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1585,10 +1585,25 @@ main h6 {
 </div></div><div id="cell-17" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">createGPULines</span> } <span class="tok-keyword">from</span> <span class="tok-string">'npm:webgpu-instanced-lines'</span>;
 
 <span class="tok-keyword">const</span> <span class="tok-definition">gpuLines</span> = <span class="tok-variable">createGPULines</span>(<span class="tok-variable">device</span>, {
-  <span class="tok-definition">colorTargets</span>: [{ <span class="tok-definition">format</span>: <span class="tok-variable">canvasFormat</span> }],
+  <span class="tok-definition">colorTargets</span>: [{
+<span class="tok-definition">format</span>: <span class="tok-variable">canvasFormat</span>,
+<span class="tok-definition">blend</span>: {
+  <span class="tok-definition">color</span>: {
+    <span class="tok-definition">srcFactor</span>: <span class="tok-string">'src-alpha'</span>,
+    <span class="tok-definition">dstFactor</span>: <span class="tok-string">'one-minus-src-alpha'</span>,
+    <span class="tok-definition">operation</span>: <span class="tok-string">'add'</span>
+  },
+  <span class="tok-definition">alpha</span>: {
+    <span class="tok-definition">srcFactor</span>: <span class="tok-string">'one'</span>,
+    <span class="tok-definition">dstFactor</span>: <span class="tok-string">'one-minus-src-alpha'</span>,
+    <span class="tok-definition">operation</span>: <span class="tok-string">'add'</span>
+  }
+}
+  }],
   <span class="tok-definition">depthStencil</span>: { <span class="tok-definition">format</span>: <span class="tok-string">'depth24plus'</span>, <span class="tok-definition">depthWriteEnabled</span>: <span class="tok-literal">true</span>, <span class="tok-definition">depthCompare</span>: <span class="tok-string">'less'</span> },
+  <span class="tok-definition">multisample</span>: { <span class="tok-definition">count</span>: <span class="tok-variable">renderState</span>.<span class="tok-definition">sampleCount</span>, <span class="tok-definition">alphaToCoverageEnabled</span>: <span class="tok-literal">false</span> },
   <span class="tok-definition">join</span>: <span class="tok-string">'bevel'</span>,
-  <span class="tok-definition">cap</span>: <span class="tok-string">'square'</span>,  <span class="tok-comment">// Use square caps + fragment discard for round appearance</span>
+  <span class="tok-definition">cap</span>: <span class="tok-string">'square'</span>,
   <span class="tok-definition">vertexShaderBody</span>,
   <span class="tok-definition">fragmentShaderBody</span>,
 });
