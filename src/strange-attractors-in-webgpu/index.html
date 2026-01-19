@@ -117,7 +117,7 @@ const simulateInput = Inputs.toggle({ label: 'Simulate', value: true });
 const simulate = ctrl(simulateInput);
 
 const particleCountInput = Inputs.range([1, 4096], {
-  value: 20,
+  value: 200,
   label: 'Particle count',
   step: 1
 });
@@ -125,7 +125,7 @@ const particleCount = ctrl(particleCountInput);
 
 const stepCountInput = Inputs.range([1, 1024], {
   label: 'Track length',
-  value: 100,
+  value: 50,
   transform: Math.log,
   step: 1
 });
@@ -170,14 +170,21 @@ A naive WebGPU port would preserve this texture-based approach, replacing fragme
 2. **Copy**: Transfer the temporary column back into the main state texture
 3. **Draw**: Render lines by sampling the state texture in a vertex shader
 
-WebGPU offers a better primitive for this workload which eliminates the copy step entirely: storage buffers with `read_write` access. This is an easy fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction.
+I tried this texture-based approach, but when I didn't see much performance improvement over the buffer approach, I switched back to storage buffers with `read_write` access. This is a natural fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction, and it eliminates the copy step entirely.
 
 With storage buffers, each frame requires just two GPU operations:
 
 1. **Integrate** the differential equation, reading the current state and writing one new state value for each particle.
 2. **Draw** all line segments, joins, and caps using instanced triangle strip geometry.
 
-For line rendering, we use the (WIP) [webgpu-lines](../webgpu-lines/) module. Lines are difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
+For line rendering, we use the [webgpu-instanced-lines](https://github.com/rreusser/webgpu-instanced-lines) module. Lines are difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.
+
+  </script>
+  <script id="webgpu-lines-import" type="module" pinned>
+import { createGPULines } from 'npm:webgpu-instanced-lines';
+  </script>
+  <script id="perf-note" type="text/markdown">
+**A note on performance**: For reasons I don't understand, this WebGPU implementation performs slightly worse than the [original WebGL 1 version](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1) despite using almost identically the same line rendering implementation. Performance will likely improve as WebGPU implementations mature.
   </script>
   <script id="explanation-state" type="text/markdown">
 ## State Layout
@@ -193,19 +200,17 @@ As we step the ODE, we compute one new history point for each particle track. To
   <script id="state-buffer" type="module">
 particleCount; stepCount; restart;
 
-// Create storage buffer for state
-// Each element stores (x, y, z) as vec3f for one particle at one timestep
-// Layout: buffer[particleId * stepCount + stepIndex] = position
-// Using storage buffer with read_write access eliminates the need for a temp buffer
-// Note: array<vec3f> has 16-byte stride due to WGSL alignment rules
+// Create storage buffer for particle state
+// Layout: particle-major ordering, each entry is vec4f (16 bytes)
+// Index: particle * stepCount + step
 const stateBuffer = device.createBuffer({
   label: 'state-buffer',
-  size: particleCount * stepCount * 16, // vec3f with 16-byte stride per position
+  size: particleCount * stepCount * 16, // vec4f per point
   usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
 });
 
-// Track current column for ring buffer
-const simState = { currentColumn: 0, t: 0 };
+// Track current step for ring buffer
+const simState = { currentStep: 0, t: 0 };
 
 invalidation.then(() => {
   stateBuffer.destroy();
@@ -223,9 +228,9 @@ For historical reasons which I didn't see it necessary to change, we initialize 
 We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy quasirandom number generator described by Martin Roberts in *[The Unreasonable Effectiveness of Quasirandom Sequences](http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/)*.
   </script>
   <script id="init-shader" type="module">
-// Compute shader to initialize particle state
+// Compute shader to initialize particle state (writes to buffer)
 const initShaderCode = /* wgsl */`
-@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec3f>;
+@group(0) @binding(0) var<storage, read_write> state: array<vec4f>;
 
 struct Uniforms {
   origin: vec3f,
@@ -254,11 +259,12 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let particle = gid.x;
   if (particle >= uniforms.particleCount) { return; }
 
-  // Initialize all columns for this particle with the same position
+  // Initialize all steps for this particle with the same position
   let pos = uniforms.origin + uniforms.scale * sphericalRandom(f32(particle) + 0.5);
-  let baseIdx = particle * uniforms.stepCount;
-  for (var col = 0u; col < uniforms.stepCount; col++) {
-    stateBuffer[baseIdx + col] = pos;
+  for (var step = 0u; step < uniforms.stepCount; step++) {
+    // Buffer index: particle * stepCount + step
+    let idx = particle * uniforms.stepCount + step;
+    state[idx] = vec4f(pos, 1.0);
   }
 }
 `;
@@ -313,7 +319,7 @@ function initializeState() {
   pass.end();
   device.queue.submit([encoder.finish()]);
 
-  simState.currentColumn = 0;
+  simState.currentStep = 0;
   simState.t = 0;
   renderState.dirty = true;
 }
@@ -347,15 +353,16 @@ fn derivative(x: f32, y: f32, z: f32, t: f32) -> vec3f {
 `;
   </script>
   <script id="integrate-shader" type="module">
-// Integration shader: reads and writes to a single storage buffer
+// Integration shader: reads from and writes to storage buffer directly
+// With read_write access, no ping-pong needed - just read src step and write dst step
 const integrateShaderCode = /* wgsl */`
-@group(0) @binding(0) var<storage, read_write> stateBuffer: array<vec3f>;
+@group(0) @binding(0) var<storage, read_write> state: array<vec4f>;
 
 struct Uniforms {
   dt: f32,
   t: f32,
-  srcColumn: u32,
-  dstColumn: u32,
+  srcStep: u32,
+  dstStep: u32,
   stepCount: u32,
   particleCount: u32,
 }
@@ -372,9 +379,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
   let particle = gid.x;
   if (particle >= uniforms.particleCount) { return; }
 
-  // Read current state from source column
-  let readIdx = particle * uniforms.stepCount + uniforms.srcColumn;
-  let p = stateBuffer[readIdx];
+  // Read current state from source step
+  let srcIdx = particle * uniforms.stepCount + uniforms.srcStep;
+  let p = state[srcIdx].xyz;
 
   // RK4 integration
   let dt = uniforms.dt;
@@ -391,9 +398,9 @@ fn main(@builtin(global_invocation_id) gid: vec3u) {
     newP = newP * 0.0001;
   }
 
-  // Write to destination column
-  let writeIdx = particle * uniforms.stepCount + uniforms.dstColumn;
-  stateBuffer[writeIdx] = newP;
+  // Write to destination step
+  let dstIdx = particle * uniforms.stepCount + uniforms.dstStep;
+  state[dstIdx] = vec4f(newP, 1.0);
 }
 `;
 
@@ -413,7 +420,7 @@ const integratePipeline = device.createComputePipeline({
 
 const integrateUniformBuffer = device.createBuffer({
   label: 'integrate-uniforms',
-  size: 32, // f32 dt + f32 t + u32 srcColumn + u32 dstColumn + u32 stepCount + u32 particleCount + padding
+  size: 32, // f32 dt + f32 t + u32 srcStep + u32 dstStep + u32 stepCount + u32 particleCount + padding
   usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 });
 
@@ -435,14 +442,33 @@ invalidation.then(() => {
 
 In the timeless words of Matt DesLauriers, *[Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard)*. Browsers limit the built-in line primitive to a single pixel width, so for any reasonably well-rendered lines, we need to build our own geometry.
 
-The (WIP) [webgpu-lines](../webgpu-lines/) module renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus half of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.
+The [webgpu-instanced-lines](https://github.com/rreusser/webgpu-instanced-lines) module renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus half of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.
 
 We don't pass vertex positions directly. Instead, we provide a vertex function which uses the integer vertex ID to read particle buffer data. To handle the ring buffer, we add an offset to the step index that shifts based on which column was most recently written. The oldest data is always at the "start" of the rendered line, and the newest at the end.
+  </script>
 
+  <script id="line-breaks" type="text/markdown">
 ### Line Breaks
 
 Multiple particle tracks are rendered in a single draw call. We separate them using sentinel values of `w = 0` in clip space. When the vertex function returns a position with `w = 0`, the line renderer interprets this as a break, skipping one instance and reworking adjacent joins into end caps.
+
+### Code
+
+A selection of the code is presented below.
   </script>
+  <script id="gpu-lines-init" type="module" pinned>
+const gpuLines = createGPULines(device, {
+  colorTargets: [{ format: canvasFormat }],
+  depthStencil: { format: 'depth24plus', depthWriteEnabled: true, depthCompare: 'less' },
+  join: 'bevel',
+  cap: 'square',  // Use square caps + fragment discard for round appearance
+  vertexShaderBody,
+  fragmentShaderBody,
+});
+
+invalidation.then(() => gpuLines.destroy());
+  </script>
+
   <script id="camera-setup" type="module">
 // Simple orbital camera using mouse drag
 // phi = azimuthal angle (rotation around Y axis)
@@ -457,6 +483,11 @@ const cameraState = {
   far: 100
 };
 
+// Pre-allocate matrices to avoid per-frame allocations
+const _view = new Float32Array(16);
+const _proj = new Float32Array(16);
+const _projView = new Float32Array(16);
+
 function getProjectionViewMatrix(aspectRatio) {
   const { phi, theta, distance, center, fov, near, far } = cameraState;
 
@@ -466,60 +497,52 @@ function getProjectionViewMatrix(aspectRatio) {
   const z = center[2] + distance * Math.cos(theta) * Math.sin(phi);
 
   // View matrix (lookAt)
-  const eye = [x, y, z];
-  const forward = [center[0] - x, center[1] - y, center[2] - z];
-  const len = Math.sqrt(forward[0]**2 + forward[1]**2 + forward[2]**2);
-  forward[0] /= len; forward[1] /= len; forward[2] /= len;
+  const eyeX = x, eyeY = y, eyeZ = z;
+  let fwdX = center[0] - x, fwdY = center[1] - y, fwdZ = center[2] - z;
+  const len = Math.sqrt(fwdX*fwdX + fwdY*fwdY + fwdZ*fwdZ);
+  fwdX /= len; fwdY /= len; fwdZ /= len;
 
-  const up = [0, 1, 0];
-  const right = [
-    forward[1] * up[2] - forward[2] * up[1],
-    forward[2] * up[0] - forward[0] * up[2],
-    forward[0] * up[1] - forward[1] * up[0]
-  ];
-  const rlen = Math.sqrt(right[0]**2 + right[1]**2 + right[2]**2);
-  right[0] /= rlen; right[1] /= rlen; right[2] /= rlen;
+  // right = forward × up (up = 0,1,0)
+  let rightX = fwdY * 0 - fwdZ * 1;
+  let rightY = fwdZ * 0 - fwdX * 0;
+  let rightZ = fwdX * 1 - fwdY * 0;
+  const rlen = Math.sqrt(rightX*rightX + rightY*rightY + rightZ*rightZ);
+  rightX /= rlen; rightY /= rlen; rightZ /= rlen;
 
-  const newUp = [
-    right[1] * forward[2] - right[2] * forward[1],
-    right[2] * forward[0] - right[0] * forward[2],
-    right[0] * forward[1] - right[1] * forward[0]
-  ];
+  // newUp = right × forward
+  const upX = rightY * fwdZ - rightZ * fwdY;
+  const upY = rightZ * fwdX - rightX * fwdZ;
+  const upZ = rightX * fwdY - rightY * fwdX;
 
-  // View matrix
-  const view = new Float32Array([
-    right[0], newUp[0], -forward[0], 0,
-    right[1], newUp[1], -forward[1], 0,
-    right[2], newUp[2], -forward[2], 0,
-    -(right[0]*eye[0] + right[1]*eye[1] + right[2]*eye[2]),
-    -(newUp[0]*eye[0] + newUp[1]*eye[1] + newUp[2]*eye[2]),
-    (forward[0]*eye[0] + forward[1]*eye[1] + forward[2]*eye[2]),
-    1
-  ]);
+  // View matrix (reuse pre-allocated array)
+  _view[0] = rightX; _view[1] = upX; _view[2] = -fwdX; _view[3] = 0;
+  _view[4] = rightY; _view[5] = upY; _view[6] = -fwdY; _view[7] = 0;
+  _view[8] = rightZ; _view[9] = upZ; _view[10] = -fwdZ; _view[11] = 0;
+  _view[12] = -(rightX*eyeX + rightY*eyeY + rightZ*eyeZ);
+  _view[13] = -(upX*eyeX + upY*eyeY + upZ*eyeZ);
+  _view[14] = (fwdX*eyeX + fwdY*eyeY + fwdZ*eyeZ);
+  _view[15] = 1;
 
-  // Projection matrix (perspective)
+  // Projection matrix (perspective, reuse pre-allocated array)
   const f = 1.0 / Math.tan(fov / 2);
   const rangeInv = 1 / (near - far);
-  const proj = new Float32Array([
-    f / aspectRatio, 0, 0, 0,
-    0, f, 0, 0,
-    0, 0, (near + far) * rangeInv, -1,
-    0, 0, near * far * rangeInv * 2, 0
-  ]);
+  _proj[0] = f / aspectRatio; _proj[1] = 0; _proj[2] = 0; _proj[3] = 0;
+  _proj[4] = 0; _proj[5] = f; _proj[6] = 0; _proj[7] = 0;
+  _proj[8] = 0; _proj[9] = 0; _proj[10] = (near + far) * rangeInv; _proj[11] = -1;
+  _proj[12] = 0; _proj[13] = 0; _proj[14] = near * far * rangeInv * 2; _proj[15] = 0;
 
-  // Multiply proj * view
-  const result = new Float32Array(16);
+  // Multiply proj * view (reuse pre-allocated result)
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
       let sum = 0;
       for (let k = 0; k < 4; k++) {
-        sum += proj[i + k*4] * view[k + j*4];
+        sum += _proj[i + k*4] * _view[k + j*4];
       }
-      result[i + j*4] = sum;
+      _projView[i + j*4] = sum;
     }
   }
 
-  return result;
+  return _projView;
 }
 
 // Wire up mouse/touch drag for camera rotation
@@ -611,85 +634,116 @@ svg.on('touchend', (event) => {
 });
   </script>
   <script id="line-rendering" type="module">
-import { createGPULines } from '../webgpu-lines/webgpu-lines.js';
-
-// Vertex shader that samples the state buffer
+// Vertex shader that loads from the state buffer
 const vertexShaderBody = /* wgsl */`
-@group(1) @binding(0) var<storage, read> stateBuffer: array<vec3f>;
+@group(1) @binding(0) var<storage, read> state: array<vec4f>;
 @group(1) @binding(1) var<uniform> projViewMatrix: mat4x4f;
 
 struct LineUniforms {
-  columnOffset: u32,
+  stepOffset: u32,  // Ring buffer offset
   stepCount: u32,
   particleCount: u32,
+  width: f32,
 }
 @group(1) @binding(2) var<uniform> lineUniforms: LineUniforms;
 
 struct Vertex {
   position: vec4f,
   width: f32,
-  particleId: f32,
+  t: f32,
+  velocity: f32,
+}
+
+// Bouali attractor derivative for velocity computation
+fn attractorDerivative(pos: vec3f) -> vec3f {
+  let alpha = 3.0;
+  let beta = 2.2;
+  let gamma = 1.0;
+  let mu = 1.51;
+  return vec3f(
+    alpha * pos.x * (1.0 - pos.y) - beta * pos.z,
+    -gamma * pos.y * (1.0 - pos.x * pos.x),
+    mu * pos.x
+  );
 }
 
 fn getVertex(index: u32) -> Vertex {
   // Decode buffer index from vertex index
-  // Index layout: for each particle, stepCount points, then a break
   let pointsPerParticle = lineUniforms.stepCount + 1u; // +1 for line break
   let particle = index / pointsPerParticle;
   let step = index % pointsPerParticle;
 
   // Check if this is a line break point
   if (step >= lineUniforms.stepCount) {
-    return Vertex(vec4f(0.0, 0.0, 0.0, 0.0), 0.0, f32(particle));
+    return Vertex(vec4f(0), 0.0, 0.0, 0.0);
   }
 
-  // Compute buffer index with ring buffer offset
-  let stepIndex = (step + lineUniforms.columnOffset) % lineUniforms.stepCount;
-  let bufferIdx = particle * lineUniforms.stepCount + stepIndex;
+  // Compute buffer index with ring buffer offset (modular arithmetic for wrap-around)
+  let bufferStep = (step + lineUniforms.stepOffset) % lineUniforms.stepCount;
+  let bufferIdx = particle * lineUniforms.stepCount + bufferStep;
 
-  // Sample position from state buffer
-  let pos = stateBuffer[bufferIdx];
+  // Load position from state buffer
+  let pos = state[bufferIdx].xyz;
+
+  // Compute velocity from attractor derivative
+  let speed = length(attractorDerivative(pos));
+  let normalizedVelocity = clamp(speed / 10.0, 0.0, 1.0);
+
+  // Progress along the track (0 = oldest, 1 = newest)
+  let t = f32(step) / f32(lineUniforms.stepCount - 1u);
 
   // Project to clip space
   let projected = projViewMatrix * vec4f(pos, 1.0);
 
-  // Use particle ID for slight z offset to reduce z-fighting
-  var p = projected;
-  let w = p.w;
-  p = p / w;
-  p.z = p.z - 0.0002 * abs(f32(particle) / f32(lineUniforms.particleCount) - 0.5);
-  p = p * w;
+  // Line width tapers from thin (old) to thick (new)
+  let lineWidth = lineUniforms.width * (0.3 + 0.7 * t);
 
-  return Vertex(p, uniforms.width, f32(particle) / f32(lineUniforms.particleCount));
+  return Vertex(projected, lineWidth, t, normalizedVelocity);
 }
 `;
 
 const fragmentShaderBody = /* wgsl */`
-fn getColor(lineCoord: vec2f, particleId: f32) -> vec4f {
-  let color1 = vec3f(0.55, 0.89, 0.65);
-  let color2 = vec3f(0.11, 0.32, 0.65);
-  let baseColor = mix(color1, color2, particleId);
+// Rainbow color palette from webgpu-instanced-lines lorenz example
+fn rainbow(p: vec2f) -> vec3f {
+  let theta = p.x * 6.283185;
+  let c = cos(theta);
+  let s = sin(theta);
+  let m1 = mat3x3f(
+    0.5230851,  0.56637411, 0.46725319,
+    0.12769652, 0.14082407, 0.13691271,
+   -0.25934743,-0.12121582, 0.2348705
+  );
+  let m2 = mat3x3f(
+    0.3555664, -0.11472876,-0.01250831,
+    0.15243126,-0.03668075, 0.0765231,
+   -0.00192128,-0.01350681,-0.0036526
+  );
+  return m1 * vec3f(1.0, p.y * 2.0 - 1.0, s) +
+         m2 * vec3f(c, s * c, c * c - s * s);
+}
 
-  // 1-pixel border: lineCoord is in [-1, 1], so 1 pixel = 2/width in normalized coords
-  let borderWidth = 2.0 / uniforms.width;
-  let dist = length(lineCoord.xy);
-  let borderColor = vec3f(1.0);
-  let color = mix(baseColor, borderColor, smoothstep(1.0 - 2.0 * borderWidth, 1.0 - borderWidth, dist));
+fn getColor(lineCoord: vec2f, t: f32, velocity: f32) -> vec4f {
+  // Discard fragments outside the line
+  if (length(lineCoord) > 1.0) {
+    discard;
+  }
+
+  // Rainbow color based on velocity, with saturation from track progress
+  let fillColor = rainbow(vec2f(velocity, t));
+
+  // Dark border effect
+  let width = 10.0;
+  let borderWidth = 1.0;
+  let sdf = length(lineCoord) * width * 0.5;
+  let borderStart = width * 0.5 - borderWidth;
+  let borderMask = smoothstep(borderStart - 0.5, borderStart + 0.5, sdf);
+  let color = mix(fillColor, vec3f(0.0), borderMask);
 
   return vec4f(color, 1.0);
 }
 `;
-
-const gpuLines = createGPULines(device, {
-  format: canvasFormat,
-  depthFormat: 'depth24plus',
-  join: 'bevel',
-  cap: 'round',
-  capResolution: 4,
-  vertexShaderBody,
-  fragmentShaderBody,
-});
-
+  </script>
+  <script id="line-buffers" type="module">
 // Create buffers for line rendering
 const projViewBuffer = device.createBuffer({
   label: 'proj-view-matrix',
@@ -699,7 +753,7 @@ const projViewBuffer = device.createBuffer({
 
 const lineUniformBuffer = device.createBuffer({
   label: 'line-uniforms',
-  size: 16, // columnOffset, stepCount, particleCount + padding
+  size: 16, // stepOffset (u32), stepCount (u32), particleCount (u32), width (f32)
   usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
 });
 
@@ -713,10 +767,12 @@ const lineBindGroup = device.createBindGroup({
 });
 
 invalidation.then(() => {
-  gpuLines.destroy();
   projViewBuffer.destroy();
   lineUniformBuffer.destroy();
 });
+  </script>
+  <script id="vertex-shader-code" type="module">
+display(html`<pre><code class="language-wgsl">${vertexShaderBody}</code></pre>`);
   </script>
   <script id="explanation-draw-loop" type="text/markdown">
 ## Draw Loop
@@ -732,38 +788,48 @@ import { createFrameLoop } from './lib/frame-loop.js';
 
 lineWidth; simulate; dt;
 
+// Pre-allocate uniform data buffers to avoid per-frame allocations
+const _integrateData = new ArrayBuffer(32);
+const _integrateF32 = new Float32Array(_integrateData);
+const _integrateU32 = new Uint32Array(_integrateData);
+
+const _lineData = new ArrayBuffer(16);
+const _lineU32 = new Uint32Array(_lineData);
+const _lineF32 = new Float32Array(_lineData);
+
 const loop = createFrameLoop(() => {
+  // Use a single command encoder for both compute and render to avoid
+  // synchronization barriers between separate submissions
+  const encoder = device.createCommandEncoder();
+  let needsSubmit = false;
+
   // Simulation step
   if (simulate) {
-    // Calculate source and destination columns
-    const srcColumn = simState.currentColumn;
-    const dstColumn = (simState.currentColumn + 1) % stepCount;
+    // Calculate source and destination steps
+    const srcStep = simState.currentStep;
+    const dstStep = (simState.currentStep + 1) % stepCount;
 
-    // Update integration uniforms (dt, t, srcColumn, dstColumn, stepCount, particleCount)
-    const integrateData = new ArrayBuffer(32);
-    const f32 = new Float32Array(integrateData);
-    const u32 = new Uint32Array(integrateData);
-    f32[0] = dt;
-    f32[1] = simState.t;
-    u32[2] = srcColumn;
-    u32[3] = dstColumn;
-    u32[4] = stepCount;
-    u32[5] = particleCount;
-    device.queue.writeBuffer(integrateUniformBuffer, 0, integrateData);
+    // Update integration uniforms (dt, t, srcStep, dstStep, stepCount, particleCount)
+    _integrateF32[0] = dt;
+    _integrateF32[1] = simState.t;
+    _integrateU32[2] = srcStep;
+    _integrateU32[3] = dstStep;
+    _integrateU32[4] = stepCount;
+    _integrateU32[5] = particleCount;
+    device.queue.writeBuffer(integrateUniformBuffer, 0, _integrateData);
 
-    // Run integration (single pass reads and writes to storage buffer)
-    const encoder = device.createCommandEncoder();
+    // Run integration: reads from and writes to stateBuffer directly
     const integratePass = encoder.beginComputePass();
     integratePass.setPipeline(integratePipeline);
     integratePass.setBindGroup(0, integrateBindGroup);
     integratePass.dispatchWorkgroups(Math.ceil(particleCount / 64));
     integratePass.end();
-    device.queue.submit([encoder.finish()]);
 
-    // Advance time and column
+    // Advance time and step (no texture copy needed with buffer approach)
     simState.t += dt;
-    simState.currentColumn = dstColumn;
+    simState.currentStep = dstStep;
     renderState.dirty = true;
+    needsSubmit = true;
   }
 
   // Render
@@ -772,16 +838,25 @@ const loop = createFrameLoop(() => {
     const projView = getProjectionViewMatrix(aspectRatio);
     device.queue.writeBuffer(projViewBuffer, 0, projView);
 
-    // Update line uniforms (columnOffset, stepCount, particleCount as u32)
-    const lineData = new ArrayBuffer(16);
-    const u32 = new Uint32Array(lineData);
-    // columnOffset: the oldest column, so lines render from oldest to newest
-    u32[0] = (simState.currentColumn + 1) % stepCount;
-    u32[1] = stepCount;
-    u32[2] = particleCount;
-    device.queue.writeBuffer(lineUniformBuffer, 0, lineData);
+    // Update line uniforms (stepOffset, stepCount, particleCount, width)
+    // stepOffset: the oldest step index, so lines render from oldest to newest
+    // Since we just wrote to currentStep, oldest is (currentStep + 1) % stepCount
+    _lineU32[0] = (simState.currentStep + 1) % stepCount;
+    _lineU32[1] = stepCount;
+    _lineU32[2] = particleCount;
+    _lineF32[3] = lineWidth * dpr;
+    device.queue.writeBuffer(lineUniformBuffer, 0, _lineData);
 
-    const encoder = device.createCommandEncoder();
+    // Total vertex count: (stepCount + 1) per particle for line breaks
+    const totalVertexCount = particleCount * (stepCount + 1);
+
+    // Update gpuLines uniforms BEFORE beginning render pass to avoid mid-pass writes
+    const lineDrawProps = {
+      vertexCount: totalVertexCount,
+      width: lineWidth * dpr,
+      resolution: [canvas.width, canvas.height]
+    };
+    gpuLines.updateUniforms(lineDrawProps);
 
     const pass = encoder.beginRenderPass({
       colorAttachments: [{
@@ -798,21 +873,19 @@ const loop = createFrameLoop(() => {
       }
     });
 
-    // Total vertex count: (stepCount + 1) per particle for line breaks
-    const totalVertexCount = particleCount * (stepCount + 1);
-
-    gpuLines.draw(pass, {
-      vertexCount: totalVertexCount,
-      width: lineWidth * dpr,
-      resolution: [canvas.width, canvas.height]
-    }, [lineBindGroup]);
+    gpuLines.draw(pass, { ...lineDrawProps, skipUniformUpdate: true }, [lineBindGroup]);
 
     pass.end();
-    device.queue.submit([encoder.finish()]);
+    needsSubmit = true;
 
     if (!simulate) {
       renderState.dirty = false;
     }
+  }
+
+  // Single submission for all GPU work this frame
+  if (needsSubmit) {
+    device.queue.submit([encoder.finish()]);
   }
 });
 

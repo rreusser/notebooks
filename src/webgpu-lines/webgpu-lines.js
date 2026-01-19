@@ -224,6 +224,26 @@ export function createGPULines(device, options) {
     entries: [{ binding: 0, resource: { buffer: uniformBuffer } }]
   });
 
+  // Pre-allocate uniform data buffer and cache last values to avoid redundant writes
+  const _uniformData = new ArrayBuffer(48);
+  const _f32 = new Float32Array(_uniformData);
+  const _u32 = new Uint32Array(_uniformData);
+  // Initialize static values that never change
+  _f32[2] = capRes2;
+  _f32[3] = joinRes2;
+  _f32[4] = effectiveMiterLimit * effectiveMiterLimit;
+  _u32[5] = isRound ? 1 : 0;
+  _u32[8] = insertCaps ? 1 : 0;
+  _u32[9] = 0; // padding
+  _f32[10] = capScale[0];
+  _f32[11] = capScale[1];
+  // Track last dynamic values to detect changes
+  let _lastWidth = -1;
+  let _lastPointCount = -1;
+  let _lastResX = -1;
+  let _lastResY = -1;
+  let _uniformsWritten = false;
+
   return {
     /**
      * Get bind group layout for user's data (group 1, 2, etc.)
@@ -234,34 +254,55 @@ export function createGPULines(device, options) {
     },
 
     /**
+     * Update uniforms before the render pass begins.
+     * Call this before beginRenderPass() to avoid writes during the pass.
+     * @param {object} props - Draw properties
+     * @param {number} props.vertexCount - Number of vertices in the line
+     * @param {number} props.width - Line width in pixels
+     * @param {Array<number>} props.resolution - [width, height] of render target
+     */
+    updateUniforms(props) {
+      const { vertexCount: pointCount, width, resolution } = props;
+
+      // Only write if values changed
+      const needsUpdate = !_uniformsWritten ||
+        width !== _lastWidth ||
+        pointCount !== _lastPointCount ||
+        resolution[0] !== _lastResX ||
+        resolution[1] !== _lastResY;
+
+      if (needsUpdate) {
+        _f32[0] = resolution[0];
+        _f32[1] = resolution[1];
+        _f32[6] = width;
+        _u32[7] = pointCount;
+        device.queue.writeBuffer(uniformBuffer, 0, _uniformData);
+
+        _lastWidth = width;
+        _lastPointCount = pointCount;
+        _lastResX = resolution[0];
+        _lastResY = resolution[1];
+        _uniformsWritten = true;
+      }
+    },
+
+    /**
      * Draw lines
      * @param {GPURenderPassEncoder} pass - Render pass
      * @param {object} props - Draw properties
      * @param {number} props.vertexCount - Number of vertices in the line
      * @param {number} props.width - Line width in pixels (used if no per-vertex width)
      * @param {Array<number>} props.resolution - [width, height] of render target
+     * @param {boolean} [props.skipUniformUpdate] - Skip uniform update (call updateUniforms first)
      * @param {Array<GPUBindGroup>} [bindGroups] - User bind groups for groups 1, 2, etc.
      */
     draw(pass, props, bindGroups = []) {
-      const { vertexCount: pointCount, width, resolution } = props;
+      const { vertexCount: pointCount, skipUniformUpdate } = props;
 
-      // Update uniforms (48 bytes)
-      const uniformData = new ArrayBuffer(48);
-      const f32 = new Float32Array(uniformData);
-      const u32 = new Uint32Array(uniformData);
-      f32[0] = resolution[0];
-      f32[1] = resolution[1];
-      f32[2] = capRes2;
-      f32[3] = joinRes2;
-      f32[4] = effectiveMiterLimit * effectiveMiterLimit;
-      u32[5] = isRound ? 1 : 0;
-      f32[6] = width;
-      u32[7] = pointCount;
-      u32[8] = insertCaps ? 1 : 0;
-      u32[9] = 0; // padding
-      f32[10] = capScale[0];
-      f32[11] = capScale[1];
-      device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+      // Update uniforms if not skipped (for backwards compatibility)
+      if (!skipUniformUpdate) {
+        this.updateUniforms(props);
+      }
 
       const instanceCount = Math.max(0, pointCount - 1);
 
