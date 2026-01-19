@@ -1,10 +1,10 @@
 <!doctype html>
 <notebook theme="air">
-  <title>WebGPU Lines</title>
+  <title>WebGPU Instanced Lines</title>
   <script id="1" type="text/markdown">
-    # WebGPU Lines
+    # WebGPU Instanced Lines
 
-    This module implements high-performance, flexible GPU-accelerated line rendering for WebGPU. It is a direct port of [regl-gpu-lines](https://github.com/rreusser/regl-gpu-lines) to WebGPU. The focus is on speed and customizability rather than sophisticated stroke expansion algorithms. For background on GPU line rendering, see Matt DesLauriers' [Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard) and Rye Terrell's [Instanced Line Rendering](https://wwwtyro.net/2019/11/18/instanced-lines.html). This library is a work in progress. You can find the [source on GitHub](https://github.com/rreusser/webgpu-instanced-lines), and it will eventually be published as a standalone NPM module.
+    [webgpu-instanced-lines](https://www.npmjs.com/package/webgpu-instanced-lines) is a library for high-performance, customizable line rendering for WebGPU using instanced triangle strips. It is a WebGPU port of [regl-gpu-lines](https://github.com/rreusser/regl-gpu-lines). This notebook is where I originally developed the implementation. The source now lives on [GitHub](https://github.com/rreusser/webgpu-instanced-lines).
   </script>
   <script id="2" type="module">
     // Initialize WebGPU for interactive demo
@@ -23,14 +23,7 @@
 
     invalidation.then(() => device.destroy());
   </script>
-  <script id="3" type="module">
-    // Initialize offscreen demo renderer for static examples
-    import { initDemoRenderer } from './demo-renderer.js';
-
-    const demoRenderer = await initDemoRenderer();
-    invalidation.then(() => demoRenderer.destroy());
-  </script>
-  <script id="4" type="text/markdown">
+  <script id="3" type="text/markdown">
     ## Interactive Demo
 
     Explore the line rendering options with interactive demo below. Drag handles to edit vertices, drag the background to pan, and scroll to zoom. Enable **Debug view** to see the underlying triangle strip structure. Alternating colors indicate separate instances.
@@ -188,7 +181,7 @@
     </div>`);
   </script>
   <script id="11" type="module">
-    import { createGPULines } from './webgpu-lines.js';
+    import { createGPULines } from 'npm:webgpu-instanced-lines';
 
     pattern; lineBreak;
 
@@ -357,10 +350,11 @@
     stack.addEventListener('update', updateHandlePositions);
   </script>
   <script id="13" type="module">
-    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; alpha; stripes; varyingWidth; debugView;
+    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; alpha; stripes; varyingWidth; debugView; lineWidth;
 
     const useSdfMode = sdfStrokeWidth > 0;
     const useBlend = useSdfMode || alpha < 1 || debugView;
+    const baseWidth = lineWidth * dpr;
 
     // Vertex shader body with position buffer, distance buffer, and view matrix
     const vertexShaderBody = /* wgsl */`
@@ -385,9 +379,8 @@
         let p = positions[index];
         let d = distances[index];
         let projected = viewMatrix * vec4f(p.xyz, 1.0);
-        // Reference totalDistance to ensure it's included in bind group layout
         let normalizedDist = d / totalDistance;
-        let w = ${varyingWidth ? 'uniforms.width * (0.5 + 1.5 * normalizedDist)' : 'uniforms.width'};
+        let w = ${varyingWidth ? `${baseWidth.toFixed(1)} * (0.5 + 1.5 * normalizedDist)` : `${baseWidth.toFixed(1)}`};
         return Vertex(vec4f(projected.xyz, p.w * projected.w), w, d, w);
       }
     `;
@@ -460,18 +453,20 @@
     `;
 
     const gpuLines = createGPULines(device, {
-      format: canvasFormat,
+      colorTargets: [{
+        format: canvasFormat,
+        blend: useBlend ? {
+          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
+        } : undefined
+      }],
       join: joinType,
       joinResolution: joinResolution,
       miterLimit: miterLimit,
       cap: capType,
       capResolution: capResolution,
       vertexShaderBody,
-      fragmentShaderBody,
-      blend: useBlend ? {
-        color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
-      } : null
+      fragmentShaderBody
     });
 
     // Create view matrix buffer
@@ -548,532 +543,16 @@
     invalidation.then(() => loop.cancel());
   </script>
   <script id="15" type="text/markdown">
+    ## Rationale
 
-    ## How It Works
+    Drawing lines on the GPU is surprisingly difficult. The hardware primitive `LINE_STRIP` produces lines exactly one pixel wide, which is rarely what you want. To get variable-width lines with proper joins and caps, you need to expand lines into triangles yourself.
 
-    ### Background
+    This library takes a pragmatic approach: it uses instanced rendering with triangle strips to draw one segment per instance, including half of each join on either end. This avoids the complexity of full stroke expansion algorithms while still producing good results for most use cases.
 
-    The renderer uses **instanced rendering** with triangle strips. For a line with N points, it draws N-1 instances, where each instance renders one line segment plus half of the join geometry on each end. End caps are simply joins stretched around to form a cap.
+    The tradeoff is that the library does not handle self-intersecting lines correctly. For scientific visualization, data plots, and UI elements, this is usually acceptable. For complex vector graphics with many overlapping strokes, you may need a more sophisticated solution.
 
-    The geometry is carefully generated to optimize for high-performance rendering without the full rigor of stroke expansion algorithms, which handle self-intersection more carefully. The `lineCoord` varying is constructed so that `length(lineCoord)` gives consistent radial distance from the line center across both segments and caps, permitting uniform stroke widths.
+    The shader interface is designed to be flexible. Rather than prescribing a specific data format, you write a vertex function that fetches positions from wherever you store them (buffers, textures, procedural computation) and returns clip-space coordinates plus any per-vertex data you need. The library handles the geometry expansion, and your fragment shader receives a `lineCoord` varying that makes it easy to implement SDF-based anti-aliasing and stroke effects.
 
-    ### Features
-    - Instanced rendering with triangle strips
-    - Screen-projected lines using a custom vertex function that can read geometry from buffers, textures, or procedural computation. The vertex function also defines varying values, line widths, and vertex projection at runtime in the shader.
-    - Bevel, miter, and round joins
-    - Round, square, and butt end caps
-    - Line breaks via `w = 0` sentinel value
-    - A `lineCoord` varying that can be used to construct SDF stroke outlines with anti-aliasing
-
-    ### Limitations
-
-    - The library does not handle self-intersecting lines.
-    - Rapidly varying line widths render incorrectly.
-    - World-space line widths require custom work in the vertex shader function.
-
-    ### Shader Interface
-
-    You provide two pieces of WGSL code.
-
-    **`vertexShaderBody`** defines how to fetch and transform vertex data. You write bind group declarations (`@group(1)` and higher) for your data, a struct containing `position: vec4f`, `width: f32`, and any custom varyings, and a function (default name `getVertex`) that takes a point index and returns your struct.
-
-    **`fragmentShaderBody`** defines how to color the line. You write a `getColor` function that receives `lineCoord: vec2f` plus any varyings from your struct.
-
-    The library parses your struct to identify the position, width, and varying fields automatically. The library reserves `@group(0)` for its internal uniforms. Your shader code should use `@group(1)` and higher for your own data.
-
-    Example:
-    ```wgsl
-    // In vertexShaderBody:
-    @group(1) @binding(0) var<storage, read> positions: array<vec4f>;
-
-    struct Vertex {
-      position: vec4f,    // Required
-      width: f32,         // Required
-      distance: f32,      // Varying - passed to getColor
-    }
-
-    fn getVertex(index: u32) -> Vertex {
-      let p = positions[index];
-      return Vertex(p, 10.0, f32(index));
-    }
-
-    // In fragmentShaderBody:
-    fn getColor(lineCoord: vec2f, distance: f32) -> vec4f {
-      return vec4f(0.2, 0.5, 0.9, 1.0);
-    }
-    ```
-
-    ### Line Breaks
-
-    To create a line break (splitting one line into multiple segments with separate end caps), have your `getVertex` function return a position with `w = 0` (or `NaN` in any component). The library detects these sentinel values and inserts caps on adjacent segments.
-
-    ### Vertex Window
-
-    Internally, each instance calls `getVertex` for a 4-point window of adjacent vertices. Points **A** (previous) and **D** (next) provide direction for computing join angles. Points **B** (start) and **C** (end) define the segment being drawn.
-
-    Within each instance, a vertex index (0 to ~30, depending on join/cap resolution) expands into the triangle strip vertices. The vertex shader uses this index to compute screen-space offsets perpendicular to the line direction, forming the segment body, joins, and caps.
-
-  </script>
-  <script id="16" type="text/markdown">
-    ---
-
-    ## API Reference
-
-    ### `createGPULines(device, options)`
-
-    Creates a new line renderer instance.
-
-    **Parameters:**
-    - `device` - WebGPU device
-    - `options` - Configuration object (see below)
-
-    **Returns:** Line renderer object with `draw()`, `getBindGroupLayout()`, and `destroy()` methods.
-  </script>
-  <script id="17" type="text/markdown">
-    ### Options
-  </script>
-  <script id="18" type="text/markdown">
-    #### `join`
-
-    Controls how line segments are connected at vertices. Options are `'bevel'`, `'miter'`, and `'round'`.
-  </script>
-  <script id="19" type="module">
-    {
-      const createDemoCanvas = (id, w = 200, h = 120) =>
-        html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
-
-      const joinBevel = createDemoCanvas('demo-join-bevel');
-      const joinMiter = createDemoCanvas('demo-join-miter');
-      const joinRound = createDemoCanvas('demo-join-round');
-
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
-        <figure style="margin: 0; text-align: center;">
-          ${joinBevel}
-          <figcaption><code>join: 'bevel'</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${joinMiter}
-          <figcaption><code>join: 'miter'</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${joinRound}
-          <figcaption><code>join: 'round'</code></figcaption>
-        </figure>
-      </div>`);
-
-      const baseOpts = { pattern: 'join-demo', lineWidth: 50, cap: 'round', miterLimit: 10, width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(joinBevel, { ...baseOpts, join: 'bevel' });
-      await demoRenderer.renderToCanvas(joinMiter, { ...baseOpts, join: 'miter' });
-      await demoRenderer.renderToCanvas(joinRound, { ...baseOpts, join: 'round' });
-    }
-  </script>
-  <script id="20" type="text/markdown">
-    #### `cap`
-
-    Controls how line endpoints are rendered. Options are `'round'`, `'square'`, and `'none'`.
-  </script>
-  <script id="21" type="module">
-    {
-      const createDemoCanvas = (id, w = 200, h = 120) =>
-        html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
-
-      const capRound = createDemoCanvas('demo-cap-round');
-      const capSquare = createDemoCanvas('demo-cap-square');
-      const capNone = createDemoCanvas('demo-cap-none');
-
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
-        <figure style="margin: 0; text-align: center;">
-          ${capRound}
-          <figcaption><code>cap: 'round'</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${capSquare}
-          <figcaption><code>cap: 'square'</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${capNone}
-          <figcaption><code>cap: 'none'</code></figcaption>
-        </figure>
-      </div>`);
-
-      const baseOpts = { pattern: 'cap-demo', lineWidth: 50, width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(capRound, { ...baseOpts, cap: 'round' });
-      await demoRenderer.renderToCanvas(capSquare, { ...baseOpts, cap: 'square' });
-      await demoRenderer.renderToCanvas(capNone, { ...baseOpts, cap: 'none' });
-    }
-  </script>
-  <script id="22" type="text/markdown">
-    #### `miterLimit`
-
-    When using `join: 'miter'`, this controls when sharp angles fall back to bevel joins. Lower values create more bevels. Higher values allow longer miter points. Default is `4`.
-  </script>
-  <script id="23" type="module">
-    {
-      const createDemoCanvas = (id, w = 200, h = 120) =>
-        html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
-
-      const miter1 = createDemoCanvas('demo-miter-1');
-      const miter4 = createDemoCanvas('demo-miter-4');
-      const miter10 = createDemoCanvas('demo-miter-10');
-
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
-        <figure style="margin: 0; text-align: center;">
-          ${miter1}
-          <figcaption><code>miterLimit: 1</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${miter4}
-          <figcaption><code>miterLimit: 4</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${miter10}
-          <figcaption><code>miterLimit: 10</code></figcaption>
-        </figure>
-      </div>`);
-
-      const baseOpts = { pattern: 'miter-demo', lineWidth: 50, join: 'miter', cap: 'round', width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(miter1, { ...baseOpts, miterLimit: 1 });
-      await demoRenderer.renderToCanvas(miter4, { ...baseOpts, miterLimit: 4 });
-      await demoRenderer.renderToCanvas(miter10, { ...baseOpts, miterLimit: 10 });
-    }
-  </script>
-  <script id="24" type="text/markdown">
-    #### `joinResolution` and `capResolution`
-
-    Control the number of triangles used for round joins and caps. Higher values create smoother curves. Default is `8`.
-  </script>
-  <script id="25" type="module">
-    {
-      const createDemoCanvas = (id, w = 200, h = 120) =>
-        html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
-
-      const res2 = createDemoCanvas('demo-res-2');
-      const res4 = createDemoCanvas('demo-res-4');
-      const res16 = createDemoCanvas('demo-res-16');
-
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
-        <figure style="margin: 0; text-align: center;">
-          ${res2}
-          <figcaption><code>joinResolution: 2</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${res4}
-          <figcaption><code>joinResolution: 4</code></figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${res16}
-          <figcaption><code>joinResolution: 16</code></figcaption>
-        </figure>
-      </div>`);
-
-      const baseOpts = { pattern: 'resolution-demo', lineWidth: 50, join: 'round', cap: 'round', width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(res2, { ...baseOpts, joinResolution: 2 });
-      await demoRenderer.renderToCanvas(res4, { ...baseOpts, joinResolution: 4 });
-      await demoRenderer.renderToCanvas(res16, { ...baseOpts, joinResolution: 16 });
-    }
-  </script>
-  <script id="26" type="text/markdown">
-    #### Line Breaks
-
-    Insert a point with `w = 0` (or `NaN` for any coordinate) to create a line break. This splits the line into separate segments, each with its own end caps.
-  </script>
-  <script id="27" type="module">
-    {
-      const createDemoCanvas = (id, w = 200, h = 120) =>
-        html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
-
-      const continuous = createDemoCanvas('demo-continuous');
-      const withBreak = createDemoCanvas('demo-with-break');
-
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
-        <figure style="margin: 0; text-align: center;">
-          ${continuous}
-          <figcaption>Continuous line</figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${withBreak}
-          <figcaption>With line break (<code>w: 0</code>)</figcaption>
-        </figure>
-      </div>`);
-
-      const baseOpts = { pattern: 'break-demo', lineWidth: 50, join: 'round', cap: 'round', width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(continuous, { ...baseOpts, lineBreak: false });
-      await demoRenderer.renderToCanvas(withBreak, { ...baseOpts, lineBreak: true });
-    }
-  </script>
-  <script id="28" type="text/markdown">
-    ---
-
-    ### Custom Shaders
-
-    The library supports custom WGSL shaders for advanced rendering effects. Provide shader code via the `fragmentShaderBody` and `vertexShaderBody` options.
-  </script>
-  <script id="29" type="text/markdown">
-    #### `fragmentShaderBody`
-
-    The fragment shader controls how lines are colored. Your code must define a `getColor` function.
-
-    ```wgsl
-    fn getColor(lineCoord: vec2f) -> vec4f {
-      // Return RGBA color (0-1 range)
-      return vec4f(0.2, 0.5, 0.9, 1.0);
-    }
-    ```
-
-    The `lineCoord` parameter provides spatial information about the current fragment (see below).
-
-    Any fields in your `Vertex` struct beyond `position` and `width` become varyings, interpolated across the line and passed as additional parameters to `getColor`. For example, if your struct includes `dist: f32`, your function signature becomes `fn getColor(lineCoord: vec2f, dist: f32) -> vec4f`.
-
-    If your shader code references `instanceID`, the library will automatically pass two additional parameters, `instanceID: f32` (segment index, negative for end caps) and `triStripCoord: vec2f` (triangle strip vertex coordinates for wireframe visualization). These are useful for debug views showing the internal triangle strip structure.
-  </script>
-  <script id="30" type="text/markdown">
-    #### `lineCoord` Values
-
-    | Component | Segments/Joins | Caps | Description |
-    |-----------|----------------|------|-------------|
-    | `lineCoord.x` | 0 | sin(θ) × sign | Always 0 for segments. Varies around the semicircle for caps. |
-    | `lineCoord.y` | -1 to 1 | cos(θ) × sign | Position across the line. 0 at center, ±1 at edges. |
-
-    The `lineCoord` values are designed for SDF (signed distance field) rendering. `length(lineCoord)` gives radial distance from line center (0 at center, 1 at edge). For segments, `length(lineCoord) = abs(lineCoord.y)` since x=0. For caps, `length(lineCoord) = 1` on the outer edge (unit circle).
-
-    Note that `lineCoord.x` does NOT provide distance along the line. To implement dashes, add a cumulative distance field to your `Vertex` struct. It will be interpolated and passed to `getColor` as an extra parameter. See the interactive demo's "Stripes" option for an example.
-  </script>
-  <script id="31" type="module">
-    {
-      const createDemoCanvas = (id, w = 200, h = 120) =>
-        html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
-
-      const lcX = createDemoCanvas('demo-lc-x');
-      const lcY = createDemoCanvas('demo-lc-y');
-
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
-        <figure style="margin: 0; max-width: 200px;">
-          ${lcX}
-          <figcaption><code>lineCoord.x</code> (0 on segments, varies in caps)</figcaption>
-        </figure>
-        <figure style="margin: 0; max-width: 200px;">
-          ${lcY}
-          <figcaption><code>lineCoord.y</code> (across line)</figcaption>
-        </figure>
-      </div>`);
-
-      const shaderX = /* wgsl */`
-        fn getColor(lineCoord: vec2f) -> vec4f {
-          // lineCoord.x is 0 for segments, varies in caps (sin(theta))
-          let t = abs(lineCoord.x);
-          // Blue for segments (x=0), orange gradient in caps
-          return vec4f(t, 0.4 * (1.0 - t), 1.0 - t, 1.0);
-        }
-      `;
-
-      const shaderY = /* wgsl */`
-        fn getColor(lineCoord: vec2f) -> vec4f {
-          let t = lineCoord.y * 0.5 + 0.5;
-          return vec4f(t, 0.3, 1.0 - t, 1.0);
-        }
-      `;
-
-      const baseOpts = { pattern: 'cap-demo', lineWidth: 50, join: 'round', cap: 'round', width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(lcX, { ...baseOpts, fragmentShaderBody: shaderX });
-      await demoRenderer.renderToCanvas(lcY, { ...baseOpts, fragmentShaderBody: shaderY });
-    }
-  </script>
-  <script id="32" type="text/markdown">
-    #### Example Shaders
-
-    Solid color with edge darkening.
-    ```wgsl
-    fn getColor(lineCoord: vec2f) -> vec4f {
-      let edge = 1.0 - 0.3 * abs(lineCoord.y);
-      return vec4f(0.2 * edge, 0.5 * edge, 0.9 * edge, 1.0);
-    }
-    ```
-
-    Cross-line stripes using `lineCoord.y`.
-    ```wgsl
-    fn getColor(lineCoord: vec2f) -> vec4f {
-      let stripe = step(0.0, lineCoord.y);
-      return vec4f(stripe * 0.2, 0.5, 0.9 - stripe * 0.4, 1.0);
-    }
-    ```
-
-    SDF stroke with anti-aliasing.
-    ```wgsl
-    fn linearstep(a: f32, b: f32, x: f32) -> f32 {
-      return clamp((x - a) / (b - a), 0.0, 1.0);
-    }
-    fn getColor(lineCoord: vec2f) -> vec4f {
-      let width = 20.0;
-      let strokeWidth = 4.0;
-      let sdf = 0.5 * width * length(lineCoord);
-      let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
-      let strokeMask = linearstep(
-        width * 0.5 - strokeWidth - 0.5,
-        width * 0.5 - strokeWidth + 0.5, sdf);
-      let fillColor = vec3f(0.4, 0.7, 1.0);
-      let strokeColor = vec3f(0.1, 0.3, 0.6);
-      let color = mix(fillColor, strokeColor, strokeMask);
-      return vec4f(color, aa);
-    }
-    ```
-
-    When using transparency or `discard`, enable alpha blending.
-    ```javascript
-    createGPULines(device, {
-      blend: {
-        color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
-      }
-    });
-    ```
-  </script>
-  <script id="33" type="module">
-    {
-      const createDemoCanvas = (id, w = 200, h = 120) =>
-        html`<canvas id="${id}" style="width: ${w}px; height: ${h}px; border: 1px solid #ddd;"></canvas>`;
-
-      const stripes = createDemoCanvas('demo-stripes');
-      const gradient = createDemoCanvas('demo-gradient');
-      const sdfStroke = createDemoCanvas('demo-sdf-stroke');
-
-      display(html`<div style="display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-start;">
-        <figure style="margin: 0; text-align: center;">
-          ${stripes}
-          <figcaption>Cross-line stripes</figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${gradient}
-          <figcaption>Cross-line gradient</figcaption>
-        </figure>
-        <figure style="margin: 0; text-align: center;">
-          ${sdfStroke}
-          <figcaption>SDF stroke</figcaption>
-        </figure>
-      </div>`);
-
-      const shaderStripes = /* wgsl */`
-        fn getColor(lineCoord: vec2f) -> vec4f {
-          // Cross-line stripes using lineCoord.y
-          let stripe = select(0.0, 1.0, lineCoord.y >= 0.0);
-          return vec4f(stripe * 0.2, 0.5, 0.9 - stripe * 0.4, 1.0);
-        }
-      `;
-
-      const shaderGradient = /* wgsl */`
-        fn getColor(lineCoord: vec2f) -> vec4f {
-          let t = lineCoord.y * 0.5 + 0.5;
-          let top = vec3f(1.0, 0.4, 0.2);
-          let bottom = vec3f(0.2, 0.4, 1.0);
-          let color = mix(bottom, top, t);
-          return vec4f(color, 1.0);
-        }
-      `;
-
-      const shaderSDF = /* wgsl */`
-        fn linearstep(a: f32, b: f32, x: f32) -> f32 {
-          return clamp((x - a) / (b - a), 0.0, 1.0);
-        }
-        fn getColor(lineCoord: vec2f) -> vec4f {
-          let width = 50.0;
-          let strokeWidth = 5.0;
-          // Use length(lineCoord) for proper SDF on both segments and caps
-          let dist = length(lineCoord);
-          let sdf = 0.5 * width * dist;
-          let aa = linearstep(width * 0.5, width * 0.5 - 1.0, sdf);
-          let strokeMask = linearstep(width * 0.5 - strokeWidth - 0.5, width * 0.5 - strokeWidth + 0.5, sdf);
-          let fillColor = vec3f(0.4, 0.7, 1.0);
-          let strokeColor = vec3f(0.1, 0.3, 0.6);
-          let color = mix(fillColor, strokeColor, strokeMask);
-          return vec4f(color, aa);
-        }
-      `;
-
-      const blend = {
-        color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-        alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
-      };
-
-      const baseOpts = { pattern: 'shader-demo', join: 'round', cap: 'round', width: 200, height: 120 };
-      await demoRenderer.renderToCanvas(stripes, { ...baseOpts, lineWidth: 50, fragmentShaderBody: shaderStripes });
-      await demoRenderer.renderToCanvas(gradient, { ...baseOpts, lineWidth: 50, fragmentShaderBody: shaderGradient });
-      await demoRenderer.renderToCanvas(sdfStroke, { ...baseOpts, lineWidth: 50, fragmentShaderBody: shaderSDF, blend });
-    }
-  </script>
-  <script id="34" type="text/markdown">
-    #### `vertexShaderBody`
-
-    The vertex shader body defines how line positions and per-vertex data are computed. You provide bind group declarations (group 1+) for your data, a struct defining the vertex output, and a vertex function that returns the struct given a point index.
-
-    ```wgsl
-    @group(1) @binding(0) var<storage, read> positions: array<vec4f>;
-    @group(1) @binding(1) var<uniform> viewMatrix: mat4x4f;
-
-    struct Vertex {
-      position: vec4f,  // Required, clip-space position (w component controls line breaks)
-      width: f32,       // Optional, per-vertex line width
-      // Additional fields become varyings passed to fragment shader
-    }
-
-    fn getVertex(index: u32) -> Vertex {
-      let p = positions[index];
-      let projected = viewMatrix * vec4f(p.xyz, 1.0);
-      return Vertex(vec4f(projected.xyz, p.w * projected.w), 20.0);
-    }
-    ```
-
-    Options for customization include `vertexFunction` (name of your vertex function, default `'getVertex'`), `positionField` (name of position field in struct, default `'position'`), and `widthField` (name of width field in struct, default `'width'`).
-
-    Available library uniforms are `uniforms.resolution` (canvas resolution in pixels), `uniforms.width` (fallback line width if no per-vertex width), and `uniforms.pointCount` (number of points).
-  </script>
-  <script id="35" type="text/markdown">
-    ### Drawing
-
-    #### `gpuLines.draw(pass, props, bindGroups)`
-
-    Draws lines in a render pass. The `props` object includes `vertexCount` (number of points in the line), `width` (line width in pixels, fallback if no per-vertex width), and `resolution` (canvas resolution as `[width, height]`). The `bindGroups` parameter is an array of user bind groups for groups 1, 2, etc.
-
-    #### `gpuLines.getBindGroupLayout(index)`
-
-    Returns the bind group layout for the specified group index. Use this to create bind groups for your data.
-
-    ```javascript
-    const dataBindGroup = device.createBindGroup({
-      layout: gpuLines.getBindGroupLayout(1),
-      entries: [
-        { binding: 0, resource: { buffer: positionBuffer } },
-        { binding: 1, resource: { buffer: viewMatrixBuffer } }
-      ]
-    });
-
-    const pass = encoder.beginRenderPass({ ... });
-    gpuLines.draw(pass, {
-      vertexCount: points.length,
-      width: 20,
-      resolution: [canvas.width, canvas.height]
-    }, [dataBindGroup]);
-    pass.end();
-    ```
-  </script>
-  <script id="36" type="text/markdown">
-    ### Position Data Format
-
-    Your vertex function returns a `vec4f` position. The `x` and `y` components are position in clip space (-1 to 1), `z` is depth, and `w` should be `1` for valid points or `0` (or NaN for any component) for line breaks.
-
-    Example with a storage buffer.
-    ```javascript
-    const positions = new Float32Array([
-      x0, y0, z0, w0,  // Point 0
-      x1, y1, z1, w1,  // Point 1
-      // ...
-    ]);
-
-    const buffer = device.createBuffer({
-      size: positions.byteLength,
-      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-    });
-    device.queue.writeBuffer(buffer, 0, positions);
-    ```
-
-    Your `getVertex` function can read from any source (buffers, textures, procedural) and transform to clip space however you like.
+    For background on GPU line rendering, see Matt DesLauriers' [Drawing Lines is Hard](https://mattdesl.svbtle.com/drawing-lines-is-hard) and Rye Terrell's [Instanced Line Rendering](https://wwwtyro.net/2019/11/18/instanced-lines.html).
   </script>
 </notebook>
