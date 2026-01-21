@@ -1158,3 +1158,783 @@ fn column_fft(@builtin(global_invocation_id) global_id: vec3<u32>) {
 }
 `;
 }
+
+// ============================================================================
+// Vec4 variants - process two complex numbers per element (re1, im1, re2, im2)
+// ============================================================================
+
+function getVec4PrecisionStrings(precision: FFTPrecision) {
+  return {
+    storageType: precision === 'f16' ? 'vec4<f16>' : 'vec4<f32>',
+    enableF16: precision === 'f16' ? 'enable f16;\n' : '',
+    loadConvert: precision === 'f16' ? 'vec4<f32>' : '',
+    storeConvert: precision === 'f16' ? 'vec4<f16>' : '',
+  };
+}
+
+/**
+ * Vec4 unscramble shader
+ */
+export function generateVec4UnscrambleShader(N: number, R: number, C: number, precision: FFTPrecision = 'f32'): string {
+  const { storageType, enableF16 } = getVec4PrecisionStrings(precision);
+
+  return `
+// Vec4 Unscramble shader for N=${N} = ${R}×${C}
+// Storage: ${precision}
+
+${enableF16}
+struct UnscrambleParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: UnscrambleParams;
+
+@compute @workgroup_size(256, 1, 1)
+fn unscramble(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let k = global_id.x;
+  let row = global_id.y;
+
+  let C = params.C;
+  let R = params.R;
+  let N = params.N;
+
+  if (k >= N || row >= params.num_original_rows) {
+    return;
+  }
+
+  let scrambled_pos = (k % R) * C + (k / R);
+  let input_idx = row * N + scrambled_pos;
+  let output_idx = row * N + k;
+
+  output[output_idx] = input[input_idx];
+}
+`;
+}
+
+/**
+ * Vec4 scramble shader
+ */
+export function generateVec4ScrambleShader(N: number, R: number, C: number, precision: FFTPrecision = 'f32'): string {
+  const { storageType, enableF16 } = getVec4PrecisionStrings(precision);
+
+  return `
+// Vec4 Scramble shader for N=${N} = ${R}×${C}
+// Storage: ${precision}
+
+${enableF16}
+struct ScrambleParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: ScrambleParams;
+
+@compute @workgroup_size(256, 1, 1)
+fn scramble(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let k = global_id.x;
+  let row = global_id.y;
+
+  let C = params.C;
+  let R = params.R;
+  let N = params.N;
+
+  if (k >= N || row >= params.num_original_rows) {
+    return;
+  }
+
+  let scrambled_pos = (k % R) * C + (k / R);
+  let input_idx = row * N + k;
+  let output_idx = row * N + scrambled_pos;
+
+  output[output_idx] = input[input_idx];
+}
+`;
+}
+
+/**
+ * Vec4 sub-row FFT shader (C-point FFT on sub-rows)
+ */
+export function generateVec4SubRowFFTShader(N: number, R: number, C: number, precision: FFTPrecision = 'f32'): string {
+  const { storageType, enableF16, loadConvert, storeConvert } = getVec4PrecisionStrings(precision);
+  const log2C = Math.log2(C);
+
+  return `
+// Vec4 Sub-row FFT shader: ${C}-point FFT for N=${N} = ${R}×${C}
+// Processes two complex numbers per element
+// Storage: ${precision}
+
+${enableF16}
+fn cmul4(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+  return vec4<f32>(
+    a.x * b.x - a.y * b.y,
+    a.x * b.y + a.y * b.x,
+    a.z * b.z - a.w * b.w,
+    a.z * b.w + a.w * b.z
+  );
+}
+
+struct SubRowFFTParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+  forward: u32,
+  split_norm: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: SubRowFFTParams;
+
+var<workgroup> buffer_a: array<vec4<f32>, ${C}>;
+var<workgroup> buffer_b: array<vec4<f32>, ${C}>;
+
+fn bitrev(x: u32) -> u32 {
+  var v = x;
+  var result = 0u;
+  for (var i = 0u; i < ${log2C}u; i++) {
+    result = (result << 1u) | (v & 1u);
+    v = v >> 1u;
+  }
+  return result;
+}
+
+@compute @workgroup_size(${C}, 1, 1)
+fn sub_row_fft(@builtin(local_invocation_id) local_id: vec3<u32>,
+               @builtin(workgroup_id) workgroup_id: vec3<u32>) {
+  // 2D dispatch: x = sub-row within original row, y = original row
+  let sub_row_index = workgroup_id.x;
+  let original_row = workgroup_id.y;
+  let sub_row = original_row * params.R + sub_row_index;
+
+  let j = local_id.x;
+  let C = ${C}u;
+
+  if (sub_row_index >= params.R || original_row >= params.num_original_rows) {
+    return;
+  }
+
+  let is_forward = params.forward != 0u;
+  let sign = select(1.0, -1.0, is_forward);
+  let PI = 3.14159265358979;
+
+  let input_idx = sub_row * C + bitrev(j);
+  buffer_a[j] = ${loadConvert}(input[input_idx]);
+  workgroupBarrier();
+
+  for (var s = 0u; s < ${log2C}u; s++) {
+    let m = 1u << (s + 1u);
+    let half_m = 1u << s;
+    let group = j / m;
+    let idx_in_group = j % m;
+    let is_first_half = idx_in_group < half_m;
+    let k = select(idx_in_group - half_m, idx_in_group, is_first_half);
+    let base = group * m + k;
+
+    let angle = sign * 2.0 * PI * f32(k) / f32(m);
+    let c = cos(angle);
+    let sv = sin(angle);
+    let w = vec4<f32>(c, sv, c, sv);
+
+    var a: vec4<f32>;
+    var b: vec4<f32>;
+    if ((s & 1u) == 0u) {
+      a = buffer_a[base];
+      b = cmul4(w, buffer_a[base + half_m]);
+    } else {
+      a = buffer_b[base];
+      b = cmul4(w, buffer_b[base + half_m]);
+    }
+
+    let result = select(a - b, a + b, is_first_half);
+
+    workgroupBarrier();
+
+    if ((s & 1u) == 0u) {
+      buffer_b[j] = result;
+    } else {
+      buffer_a[j] = result;
+    }
+
+    workgroupBarrier();
+  }
+
+  var result = select(buffer_b[j], buffer_a[j], ${log2C % 2 === 0 ? 'true' : 'false'});
+
+  if (params.split_norm != 0u) {
+    result = result / sqrt(f32(C));
+  } else if (!is_forward) {
+    result = result / f32(C);
+  }
+
+  let output_idx = sub_row * C + j;
+  output[output_idx] = ${storeConvert}(result);
+}
+`;
+}
+
+/**
+ * Vec4 twiddle multiply shader
+ */
+export function generateVec4SubRowTwiddleShader(N: number, R: number, C: number, precision: FFTPrecision = 'f32'): string {
+  const { storageType, enableF16, loadConvert, storeConvert } = getVec4PrecisionStrings(precision);
+
+  return `
+// Vec4 Twiddle multiply shader for N=${N} = ${R}×${C}
+// Storage: ${precision}
+
+${enableF16}
+fn cmul4(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+  return vec4<f32>(
+    a.x * b.x - a.y * b.y,
+    a.x * b.y + a.y * b.x,
+    a.z * b.z - a.w * b.w,
+    a.z * b.w + a.w * b.z
+  );
+}
+
+struct TwiddleParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+  forward: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: TwiddleParams;
+
+@compute @workgroup_size(16, 16, 1)
+fn twiddle_multiply(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  let c = global_id.x;
+  let sub_row_index = global_id.y % params.R;
+  let original_row = global_id.y / params.R;
+
+  if (c >= params.C || sub_row_index >= params.R || original_row >= params.num_original_rows) {
+    return;
+  }
+
+  let sub_row = original_row * params.R + sub_row_index;
+  let idx = sub_row * params.C + c;
+
+  let sign = select(1.0, -1.0, params.forward != 0u);
+  let PI = 3.14159265358979;
+
+  let angle = sign * 2.0 * PI * f32(sub_row_index * c) / f32(params.N);
+  let cv = cos(angle);
+  let sv = sin(angle);
+  let w = vec4<f32>(cv, sv, cv, sv);
+
+  let val = ${loadConvert}(input[idx]);
+  output[idx] = ${storeConvert}(cmul4(val, w));
+}
+`;
+}
+
+/**
+ * Vec4 column FFT shader (R-point FFT on columns)
+ */
+export function generateVec4SubRowColumnFFTShader(N: number, R: number, C: number, precision: FFTPrecision = 'f32'): string {
+  const { storageType, enableF16, loadConvert, storeConvert } = getVec4PrecisionStrings(precision);
+  const log2R = Math.log2(R);
+
+  // For small R, use specialized implementations
+  if (R === 2) {
+    return generateVec4ColumnFFT2Shader(N, R, C, precision);
+  } else if (R === 4) {
+    return generateVec4ColumnFFT4Shader(N, R, C, precision);
+  } else if (R === 8) {
+    return generateVec4ColumnFFT8Shader(N, R, C, precision);
+  } else if (R === 16) {
+    return generateVec4ColumnFFT16Shader(N, R, C, precision);
+  }
+
+  // Generic R-point FFT for larger R
+  return `
+// Vec4 Column FFT shader: ${R}-point FFT for N=${N} = ${R}×${C}
+// Storage: ${precision}
+
+${enableF16}
+fn cmul4(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+  return vec4<f32>(
+    a.x * b.x - a.y * b.y,
+    a.x * b.y + a.y * b.x,
+    a.z * b.z - a.w * b.w,
+    a.z * b.w + a.w * b.z
+  );
+}
+
+struct ColumnFFTParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+  forward: u32,
+  split_norm: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: ColumnFFTParams;
+
+var<workgroup> buffer_a: array<vec4<f32>, ${R}>;
+var<workgroup> buffer_b: array<vec4<f32>, ${R}>;
+
+fn bitrev(x: u32) -> u32 {
+  var v = x;
+  var result = 0u;
+  for (var i = 0u; i < ${log2R}u; i++) {
+    result = (result << 1u) | (v & 1u);
+    v = v >> 1u;
+  }
+  return result;
+}
+
+@compute @workgroup_size(${R}, 1, 1)
+fn column_fft(@builtin(local_invocation_id) local_id: vec3<u32>,
+              @builtin(workgroup_id) workgroup_id: vec3<u32>) {
+  // 2D dispatch: workgroup_id.x = column, workgroup_id.y = original_row
+  let col = workgroup_id.x;
+  let original_row = workgroup_id.y;
+
+  let j = local_id.x;
+  let C = params.C;
+  let R = ${R}u;
+
+  if (col >= C || original_row >= params.num_original_rows) {
+    return;
+  }
+
+  let is_forward = params.forward != 0u;
+  let sign = select(1.0, -1.0, is_forward);
+  let PI = 3.14159265358979;
+
+  let base_idx = original_row * params.N;
+  let input_idx = base_idx + bitrev(j) * C + col;
+  buffer_a[j] = ${loadConvert}(input[input_idx]);
+  workgroupBarrier();
+
+  for (var s = 0u; s < ${log2R}u; s++) {
+    let m = 1u << (s + 1u);
+    let half_m = 1u << s;
+    let group = j / m;
+    let idx_in_group = j % m;
+    let is_first_half = idx_in_group < half_m;
+    let k = select(idx_in_group - half_m, idx_in_group, is_first_half);
+    let base = group * m + k;
+
+    let angle = sign * 2.0 * PI * f32(k) / f32(m);
+    let cv = cos(angle);
+    let sv = sin(angle);
+    let w = vec4<f32>(cv, sv, cv, sv);
+
+    var a: vec4<f32>;
+    var b: vec4<f32>;
+    if ((s & 1u) == 0u) {
+      a = buffer_a[base];
+      b = cmul4(w, buffer_a[base + half_m]);
+    } else {
+      a = buffer_b[base];
+      b = cmul4(w, buffer_b[base + half_m]);
+    }
+
+    let result = select(a - b, a + b, is_first_half);
+
+    workgroupBarrier();
+
+    if ((s & 1u) == 0u) {
+      buffer_b[j] = result;
+    } else {
+      buffer_a[j] = result;
+    }
+
+    workgroupBarrier();
+  }
+
+  var result = select(buffer_b[j], buffer_a[j], ${log2R % 2 === 0 ? 'true' : 'false'});
+
+  if (params.split_norm != 0u) {
+    result = result / sqrt(f32(R));
+  } else if (!is_forward) {
+    result = result / f32(R);
+  }
+
+  let output_idx = base_idx + j * C + col;
+  output[output_idx] = ${storeConvert}(result);
+}
+`;
+}
+
+// Specialized vec4 column FFT for R=2
+function generateVec4ColumnFFT2Shader(N: number, R: number, C: number, precision: FFTPrecision): string {
+  const { storageType, enableF16, loadConvert, storeConvert } = getVec4PrecisionStrings(precision);
+
+  return `
+// Vec4 Column FFT shader: 2-point for N=${N} = ${R}×${C}
+${enableF16}
+struct ColumnFFTParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+  forward: u32,
+  split_norm: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: ColumnFFTParams;
+
+@compute @workgroup_size(256, 1, 1)
+fn column_fft(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  // global_id.x = original_row * C + column (1D dispatch pattern matching vec2)
+  let combined = global_id.x;
+  let original_row = combined / params.C;
+  let col = combined % params.C;
+
+  if (original_row >= params.num_original_rows) {
+    return;
+  }
+
+  let base_idx = original_row * params.N + col;
+  let x0 = ${loadConvert}(input[base_idx]);
+  let x1 = ${loadConvert}(input[base_idx + params.C]);
+
+  var X0 = x0 + x1;
+  var X1 = x0 - x1;
+
+  let norm = select(
+    select(1.0, 0.5, params.forward == 0u),
+    0.70710678118,
+    params.split_norm != 0u
+  );
+  X0 = X0 * norm;
+  X1 = X1 * norm;
+
+  output[base_idx] = ${storeConvert}(X0);
+  output[base_idx + params.C] = ${storeConvert}(X1);
+}
+`;
+}
+
+// Specialized vec4 column FFT for R=4
+function generateVec4ColumnFFT4Shader(N: number, R: number, C: number, precision: FFTPrecision): string {
+  const { storageType, enableF16, loadConvert, storeConvert } = getVec4PrecisionStrings(precision);
+
+  return `
+// Vec4 Column FFT shader: 4-point for N=${N} = ${R}×${C}
+${enableF16}
+fn cmul4(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+  return vec4<f32>(
+    a.x * b.x - a.y * b.y,
+    a.x * b.y + a.y * b.x,
+    a.z * b.z - a.w * b.w,
+    a.z * b.w + a.w * b.z
+  );
+}
+
+struct ColumnFFTParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+  forward: u32,
+  split_norm: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: ColumnFFTParams;
+
+@compute @workgroup_size(256, 1, 1)
+fn column_fft(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  // global_id.x = original_row * C + column (1D dispatch pattern matching vec2)
+  let combined = global_id.x;
+  let original_row = combined / params.C;
+  let col = combined % params.C;
+
+  if (original_row >= params.num_original_rows) {
+    return;
+  }
+
+  let sign = select(1.0, -1.0, params.forward != 0u);
+  let base_idx = original_row * params.N + col;
+
+  let x0 = ${loadConvert}(input[base_idx]);
+  let x1 = ${loadConvert}(input[base_idx + params.C]);
+  let x2 = ${loadConvert}(input[base_idx + 2u * params.C]);
+  let x3 = ${loadConvert}(input[base_idx + 3u * params.C]);
+
+  // W_4^1 = ±i (packed for vec4)
+  let W1 = vec4<f32>(0.0, sign, 0.0, sign);
+
+  let a0 = x0 + x2;
+  let a1 = x0 - x2;
+  let a2 = x1 + x3;
+  let a3 = x1 - x3;
+
+  var X0 = a0 + a2;
+  var X1 = a1 + cmul4(W1, a3);
+  var X2 = a0 - a2;
+  var X3 = a1 - cmul4(W1, a3);
+
+  let norm = select(
+    select(1.0, 0.25, params.forward == 0u),
+    0.5,
+    params.split_norm != 0u
+  );
+  X0 = X0 * norm;
+  X1 = X1 * norm;
+  X2 = X2 * norm;
+  X3 = X3 * norm;
+
+  output[base_idx] = ${storeConvert}(X0);
+  output[base_idx + params.C] = ${storeConvert}(X1);
+  output[base_idx + 2u * params.C] = ${storeConvert}(X2);
+  output[base_idx + 3u * params.C] = ${storeConvert}(X3);
+}
+`;
+}
+
+// Specialized vec4 column FFT for R=8
+function generateVec4ColumnFFT8Shader(N: number, R: number, C: number, precision: FFTPrecision): string {
+  const { storageType, enableF16, loadConvert, storeConvert } = getVec4PrecisionStrings(precision);
+
+  return `
+// Vec4 Column FFT shader: 8-point for N=${N} = ${R}×${C}
+${enableF16}
+const PI: f32 = 3.14159265358979;
+
+fn cmul4(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+  return vec4<f32>(
+    a.x * b.x - a.y * b.y,
+    a.x * b.y + a.y * b.x,
+    a.z * b.z - a.w * b.w,
+    a.z * b.w + a.w * b.z
+  );
+}
+
+struct ColumnFFTParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+  forward: u32,
+  split_norm: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: ColumnFFTParams;
+
+@compute @workgroup_size(256, 1, 1)
+fn column_fft(@builtin(global_invocation_id) global_id: vec3<u32>) {
+  // 1D dispatch pattern matching vec2 version: combined = original_row * C + col
+  let combined = global_id.x;
+  let original_row = combined / params.C;
+  let col = combined % params.C;
+
+  if (original_row >= params.num_original_rows) {
+    return;
+  }
+
+  let sign = select(1.0, -1.0, params.forward != 0u);
+  let base_idx = original_row * params.N + col;
+  let C = params.C;
+
+  let x0 = ${loadConvert}(input[base_idx]);
+  let x1 = ${loadConvert}(input[base_idx + C]);
+  let x2 = ${loadConvert}(input[base_idx + 2u * C]);
+  let x3 = ${loadConvert}(input[base_idx + 3u * C]);
+  let x4 = ${loadConvert}(input[base_idx + 4u * C]);
+  let x5 = ${loadConvert}(input[base_idx + 5u * C]);
+  let x6 = ${loadConvert}(input[base_idx + 6u * C]);
+  let x7 = ${loadConvert}(input[base_idx + 7u * C]);
+
+  // Twiddle factors (packed for vec4)
+  let c1 = cos(sign * PI / 4.0);
+  let s1 = sin(sign * PI / 4.0);
+  let c3 = cos(sign * 3.0 * PI / 4.0);
+  let s3 = sin(sign * 3.0 * PI / 4.0);
+  let W8_1 = vec4<f32>(c1, s1, c1, s1);
+  let W8_2 = vec4<f32>(0.0, sign, 0.0, sign);
+  let W8_3 = vec4<f32>(c3, s3, c3, s3);
+
+  let a0 = x0 + x1;
+  let a1 = x0 - x1;
+  let a2 = x2 + x3;
+  let a3 = x2 - x3;
+  let a4 = x4 + x5;
+  let a5 = x4 - x5;
+  let a6 = x6 + x7;
+  let a7 = x6 - x7;
+
+  let b0 = a0 + a2;
+  let b1 = a1 + cmul4(W8_2, a3);
+  let b2 = a0 - a2;
+  let b3 = a1 - cmul4(W8_2, a3);
+  let b4 = a4 + a6;
+  let b5 = a5 + cmul4(W8_2, a7);
+  let b6 = a4 - a6;
+  let b7 = a5 - cmul4(W8_2, a7);
+
+  var X0 = b0 + b4;
+  var X1 = b1 + cmul4(W8_1, b5);
+  var X2 = b2 + cmul4(W8_2, b6);
+  var X3 = b3 + cmul4(W8_3, b7);
+  var X4 = b0 - b4;
+  var X5 = b1 - cmul4(W8_1, b5);
+  var X6 = b2 - cmul4(W8_2, b6);
+  var X7 = b3 - cmul4(W8_3, b7);
+
+  let norm = select(
+    select(1.0, 0.125, params.forward == 0u),
+    0.35355339059,
+    params.split_norm != 0u
+  );
+  X0 = X0 * norm;
+  X1 = X1 * norm;
+  X2 = X2 * norm;
+  X3 = X3 * norm;
+  X4 = X4 * norm;
+  X5 = X5 * norm;
+  X6 = X6 * norm;
+  X7 = X7 * norm;
+
+  output[base_idx] = ${storeConvert}(X0);
+  output[base_idx + C] = ${storeConvert}(X1);
+  output[base_idx + 2u * C] = ${storeConvert}(X2);
+  output[base_idx + 3u * C] = ${storeConvert}(X3);
+  output[base_idx + 4u * C] = ${storeConvert}(X4);
+  output[base_idx + 5u * C] = ${storeConvert}(X5);
+  output[base_idx + 6u * C] = ${storeConvert}(X6);
+  output[base_idx + 7u * C] = ${storeConvert}(X7);
+}
+`;
+}
+
+// Specialized vec4 column FFT for R=16
+function generateVec4ColumnFFT16Shader(N: number, R: number, C: number, precision: FFTPrecision): string {
+  const { storageType, enableF16, loadConvert, storeConvert } = getVec4PrecisionStrings(precision);
+
+  return `
+// Vec4 Column FFT shader: 16-point for N=${N} = ${R}×${C}
+${enableF16}
+const PI: f32 = 3.14159265358979;
+
+fn cmul4(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
+  return vec4<f32>(
+    a.x * b.x - a.y * b.y,
+    a.x * b.y + a.y * b.x,
+    a.z * b.z - a.w * b.w,
+    a.z * b.w + a.w * b.z
+  );
+}
+
+struct ColumnFFTParams {
+  C: u32,
+  R: u32,
+  N: u32,
+  num_original_rows: u32,
+  forward: u32,
+  split_norm: u32,
+}
+
+@group(0) @binding(0) var<storage, read> input: array<${storageType}>;
+@group(0) @binding(1) var<storage, read_write> output: array<${storageType}>;
+@group(0) @binding(2) var<uniform> params: ColumnFFTParams;
+
+var<workgroup> buffer_a: array<vec4<f32>, 16>;
+var<workgroup> buffer_b: array<vec4<f32>, 16>;
+
+@compute @workgroup_size(16, 1, 1)
+fn column_fft(@builtin(local_invocation_id) local_id: vec3<u32>,
+              @builtin(workgroup_id) workgroup_id: vec3<u32>) {
+  let col = workgroup_id.x;
+  let original_row = workgroup_id.y;
+  let j = local_id.x;
+  let C = params.C;
+
+  if (col >= C || original_row >= params.num_original_rows) {
+    return;
+  }
+
+  let is_forward = params.forward != 0u;
+  let sign = select(1.0, -1.0, is_forward);
+  let base_idx = original_row * params.N;
+
+  // Bit-reverse for 4 bits
+  var v = j;
+  var rev = 0u;
+  rev = (rev << 1u) | (v & 1u); v = v >> 1u;
+  rev = (rev << 1u) | (v & 1u); v = v >> 1u;
+  rev = (rev << 1u) | (v & 1u); v = v >> 1u;
+  rev = (rev << 1u) | (v & 1u);
+
+  let input_idx = base_idx + rev * C + col;
+  buffer_a[j] = ${loadConvert}(input[input_idx]);
+  workgroupBarrier();
+
+  // 4 stages of butterflies
+  for (var s = 0u; s < 4u; s++) {
+    let m = 1u << (s + 1u);
+    let half_m = 1u << s;
+    let group = j / m;
+    let idx_in_group = j % m;
+    let is_first_half = idx_in_group < half_m;
+    let k = select(idx_in_group - half_m, idx_in_group, is_first_half);
+    let base = group * m + k;
+
+    let angle = sign * 2.0 * PI * f32(k) / f32(m);
+    let cv = cos(angle);
+    let sv = sin(angle);
+    let w = vec4<f32>(cv, sv, cv, sv);
+
+    var a: vec4<f32>;
+    var b: vec4<f32>;
+    if ((s & 1u) == 0u) {
+      a = buffer_a[base];
+      b = cmul4(w, buffer_a[base + half_m]);
+    } else {
+      a = buffer_b[base];
+      b = cmul4(w, buffer_b[base + half_m]);
+    }
+
+    let result = select(a - b, a + b, is_first_half);
+
+    workgroupBarrier();
+
+    if ((s & 1u) == 0u) {
+      buffer_b[j] = result;
+    } else {
+      buffer_a[j] = result;
+    }
+
+    workgroupBarrier();
+  }
+
+  // After 4 stages (even), result is in buffer_a
+  var result = buffer_a[j];
+
+  let norm = select(
+    select(1.0, 0.0625, params.forward == 0u),
+    0.25,
+    params.split_norm != 0u
+  );
+  result = result * norm;
+
+  let output_idx = base_idx + j * C + col;
+  output[output_idx] = ${storeConvert}(result);
+}
+`;
+}

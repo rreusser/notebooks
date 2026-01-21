@@ -11,8 +11,6 @@ import type { FFTPrecision } from './lib/webgpu-fft/fft.js';
 import initializeSource from './shaders/initialize.wgsl?raw';
 import extractSource from './shaders/extract.wgsl?raw';
 import convolveSource from './shaders/convolve.wgsl?raw';
-import extractPairSource from './shaders/extract-pair.wgsl?raw';
-import combinePairSource from './shaders/combine-pair.wgsl?raw';
 import updateSource from './shaders/update.wgsl?raw';
 import fullscreenSource from './shaders/fullscreen.wgsl?raw';
 import visualizeSource from './shaders/visualize.wgsl?raw';
@@ -25,8 +23,6 @@ export interface TuringPipelines {
   initialize: GPUComputePipeline;
   extract: GPUComputePipeline;
   convolve: GPUComputePipeline;
-  extractPair: GPUComputePipeline;
-  combinePair: GPUComputePipeline;
   update: GPUComputePipeline;
 
   // Visualization render pipeline
@@ -37,8 +33,6 @@ export interface TuringPipelines {
     initialize: GPUBindGroupLayout;
     extract: GPUBindGroupLayout;
     convolve: GPUBindGroupLayout;
-    extractPair: GPUBindGroupLayout;
-    combinePair: GPUBindGroupLayout;
     update: GPUBindGroupLayout;
     visualize: GPUBindGroupLayout;
   };
@@ -71,16 +65,6 @@ export async function createTuringPipelines(
   const convolveModule = device.createShaderModule({
     label: 'Convolve shader',
     code: convolveSource
-  });
-
-  const extractPairModule = device.createShaderModule({
-    label: 'Extract pair shader',
-    code: extractPairSource
-  });
-
-  const combinePairModule = device.createShaderModule({
-    label: 'Combine pair shader',
-    code: combinePairSource
   });
 
   const updateModule = device.createShaderModule({
@@ -163,55 +147,6 @@ export async function createTuringPipelines(
     ]
   });
 
-  // Extract pair: vec4 input + vec2 output + params
-  const extractPairBindGroupLayout = device.createBindGroupLayout({
-    label: 'Extract pair bind group layout',
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'read-only-storage' as GPUBufferBindingType }
-      },
-      {
-        binding: 1,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'storage' as GPUBufferBindingType }
-      },
-      {
-        binding: 2,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'uniform' as GPUBufferBindingType }
-      }
-    ]
-  });
-
-  // Combine pair: two vec2 inputs + vec4 output + params
-  const combinePairBindGroupLayout = device.createBindGroupLayout({
-    label: 'Combine pair bind group layout',
-    entries: [
-      {
-        binding: 0,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'read-only-storage' as GPUBufferBindingType }
-      },
-      {
-        binding: 1,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'read-only-storage' as GPUBufferBindingType }
-      },
-      {
-        binding: 2,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'storage' as GPUBufferBindingType }
-      },
-      {
-        binding: 3,
-        visibility: GPUShaderStage.COMPUTE,
-        buffer: { type: 'uniform' as GPUBufferBindingType }
-      }
-    ]
-  });
-
   // Update: solution_in + activator_inhibitor + solution_out + params + scaleParams
   const updateBindGroupLayout = device.createBindGroupLayout({
     label: 'Update bind group layout',
@@ -285,16 +220,6 @@ export async function createTuringPipelines(
     bindGroupLayouts: [convolveBindGroupLayout]
   });
 
-  const extractPairPipelineLayout = device.createPipelineLayout({
-    label: 'Extract pair pipeline layout',
-    bindGroupLayouts: [extractPairBindGroupLayout]
-  });
-
-  const combinePairPipelineLayout = device.createPipelineLayout({
-    label: 'Combine pair pipeline layout',
-    bindGroupLayouts: [combinePairBindGroupLayout]
-  });
-
   const updatePipelineLayout = device.createPipelineLayout({
     label: 'Update pipeline layout',
     bindGroupLayouts: [updateBindGroupLayout]
@@ -333,24 +258,6 @@ export async function createTuringPipelines(
     compute: {
       module: convolveModule,
       entryPoint: 'convolve'
-    }
-  });
-
-  const extractPair = device.createComputePipeline({
-    label: 'Extract pair pipeline',
-    layout: extractPairPipelineLayout,
-    compute: {
-      module: extractPairModule,
-      entryPoint: 'extract_pair'
-    }
-  });
-
-  const combinePair = device.createComputePipeline({
-    label: 'Combine pair pipeline',
-    layout: combinePairPipelineLayout,
-    compute: {
-      module: combinePairModule,
-      entryPoint: 'combine_pair'
     }
   });
 
@@ -393,16 +300,12 @@ export async function createTuringPipelines(
     initialize,
     extract,
     convolve,
-    extractPair,
-    combinePair,
     update,
     visualize,
     bindGroupLayouts: {
       initialize: initializeBindGroupLayout,
       extract: extractBindGroupLayout,
       convolve: convolveBindGroupLayout,
-      extractPair: extractPairBindGroupLayout,
-      combinePair: combinePairBindGroupLayout,
       update: updateBindGroupLayout,
       visualize: visualizeBindGroupLayout
     }

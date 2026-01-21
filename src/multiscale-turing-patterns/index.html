@@ -22,7 +22,7 @@
   <script id="imports" type="module">
     import { createWebGPUContext, isWebGPUAvailable } from './webgpu-context.js';
     import { createTuringPipelines } from './pipeline.js';
-    import { executeFFT2D } from './lib/webgpu-fft/fft.js';
+    import { executeFFT2D, createVec4FFTPipelines, executeVec4FFT2D } from './lib/webgpu-fft/fft.js';
     import { createElementStack } from './lib/element-stack.js';
     import { createZoomableAxes } from './lib/zoomable-axes.js';
     import { expandable } from './lib/expandable.js';
@@ -631,6 +631,17 @@
       device.createBuffer({ label: 'FFT temp 1', size: complexSize, usage: bufferUsage })
     ];
 
+    // Vec4 FFT buffers (for inverse FFT on convolution results)
+    const vec4Size = N * N * 4 * bytesPerFloat;  // vec4 per pixel
+    const vec4FftWork = device.createBuffer({ label: 'Vec4 FFT work', size: vec4Size, usage: bufferUsage | GPUBufferUsage.COPY_DST | GPUBufferUsage.COPY_SRC });
+    const vec4FftTemp = [
+      device.createBuffer({ label: 'Vec4 FFT temp 0', size: vec4Size, usage: bufferUsage }),
+      device.createBuffer({ label: 'Vec4 FFT temp 1', size: vec4Size, usage: bufferUsage })
+    ];
+
+    // Create vec4 FFT pipelines for inverse FFT
+    const vec4FftPipelines = createVec4FFTPipelines(device, N, device.limits.maxComputeWorkgroupSizeX, precision);
+
     const numScalePairs = Math.ceil(numScales / 2);
     const aiSize = numScalePairs * N * N * 4 * bytesPerFloat;  // vec4 per pixel per scale pair
     const activatorInhibitor = device.createBuffer({
@@ -654,30 +665,6 @@
     const convolveParamsBuffer = device.createBuffer({
       label: 'Convolve params',
       size: 48,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
-    // Temp buffers for extracting complex pairs from vec4 for inverse FFT
-    const pairTemp0 = device.createBuffer({
-      label: 'Pair temp 0',
-      size: complexSize,
-      usage: bufferUsage
-    });
-    const pairTemp1 = device.createBuffer({
-      label: 'Pair temp 1',
-      size: complexSize,
-      usage: bufferUsage
-    });
-
-    const extractPairParamsBuffer = device.createBuffer({
-      label: 'Extract pair params',
-      size: 16,
-      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
-    });
-
-    const combinePairParamsBuffer = device.createBuffer({
-      label: 'Combine pair params',
-      size: 16,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
@@ -1033,104 +1020,31 @@
 
         device.queue.submit([convEncoder.finish()]);
 
-        // 3b. Inverse FFT the convolution result
-        // The convolution output is vec4: (complex1_re, complex2_re, complex1_im, complex2_im)
-        // We need to extract each complex pair, inverse FFT them, then recombine
+        // 3b. Inverse FFT the convolution result using single vec4 FFT
+        // The convolution output is vec4: (re1, im1, re2, im2) = two complex numbers
+        // After inverse FFT, real parts are activators, imag parts are inhibitors
 
-        // Extract pair 0 (complex1) into pairTemp0
-        const extractParams0 = new Uint32Array([N, N, 0, 0]);
-        device.queue.writeBuffer(extractPairParamsBuffer, 0, extractParams0);
+        // Copy convolution result to vec4 work buffer
+        const copyToWorkEncoder = device.createCommandEncoder({ label: `Copy to vec4 work ${pairIdx}` });
+        copyToWorkEncoder.copyBufferToBuffer(activatorInhibitor, aiOffset, vec4FftWork, 0, aiPairSize);
+        device.queue.submit([copyToWorkEncoder.finish()]);
 
-        const extract0Encoder = device.createCommandEncoder({ label: `Extract pair 0 for ${pairIdx}` });
-        const extract0BG = device.createBindGroup({
-          layout: pipelines.bindGroupLayouts.extractPair,
-          entries: [
-            { binding: 0, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
-            { binding: 1, resource: { buffer: pairTemp0 } },
-            { binding: 2, resource: { buffer: extractPairParamsBuffer } }
-          ]
-        });
-        const extract0Pass = extract0Encoder.beginComputePass({ label: 'Extract pair 0' });
-        extract0Pass.setPipeline(pipelines.extractPair);
-        extract0Pass.setBindGroup(0, extract0BG);
-        extract0Pass.dispatchWorkgroups(workgroups, workgroups, 1);
-        extract0Pass.end();
-        device.queue.submit([extract0Encoder.finish()]);
-
-        // Inverse FFT pair 0
-        executeFFT2D({
+        // Single vec4 inverse FFT
+        executeVec4FFT2D({
           device,
-          pipelines: pipelines.fft,
-          input: pairTemp0,
-          output: fhat, // reuse fhat as temp
-          temp: fftTemp,
+          pipelines: vec4FftPipelines,
+          input: vec4FftWork,
+          output: vec4FftWork,
+          temp: vec4FftTemp,
           N,
           forward: false,
           splitNormalization: true
         });
 
-        // Copy result back to pairTemp0
-        const copy0Encoder = device.createCommandEncoder({ label: 'Copy IFFT result 0' });
-        copy0Encoder.copyBufferToBuffer(fhat, 0, pairTemp0, 0, complexSize);
-        device.queue.submit([copy0Encoder.finish()]);
-
-        // Extract pair 1 (complex2) into pairTemp1
-        const extractParams1 = new Uint32Array([N, N, 1, 0]);
-        device.queue.writeBuffer(extractPairParamsBuffer, 0, extractParams1);
-
-        const extract1Encoder = device.createCommandEncoder({ label: `Extract pair 1 for ${pairIdx}` });
-        const extract1BG = device.createBindGroup({
-          layout: pipelines.bindGroupLayouts.extractPair,
-          entries: [
-            { binding: 0, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
-            { binding: 1, resource: { buffer: pairTemp1 } },
-            { binding: 2, resource: { buffer: extractPairParamsBuffer } }
-          ]
-        });
-        const extract1Pass = extract1Encoder.beginComputePass({ label: 'Extract pair 1' });
-        extract1Pass.setPipeline(pipelines.extractPair);
-        extract1Pass.setBindGroup(0, extract1BG);
-        extract1Pass.dispatchWorkgroups(workgroups, workgroups, 1);
-        extract1Pass.end();
-        device.queue.submit([extract1Encoder.finish()]);
-
-        // Inverse FFT pair 1
-        executeFFT2D({
-          device,
-          pipelines: pipelines.fft,
-          input: pairTemp1,
-          output: fhat, // reuse fhat as temp
-          temp: fftTemp,
-          N,
-          forward: false,
-          splitNormalization: true
-        });
-
-        // Copy result back to pairTemp1
-        const copy1Encoder = device.createCommandEncoder({ label: 'Copy IFFT result 1' });
-        copy1Encoder.copyBufferToBuffer(fhat, 0, pairTemp1, 0, complexSize);
-        device.queue.submit([copy1Encoder.finish()]);
-
-        // Combine pairs back into activatorInhibitor
-        const combineParams = new Uint32Array([N, N, 0, 0]);
-        device.queue.writeBuffer(combinePairParamsBuffer, 0, combineParams);
-
-        const combineEncoder = device.createCommandEncoder({ label: `Combine pairs for ${pairIdx}` });
-        const combineBG = device.createBindGroup({
-          layout: pipelines.bindGroupLayouts.combinePair,
-          entries: [
-            { binding: 0, resource: { buffer: pairTemp0 } },
-            { binding: 1, resource: { buffer: pairTemp1 } },
-            { binding: 2, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
-            { binding: 3, resource: { buffer: combinePairParamsBuffer } }
-          ]
-        });
-        const combinePass = combineEncoder.beginComputePass({ label: 'Combine pairs' });
-        combinePass.setPipeline(pipelines.combinePair);
-        combinePass.setBindGroup(0, combineBG);
-        combinePass.dispatchWorkgroups(workgroups, workgroups, 1);
-        combinePass.end();
-        device.queue.submit([combineEncoder.finish()]);
+        // Copy result back to activatorInhibitor
+        const copyFromWorkEncoder = device.createCommandEncoder({ label: `Copy from vec4 work ${pairIdx}` });
+        copyFromWorkEncoder.copyBufferToBuffer(vec4FftWork, 0, activatorInhibitor, aiOffset, aiPairSize);
+        device.queue.submit([copyFromWorkEncoder.finish()]);
       }
 
       // 4. Update solution

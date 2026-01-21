@@ -12,7 +12,10 @@
 
 import { generateFFTShader, generateTransposeShader } from './fft-generator.js';
 import type { FFTPrecision } from './fft-generator.js';
-import { createLargeFFTPipelines, executeLargeFFT2D, LargeFFTPipelines } from './fft-large.js';
+import { createLargeFFTPipelines, executeLargeFFT2D, LargeFFTPipelines, createVec4FFTPipelines, executeVec4FFT2D, Vec4FFTPipelines } from './fft-large.js';
+
+export { createVec4FFTPipelines, executeVec4FFT2D };
+export type { Vec4FFTPipelines };
 
 export type { FFTPrecision } from './fft-generator.js';
 

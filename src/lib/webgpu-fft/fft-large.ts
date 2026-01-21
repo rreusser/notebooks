@@ -23,8 +23,14 @@ import {
   generateSubRowTwiddleShader,
   generateSubRowColumnFFTShader,
   generateUnscrambleShader,
-  generateScrambleShader
+  generateScrambleShader,
+  generateVec4SubRowFFTShader,
+  generateVec4SubRowTwiddleShader,
+  generateVec4SubRowColumnFFTShader,
+  generateVec4UnscrambleShader,
+  generateVec4ScrambleShader
 } from './fft-large-generator.js';
+import { generateVec4FFTShader, generateVec4TransposeShader } from './fft-generator.js';
 
 export interface LargeFFTPipelines {
   // For large N: sub-row FFT, twiddle, column FFT
@@ -742,6 +748,689 @@ function executeHierarchical2DFFT(
       ]
     });
     const pass = encoder.beginComputePass({ label: 'Transpose 2' });
+    pass.setPipeline(pipelines.transpose);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(N / 16), Math.ceil(N / 16), 1);
+    pass.end();
+  }
+
+  device.queue.submit([encoder.finish()]);
+}
+
+// ============================================================================
+// Vec4 FFT - processes two complex numbers per element (re1, im1, re2, im2)
+// Used for inverse FFT of convolution results
+// ============================================================================
+
+export interface Vec4FFTPipelines {
+  subRowFFT: GPUComputePipeline | null;
+  twiddle: GPUComputePipeline | null;
+  columnFFT: GPUComputePipeline | null;
+  unscramble: GPUComputePipeline | null;
+  scramble: GPUComputePipeline | null;
+  simpleFFT: GPUComputePipeline;
+  transpose: GPUComputePipeline;
+
+  bindGroupLayouts: {
+    subRowFFT: GPUBindGroupLayout | null;
+    twiddle: GPUBindGroupLayout | null;
+    columnFFT: GPUBindGroupLayout | null;
+    unscramble: GPUBindGroupLayout | null;
+    scramble: GPUBindGroupLayout | null;
+    simpleFFT: GPUBindGroupLayout;
+    transpose: GPUBindGroupLayout;
+  };
+
+  N: number;
+  R: number;
+  C: number;
+  isLarge: boolean;
+}
+
+/**
+ * Create vec4 FFT pipelines for processing two complex numbers per element.
+ * Used for inverse FFT of convolution results packed as (re1, im1, re2, im2).
+ */
+export function createVec4FFTPipelines(
+  device: GPUDevice,
+  N: number,
+  maxWorkgroupSize: number = device.limits.maxComputeWorkgroupSizeX,
+  precision: FFTPrecision = 'f32'
+): Vec4FFTPipelines {
+  const isLarge = N > maxWorkgroupSize;
+
+  // Transpose pipeline (vec4)
+  const transposeCode = generateVec4TransposeShader(precision);
+  const transposeModule = device.createShaderModule({
+    label: 'Vec4 Transpose',
+    code: transposeCode
+  });
+
+  const transposeBindGroupLayout = device.createBindGroupLayout({
+    label: 'Vec4 Transpose bind group layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+    ]
+  });
+
+  const transposePipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [transposeBindGroupLayout]
+  });
+
+  const transpose = device.createComputePipeline({
+    label: 'Vec4 Transpose pipeline',
+    layout: transposePipelineLayout,
+    compute: { module: transposeModule, entryPoint: 'transpose' }
+  });
+
+  if (!isLarge) {
+    // Simple case: N ≤ maxWorkgroupSize
+    const simpleFFTCode = generateVec4FFTShader(N, precision);
+    const simpleFFTModule = device.createShaderModule({
+      label: `Vec4 Simple FFT N=${N}`,
+      code: simpleFFTCode
+    });
+
+    const simpleFFTBindGroupLayout = device.createBindGroupLayout({
+      label: 'Vec4 Simple FFT bind group layout',
+      entries: [
+        { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+        { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+        { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+      ]
+    });
+
+    const simpleFFTPipelineLayout = device.createPipelineLayout({
+      bindGroupLayouts: [simpleFFTBindGroupLayout]
+    });
+
+    const simpleFFT = device.createComputePipeline({
+      label: `Vec4 Simple FFT pipeline N=${N}`,
+      layout: simpleFFTPipelineLayout,
+      compute: { module: simpleFFTModule, entryPoint: 'fft_horizontal' }
+    });
+
+    return {
+      subRowFFT: null,
+      twiddle: null,
+      columnFFT: null,
+      unscramble: null,
+      scramble: null,
+      simpleFFT,
+      transpose,
+      bindGroupLayouts: {
+        subRowFFT: null,
+        twiddle: null,
+        columnFFT: null,
+        unscramble: null,
+        scramble: null,
+        simpleFFT: simpleFFTBindGroupLayout,
+        transpose: transposeBindGroupLayout
+      },
+      N,
+      R: 1,
+      C: N,
+      isLarge: false
+    };
+  }
+
+  // Large case: N > maxWorkgroupSize
+  const { R, C } = factorN(N, maxWorkgroupSize);
+
+  // Generate vec4 shaders
+  const subRowFFTCode = generateVec4SubRowFFTShader(N, R, C, precision);
+  const twiddleCode = generateVec4SubRowTwiddleShader(N, R, C, precision);
+  const columnFFTCode = generateVec4SubRowColumnFFTShader(N, R, C, precision);
+  const unscrambleCode = generateVec4UnscrambleShader(N, R, C, precision);
+  const scrambleCode = generateVec4ScrambleShader(N, R, C, precision);
+  const simpleFFTCode = generateVec4FFTShader(C, precision);
+
+  // Create shader modules
+  const subRowFFTModule = device.createShaderModule({
+    label: `Vec4 Sub-row FFT C=${C}`,
+    code: subRowFFTCode
+  });
+
+  const twiddleModule = device.createShaderModule({
+    label: `Vec4 Twiddle N=${N}`,
+    code: twiddleCode
+  });
+
+  const columnFFTModule = device.createShaderModule({
+    label: `Vec4 Column FFT R=${R}`,
+    code: columnFFTCode
+  });
+
+  const unscrambleModule = device.createShaderModule({
+    label: `Vec4 Unscramble N=${N}`,
+    code: unscrambleCode
+  });
+
+  const scrambleModule = device.createShaderModule({
+    label: `Vec4 Scramble N=${N}`,
+    code: scrambleCode
+  });
+
+  const simpleFFTModule = device.createShaderModule({
+    label: `Vec4 Simple FFT C=${C}`,
+    code: simpleFFTCode
+  });
+
+  // Bind group layouts
+  const subRowFFTBindGroupLayout = device.createBindGroupLayout({
+    label: 'Vec4 Sub-row FFT bind group layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+    ]
+  });
+
+  const twiddleBindGroupLayout = device.createBindGroupLayout({
+    label: 'Vec4 Twiddle bind group layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+    ]
+  });
+
+  const columnFFTBindGroupLayout = device.createBindGroupLayout({
+    label: 'Vec4 Column FFT bind group layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+    ]
+  });
+
+  const simpleFFTBindGroupLayout = device.createBindGroupLayout({
+    label: 'Vec4 Simple FFT bind group layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+    ]
+  });
+
+  const unscrambleBindGroupLayout = device.createBindGroupLayout({
+    label: 'Vec4 Unscramble bind group layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+    ]
+  });
+
+  const scrambleBindGroupLayout = device.createBindGroupLayout({
+    label: 'Vec4 Scramble bind group layout',
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'read-only-storage' } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'storage' } },
+      { binding: 2, visibility: GPUShaderStage.COMPUTE, buffer: { type: 'uniform' } }
+    ]
+  });
+
+  // Pipeline layouts
+  const subRowFFTPipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [subRowFFTBindGroupLayout]
+  });
+
+  const twiddlePipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [twiddleBindGroupLayout]
+  });
+
+  const columnFFTPipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [columnFFTBindGroupLayout]
+  });
+
+  const simpleFFTPipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [simpleFFTBindGroupLayout]
+  });
+
+  const unscramblePipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [unscrambleBindGroupLayout]
+  });
+
+  const scramblePipelineLayout = device.createPipelineLayout({
+    bindGroupLayouts: [scrambleBindGroupLayout]
+  });
+
+  // Create pipelines
+  const subRowFFT = device.createComputePipeline({
+    label: `Vec4 Sub-row FFT pipeline C=${C}`,
+    layout: subRowFFTPipelineLayout,
+    compute: { module: subRowFFTModule, entryPoint: 'sub_row_fft' }
+  });
+
+  const twiddle = device.createComputePipeline({
+    label: `Vec4 Twiddle pipeline N=${N}`,
+    layout: twiddlePipelineLayout,
+    compute: { module: twiddleModule, entryPoint: 'twiddle_multiply' }
+  });
+
+  const columnFFT = device.createComputePipeline({
+    label: `Vec4 Column FFT pipeline R=${R}`,
+    layout: columnFFTPipelineLayout,
+    compute: { module: columnFFTModule, entryPoint: 'column_fft' }
+  });
+
+  const simpleFFT = device.createComputePipeline({
+    label: `Vec4 Simple FFT pipeline C=${C}`,
+    layout: simpleFFTPipelineLayout,
+    compute: { module: simpleFFTModule, entryPoint: 'fft_horizontal' }
+  });
+
+  const unscramble = device.createComputePipeline({
+    label: `Vec4 Unscramble pipeline N=${N}`,
+    layout: unscramblePipelineLayout,
+    compute: { module: unscrambleModule, entryPoint: 'unscramble' }
+  });
+
+  const scramble = device.createComputePipeline({
+    label: `Vec4 Scramble pipeline N=${N}`,
+    layout: scramblePipelineLayout,
+    compute: { module: scrambleModule, entryPoint: 'scramble' }
+  });
+
+  return {
+    subRowFFT,
+    twiddle,
+    columnFFT,
+    unscramble,
+    scramble,
+    simpleFFT,
+    transpose,
+    bindGroupLayouts: {
+      subRowFFT: subRowFFTBindGroupLayout,
+      twiddle: twiddleBindGroupLayout,
+      columnFFT: columnFFTBindGroupLayout,
+      unscramble: unscrambleBindGroupLayout,
+      scramble: scrambleBindGroupLayout,
+      simpleFFT: simpleFFTBindGroupLayout,
+      transpose: transposeBindGroupLayout
+    },
+    N,
+    R,
+    C,
+    isLarge
+  };
+}
+
+export interface Vec4FFT2DParams {
+  device: GPUDevice;
+  pipelines: Vec4FFTPipelines;
+  input: GPUBuffer;
+  output: GPUBuffer;
+  temp: [GPUBuffer, GPUBuffer];
+  N: number;
+  forward: boolean;
+  splitNormalization: boolean;
+}
+
+/**
+ * Execute 2D FFT on vec4 data (two complex numbers per element)
+ */
+export function executeVec4FFT2D(params: Vec4FFT2DParams): void {
+  const { device, pipelines, input, output, temp, N, forward, splitNormalization } = params;
+  const { R, C, isLarge } = pipelines;
+
+  const transposeParamsBuffer = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(transposeParamsBuffer, 0, new Uint32Array([N]));
+
+  if (!isLarge) {
+    executeVec4Simple2DFFT(device, pipelines, input, output, temp, N, forward, splitNormalization, transposeParamsBuffer);
+    return;
+  }
+
+  executeVec4Hierarchical2DFFT(device, pipelines, input, output, temp, N, R, C, forward, splitNormalization, transposeParamsBuffer);
+}
+
+function executeVec4Simple2DFFT(
+  device: GPUDevice,
+  pipelines: Vec4FFTPipelines,
+  input: GPUBuffer,
+  output: GPUBuffer,
+  temp: [GPUBuffer, GPUBuffer],
+  N: number,
+  forward: boolean,
+  splitNormalization: boolean,
+  transposeParamsBuffer: GPUBuffer
+): void {
+  const fftParamsBuffer = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(fftParamsBuffer, 0, new Uint32Array([
+    N, N, forward ? 1 : 0, splitNormalization ? 1 : 0
+  ]));
+
+  const encoder = device.createCommandEncoder({ label: 'Vec4 Simple 2D FFT' });
+
+  // Pass 1: Horizontal FFT (input → temp[0])
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.simpleFFT,
+      entries: [
+        { binding: 0, resource: { buffer: input } },
+        { binding: 1, resource: { buffer: temp[0] } },
+        { binding: 2, resource: { buffer: fftParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 Horizontal FFT' });
+    pass.setPipeline(pipelines.simpleFFT);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(N, 1, 1);
+    pass.end();
+  }
+
+  // Pass 2: Transpose (temp[0] → temp[1])
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.transpose,
+      entries: [
+        { binding: 0, resource: { buffer: temp[0] } },
+        { binding: 1, resource: { buffer: temp[1] } },
+        { binding: 2, resource: { buffer: transposeParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 Transpose 1' });
+    pass.setPipeline(pipelines.transpose);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(N / 16), Math.ceil(N / 16), 1);
+    pass.end();
+  }
+
+  // Pass 3: Vertical FFT (temp[1] → temp[0])
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.simpleFFT,
+      entries: [
+        { binding: 0, resource: { buffer: temp[1] } },
+        { binding: 1, resource: { buffer: temp[0] } },
+        { binding: 2, resource: { buffer: fftParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 Vertical FFT' });
+    pass.setPipeline(pipelines.simpleFFT);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(N, 1, 1);
+    pass.end();
+  }
+
+  // Pass 4: Transpose back (temp[0] → output)
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.transpose,
+      entries: [
+        { binding: 0, resource: { buffer: temp[0] } },
+        { binding: 1, resource: { buffer: output } },
+        { binding: 2, resource: { buffer: transposeParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 Transpose 2' });
+    pass.setPipeline(pipelines.transpose);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(N / 16), Math.ceil(N / 16), 1);
+    pass.end();
+  }
+
+  device.queue.submit([encoder.finish()]);
+}
+
+function executeVec4Hierarchical2DFFT(
+  device: GPUDevice,
+  pipelines: Vec4FFTPipelines,
+  input: GPUBuffer,
+  output: GPUBuffer,
+  temp: [GPUBuffer, GPUBuffer],
+  N: number,
+  R: number,
+  C: number,
+  forward: boolean,
+  splitNormalization: boolean,
+  transposeParamsBuffer: GPUBuffer
+): void {
+  // Match vec2 hierarchical FFT order: Column FFT → Twiddle → Sub-row FFT → Unscramble
+
+  // Params for sub-row FFT
+  const subRowParamsBuffer = device.createBuffer({
+    size: 32,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(subRowParamsBuffer, 0, new Uint32Array([
+    C,           // C: sub-row size
+    R,           // R: sub-rows per original row
+    N,           // N: elements per original row
+    N * R,       // num_sub_rows: total sub-rows
+    forward ? 1 : 0,
+    splitNormalization ? 1 : 0
+  ]));
+
+  // Params for twiddle
+  const twiddleParamsBuffer = device.createBuffer({
+    size: 32,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(twiddleParamsBuffer, 0, new Uint32Array([
+    C,           // C
+    R,           // R
+    N,           // N
+    N,           // num_original_rows
+    forward ? 1 : 0
+  ]));
+
+  // Params for column FFT
+  const columnParamsBuffer = device.createBuffer({
+    size: 32,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(columnParamsBuffer, 0, new Uint32Array([
+    C,           // C: stride
+    R,           // R: FFT size
+    N,           // N: elements per original row
+    N,           // num_original_rows
+    forward ? 1 : 0,
+    splitNormalization ? 1 : 0
+  ]));
+
+  // Params for unscramble
+  const unscrambleParamsBuffer = device.createBuffer({
+    size: 16,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+  });
+  device.queue.writeBuffer(unscrambleParamsBuffer, 0, new Uint32Array([
+    C,           // C
+    R,           // R
+    N,           // N
+    N            // num_original_rows
+  ]));
+
+  const encoder = device.createCommandEncoder({ label: 'Vec4 Hierarchical 2D FFT' });
+
+  // ========== Horizontal FFT (all N rows) ==========
+  // Four-step: Column FFT -> Twiddle -> Sub-row FFT -> Unscramble
+
+  // Step H1: Column FFT (R-point) on input → temp[0]
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.columnFFT!,
+      entries: [
+        { binding: 0, resource: { buffer: input } },
+        { binding: 1, resource: { buffer: temp[0] } },
+        { binding: 2, resource: { buffer: columnParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 H Column FFT' });
+    pass.setPipeline(pipelines.columnFFT!);
+    pass.setBindGroup(0, bindGroup);
+    if (R <= 8) {
+      pass.dispatchWorkgroups(Math.ceil(N * C / 256), 1, 1);
+    } else {
+      pass.dispatchWorkgroups(C, N, 1);
+    }
+    pass.end();
+  }
+
+  // Step H2: Twiddle multiply (temp[0] → temp[1])
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.twiddle!,
+      entries: [
+        { binding: 0, resource: { buffer: temp[0] } },
+        { binding: 1, resource: { buffer: temp[1] } },
+        { binding: 2, resource: { buffer: twiddleParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 H Twiddle' });
+    pass.setPipeline(pipelines.twiddle!);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(C / 16), Math.ceil(N * R / 16), 1);
+    pass.end();
+  }
+
+  // Step H3: Sub-row FFT (C-point) on temp[1] → temp[0]
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.subRowFFT!,
+      entries: [
+        { binding: 0, resource: { buffer: temp[1] } },
+        { binding: 1, resource: { buffer: temp[0] } },
+        { binding: 2, resource: { buffer: subRowParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 H Sub-row FFT' });
+    pass.setPipeline(pipelines.subRowFFT!);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(R, N, 1);
+    pass.end();
+  }
+
+  // Step H4: Unscramble (temp[0] → temp[1])
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.unscramble!,
+      entries: [
+        { binding: 0, resource: { buffer: temp[0] } },
+        { binding: 1, resource: { buffer: temp[1] } },
+        { binding: 2, resource: { buffer: unscrambleParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 H Unscramble' });
+    pass.setPipeline(pipelines.unscramble!);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(N / 256), N, 1);
+    pass.end();
+  }
+
+  // ========== Transpose (temp[1] → temp[0]) ==========
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.transpose,
+      entries: [
+        { binding: 0, resource: { buffer: temp[1] } },
+        { binding: 1, resource: { buffer: temp[0] } },
+        { binding: 2, resource: { buffer: transposeParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 Transpose 1' });
+    pass.setPipeline(pipelines.transpose);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(N / 16), Math.ceil(N / 16), 1);
+    pass.end();
+  }
+
+  // ========== Vertical FFT (all N rows after transpose) ==========
+  // Four-step: Column FFT -> Twiddle -> Sub-row FFT -> Unscramble
+
+  // Step V1: Column FFT (R-point) on temp[0] → temp[1]
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.columnFFT!,
+      entries: [
+        { binding: 0, resource: { buffer: temp[0] } },
+        { binding: 1, resource: { buffer: temp[1] } },
+        { binding: 2, resource: { buffer: columnParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 V Column FFT' });
+    pass.setPipeline(pipelines.columnFFT!);
+    pass.setBindGroup(0, bindGroup);
+    if (R <= 8) {
+      pass.dispatchWorkgroups(Math.ceil(N * C / 256), 1, 1);
+    } else {
+      pass.dispatchWorkgroups(C, N, 1);
+    }
+    pass.end();
+  }
+
+  // Step V2: Twiddle multiply (temp[1] → temp[0])
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.twiddle!,
+      entries: [
+        { binding: 0, resource: { buffer: temp[1] } },
+        { binding: 1, resource: { buffer: temp[0] } },
+        { binding: 2, resource: { buffer: twiddleParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 V Twiddle' });
+    pass.setPipeline(pipelines.twiddle!);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(C / 16), Math.ceil(N * R / 16), 1);
+    pass.end();
+  }
+
+  // Step V3: Sub-row FFT (C-point) on temp[0] → temp[1]
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.subRowFFT!,
+      entries: [
+        { binding: 0, resource: { buffer: temp[0] } },
+        { binding: 1, resource: { buffer: temp[1] } },
+        { binding: 2, resource: { buffer: subRowParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 V Sub-row FFT' });
+    pass.setPipeline(pipelines.subRowFFT!);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(R, N, 1);
+    pass.end();
+  }
+
+  // Step V4: Unscramble (temp[1] → temp[0])
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.unscramble!,
+      entries: [
+        { binding: 0, resource: { buffer: temp[1] } },
+        { binding: 1, resource: { buffer: temp[0] } },
+        { binding: 2, resource: { buffer: unscrambleParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 V Unscramble' });
+    pass.setPipeline(pipelines.unscramble!);
+    pass.setBindGroup(0, bindGroup);
+    pass.dispatchWorkgroups(Math.ceil(N / 256), N, 1);
+    pass.end();
+  }
+
+  // ========== Transpose back (temp[0] → output) ==========
+  {
+    const bindGroup = device.createBindGroup({
+      layout: pipelines.bindGroupLayouts.transpose,
+      entries: [
+        { binding: 0, resource: { buffer: temp[0] } },
+        { binding: 1, resource: { buffer: output } },
+        { binding: 2, resource: { buffer: transposeParamsBuffer } }
+      ]
+    });
+    const pass = encoder.beginComputePass({ label: 'Vec4 Transpose 2' });
     pass.setPipeline(pipelines.transpose);
     pass.setBindGroup(0, bindGroup);
     pass.dispatchWorkgroups(Math.ceil(N / 16), Math.ceil(N / 16), 1);

@@ -221,14 +221,13 @@ fn convolve(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
   // Compute complex multiplications: fhat * (act1 + i*inh1) and fhat * (act2 + i*inh2)
   // kernels = (act1, inh1, act2, inh2)
+  // Output packed as (re1, im1, re2, im2) - two contiguous complex numbers for vec4 FFT
   let result = vec4<f32>(
     f.x * kernels.x - f.y * kernels.y,  // Re(fhat * (act1 + i*inh1)) = re*act1 - im*inh1
-    f.x * kernels.z - f.y * kernels.w,  // Re(fhat * (act2 + i*inh2)) = re*act2 - im*inh2
     f.x * kernels.y + f.y * kernels.x,  // Im(fhat * (act1 + i*inh1)) = re*inh1 + im*act1
+    f.x * kernels.z - f.y * kernels.w,  // Re(fhat * (act2 + i*inh2)) = re*act2 - im*inh2
     f.x * kernels.w + f.y * kernels.z   // Im(fhat * (act2 + i*inh2)) = re*inh2 + im*act2
   );
 
-  // Output packed as (complex1_re, complex2_re, complex1_im, complex2_im)
-  // This matches the original's .xzyw swizzle pattern
   output[idx] = vec4<f16>(result);
 }
