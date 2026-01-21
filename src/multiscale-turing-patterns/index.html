@@ -5,7 +5,7 @@
   <script id="1" type="text/markdown">
     # Multi-Scale Turing Patterns in WebGPU
 
-    This notebook implements the [Cyclic Symmetric Multi-Scale Turing Patterns](http://www.archive.bridgesmathart.org/2010/bridges2010-387.pdf) of Jonathan McCabe in WebGPU. The simulation uses FFT-based convolution with analytical kernels (Gaussian and circular) to compute activator-inhibitor dynamics across multiple scales.
+    This notebook implements the [Cyclic Symmetric Multi-Scale Turing Patterns](http://www.archive.bridgesmathart.org/2010/bridges2010-387.pdf) of Jonathan McCabe in WebGPU. The simulation uses FFT-based convolution with analytical kernels (Gaussian and circular) to compute activator-inhibitor dynamics across multiple scales. It's a translation of [previous](https://rreusser.github.io/multiscale-turing-patterns/) [implementations](https://observablehq.com/@rreusser/multiscale-turing-pattern-bot-v2), the best output of which I captured in galleries [1](https://rreusser.github.io/multiscale-turing-pattern-gallery/) and [2](https://rreusser.github.io/multiscale-turing-pattern-gallery-2/).
 
     The algorithm selects the scale with minimum variation at each point, creating the characteristic multiscale patterns. Colors are blended based on which scale dominates locally.
   </script>
@@ -513,22 +513,22 @@
     const restart = view(restartBtn);
 
     // Simulation config details
-    const stepSizeInput = Inputs.range([0.001, 1.0], {
-      value: 0.1,
+    const stepSizeInput = Inputs.range([0.01, 1.0], {
+      value: 0.2,
       step: 0.01,
       label: 'Step size'
     });
     const stepSizeValue = view(stepSizeInput);
 
     const colorRateInput = Inputs.range([0.001, 0.1], {
-      value: 0.01,
+      value: 0.02,
       step: 0.001,
       label: 'Color rate'
     });
     const colorRateValue = view(colorRateInput);
 
     const stepsPerFrameInput = Inputs.range([1, 20], {
-      value: 5,
+      value: 4,
       step: 1,
       label: 'Steps per frame'
     });
