@@ -1,0 +1,1370 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Multi-Scale Turing Patterns in WebGPU</title>
+
+  <script id="1" type="text/markdown">
+    # Multi-Scale Turing Patterns in WebGPU
+
+    This notebook implements the [Cyclic Symmetric Multi-Scale Turing Patterns](http://www.archive.bridgesmathart.org/2010/bridges2010-387.pdf) of Jonathan McCabe in WebGPU. The simulation uses FFT-based convolution with analytical kernels (Gaussian and circular) to compute activator-inhibitor dynamics across multiple scales.
+
+    The algorithm selects the scale with minimum variation at each point, creating the characteristic multiscale patterns. Colors are blended based on which scale dominates locally.
+  </script>
+
+  <script id="webgpu-check" type="module">
+    if (!navigator.gpu) {
+      display(html`<div style="color: red; padding: 20px; border: 1px solid red; background: #fff0f0; border-radius: 4px;">
+        <strong>WebGPU is not available</strong><br>
+        Please use a browser that supports WebGPU (Chrome 113+, Edge 113+, or Firefox with flags enabled).
+      </div>`);
+    }
+  </script>
+
+  <script id="imports" type="module">
+    import { createWebGPUContext, isWebGPUAvailable } from './webgpu-context.js';
+    import { createTuringPipelines } from './pipeline.js';
+    import { executeFFT2D } from './lib/webgpu-fft/fft.js';
+    import { createElementStack } from './lib/element-stack.js';
+    import { createZoomableAxes } from './lib/zoomable-axes.js';
+    import { expandable } from './lib/expandable.js';
+  </script>
+
+  <script id="context" type="module">
+    const context = await createWebGPUContext();
+    const device = context.device;
+    const precision = context.precision;
+    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    // Bytes per float based on precision (f16=2, f32=4)
+    const bytesPerFloat = precision === 'f16' ? 2 : 4;
+
+    invalidation.then(() => device.destroy());
+  </script>
+
+  <script id="N" type="module">
+    const N = parseInt(NString.split('×')[0]);
+  </script>
+
+  <script id="grid-size-state" type="module">
+    // Plain object to hold grid size - no dependencies, created once
+    // This allows other cells to read N without depending on it
+    const gridSizeState = { N: 512 };
+  </script>
+
+  <script id="expandable-state" type="module">
+    // Persist expandable state across re-renders (e.g., when grid size changes)
+    const expandableState = { expanded: false };
+  </script>
+
+  <script id="update-grid-size-state" type="module">
+    N; // dependency - updates gridSizeState when N changes
+    gridSizeState.N = N;
+  </script>
+
+  <script id="num-scales-input" type="module">
+    const numScalesInput = Inputs.range([1, 8], {
+      value: 4,
+      step: 1,
+      label: 'Number of scales'
+    });
+    const numScalesValue = view(numScalesInput);
+
+    display(html`<div id="turing-num-scales">${numScalesInput}</div>`);
+  </script>
+
+  <script id="num-scales" type="module">
+    const numScales = Math.round(numScalesValue ?? 1);
+  </script>
+
+  <script id="scale-params-input" type="module">
+    numScales; // dependencies (reads gridSizeState.N without depending on N)
+
+    // HSV to RGB conversion (h in [0,1], s and v in [0,1])
+    function hsvToRgb(h, s, v) {
+      const i = Math.floor(h * 6);
+      const f = h * 6 - i;
+      const p = v * (1 - s);
+      const q = v * (1 - f * s);
+      const t = v * (1 - (1 - f) * s);
+      const mod = i % 6;
+      const r = [v, q, p, p, t, v][mod];
+      const g = [t, v, v, q, p, p][mod];
+      const b = [p, p, t, v, v, q][mod];
+      return [r, g, b];
+    }
+
+    // Generate default color with randomized hue, full saturation
+    function randomColor() {
+      const h = Math.random();
+      return hsvToRgb(Math.random(), Math.random(), 1);
+    }
+
+    // Generate array of vibrant colors
+    const defaultColors = Array.from({ length: 10 }, randomColor);
+
+    // Create scale parameters input control
+    function createScaleParamsInput(numScales, gridSize, existingParams = []) {
+      const container = document.createElement('div');
+      container.className = 'scale-params-container symmetry-hidden';
+
+      // Add CSS for label toggling based on expandable state
+      // Full labels when collapsed (more space), abbreviated when expanded (floating panel)
+      const style = document.createElement('style');
+      style.textContent = `
+        .scale-params-container .label-full { display: inline; }
+        .scale-params-container .label-short { display: none; }
+        .expandable-expanded .scale-params-container .label-full { display: none; }
+        .expandable-expanded .scale-params-container .label-short { display: inline; }
+        .expandable-expanded .scale-params-container .input-activator { width: 40px !important; }
+        .expandable-expanded .scale-params-container .input-inhibitor-ratio { width: 40px !important; }
+        .expandable-expanded .scale-params-container .input-symmetry { width: 32px !important; }
+        .scale-params-container.symmetry-hidden .symmetry-col { display: none; }
+      `;
+      container.appendChild(style);
+
+      // Create table
+      const table = document.createElement('table');
+      table.style.cssText = 'border-collapse: collapse; width: 100%; font-size: 11px; margin: 4px 0;';
+
+      // Header row with both full and abbreviated labels
+      const thead = document.createElement('thead');
+      thead.innerHTML = `
+        <tr style="text-align: left;">
+          <th style="padding: 2px 4px;"><span class="label-short">A</span><span class="label-full">Activator</span></th>
+          <th style="padding: 2px 4px;"><span class="label-short">I/A</span><span class="label-full">Inh/Act</span></th>
+          <th style="padding: 2px 4px;"><span class="label-short">K</span><span class="label-full">Kernel</span></th>
+          <th style="padding: 2px 4px;"><span class="label-short">Δ</span><span class="label-full">Amount</span></th>
+          <th style="padding: 2px 4px;"><span class="label-short">W</span><span class="label-full">Weight</span></th>
+          <th class="symmetry-col" style="padding: 2px 4px;"><span class="label-short">S</span><span class="label-full">Symmetry</span></th>
+          <th style="padding: 2px 4px;"></th>
+        </tr>
+      `;
+      table.appendChild(thead);
+
+      const tbody = document.createElement('tbody');
+      const rows = [];
+
+      function emitUpdate() {
+        container.value = rows.map(r => ({
+          activatorRadius: parseFloat(r.activator.value) || 2,
+          inhibitorRatio: parseFloat(r.inhibitorRatio.value) || 2,
+          kernelType: r.kernel.value === 'circular' ? 1 : 0,
+          amount: parseFloat(r.amount.value) || 0.05,
+          weight: parseFloat(r.weight.value) || 1,
+          symmetry: parseInt(r.symmetry.value) || 1,
+          color: hexToRgb(r.color.value)
+        }));
+        container.dispatchEvent(new CustomEvent('input'));
+      }
+
+      function hexToRgb(hex) {
+        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+        return result ? [
+          parseInt(result[1], 16) / 255,
+          parseInt(result[2], 16) / 255,
+          parseInt(result[3], 16) / 255
+        ] : [0.5, 0.5, 0.5];
+      }
+
+      function rgbToHex(rgb) {
+        const r = Math.round(rgb[0] * 255);
+        const g = Math.round(rgb[1] * 255);
+        const b = Math.round(rgb[2] * 255);
+        return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
+      }
+
+      // Generate random radius: logarithmically from 3 to gridSize/8
+      function randomExpRadius(scaleIndex) {
+        const minRadius = 3;
+        // Use gridSizeState.N to get current grid size (not stale captured value)
+        const maxRadius = gridSizeState.N / 8;
+        // Logarithmic interpolation: radius = minRadius * (maxRadius/minRadius)^(t)
+        // where t goes from 0 to 1 across scales
+        const t = numScales > 1 ? scaleIndex / (numScales - 1) : 0;
+        const base = minRadius * Math.pow(maxRadius / minRadius, t);
+        const randomFactor = 0.7 + Math.random() * 0.6; // 0.7 to 1.3
+        return Math.round(base * randomFactor);
+      }
+
+      // Generate random values for a scale
+      function randomScaleValues(scaleIndex) {
+        // Common symmetry values that produce interesting patterns
+        const symmetryOptions = [1, 1, 2, 3, 4, 6, 8];
+        return {
+          activatorRadius: randomExpRadius(scaleIndex),
+          inhibitorRatio: (1.5 + Math.random() * 2.5).toFixed(1),
+          kernelType: Math.random() > 0.5 ? 1 : 0,
+          amount: (0.003 + 0.1 * Math.pow(Math.random(), 2)).toFixed(3), // 0-1, strongly biased toward small values
+          weight: (0.1 + Math.random() * 0.9).toFixed(2),
+          symmetry: symmetryOptions[Math.floor(Math.random() * symmetryOptions.length)],
+          color: randomColor()
+        };
+      }
+
+      for (let i = 0; i < numScales; i++) {
+        const existing = existingParams[i];
+        const defaults = existing || randomScaleValues(i);
+
+        const tr = document.createElement('tr');
+
+        // Activator radius
+        const activator = document.createElement('input');
+        activator.type = 'number';
+        activator.className = 'input-activator';
+        activator.value = defaults.activatorRadius;
+        activator.min = 1;
+        activator.max = 200;
+        activator.step = 1;
+        activator.style.cssText = 'width: 50px; padding: 2px;';
+        activator.oninput = emitUpdate;
+
+        // Inhibitor/Activator ratio
+        const inhibitorRatio = document.createElement('input');
+        inhibitorRatio.type = 'number';
+        inhibitorRatio.className = 'input-inhibitor-ratio';
+        inhibitorRatio.value = defaults.inhibitorRatio;
+        inhibitorRatio.min = 1;
+        inhibitorRatio.max = 10;
+        inhibitorRatio.step = 0.1;
+        inhibitorRatio.style.cssText = 'width: 50px; padding: 2px;';
+        inhibitorRatio.oninput = emitUpdate;
+
+        // Kernel type toggle (visual dot: blurred = gaussian, sharp = circular)
+        const kernel = document.createElement('button');
+        kernel.type = 'button';
+        kernel.value = (defaults.kernelType === 1) ? 'circular' : 'gaussian';
+        kernel.style.cssText = `
+          width: 24px; height: 22px; padding: 0; border: 1px solid #ccc;
+          border-radius: 4px; background: #fff; cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+        `;
+        const kernelDot = document.createElement('div');
+        kernelDot.style.cssText = `
+          width: 12px; height: 12px; border-radius: 50%; background: #333;
+          filter: ${kernel.value === 'gaussian' ? 'blur(3px)' : 'none'};
+          transition: filter 0.15s ease;
+        `;
+        kernel.appendChild(kernelDot);
+        kernel._dot = kernelDot; // Store reference for randomize
+        kernel.title = kernel.value === 'gaussian' ? 'Gaussian (click for circular)' : 'Circular (click for gaussian)';
+        kernel.onclick = () => {
+          kernel.value = kernel.value === 'gaussian' ? 'circular' : 'gaussian';
+          kernelDot.style.filter = kernel.value === 'gaussian' ? 'blur(3px)' : 'none';
+          kernel.title = kernel.value === 'gaussian' ? 'Gaussian (click for circular)' : 'Circular (click for gaussian)';
+          emitUpdate();
+        };
+
+        // Amount
+        const amount = document.createElement('input');
+        amount.type = 'number';
+        amount.value = defaults.amount;
+        amount.min = 0.001;
+        amount.max = 1;
+        amount.step = 0.001;
+        amount.style.cssText = 'width: 55px; padding: 2px;';
+        amount.oninput = emitUpdate;
+
+        // Weight
+        const weight = document.createElement('input');
+        weight.type = 'number';
+        weight.value = defaults.weight;
+        weight.min = 0;
+        weight.max = 1;
+        weight.step = 0.01;
+        weight.style.cssText = 'width: 50px; padding: 2px;';
+        weight.oninput = emitUpdate;
+
+        // Symmetry
+        const symmetry = document.createElement('input');
+        symmetry.type = 'number';
+        symmetry.className = 'input-symmetry';
+        symmetry.value = defaults.symmetry ?? 1;
+        symmetry.min = 1;
+        symmetry.max = 8;
+        symmetry.step = 1;
+        symmetry.style.cssText = 'width: 40px; padding: 2px;';
+        symmetry.oninput = emitUpdate;
+
+        // Color
+        const color = document.createElement('input');
+        color.type = 'color';
+        color.value = rgbToHex(defaults.color);
+        color.style.cssText = 'width: 36px; height: 22px; padding: 0; border: 1px solid #ccc;';
+        color.oninput = emitUpdate;
+
+        // Add cells
+        [activator, inhibitorRatio, kernel, amount, weight, symmetry, color].forEach((input, idx) => {
+          const td = document.createElement('td');
+          td.style.padding = '1px 2px';
+          if (idx === 5) td.className = 'symmetry-col'; // symmetry column
+          td.appendChild(input);
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+        rows.push({ activator, inhibitorRatio, kernel, amount, weight, symmetry, color });
+      }
+
+      table.appendChild(tbody);
+      container.appendChild(table);
+
+      // Expose randomize method on container
+      container.randomize = () => {
+        for (let i = 0; i < rows.length; i++) {
+          const row = rows[i];
+          const vals = randomScaleValues(i);
+          row.activator.value = vals.activatorRadius;
+          row.inhibitorRatio.value = vals.inhibitorRatio;
+          row.kernel.value = vals.kernelType === 1 ? 'circular' : 'gaussian';
+          row.kernel._dot.style.filter = vals.kernelType === 1 ? 'none' : 'blur(3px)';
+          row.amount.value = vals.amount;
+          row.weight.value = vals.weight;
+          row.symmetry.value = vals.symmetry;
+          row.color.value = rgbToHex(vals.color);
+        }
+        emitUpdate();
+      };
+
+      // Initialize value
+      emitUpdate();
+
+      return container;
+    }
+
+    // Get existing params from previous instance if available
+    const existingScaleParams = (this?.value) || [];
+
+    const scaleParamsInput = createScaleParamsInput(numScales, gridSizeState.N, existingScaleParams);
+    const scaleParamsValue = view(scaleParamsInput);
+
+    display(html`<div id="turing-scale-params">${scaleParamsInput}</div>`);
+  </script>
+
+  <script id="scale-params" type="module">
+    const scaleParams = scaleParamsValue ?? [{
+      activatorRadius: 2,
+      inhibitorRatio: 2,
+      kernelType: 0,
+      amount: 0.05,
+      weight: 1,
+      symmetry: 1,
+      color: [0.33, 0.53, 0.8]
+    }];
+  </script>
+
+  <script id="button-row" type="module">
+    // Randomize button - calls into scale params
+    const randomizeBtn = document.createElement('button');
+    randomizeBtn.textContent = 'Randomize';
+    randomizeBtn.style.cssText = 'padding: 4px 8px; cursor: pointer; font-size: 12px;';
+    randomizeBtn.onclick = () => {
+      const scaleParamsEl = document.querySelector('#turing-scale-params .scale-params-container');
+      if (scaleParamsEl?.randomize) scaleParamsEl.randomize();
+    };
+
+    // Download PNG button - will be wired up in render cell
+    const downloadBtn = document.createElement('button');
+    downloadBtn.id = 'turing-download-btn';
+    downloadBtn.textContent = 'Download PNG';
+    downloadBtn.style.cssText = 'padding: 4px 8px; cursor: pointer; font-size: 12px;';
+    downloadBtn.onclick = () => {
+      // This will be overwritten by the render cell once canvas is available
+      if (downloadBtn._download) downloadBtn._download();
+    };
+
+    // Style the buttons
+    restartButton.style.cssText = 'padding: 4px 8px; cursor: pointer; font-size: 12px;';
+
+    display(html`<div id="turing-button-row" style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
+      ${randomizeBtn}
+      ${restartButton}
+      ${downloadBtn}
+      ${simulateInput}
+      ${symmetryInput}
+    </div>`);
+
+    // Export download button for render cell to wire up
+    const downloadButton = downloadBtn;
+  </script>
+
+  <script id="symmetry-column-toggle" type="module">
+    symmetryEnabled; // dependency
+    const container = document.querySelector('#turing-scale-params .scale-params-container');
+    if (container) {
+      container.classList.toggle('symmetry-hidden', !symmetryEnabled);
+    }
+  </script>
+
+  <script id="figure" type="module">
+    stack; axes; // dependencies (simState accessed in callback only)
+
+    const figure = html`<figure style="margin: 0;">${stack.element}</figure>`;
+
+    display(expandable(figure, {
+      width: Math.min(width, 640),
+      height: Math.min(width, 640),
+      toggleOffset: [-15, -16],
+      controls: [
+        '#turing-num-scales',
+        '#turing-scale-params',
+        '#turing-button-row',
+        '#turing-sim-controls',
+        '#turing-display-controls'
+      ],
+      state: expandableState,
+      onResize(el, w, h) {
+        stack.resize(w, h);
+        axes.updateScales(
+          d3.scaleLinear().domain([0, gridSizeState.N]).range([0, w]),
+          d3.scaleLinear().domain([0, gridSizeState.N]).range([h, 0])
+        );
+        simState.dirty = true;
+      }
+    }));
+  </script>
+
+  <script id="status" type="module">
+    const statusEl = html`<div id="turing-status" style="font-family: monospace; font-size: 12px; color: #666;">Initializing...</div>`;
+    display(statusEl);
+  </script>
+
+  <script id="grid-size-input" type="module">
+    const maxWorkgroupSize = device.limits.maxComputeWorkgroupSizeX;
+    const allSizes = [256, 512, 1024, 2048, 4096];
+    const validSizes = allSizes.filter(n => {
+      if (n <= maxWorkgroupSize) return true;
+      const C = maxWorkgroupSize;
+      const R = n / C;
+      return Number.isInteger(R) && (R & (R - 1)) === 0;
+    });
+
+    const gridSizeOptions = validSizes.map(n => `${n}×${n}`);
+    const defaultN = 512;
+
+    const NInput = Inputs.select(gridSizeOptions, {
+      value: `${defaultN}×${defaultN}`,
+      label: 'Grid size'
+    });
+    const NString = view(NInput);
+  </script>
+
+  <script id="toggle-checkboxes" type="module">
+    // Simulate checkbox
+    const simulateContainer = document.createElement('label');
+    simulateContainer.style.cssText = 'display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;';
+    const simulateCheckbox = document.createElement('input');
+    simulateCheckbox.type = 'checkbox';
+    simulateCheckbox.checked = true;
+    simulateContainer.appendChild(simulateCheckbox);
+    simulateContainer.appendChild(document.createTextNode('Simulate'));
+    simulateContainer.value = true;
+    simulateCheckbox.onchange = () => {
+      simulateContainer.value = simulateCheckbox.checked;
+      simulateContainer.dispatchEvent(new CustomEvent('input'));
+    };
+    const simulateValue = view(simulateContainer);
+
+    // Symmetry checkbox
+    const symmetryContainer = document.createElement('label');
+    symmetryContainer.style.cssText = 'display: flex; align-items: center; gap: 4px; cursor: pointer; font-size: 12px;';
+    const symmetryCheckbox = document.createElement('input');
+    symmetryCheckbox.type = 'checkbox';
+    symmetryCheckbox.checked = false;
+    symmetryContainer.appendChild(symmetryCheckbox);
+    symmetryContainer.appendChild(document.createTextNode('Symmetry'));
+    symmetryContainer.value = false;
+    symmetryCheckbox.onchange = () => {
+      symmetryContainer.value = symmetryCheckbox.checked;
+      symmetryContainer.dispatchEvent(new CustomEvent('input'));
+    };
+    const symmetryEnabledValue = view(symmetryContainer);
+
+    // Export for use elsewhere
+    const simulateInput = simulateContainer;
+    const symmetryInput = symmetryContainer;
+  </script>
+
+  <script id="symmetry-state" type="module">
+    const symmetryState = { enabled: false };
+  </script>
+
+  <script id="toggle-values" type="module">
+    const simulate = simulateValue ?? true;
+    const symmetryEnabled = symmetryEnabledValue ?? false;
+    // Update state object without triggering downstream re-renders
+    symmetryState.enabled = symmetryEnabled;
+  </script>
+
+  <script id="symmetry-dirty" type="module">
+    symmetryEnabled; simState; // dependencies
+    simState.dirty = true;
+  </script>
+
+  <script id="simulation-controls" type="module">
+    // Custom restart button
+    const restartBtn = document.createElement('button');
+    restartBtn.textContent = 'Restart';
+    restartBtn.style.cssText = 'padding: 4px 12px; cursor: pointer; font-size: 12px;';
+    let restartCount = 0;
+    restartBtn.value = restartCount;
+    restartBtn.onclick = () => {
+      restartBtn.value = ++restartCount;
+      restartBtn.dispatchEvent(new CustomEvent('input'));
+    };
+    const restart = view(restartBtn);
+
+    // Simulation config details
+    const stepSizeInput = Inputs.range([0.001, 1.0], {
+      value: 0.1,
+      step: 0.01,
+      label: 'Step size'
+    });
+    const stepSizeValue = view(stepSizeInput);
+
+    const colorRateInput = Inputs.range([0.001, 0.1], {
+      value: 0.01,
+      step: 0.001,
+      label: 'Color rate'
+    });
+    const colorRateValue = view(colorRateInput);
+
+    const stepsPerFrameInput = Inputs.range([1, 20], {
+      value: 5,
+      step: 1,
+      label: 'Steps per frame'
+    });
+    const stepsPerFrameValue = view(stepsPerFrameInput);
+
+    display(html`<div id="turing-sim-controls">
+      <details class="sim-config-details">
+        <summary style="cursor: pointer; font-size: 12px;">Simulation config</summary>
+        <div style="padding-left: 8px;">
+          <div id="turing-grid-size">${NInput}</div>
+          ${stepSizeInput}
+          ${colorRateInput}
+          ${stepsPerFrameInput}
+        </div>
+      </details>
+    </div>`);
+
+    // Export restart button for use in button row
+    const restartButton = restartBtn;
+  </script>
+
+  <script id="sim-params" type="module">
+    const stepSize = stepSizeValue ?? 0.02;
+    const colorRate = colorRateValue ?? 0.01;
+    const stepsPerFrame = Math.round(stepsPerFrameValue ?? 5);
+  </script>
+
+  <script id="display-controls" type="module">
+    const contrastInput = Inputs.range([0, 0.99], {
+      value: 0.7,
+      step: 0.01,
+      label: 'Contrast'
+    });
+    const contrastValue = view(contrastInput);
+
+    const brightnessInput = Inputs.range([-2, 2], {
+      value: -1,
+      step: 0.1,
+      label: 'Brightness'
+    });
+    const brightnessValue = view(brightnessInput);
+
+    const gammaInput = Inputs.range([0.2, 3], {
+      value: 1.0,
+      step: 0.1,
+      label: 'Gamma'
+    });
+    const gammaValue = view(gammaInput);
+
+    const colorStrengthInput = Inputs.range([0, 1], {
+      value: 1.0,
+      step: 0.1,
+      label: 'Color strength'
+    });
+    const colorStrengthValue = view(colorStrengthInput);
+
+    const invertInput = Inputs.toggle({ label: 'Invert', value: false });
+    const invertValue = view(invertInput);
+
+    display(html`<div id="turing-display-controls">
+      <details class="display-config-details">
+        <summary style="cursor: pointer; font-size: 12px; margin-bottom: 8px;">Display config</summary>
+        <div style="padding-left: 8px;">
+          ${contrastInput}
+          ${brightnessInput}
+          ${gammaInput}
+          ${colorStrengthInput}
+          ${invertInput}
+        </div>
+      </details>
+    </div>`);
+  </script>
+
+  <script id="display-params" type="module">
+    const contrast = contrastValue ?? 0.5;
+    const brightness = brightnessValue ?? 0;
+    const gamma = gammaValue ?? 1.0;
+    const colorStrength = colorStrengthValue ?? 0.5;
+    const invert = invertValue ?? false;
+  </script>
+
+  <script id="buffers" type="module">
+    N; numScales; restart; scaleParams; bytesPerFloat; // dependencies
+
+    // Buffer sizes: vec4 = 4 floats, vec2 = 2 floats (complex)
+    const solutionSize = N * N * 4 * bytesPerFloat;  // vec4 per pixel
+    const complexSize = N * N * 2 * bytesPerFloat;   // vec2 (complex) per pixel
+    const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+
+    const solution = [
+      device.createBuffer({ label: 'Solution 0', size: solutionSize, usage: bufferUsage }),
+      device.createBuffer({ label: 'Solution 1', size: solutionSize, usage: bufferUsage })
+    ];
+
+    const fhat = device.createBuffer({ label: 'fhat', size: complexSize, usage: bufferUsage });
+    const fhatFreq = device.createBuffer({ label: 'fhat_freq', size: complexSize, usage: bufferUsage });
+
+    const fftTemp = [
+      device.createBuffer({ label: 'FFT temp 0', size: complexSize, usage: bufferUsage }),
+      device.createBuffer({ label: 'FFT temp 1', size: complexSize, usage: bufferUsage })
+    ];
+
+    const numScalePairs = Math.ceil(numScales / 2);
+    const aiSize = numScalePairs * N * N * 4 * bytesPerFloat;  // vec4 per pixel per scale pair
+    const activatorInhibitor = device.createBuffer({
+      label: 'Activator/Inhibitor',
+      size: aiSize,
+      usage: bufferUsage
+    });
+
+    const initParamsBuffer = device.createBuffer({
+      label: 'Init params',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const extractParamsBuffer = device.createBuffer({
+      label: 'Extract params',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const convolveParamsBuffer = device.createBuffer({
+      label: 'Convolve params',
+      size: 48,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    // Temp buffers for extracting complex pairs from vec4 for inverse FFT
+    const pairTemp0 = device.createBuffer({
+      label: 'Pair temp 0',
+      size: complexSize,
+      usage: bufferUsage
+    });
+    const pairTemp1 = device.createBuffer({
+      label: 'Pair temp 1',
+      size: complexSize,
+      usage: bufferUsage
+    });
+
+    const extractPairParamsBuffer = device.createBuffer({
+      label: 'Extract pair params',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const combinePairParamsBuffer = device.createBuffer({
+      label: 'Combine pair params',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const updateParamsBuffer = device.createBuffer({
+      label: 'Update params',
+      size: 32,  // vec2<u32> + u32 + 5*f32 = 32 bytes
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const scaleParamsBuffer = device.createBuffer({
+      label: 'Scale params',
+      size: numScales * 32,
+      usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+    });
+
+    const visualizeParamsBuffer = device.createBuffer({
+      label: 'Visualize params',
+      size: 40,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const viewInverseBuffer = device.createBuffer({
+      label: 'View inverse',
+      size: 64,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+  </script>
+
+  <script id="pipelines" type="module">
+    N; precision; // dependencies
+
+    const pipelines = await createTuringPipelines(device, canvasFormat, N, precision);
+  </script>
+
+  <script id="stack" type="module">
+    canvas; ctx; N; // dependencies
+
+    const dpr = window.devicePixelRatio || 1;
+
+    function resizeCanvas(w, h) {
+      const pixelW = Math.round(w * dpr);
+      const pixelH = Math.round(h * dpr);
+      if (canvas.width !== pixelW || canvas.height !== pixelH) {
+        canvas.width = pixelW;
+        canvas.height = pixelH;
+        ctx.configure({ device, format: canvasFormat, alphaMode: 'opaque' });
+      }
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+    }
+
+    const initialSize = Math.min(width, 640);
+    resizeCanvas(initialSize, initialSize);
+
+    const stack = createElementStack({
+      width: initialSize,
+      height: initialSize,
+      layers: [
+        {
+          id: 'canvas',
+          element: ({ current, width, height }) => {
+            resizeCanvas(width, height);
+            return canvas;
+          }
+        }
+      ]
+    });
+  </script>
+
+  <script id="canvas" type="module">
+    N; // dependency
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'turing-canvas';
+    // Size will be set properly by the stack with devicePixelRatio support
+
+    const ctx = canvas.getContext('webgpu');
+    // Initial configure - will be reconfigured when stack sets the size
+    canvas.width = 1;
+    canvas.height = 1;
+    ctx.configure({ device, format: canvasFormat, alphaMode: 'opaque' });
+  </script>
+
+  <script id="initialize" type="module">
+    N; restart; solution; initParamsBuffer; pipelines; // dependencies
+
+    const randomSeed = Math.floor(Math.random() * 0xFFFFFFFF);
+    const initParams = new Uint32Array([N, N, randomSeed, 0]);
+    device.queue.writeBuffer(initParamsBuffer, 0, initParams);
+
+    const initBindGroup = device.createBindGroup({
+      label: 'Initialize bind group',
+      layout: pipelines.bindGroupLayouts.initialize,
+      entries: [
+        { binding: 0, resource: { buffer: solution[0] } },
+        { binding: 1, resource: { buffer: initParamsBuffer } }
+      ]
+    });
+
+    const initEncoder = device.createCommandEncoder({ label: 'Initialize encoder' });
+    const initPass = initEncoder.beginComputePass({ label: 'Initialize pass' });
+    initPass.setPipeline(pipelines.initialize);
+    initPass.setBindGroup(0, initBindGroup);
+    initPass.dispatchWorkgroups(Math.ceil(N / 16), Math.ceil(N / 16), 1);
+    initPass.end();
+    device.queue.submit([initEncoder.finish()]);
+
+    // Also initialize solution[1]
+    const init2BindGroup = device.createBindGroup({
+      label: 'Initialize bind group 2',
+      layout: pipelines.bindGroupLayouts.initialize,
+      entries: [
+        { binding: 0, resource: { buffer: solution[1] } },
+        { binding: 1, resource: { buffer: initParamsBuffer } }
+      ]
+    });
+
+    const init2Encoder = device.createCommandEncoder({ label: 'Initialize encoder 2' });
+    const init2Pass = init2Encoder.beginComputePass({ label: 'Initialize pass 2' });
+    init2Pass.setPipeline(pipelines.initialize);
+    init2Pass.setBindGroup(0, init2BindGroup);
+    init2Pass.dispatchWorkgroups(Math.ceil(N / 16), Math.ceil(N / 16), 1);
+    init2Pass.end();
+    device.queue.submit([init2Encoder.finish()]);
+  </script>
+
+  <script id="sim-state" type="module">
+    // No dependencies - simState object is created once and never changes identity
+    // This prevents downstream cells (axes, figure) from re-running on restart
+    const simState = { dirty: true, solutionIndex: 0, iteration: 0 };
+  </script>
+
+  <script id="reset-sim-state" type="module">
+    restart; scaleParams; // dependencies - reset when restart clicked or params changed
+
+    // Reset simState values without changing the object identity
+    simState.dirty = true;
+    simState.solutionIndex = 0;
+    simState.iteration = 0;
+  </script>
+
+  <script id="axes" type="module">
+    stack; N; // dependencies (simState accessed in callbacks only)
+
+    const axes = createZoomableAxes({
+      d3,
+      element: stack.element,
+      xScale: d3.scaleLinear().domain([0, N]).range([0, stack.width]),
+      yScale: d3.scaleLinear().domain([0, N]).range([stack.height, 0]),
+      aspectRatio: 1,
+      onChange: () => {
+        simState.dirty = true;
+      }
+    });
+
+    stack.addEventListener('update', () => { simState.dirty = true; });
+  </script>
+
+  <script id="simulation-loop" type="module">
+    // Dependencies
+    device; ctx; canvas; N; numScales; pipelines;
+    solution; fhat; fhatFreq; fftTemp; activatorInhibitor;
+    extractParamsBuffer; convolveParamsBuffer; updateParamsBuffer;
+    scaleParamsBuffer; visualizeParamsBuffer; viewInverseBuffer;
+    scaleParams; axes; simState; statusEl; symmetryState;
+    stepSize; colorRate; stepsPerFrame; simulate;
+    contrast; brightness; gamma; colorStrength; invert;
+
+    // Trigger redraw when display params change (even if not simulating)
+    simState.dirty = true;
+
+    const workgroups = Math.ceil(N / 16);
+
+    // Write initial extract params
+    const extractParams = new Uint32Array([N, N, 0, 0]);
+    device.queue.writeBuffer(extractParamsBuffer, 0, extractParams);
+
+    // Create visualize bind groups
+    const visualizeBindGroups = [
+      device.createBindGroup({
+        label: 'Visualize bind group 0',
+        layout: pipelines.bindGroupLayouts.visualize,
+        entries: [
+          { binding: 0, resource: { buffer: solution[0] } },
+          { binding: 1, resource: { buffer: visualizeParamsBuffer } },
+          { binding: 2, resource: { buffer: viewInverseBuffer } }
+        ]
+      }),
+      device.createBindGroup({
+        label: 'Visualize bind group 1',
+        layout: pipelines.bindGroupLayouts.visualize,
+        entries: [
+          { binding: 0, resource: { buffer: solution[1] } },
+          { binding: 1, resource: { buffer: visualizeParamsBuffer } },
+          { binding: 2, resource: { buffer: viewInverseBuffer } }
+        ]
+      })
+    ];
+
+    // Create update bind groups
+    const updateBindGroups = [
+      device.createBindGroup({
+        label: 'Update bind group 0->1',
+        layout: pipelines.bindGroupLayouts.update,
+        entries: [
+          { binding: 0, resource: { buffer: solution[0] } },
+          { binding: 1, resource: { buffer: activatorInhibitor } },
+          { binding: 2, resource: { buffer: solution[1] } },
+          { binding: 3, resource: { buffer: updateParamsBuffer } },
+          { binding: 4, resource: { buffer: scaleParamsBuffer } }
+        ]
+      }),
+      device.createBindGroup({
+        label: 'Update bind group 1->0',
+        layout: pipelines.bindGroupLayouts.update,
+        entries: [
+          { binding: 0, resource: { buffer: solution[1] } },
+          { binding: 1, resource: { buffer: activatorInhibitor } },
+          { binding: 2, resource: { buffer: solution[0] } },
+          { binding: 3, resource: { buffer: updateParamsBuffer } },
+          { binding: 4, resource: { buffer: scaleParamsBuffer } }
+        ]
+      })
+    ];
+
+    function updateParams() {
+      // Scale params (apply symmetry override based on symmetryState)
+      const scaleData = new Float32Array(numScales * 8);
+      for (let i = 0; i < numScales; i++) {
+        const s = scaleParams[i];
+        const offset = i * 8;
+        scaleData[offset + 0] = s.weight;
+        scaleData[offset + 1] = s.amount;
+        scaleData[offset + 2] = symmetryState.enabled ? s.symmetry : 1;
+        scaleData[offset + 3] = 0.0;
+        scaleData[offset + 4] = s.color[0];
+        scaleData[offset + 5] = s.color[1];
+        scaleData[offset + 6] = s.color[2];
+        scaleData[offset + 7] = 0.0;
+      }
+      device.queue.writeBuffer(scaleParamsBuffer, 0, scaleData);
+
+      // Update params (32 bytes: vec2<u32> + u32 + 5*f32)
+      const updateData = new Float32Array(8);
+      const updateDataU32 = new Uint32Array(updateData.buffer);
+      updateDataU32[0] = N;
+      updateDataU32[1] = N;
+      updateDataU32[2] = numScales;
+      updateData[3] = stepSize;
+      updateData[4] = colorRate;
+      // indices 5, 6, 7 are padding
+      device.queue.writeBuffer(updateParamsBuffer, 0, updateData);
+
+      // Visualize params (40 bytes with padding for vec2 alignment)
+      const visData = new Float32Array(10);
+      const visDataU32 = new Uint32Array(visData.buffer);
+      visDataU32[0] = N;                    // resolution.x
+      visDataU32[1] = N;                    // resolution.y
+      visData[2] = contrast;
+      visData[3] = brightness;
+      visData[4] = colorStrength;
+      visData[5] = gamma;
+      visDataU32[6] = invert ? 1 : 0;
+      // visData[7] is padding for vec2 alignment
+      visData[8] = N;                       // domainSize.x
+      visData[9] = N;                       // domainSize.y
+      device.queue.writeBuffer(visualizeParamsBuffer, 0, visData);
+
+      // View matrix
+      device.queue.writeBuffer(viewInverseBuffer, 0, axes.viewInverse);
+    }
+
+    function simulationStep() {
+      const encoder = device.createCommandEncoder({ label: `Simulation step ${simState.iteration}` });
+
+      // 1. Extract scalar field from current solution
+      const extractBG = device.createBindGroup({
+        layout: pipelines.bindGroupLayouts.extract,
+        entries: [
+          { binding: 0, resource: { buffer: solution[simState.solutionIndex] } },
+          { binding: 1, resource: { buffer: fhat } },
+          { binding: 2, resource: { buffer: extractParamsBuffer } }
+        ]
+      });
+
+      const extractPass = encoder.beginComputePass({ label: 'Extract pass' });
+      extractPass.setPipeline(pipelines.extract);
+      extractPass.setBindGroup(0, extractBG);
+      extractPass.dispatchWorkgroups(workgroups, workgroups, 1);
+      extractPass.end();
+
+      device.queue.submit([encoder.finish()]);
+
+      // 2. FFT forward
+      executeFFT2D({
+        device,
+        pipelines: pipelines.fft,
+        input: fhat,
+        output: fhatFreq,
+        temp: fftTemp,
+        N,
+        forward: true,
+        splitNormalization: true
+      });
+
+      // 3. Convolve with kernels for each scale pair
+      const numScalePairs = Math.ceil(numScales / 2);
+      for (let pairIdx = 0; pairIdx < numScalePairs; pairIdx++) {
+        const scaleIdx1 = pairIdx * 2;
+        const scaleIdx2 = Math.min(pairIdx * 2 + 1, numScales - 1);
+
+        const s1 = scaleParams[scaleIdx1];
+        const s2 = scaleParams[scaleIdx2];
+
+        // ConvolveParams struct layout (with vec4 alignment padding):
+        // offset 0:  resolution (vec2<u32>, 8 bytes)
+        // offset 8:  PADDING (8 bytes) to align radii to 16 bytes
+        // offset 16: radii (vec4<f32>, 16 bytes)
+        // offset 32: types (vec4<u32>, 16 bytes)
+        const convParams = new Float32Array(12);
+        const convParamsU32 = new Uint32Array(convParams.buffer);
+        convParamsU32[0] = N;                                      // resolution.x (offset 0)
+        convParamsU32[1] = N;                                      // resolution.y (offset 4)
+        // offset 8-15: padding
+        convParams[4] = s1.activatorRadius;                        // radii.x (offset 16)
+        convParams[5] = s1.activatorRadius * s1.inhibitorRatio;    // radii.y (offset 20)
+        convParams[6] = s2.activatorRadius;                        // radii.z (offset 24)
+        convParams[7] = s2.activatorRadius * s2.inhibitorRatio;    // radii.w (offset 28)
+        convParamsU32[8] = s1.kernelType;                          // types.x (offset 32)
+        convParamsU32[9] = s1.kernelType;                          // types.y (offset 36)
+        convParamsU32[10] = s2.kernelType;                         // types.z (offset 40)
+        convParamsU32[11] = s2.kernelType;                         // types.w (offset 44)
+        device.queue.writeBuffer(convolveParamsBuffer, 0, convParams);
+
+        const aiPairSize = N * N * 4 * bytesPerFloat;  // vec4 per pixel per pair
+        const aiOffset = pairIdx * aiPairSize;
+
+        const convEncoder = device.createCommandEncoder({ label: `Convolve pair ${pairIdx}` });
+        const convBG = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.convolve,
+          entries: [
+            { binding: 0, resource: { buffer: fhatFreq } },
+            { binding: 1, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
+            { binding: 2, resource: { buffer: convolveParamsBuffer } }
+          ]
+        });
+
+        const convPass = convEncoder.beginComputePass({ label: `Convolve pass ${pairIdx}` });
+        convPass.setPipeline(pipelines.convolve);
+        convPass.setBindGroup(0, convBG);
+        convPass.dispatchWorkgroups(workgroups, workgroups, 1);
+        convPass.end();
+
+        device.queue.submit([convEncoder.finish()]);
+
+        // 3b. Inverse FFT the convolution result
+        // The convolution output is vec4: (complex1_re, complex2_re, complex1_im, complex2_im)
+        // We need to extract each complex pair, inverse FFT them, then recombine
+
+        // Extract pair 0 (complex1) into pairTemp0
+        const extractParams0 = new Uint32Array([N, N, 0, 0]);
+        device.queue.writeBuffer(extractPairParamsBuffer, 0, extractParams0);
+
+        const extract0Encoder = device.createCommandEncoder({ label: `Extract pair 0 for ${pairIdx}` });
+        const extract0BG = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.extractPair,
+          entries: [
+            { binding: 0, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
+            { binding: 1, resource: { buffer: pairTemp0 } },
+            { binding: 2, resource: { buffer: extractPairParamsBuffer } }
+          ]
+        });
+        const extract0Pass = extract0Encoder.beginComputePass({ label: 'Extract pair 0' });
+        extract0Pass.setPipeline(pipelines.extractPair);
+        extract0Pass.setBindGroup(0, extract0BG);
+        extract0Pass.dispatchWorkgroups(workgroups, workgroups, 1);
+        extract0Pass.end();
+        device.queue.submit([extract0Encoder.finish()]);
+
+        // Inverse FFT pair 0
+        executeFFT2D({
+          device,
+          pipelines: pipelines.fft,
+          input: pairTemp0,
+          output: fhat, // reuse fhat as temp
+          temp: fftTemp,
+          N,
+          forward: false,
+          splitNormalization: true
+        });
+
+        // Copy result back to pairTemp0
+        const copy0Encoder = device.createCommandEncoder({ label: 'Copy IFFT result 0' });
+        copy0Encoder.copyBufferToBuffer(fhat, 0, pairTemp0, 0, complexSize);
+        device.queue.submit([copy0Encoder.finish()]);
+
+        // Extract pair 1 (complex2) into pairTemp1
+        const extractParams1 = new Uint32Array([N, N, 1, 0]);
+        device.queue.writeBuffer(extractPairParamsBuffer, 0, extractParams1);
+
+        const extract1Encoder = device.createCommandEncoder({ label: `Extract pair 1 for ${pairIdx}` });
+        const extract1BG = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.extractPair,
+          entries: [
+            { binding: 0, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
+            { binding: 1, resource: { buffer: pairTemp1 } },
+            { binding: 2, resource: { buffer: extractPairParamsBuffer } }
+          ]
+        });
+        const extract1Pass = extract1Encoder.beginComputePass({ label: 'Extract pair 1' });
+        extract1Pass.setPipeline(pipelines.extractPair);
+        extract1Pass.setBindGroup(0, extract1BG);
+        extract1Pass.dispatchWorkgroups(workgroups, workgroups, 1);
+        extract1Pass.end();
+        device.queue.submit([extract1Encoder.finish()]);
+
+        // Inverse FFT pair 1
+        executeFFT2D({
+          device,
+          pipelines: pipelines.fft,
+          input: pairTemp1,
+          output: fhat, // reuse fhat as temp
+          temp: fftTemp,
+          N,
+          forward: false,
+          splitNormalization: true
+        });
+
+        // Copy result back to pairTemp1
+        const copy1Encoder = device.createCommandEncoder({ label: 'Copy IFFT result 1' });
+        copy1Encoder.copyBufferToBuffer(fhat, 0, pairTemp1, 0, complexSize);
+        device.queue.submit([copy1Encoder.finish()]);
+
+        // Combine pairs back into activatorInhibitor
+        const combineParams = new Uint32Array([N, N, 0, 0]);
+        device.queue.writeBuffer(combinePairParamsBuffer, 0, combineParams);
+
+        const combineEncoder = device.createCommandEncoder({ label: `Combine pairs for ${pairIdx}` });
+        const combineBG = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.combinePair,
+          entries: [
+            { binding: 0, resource: { buffer: pairTemp0 } },
+            { binding: 1, resource: { buffer: pairTemp1 } },
+            { binding: 2, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
+            { binding: 3, resource: { buffer: combinePairParamsBuffer } }
+          ]
+        });
+        const combinePass = combineEncoder.beginComputePass({ label: 'Combine pairs' });
+        combinePass.setPipeline(pipelines.combinePair);
+        combinePass.setBindGroup(0, combineBG);
+        combinePass.dispatchWorkgroups(workgroups, workgroups, 1);
+        combinePass.end();
+        device.queue.submit([combineEncoder.finish()]);
+      }
+
+      // 4. Update solution
+      const updateEncoder = device.createCommandEncoder({ label: `Update ${simState.iteration}` });
+      const updatePass = updateEncoder.beginComputePass({ label: 'Update pass' });
+      updatePass.setPipeline(pipelines.update);
+      updatePass.setBindGroup(0, updateBindGroups[simState.solutionIndex]);
+      updatePass.dispatchWorkgroups(workgroups, workgroups, 1);
+      updatePass.end();
+
+      device.queue.submit([updateEncoder.finish()]);
+
+      // Swap buffers
+      simState.solutionIndex = 1 - simState.solutionIndex;
+      simState.iteration++;
+    }
+
+    function render() {
+      const renderEncoder = device.createCommandEncoder({ label: 'Render' });
+      const renderPass = renderEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: ctx.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+      renderPass.setPipeline(pipelines.visualize);
+      renderPass.setBindGroup(0, visualizeBindGroups[simState.solutionIndex]);
+      renderPass.draw(3, 1, 0, 0);
+      renderPass.end();
+
+      device.queue.submit([renderEncoder.finish()]);
+    }
+
+    let animationId;
+
+    // Download PNG function
+    async function downloadPNG() {
+      const width = N;
+      const height = N;
+      const bytesPerRow = Math.ceil(width * 4 / 256) * 256; // Align to 256
+
+      // Create render texture
+      const renderTexture = device.createTexture({
+        size: [width, height],
+        format: canvasFormat,
+        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
+      });
+
+      // Create staging buffer
+      const stagingBuffer = device.createBuffer({
+        size: bytesPerRow * height,
+        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
+      });
+
+      // Update params for full resolution render
+      const visData = new Float32Array(10);
+      const visDataU32 = new Uint32Array(visData.buffer);
+      visDataU32[0] = width;
+      visDataU32[1] = height;
+      visData[2] = contrast;
+      visData[3] = brightness;
+      visData[4] = colorStrength;
+      visData[5] = gamma;
+      visDataU32[6] = invert ? 1 : 0;
+      visData[8] = width;
+      visData[9] = height;
+      device.queue.writeBuffer(visualizeParamsBuffer, 0, visData);
+
+      // View matrix for full image: maps clip [-1,1] to data [0, domainSize]
+      // data = (clip + 1) * domainSize / 2
+      const fullViewMatrix = new Float32Array([
+        width / 2, 0, 0, 0,           // column 0
+        0, height / 2, 0, 0,          // column 1
+        0, 0, 1, 0,                   // column 2
+        width / 2, height / 2, 0, 1   // column 3 (translation)
+      ]);
+      device.queue.writeBuffer(viewInverseBuffer, 0, fullViewMatrix);
+
+      // Render to texture
+      const renderEncoder = device.createCommandEncoder({ label: 'Download render' });
+      const renderPass = renderEncoder.beginRenderPass({
+        colorAttachments: [{
+          view: renderTexture.createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+      renderPass.setPipeline(pipelines.visualize);
+      renderPass.setBindGroup(0, visualizeBindGroups[simState.solutionIndex]);
+      renderPass.draw(3, 1, 0, 0);
+      renderPass.end();
+
+      // Copy texture to buffer
+      renderEncoder.copyTextureToBuffer(
+        { texture: renderTexture },
+        { buffer: stagingBuffer, bytesPerRow },
+        [width, height]
+      );
+
+      device.queue.submit([renderEncoder.finish()]);
+
+      // Map and read buffer
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const data = new Uint8Array(stagingBuffer.getMappedRange());
+
+      // Create canvas and draw image
+      const downloadCanvas = document.createElement('canvas');
+      downloadCanvas.width = width;
+      downloadCanvas.height = height;
+      const ctx2d = downloadCanvas.getContext('2d');
+      const imageData = ctx2d.createImageData(width, height);
+
+      // Copy data (handle row alignment)
+      for (let y = 0; y < height; y++) {
+        for (let x = 0; x < width; x++) {
+          const srcIdx = y * bytesPerRow + x * 4;
+          const dstIdx = (y * width + x) * 4;
+          // BGRA to RGBA conversion (WebGPU uses BGRA on some platforms)
+          if (canvasFormat === 'bgra8unorm') {
+            imageData.data[dstIdx + 0] = data[srcIdx + 2]; // R
+            imageData.data[dstIdx + 1] = data[srcIdx + 1]; // G
+            imageData.data[dstIdx + 2] = data[srcIdx + 0]; // B
+            imageData.data[dstIdx + 3] = 255;              // A
+          } else {
+            imageData.data[dstIdx + 0] = data[srcIdx + 0]; // R
+            imageData.data[dstIdx + 1] = data[srcIdx + 1]; // G
+            imageData.data[dstIdx + 2] = data[srcIdx + 2]; // B
+            imageData.data[dstIdx + 3] = 255;              // A
+          }
+        }
+      }
+
+      ctx2d.putImageData(imageData, 0, 0);
+
+      stagingBuffer.unmap();
+      stagingBuffer.destroy();
+      renderTexture.destroy();
+
+      // Restore view matrix
+      device.queue.writeBuffer(viewInverseBuffer, 0, axes.viewInverse);
+      simState.dirty = true;
+
+      // Trigger download
+      const link = document.createElement('a');
+      link.download = `turing-pattern-${N}x${N}-${Date.now()}.png`;
+      link.href = downloadCanvas.toDataURL('image/png');
+      link.click();
+    }
+
+    // Wire up download button
+    const downloadBtnEl = document.querySelector('#turing-download-btn');
+    if (downloadBtnEl) {
+      downloadBtnEl._download = downloadPNG;
+    }
+
+    function animate() {
+      updateParams();
+
+      if (simulate) {
+        for (let i = 0; i < stepsPerFrame; i++) {
+          simulationStep();
+        }
+        simState.dirty = true;
+      }
+
+      if (simState.dirty) {
+        render();
+        simState.dirty = false;
+      }
+
+      statusEl.textContent = `Grid: ${N}×${N} | Scales: ${numScales} | Iteration: ${simState.iteration}`;
+
+      animationId = requestAnimationFrame(animate);
+    }
+
+    animate();
+
+    invalidation.then(() => {
+      cancelAnimationFrame(animationId);
+    });
+  </script>
+
+  <script id="docs" type="text/markdown">
+    ## Controls
+
+    Each row in the scale parameters table defines a pattern scale:
+
+    - **A** (Activator radius): The radius of the activator kernel in pixels. Smaller radii create finer details; larger radii create broader structures.
+    - **I/A** (Inhibitor/Activator ratio): The inhibitor radius as a multiple of the activator radius. Higher ratios (e.g., 2.0) create more separation between features. Must be > 1.
+    - **S** (Symmetry): Rotational symmetry order of the kernel. 1 = no symmetry (standard Gaussian/circle), 2-8 = creates n-fold symmetric patterns like stripes (2), triangles (3), squares (4), or hexagons (6).
+    - **Kernel**: Shape of the convolution kernel—Gaussian (smooth falloff) or Circle (sharp cutoff). Gaussian kernels tend to produce smoother features.
+    - **Amount**: Step size multiplier for this scale. Controls how strongly this scale influences the pattern evolution. Small values (0.01-0.1) give subtle influence; larger values dominate.
+    - **Weight**: Relative importance when computing pattern variation. Higher weights make a scale more likely to "win" and drive the local pattern.
+
+    Use mouse to zoom and pan the visualization. Click the expand button to view fullscreen.
+  </script>
+
+  <script id="algorithm" type="text/markdown">
+    ## Algorithm
+
+    Multiscale Turing patterns are a reaction-diffusion system where multiple scales of activator-inhibitor dynamics compete. At each point:
+
+    1. Convolve the field with Gaussian or circular kernels at different radii to compute activator and inhibitor values
+    2. Find the scale with minimum variation (smallest |activator - inhibitor|)
+    3. Step the field in the direction indicated by that scale (positive if activator > inhibitor)
+    4. Mix the color toward the dominant scale's color
+
+    ### Implementation
+
+    This implementation uses several techniques to maximize throughput on the GPU:
+
+    **Packed FFTs**: We compute four real-valued FFTs in a single pass by packing data into complex pairs. The real solution field ${tex`u`} is stored as a vec4 treating it as two identical complex numbers:
+
+    ${tex.block`(u + 0i,\; u + 0i)`}
+
+    Similarly, four convolution kernels (two activator-inhibitor pairs for scales ${tex`n`} and ${tex`n+1`}) are packed into two complex numbers:
+
+    ${tex.block`(\hat{A}_n + i\hat{I}_n,\; \hat{A}_{n+1} + i\hat{I}_{n+1})`}
+
+    where ${tex`\hat{A}`} and ${tex`\hat{I}`} are the frequency-domain activator and inhibitor kernels. After a single forward FFT, we multiply by two sets of frequency-domain kernels and perform one inverse FFT to recover all four convolved outputs.
+
+    **Analytical frequency-domain kernels**: Rather than storing precomputed kernel textures, we evaluate kernels analytically in the shader. The Fourier transform of a Gaussian with standard deviation ${tex`\sigma`} is another Gaussian:
+
+    ${tex.block`\mathcal{F}\left[e^{-x^2/2\sigma^2}\right] = e^{-2\pi^2\sigma^2 f^2}`}
+
+    The Fourier transform of a circular disc of radius ${tex`R`} is a Bessel function of the first kind:
+
+    ${tex.block`\mathcal{F}\left[\Pi(r/R)\right] = \frac{J_1(2\pi R f)}{\pi R f}`}
+
+    This eliminates kernel memory bandwidth entirely and allows arbitrary kernel parameters without regenerating textures.
+
+    **Float16 precision**: All computation uses 16-bit floating point for storage buffers, halving memory bandwidth compared to float32. The reduced precision is sufficient for the visual nature of the simulation while enabling larger grid sizes and faster execution.
+  </script>
+</notebook>

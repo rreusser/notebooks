@@ -11,10 +11,13 @@
  * @param {Function} [options.onResize] - Optional callback when dimensions change: (content, width, height, expanded) => void
  * @param {string|HTMLElement|Array<string|HTMLElement>} [options.controls] - Controls to float over expanded content.
  *   Can be a CSS selector string, an HTMLElement, or an array of either.
+ * @param {Object} [options.state] - Optional external state object to persist expanded state across re-renders.
+ *   Should have an `expanded` property (boolean).
  * @returns {HTMLElement} The expandable container
  */
-export function expandable(content, { width, height, toggleOffset = [8, 8], margin = 0, padding = 0, onResize, controls }) {
-  let expanded = false;
+export function expandable(content, { width, height, toggleOffset = [8, 8], margin = 0, padding = 0, onResize, controls, state }) {
+  // Use external state if provided, otherwise local state
+  let expanded = state?.expanded ?? false;
   let currentWidth = width;
   let currentHeight = height;
   let controlsPanelExpanded = false;
@@ -132,9 +135,17 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
       max-height: calc(100vh - 200px);
       display: flex;
       flex-direction: column;
-      gap: 16px;
+      gap: 4px;
     `;
 
+    // Add CSS for details elements
+    const panelStyle = document.createElement('style');
+    panelStyle.textContent = `
+      .expandable-controls-content details {
+        margin: 4px 0;
+      }
+    `;
+    floatingPanel.appendChild(panelStyle);
     floatingPanel.appendChild(panelHeader);
     floatingPanel.appendChild(panelContent);
 
@@ -393,6 +404,8 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
 
   function collapse() {
     expanded = false;
+    if (state) state.expanded = false;
+    container.classList.remove('expandable-expanded');
     toggleBtn.innerHTML = '⤢';
     toggleBtn.title = 'Expand';
     toggleBtn.style.top = `${-toggleOffset[1]}px`;
@@ -408,6 +421,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
 
     // Hide floating panel and restore controls
     if (floatingPanel) {
+      floatingPanel.classList.remove('expandable-expanded');
       floatingPanel.style.display = 'none';
       restoreControls();
     }
@@ -498,6 +512,8 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
 
   function expand() {
     expanded = true;
+    if (state) state.expanded = true;
+    container.classList.add('expandable-expanded');
     toggleBtn.innerHTML = '✕';
     toggleBtn.title = 'Collapse';
     toggleBtn.style.top = '8px';
@@ -557,6 +573,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
         if (!floatingPanel.parentNode) {
           document.body.appendChild(floatingPanel);
         }
+        floatingPanel.classList.add('expandable-expanded');
         floatingPanel.style.cssText = `
           position: fixed;
           z-index: 10000;
@@ -564,7 +581,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
           border-radius: 8px;
           box-shadow: 0 4px 20px rgba(0,0,0,0.3);
           overflow: hidden;
-          max-width: min(350px, calc(100vw - 32px));
+          max-width: min(360px, calc(100vw - 32px));
           max-height: calc(100vh - 100px);
           left: ${controlsPanelPosition.x}px;
           top: ${controlsPanelPosition.y}px;
@@ -641,6 +658,13 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
   Object.defineProperty(container, 'expandedDimensions', {
     get: () => ({ width: currentWidth, height: currentHeight, expanded })
   });
+
+  // If external state says we should be expanded, expand after DOM is ready
+  if (state?.expanded) {
+    requestAnimationFrame(() => {
+      expand();
+    });
+  }
 
   return container;
 }
