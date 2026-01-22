@@ -31,13 +31,28 @@
   <script id="context" type="module">
     const context = await createWebGPUContext();
     const device = context.device;
-    const precision = context.precision;
+    const detectedPrecision = context.precision;
     const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    invalidation.then(() => device.destroy());
+  </script>
+
+  <script id="precision-input" type="module">
+    // Only show f16 option if supported
+    const precisionOptions = detectedPrecision === 'f16' ? ['f16', 'f32'] : ['f32'];
+
+    const precisionInput = Inputs.radio(precisionOptions, {
+      label: 'Precision',
+      value: detectedPrecision
+    });
+    const precisionValue = view(precisionInput);
+  </script>
+
+  <script id="precision" type="module">
+    const precision = precisionValue ?? detectedPrecision;
 
     // Bytes per float based on precision (f16=2, f32=4)
     const bytesPerFloat = precision === 'f16' ? 2 : 4;
-
-    invalidation.then(() => device.destroy());
   </script>
 
   <script id="N" type="module">
@@ -539,6 +554,7 @@
         <summary style="cursor: pointer; font-size: 12px;">Simulation config</summary>
         <div style="padding-left: 8px;">
           <div id="turing-grid-size">${NInput}</div>
+          <div id="turing-precision">${precisionInput}</div>
           ${stepSizeInput}
           ${colorRateInput}
           ${stepsPerFrameInput}
@@ -611,25 +627,31 @@
   </script>
 
   <script id="buffers" type="module">
-    N; numScales; restart; scaleParams; bytesPerFloat; // dependencies
+    N; numScales; restart; scaleParams; bytesPerFloat; precision; // dependencies
 
     // Buffer sizes: vec4 = 4 floats, vec2 = 2 floats (complex)
     const solutionSize = N * N * 4 * bytesPerFloat;  // vec4 per pixel
     const complexSize = N * N * 2 * bytesPerFloat;   // vec2 (complex) per pixel
     const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
 
+    // Track total GPU memory usage
+    let totalGPUMemory = 0;
+
     const solution = [
       device.createBuffer({ label: 'Solution 0', size: solutionSize, usage: bufferUsage }),
       device.createBuffer({ label: 'Solution 1', size: solutionSize, usage: bufferUsage })
     ];
+    totalGPUMemory += solutionSize * 2;
 
     const fhat = device.createBuffer({ label: 'fhat', size: complexSize, usage: bufferUsage });
     const fhatFreq = device.createBuffer({ label: 'fhat_freq', size: complexSize, usage: bufferUsage });
+    totalGPUMemory += complexSize * 2;
 
     const fftTemp = [
       device.createBuffer({ label: 'FFT temp 0', size: complexSize, usage: bufferUsage }),
       device.createBuffer({ label: 'FFT temp 1', size: complexSize, usage: bufferUsage })
     ];
+    totalGPUMemory += complexSize * 2;
 
     // Vec4 FFT buffers (for inverse FFT on convolution results)
     const vec4Size = N * N * 4 * bytesPerFloat;  // vec4 per pixel
@@ -638,6 +660,7 @@
       device.createBuffer({ label: 'Vec4 FFT temp 0', size: vec4Size, usage: bufferUsage }),
       device.createBuffer({ label: 'Vec4 FFT temp 1', size: vec4Size, usage: bufferUsage })
     ];
+    totalGPUMemory += vec4Size * 3;
 
     // Create vec4 FFT pipelines for inverse FFT
     const vec4FftPipelines = createVec4FFTPipelines(device, N, device.limits.maxComputeWorkgroupSizeX, precision);
@@ -649,6 +672,7 @@
       size: aiSize,
       usage: bufferUsage
     });
+    totalGPUMemory += aiSize;
 
     const initParamsBuffer = device.createBuffer({
       label: 'Init params',
@@ -674,23 +698,45 @@
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    const scaleParamsSize = numScales * 32;
     const scaleParamsBuffer = device.createBuffer({
       label: 'Scale params',
-      size: numScales * 32,
+      size: scaleParamsSize,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
     });
+    totalGPUMemory += scaleParamsSize;
 
     const visualizeParamsBuffer = device.createBuffer({
       label: 'Visualize params',
       size: 40,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
+    totalGPUMemory += 40;
 
     const viewInverseBuffer = device.createBuffer({
       label: 'View inverse',
       size: 64,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
+    totalGPUMemory += 64;
+
+    // Uniform buffers (small, fixed size)
+    totalGPUMemory += 16 + 16 + 48 + 32; // init, extract, convolve, update params
+
+    // Helper to format bytes
+    const formatBytes = (bytes) => {
+      if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+      if (bytes >= 1024) return (bytes / 1024).toFixed(2) + ' KB';
+      return bytes + ' B';
+    };
+
+    // Export memory info for status display
+    const memoryInfo = {
+      total: totalGPUMemory,
+      formatted: formatBytes(totalGPUMemory),
+      precision
+    };
   </script>
 
   <script id="pipelines" type="module">
@@ -832,6 +878,7 @@
     scaleParams; axes; simState; statusEl; symmetryState;
     stepSize; colorRate; stepsPerFrame; simulate;
     contrast; brightness; gamma; colorStrength; invert;
+    memoryInfo;
 
     // Trigger redraw when display params change (even if not simulating)
     simState.dirty = true;
@@ -1218,7 +1265,7 @@
         simState.dirty = false;
       }
 
-      statusEl.textContent = `Grid: ${N}×${N} | Scales: ${numScales} | Iteration: ${simState.iteration}`;
+      statusEl.textContent = `Grid: ${N}×${N} | Scales: ${numScales} | ${memoryInfo.precision} | Memory: ${memoryInfo.formatted} | Iteration: ${simState.iteration}`;
 
       animationId = requestAnimationFrame(animate);
     }

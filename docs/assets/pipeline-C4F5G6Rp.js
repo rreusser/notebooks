@@ -1,4 +1,4 @@
-import{createFFTPipelines as C}from"./fft-DMDJR3Su.js";const U=`// Initialize Shader
+import{createFFTPipelines as C}from"./fft-Chkx7JT6.js";const U=`// Initialize Shader
 //
 // Creates random initial conditions for multiscale Turing patterns.
 // Generates uniform random noise in [-1, 1] range.

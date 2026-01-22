@@ -1152,10 +1152,10 @@ fn cmul4(a: vec4<f32>, b: vec4<f32>) -> vec4<f32> {
 }
 
 struct SubRowFFTParams {
-  C: u32,
-  R: u32,
-  N: u32,
-  num_original_rows: u32,
+  C: u32,           // Sub-row size (FFT size)
+  R: u32,           // Number of sub-rows per original row
+  N: u32,           // Total elements per original row (R * C)
+  num_sub_rows: u32, // Total sub-rows to process (M * R for M original rows)
   forward: u32,
   split_norm: u32,
 }
@@ -1183,26 +1183,31 @@ fn sub_row_fft(@builtin(local_invocation_id) local_id: vec3<u32>,
   // 2D dispatch: x = sub-row within original row, y = original row
   let sub_row_index = workgroup_id.x;
   let original_row = workgroup_id.y;
-  let sub_row = original_row * params.R + sub_row_index;
-
-  let j = local_id.x;
+  let sub_row = original_row * params.R + sub_row_index;  // Global sub-row index
+  let j = local_id.x;            // Position within sub-row
   let C = ${u}u;
+  let R = params.R;
+  let N = params.N;
 
-  if (sub_row_index >= params.R || original_row >= params.num_original_rows) {
+  if (sub_row >= params.num_sub_rows) {
     return;
   }
+  let base_offset = original_row * N + sub_row_index * C;
 
   let is_forward = params.forward != 0u;
   let sign = select(1.0, -1.0, is_forward);
   let PI = 3.14159265358979;
 
-  let input_idx = sub_row * C + bitrev(j);
+  // Load with bit-reversal
+  let input_idx = base_offset + bitrev(j);
   buffer_a[j] = ${i}(input[input_idx]);
   workgroupBarrier();
 
+  // ${c} stages of butterflies
   for (var s = 0u; s < ${c}u; s++) {
     let m = 1u << (s + 1u);
     let half_m = 1u << s;
+
     let group = j / m;
     let idx_in_group = j % m;
     let is_first_half = idx_in_group < half_m;
@@ -1210,9 +1215,9 @@ fn sub_row_fft(@builtin(local_invocation_id) local_id: vec3<u32>,
     let base = group * m + k;
 
     let angle = sign * 2.0 * PI * f32(k) / f32(m);
-    let c = cos(angle);
+    let cv = cos(angle);
     let sv = sin(angle);
-    let w = vec4<f32>(c, sv, c, sv);
+    let w = vec4<f32>(cv, sv, cv, sv);
 
     var a: vec4<f32>;
     var b: vec4<f32>;
@@ -1237,15 +1242,18 @@ fn sub_row_fft(@builtin(local_invocation_id) local_id: vec3<u32>,
     workgroupBarrier();
   }
 
+  // Get result from correct buffer
   var result = select(buffer_b[j], buffer_a[j], ${c%2===0?"true":"false"});
 
+  // Normalization (only sqrt(C) since this is one dimension of a 2D FFT)
   if (params.split_norm != 0u) {
     result = result / sqrt(f32(C));
   } else if (!is_forward) {
     result = result / f32(C);
   }
 
-  let output_idx = sub_row * C + j;
+  // Write output at same offset structure
+  let output_idx = base_offset + j;
   output[output_idx] = ${s}(result);
 }
 `}function le(e,r,u,n="f32"){const{storageType:o,enableF16:a,loadConvert:i,storeConvert:s}=y(n);return`
@@ -1276,26 +1284,32 @@ struct TwiddleParams {
 
 @compute @workgroup_size(16, 16, 1)
 fn twiddle_multiply(@builtin(global_invocation_id) global_id: vec3<u32>) {
-  let c = global_id.x;
-  let sub_row_index = global_id.y % params.R;
-  let original_row = global_id.y / params.R;
+  let c = global_id.x;  // column within sub-row (0 to C-1)
+  let combined = global_id.y;  // combined index: original_row * R + r
 
-  if (c >= params.C || sub_row_index >= params.R || original_row >= params.num_original_rows) {
+  let C = params.C;
+  let R = params.R;
+  let N = params.N;
+
+  let original_row = combined / R;
+  let r = combined % R;  // sub-row index within original row
+
+  if (c >= C || original_row >= params.num_original_rows) {
     return;
   }
 
-  let sub_row = original_row * params.R + sub_row_index;
-  let idx = sub_row * params.C + c;
+  // Linear index in memory
+  let idx = original_row * N + r * C + c;
+  let val = ${i}(input[idx]);
 
+  // Twiddle factor: W_N^(r*c)
   let sign = select(1.0, -1.0, params.forward != 0u);
   let PI = 3.14159265358979;
-
-  let angle = sign * 2.0 * PI * f32(sub_row_index * c) / f32(params.N);
+  let angle = sign * 2.0 * PI * f32(r) * f32(c) / f32(N);
   let cv = cos(angle);
   let sv = sin(angle);
   let w = vec4<f32>(cv, sv, cv, sv);
 
-  let val = ${i}(input[idx]);
   output[idx] = ${s}(cmul4(val, w));
 }
 `}function be(e,r,u,n="f32"){const{storageType:o,enableF16:a,loadConvert:i,storeConvert:s}=y(n),c=Math.log2(r);return r===2?fe(e,r,u,n):r===4?pe(e,r,u,n):r===8?ce(e,r,u,n):r===16?de(e,r,u,n):`
@@ -1569,13 +1583,14 @@ fn column_fft(@builtin(global_invocation_id) global_id: vec3<u32>) {
   let base_idx = original_row * params.N + col;
   let C = params.C;
 
+  // Load in bit-reversed order: 0,4,2,6,1,5,3,7
   let x0 = ${i}(input[base_idx]);
-  let x1 = ${i}(input[base_idx + C]);
+  let x1 = ${i}(input[base_idx + 4u * C]);
   let x2 = ${i}(input[base_idx + 2u * C]);
-  let x3 = ${i}(input[base_idx + 3u * C]);
-  let x4 = ${i}(input[base_idx + 4u * C]);
+  let x3 = ${i}(input[base_idx + 6u * C]);
+  let x4 = ${i}(input[base_idx + C]);
   let x5 = ${i}(input[base_idx + 5u * C]);
-  let x6 = ${i}(input[base_idx + 6u * C]);
+  let x6 = ${i}(input[base_idx + 3u * C]);
   let x7 = ${i}(input[base_idx + 7u * C]);
 
   // Twiddle factors (packed for vec4)
