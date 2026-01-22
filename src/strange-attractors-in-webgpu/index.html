@@ -201,7 +201,7 @@ For line rendering, we use the [webgpu-instanced-lines](https://github.com/rreus
 
   </script>
   <script id="perf-note" type="text/markdown">
-**A note on performance**: For reasons I don't understand, this WebGPU implementation performs slightly worse than the [original WebGL 1 version](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1) despite using almost identically the same line rendering implementation. Performance will likely improve as WebGPU implementations mature.
+**A note on performance**: For reasons I don't understand, this WebGPU implementation performs slightly worse than the [original WebGL 1 version](https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1) despite using almost identically the same logic and line rendering implementation. It's relatively unclear to me why that is, though I take it as a lesson that new technology can unlock new techniques, algorithms, and capabilities, but just blindly throwing it at the stuff you're already doing isn't necessarily going to lead to magic improvements.
   </script>
   <script id="explanation-state" type="text/markdown">
 ## State Layout
