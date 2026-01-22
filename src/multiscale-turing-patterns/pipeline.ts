@@ -51,35 +51,49 @@ export async function createTuringPipelines(
   // Create FFT pipelines with specified precision
   const fft = createFFTPipelines(device, N, precision);
 
-  // Create shader modules
+  // Helper to adapt shader source to the specified precision
+  // Shaders are written with f16 by default, replace with f32 if needed
+  const adaptShader = (source: string): string => {
+    if (precision === 'f32') {
+      return source
+        .replace(/enable f16;/g, '') // Remove f16 enable directive
+        .replace(/vec4<f16>/g, 'vec4<f32>')
+        .replace(/vec2<f16>/g, 'vec2<f32>')
+        .replace(/array<vec4<f16>>/g, 'array<vec4<f32>>')
+        .replace(/array<vec2<f16>>/g, 'array<vec2<f32>>');
+    }
+    return source;
+  };
+
+  // Create shader modules with precision-adapted code
   const initializeModule = device.createShaderModule({
     label: 'Initialize shader',
-    code: initializeSource
+    code: adaptShader(initializeSource)
   });
 
   const extractModule = device.createShaderModule({
     label: 'Extract shader',
-    code: extractSource
+    code: adaptShader(extractSource)
   });
 
   const convolveModule = device.createShaderModule({
     label: 'Convolve shader',
-    code: convolveSource
+    code: adaptShader(convolveSource)
   });
 
   const updateModule = device.createShaderModule({
     label: 'Update shader',
-    code: updateSource
+    code: adaptShader(updateSource)
   });
 
   const fullscreenModule = device.createShaderModule({
     label: 'Fullscreen vertex shader',
-    code: fullscreenSource
+    code: fullscreenSource // No precision-dependent types
   });
 
   const visualizeModule = device.createShaderModule({
     label: 'Visualize shader',
-    code: visualizeSource
+    code: adaptShader(visualizeSource)
   });
 
   // ============================================================================

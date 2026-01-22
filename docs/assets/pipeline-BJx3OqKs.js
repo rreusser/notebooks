@@ -1,4 +1,4 @@
-import{createFFTPipelines as C}from"./fft-Chkx7JT6.js";const U=`// Initialize Shader
+import{createFFTPipelines as z}from"./fft-Chkx7JT6.js";const G=`// Initialize Shader
 //
 // Creates random initial conditions for multiscale Turing patterns.
 // Generates uniform random noise in [-1, 1] range.
@@ -49,7 +49,7 @@ fn initialize(@builtin(global_invocation_id) global_id: vec3<u32>) {
   // Convert f32 computation result to f16 for storage
   output[idx] = vec4<f16>(vec4<f32>(f, f, f, f));
 }
-`,z=`// Extract Shader
+`,T=`// Extract Shader
 //
 // Extracts the scalar field value from the solution buffer
 // and packs it into a complex number format for FFT.
@@ -83,7 +83,7 @@ fn extract(@builtin(global_invocation_id) global_id: vec3<u32>) {
   // Pack as complex number (real=f, imag=0)
   output[idx] = vec2<f16>(vec2<f32>(f, 0.0));
 }
-`,G=`// Convolve Shader
+`,I=`// Convolve Shader
 //
 // Multiplies the FFT of the scalar field by analytical kernels
 // (Gaussian or Circular/Bessel) to compute activator and inhibitor convolutions.
@@ -316,7 +316,7 @@ fn convolve(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
   output[idx] = vec4<f16>(result);
 }
-`,T=`// Update Shader
+`,M=`// Update Shader
 //
 // Computes the multiscale Turing pattern update step.
 // For each pixel:
@@ -476,7 +476,7 @@ fn update(@builtin(global_invocation_id) global_id: vec3<u32>) {
   // Write output (f32 -> f16)
   solution_out[idx] = vec4<f16>(vec4<f32>(newColor, newF));
 }
-`,I=`// Fullscreen Vertex Shader
+`,B=`// Fullscreen Vertex Shader
 //
 // Renders a fullscreen triangle that covers the entire viewport.
 // Used as the vertex stage for visualization fragment shaders.
@@ -501,7 +501,7 @@ fn fullscreen(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
   return output;
 }
-`,M=`// Visualization Fragment Shader
+`,V=`// Visualization Fragment Shader
 //
 // Renders the multiscale Turing pattern with color from the solution buffer.
 // Supports zoom/pan via viewInverse matrix with periodic wrapping.
@@ -624,4 +624,4 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
 
   return vec4<f32>(finalColor, 1.0);
 }
-`;async function V(n,o,l,s="f32"){const u=C(n,l,s),c=n.createShaderModule({label:"Initialize shader",code:U}),f=n.createShaderModule({label:"Extract shader",code:z}),p=n.createShaderModule({label:"Convolve shader",code:G}),d=n.createShaderModule({label:"Update shader",code:T}),x=n.createShaderModule({label:"Fullscreen vertex shader",code:I}),v=n.createShaderModule({label:"Visualize shader",code:M}),e=n.createBindGroupLayout({label:"Initialize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),t=n.createBindGroupLayout({label:"Extract bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),r=n.createBindGroupLayout({label:"Convolve bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=n.createBindGroupLayout({label:"Update bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}},{binding:4,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}}]}),i=n.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),m=n.createPipelineLayout({label:"Initialize pipeline layout",bindGroupLayouts:[e]}),y=n.createPipelineLayout({label:"Extract pipeline layout",bindGroupLayouts:[t]}),g=n.createPipelineLayout({label:"Convolve pipeline layout",bindGroupLayouts:[r]}),b=n.createPipelineLayout({label:"Update pipeline layout",bindGroupLayouts:[a]}),h=n.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[i]}),w=n.createComputePipeline({label:"Initialize pipeline",layout:m,compute:{module:c,entryPoint:"initialize"}}),_=n.createComputePipeline({label:"Extract pipeline",layout:y,compute:{module:f,entryPoint:"extract"}}),k=n.createComputePipeline({label:"Convolve pipeline",layout:g,compute:{module:p,entryPoint:"convolve"}}),S=n.createComputePipeline({label:"Update pipeline",layout:b,compute:{module:d,entryPoint:"update"}}),P=n.createRenderPipeline({label:"Visualize pipeline",layout:h,vertex:{module:x,entryPoint:"fullscreen"},fragment:{module:v,entryPoint:"visualize",targets:[{format:o}]},primitive:{topology:"triangle-list"}});return{fft:u,initialize:w,extract:_,convolve:k,update:S,visualize:P,bindGroupLayouts:{initialize:e,extract:t,convolve:r,update:a,visualize:i}}}export{V as createTuringPipelines};
+`;async function L(e,u,c,t="f32"){const f=z(e,c,t),n=s=>t==="f32"?s.replace(/enable f16;/g,"").replace(/vec4<f16>/g,"vec4<f32>").replace(/vec2<f16>/g,"vec2<f32>").replace(/array<vec4<f16>>/g,"array<vec4<f32>>").replace(/array<vec2<f16>>/g,"array<vec2<f32>>"):s,p=e.createShaderModule({label:"Initialize shader",code:n(G)}),d=e.createShaderModule({label:"Extract shader",code:n(T)}),x=e.createShaderModule({label:"Convolve shader",code:n(I)}),v=e.createShaderModule({label:"Update shader",code:n(M)}),m=e.createShaderModule({label:"Fullscreen vertex shader",code:B}),y=e.createShaderModule({label:"Visualize shader",code:n(V)}),r=e.createBindGroupLayout({label:"Initialize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=e.createBindGroupLayout({label:"Extract bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),i=e.createBindGroupLayout({label:"Convolve bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),o=e.createBindGroupLayout({label:"Update bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}},{binding:4,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}}]}),l=e.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),g=e.createPipelineLayout({label:"Initialize pipeline layout",bindGroupLayouts:[r]}),b=e.createPipelineLayout({label:"Extract pipeline layout",bindGroupLayouts:[a]}),h=e.createPipelineLayout({label:"Convolve pipeline layout",bindGroupLayouts:[i]}),w=e.createPipelineLayout({label:"Update pipeline layout",bindGroupLayouts:[o]}),_=e.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[l]}),k=e.createComputePipeline({label:"Initialize pipeline",layout:g,compute:{module:p,entryPoint:"initialize"}}),S=e.createComputePipeline({label:"Extract pipeline",layout:b,compute:{module:d,entryPoint:"extract"}}),P=e.createComputePipeline({label:"Convolve pipeline",layout:h,compute:{module:x,entryPoint:"convolve"}}),C=e.createComputePipeline({label:"Update pipeline",layout:w,compute:{module:v,entryPoint:"update"}}),U=e.createRenderPipeline({label:"Visualize pipeline",layout:_,vertex:{module:m,entryPoint:"fullscreen"},fragment:{module:y,entryPoint:"visualize",targets:[{format:u}]},primitive:{topology:"triangle-list"}});return{fft:f,initialize:k,extract:S,convolve:P,update:C,visualize:U,bindGroupLayouts:{initialize:r,extract:a,convolve:i,update:o,visualize:l}}}export{L as createTuringPipelines};
