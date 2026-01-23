@@ -208,7 +208,7 @@
           activatorRadius: randomExpRadius(scaleIndex),
           inhibitorRatio: (1.5 + Math.random() * 2.5).toFixed(1),
           kernelType: Math.random() > 0.5 ? 1 : 0,
-          amount: (0.003 + 0.1 * Math.pow(Math.random(), 2)).toFixed(3), // 0-1, strongly biased toward small values
+          amount: (0.1 + 0.9 * Math.random()).toFixed(2), // 0.1-1.0
           weight: (0.1 + Math.random() * 0.9).toFixed(2),
           symmetry: symmetryOptions[Math.floor(Math.random() * symmetryOptions.length)],
           color: randomColor()
@@ -543,7 +543,7 @@
     const colorRateValue = view(colorRateInput);
 
     const stepsPerFrameInput = Inputs.range([1, 20], {
-      value: 4,
+      value: 1,
       step: 1,
       label: 'Steps per frame'
     });
@@ -574,7 +574,7 @@
 
   <script id="display-controls" type="module">
     const contrastInput = Inputs.range([0, 0.99], {
-      value: 0.7,
+      value: 0.4,
       step: 0.01,
       label: 'Contrast'
     });

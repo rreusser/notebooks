@@ -3,15 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Multi-Scale Turing Patterns in WebGPU">
-  <meta property="og:title" content="Multi-Scale Turing Patterns in WebGPU">
-  <meta name="twitter:description" content="Interactive multi-scale Turing patterns computed in WebGPU">
-  <meta name="subject" content="Interactive multi-scale Turing patterns computed in WebGPU">
-  <meta name="description" content="Interactive multi-scale Turing patterns computed in WebGPU">
-  <meta property="og:description" content="Interactive multi-scale Turing patterns computed in WebGPU">
-  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/multiscale-turing-patterns.jpg">
-  <meta name="twitter:card" content="summary_large_image">
-  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/multiscale-turing-patterns.jpg">
+  <meta name="twitter:title" content="Toiletpaperfullerenes and Charmin Nanotubes">
+  <meta property="og:title" content="Toiletpaperfullerenes and Charmin Nanotubes">
+  <meta name="twitter:description" content="Fullerenes">
+  <meta name="subject" content="Fullerenes">
+  <meta name="description" content="Fullerenes">
+  <meta property="og:description" content="Fullerenes">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1507,7 +1504,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Multi-Scale Turing Patterns in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-Df7PlIhu.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Toiletpaperfullerenes and Charmin Nanotubes</title>  <script type="module" crossorigin src="/notebooks/assets/index-Cl98jlHT.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1519,20 +1516,13 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Multi-Scale Turing Patterns in WebGPU</h1>
+    <h1>Toiletpaperfullerenes and Charmin Nanotubes</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20260120">January 20, 2026</time>
+      <time pubdate="" datetime="20260113">January 13, 2026</time>
     </div>
     <div class="resource-links">
-        <a href="https://observablehq.com/@rreusser/multiscale-turing-pattern-bot-v2" class="resource-link">
-          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
-            <circle cx="12" cy="12" r="10" fill="white"></circle>
-            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
-          </svg>
-          Live notebook
-        </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/multiscale-turing-patterns/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/charmin-nanotubes-and-toiletpaperfullerenes/index.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1542,37 +1532,133 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This notebook implements the <a href="http://www.archive.bridgesmathart.org/2010/bridges2010-387.pdf">Cyclic Symmetric Multi-Scale Turing Patterns</a> of Jonathan McCabe in WebGPU. The simulation uses FFT-based convolution with analytical kernels (Gaussian and circular) to compute activator-inhibitor dynamics across multiple scales. It’s a translation of <a href="https://rreusser.github.io/multiscale-turing-patterns/">previous</a> <a href="https://observablehq.com/@rreusser/multiscale-turing-pattern-bot-v2">implementations</a>, the best output of which I captured in galleries <a href="https://rreusser.github.io/multiscale-turing-pattern-gallery/">1</a> and <a href="https://rreusser.github.io/multiscale-turing-pattern-gallery-2/">2</a>.</p>
-<p>The algorithm selects the scale with minimum variation at each point, creating the characteristic multiscale patterns. Colors are blended based on which scale dominates locally.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-23" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-25" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-28" class="observablehq observablehq--cell"></div><div id="cell-29" class="observablehq observablehq--cell"></div><div id="cell-30" class="observablehq observablehq--cell"></div><div id="cell-31" class="observablehq observablehq--cell"></div><div id="cell-32" class="observablehq observablehq--cell"></div><div id="cell-33" class="observablehq observablehq--cell"></div><div id="cell-34" class="observablehq observablehq--cell"></div><div id="cell-35" class="observablehq observablehq--cell"></div><div id="cell-36" class="observablehq observablehq--cell"></div><div id="cell-37" class="observablehq observablehq--cell"><div><h2 id="controls" tabindex="-1"><a href="#controls">Controls</a></h2>
-<p>Each row in the scale parameters table defines a pattern scale:</p>
-<ul>
-<li><strong>A</strong> (Activator radius): The radius of the activator kernel in pixels. Smaller radii create finer details; larger radii create broader structures.</li>
-<li><strong>I/A</strong> (Inhibitor/Activator ratio): The inhibitor radius as a multiple of the activator radius. Higher ratios (e.g., 2.0) create more separation between features. Must be &gt; 1.</li>
-<li><strong>S</strong> (Symmetry): Rotational symmetry order of the kernel. 1 = no symmetry (standard Gaussian/circle), 2-8 = creates n-fold symmetric patterns like stripes (2), triangles (3), squares (4), or hexagons (6).</li>
-<li><strong>Kernel</strong>: Shape of the convolution kernel—Gaussian (smooth falloff) or Circle (sharp cutoff). Gaussian kernels tend to produce smoother features.</li>
-<li><strong>Amount</strong>: Step size multiplier for this scale. Controls how strongly this scale influences the pattern evolution. Small values (0.01-0.1) give subtle influence; larger values dominate.</li>
-<li><strong>Weight</strong>: Relative importance when computing pattern variation. Higher weights make a scale more likely to “win” and drive the local pattern.</li>
-</ul>
-<p>Use mouse to zoom and pan the visualization. Click the expand button to view fullscreen.</p>
-</div></div><div id="cell-38" class="observablehq observablehq--cell"><div><h2 id="algorithm" tabindex="-1"><a href="#algorithm">Algorithm</a></h2>
-<p>Multiscale Turing patterns are a reaction-diffusion system where multiple scales of activator-inhibitor dynamics compete. At each point:</p>
-<ol>
-<li>Convolve the field with Gaussian or circular kernels at different radii to compute activator and inhibitor values</li>
-<li>Find the scale with minimum variation (smallest |activator - inhibitor|)</li>
-<li>Step the field in the direction indicated by that scale (positive if activator &gt; inhibitor)</li>
-<li>Mix the color toward the dominant scale’s color</li>
-</ol>
-<h3 id="implementation" tabindex="-1"><a href="#implementation">Implementation</a></h3>
-<p>This implementation uses several techniques to maximize throughput on the GPU:</p>
-<p><strong>Packed FFTs</strong>: We compute four real-valued FFTs in a single pass by packing data into complex pairs. The real solution field  is stored as a vec4 treating it as two identical complex numbers:</p>
-<p>Similarly, four convolution kernels (two activator-inhibitor pairs for scales  and ) are packed into two complex numbers:</p>
-<p>where  and  are the frequency-domain activator and inhibitor kernels. After a single forward FFT, we multiply by two sets of frequency-domain kernels and perform one inverse FFT to recover all four convolved outputs.</p>
-<p><strong>Analytical frequency-domain kernels</strong>: Rather than storing precomputed kernel textures, we evaluate kernels analytically in the shader. The Fourier transform of a Gaussian with standard deviation  is another Gaussian:</p>
-<p>The Fourier transform of a circular disc of radius  is a Bessel function of the first kind:</p>
-<p>This eliminates kernel memory bandwidth entirely and allows arbitrary kernel parameters without regenerating textures.</p>
-<p><strong>Float16 precision</strong>: All computation uses 16-bit floating point for storage buffers, halving memory bandwidth compared to float32. The reduced precision is sufficient for the visual nature of the simulation while enabling larger grid sizes and faster execution.</p>
-</div></div></main>
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Interactive mesh editor for trivalent graphs (max 3 edges per vertex). Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection. Use keyboard shortcuts to edit.</p>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-comment">// Container - will be sized by expandable's onResize callback</span>
+<span class="tok-keyword">const</span> <span class="tok-definition">container</span> = <span class="tok-variable">html</span><span class="tok-string">`&lt;div id="mesh-canvas" style="width: 100%; height: 100%;"&gt;&lt;/div&gt;`</span>;
+
+<span class="tok-comment">// Initialize WebGL context if needed</span>
+<span class="tok-keyword">if</span> (!<span class="tok-variable">state</span>.<span class="tok-definition">regl</span>) {
+  <span class="tok-variable">state</span>.<span class="tok-definition">regl</span> = <span class="tok-variable">createREGL</span>({
+<span class="tok-definition">container</span>,
+<span class="tok-definition">pixelRatio</span>: <span class="tok-variable">devicePixelRatio</span>,
+<span class="tok-definition">extensions</span>: [<span class="tok-string">'ANGLE_instanced_arrays'</span>],
+<span class="tok-definition">attributes</span>: { <span class="tok-definition">preserveDrawingBuffer</span>: <span class="tok-literal">true</span> }
+  });
+
+  <span class="tok-keyword">const</span> <span class="tok-definition">icosphere</span> = <span class="tok-variable">createIcosphere</span>(<span class="tok-literal">1</span>);
+  <span class="tok-variable">state</span>.<span class="tok-definition">camera</span> = <span class="tok-variable">createReglCamera</span>(<span class="tok-variable">state</span>.<span class="tok-definition">regl</span>, { <span class="tok-definition">eye</span>: [<span class="tok-literal">0</span>, <span class="tok-literal">1</span>, -<span class="tok-literal">20</span>] });
+  <span class="tok-variable">state</span>.<span class="tok-definition">renderer</span> = <span class="tok-variable">createMeshRenderer</span>(<span class="tok-variable">state</span>.<span class="tok-definition">regl</span>, <span class="tok-variable">icosphere</span>);
+  <span class="tok-variable">state</span>.<span class="tok-definition">physics</span> = <span class="tok-keyword">new</span> <span class="tok-definition">MeshPhysics</span>(<span class="tok-variable">state</span>.<span class="tok-definition">mesh</span>!);
+  <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span> = <span class="tok-keyword">new</span> <span class="tok-definition">MeshInteractions</span>(
+<span class="tok-variable">state</span>.<span class="tok-definition">regl</span>.<span class="tok-definition">_gl</span>.<span class="tok-definition">canvas</span>,
+<span class="tok-variable">state</span>.<span class="tok-definition">mesh</span>!,
+<span class="tok-variable">state</span>.<span class="tok-definition">camera</span>.<span class="tok-definition">camera</span>,
+{
+  <span class="tok-definition">projectionView</span>: <span class="tok-variable">state</span>.<span class="tok-definition">camera</span>.<span class="tok-definition">projectionView</span>,
+  <span class="tok-definition">onChange</span>: () =&gt; { <span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>; }
+}
+  );
+}
+
+<span class="tok-comment">// Resize canvas to match container</span>
+<span class="tok-keyword">const</span> <span class="tok-definition">resizeCanvas</span> = () =&gt; {
+  <span class="tok-keyword">if</span> (!<span class="tok-variable">state</span>.<span class="tok-definition">regl</span>) <span class="tok-keyword">return</span>;
+  <span class="tok-keyword">const</span> <span class="tok-definition">canvas</span> = <span class="tok-variable">state</span>.<span class="tok-definition">regl</span>.<span class="tok-definition">_gl</span>.<span class="tok-definition">canvas</span> <span class="tok-keyword">as</span> <span class="tok-keyword">HTMLCanvasElement</span>;
+  <span class="tok-keyword">const</span> <span class="tok-definition">rect</span> = <span class="tok-variable">container</span>.<span class="tok-definition">getBoundingClientRect</span>();
+  <span class="tok-keyword">const</span> <span class="tok-definition">dpr</span> = <span class="tok-variable">devicePixelRatio</span>;
+  <span class="tok-keyword">const</span> <span class="tok-definition">newWidth</span> = <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">rect</span>.<span class="tok-definition">width</span> * <span class="tok-variable">dpr</span>);
+  <span class="tok-keyword">const</span> <span class="tok-definition">newHeight</span> = <span class="tok-variable">Math</span>.<span class="tok-definition">floor</span>(<span class="tok-variable">rect</span>.<span class="tok-definition">height</span> * <span class="tok-variable">dpr</span>);
+  <span class="tok-keyword">if</span> (<span class="tok-variable">canvas</span>.<span class="tok-definition">width</span> !== <span class="tok-variable">newWidth</span> || <span class="tok-variable">canvas</span>.<span class="tok-definition">height</span> !== <span class="tok-variable">newHeight</span>) {
+<span class="tok-variable">canvas</span>.<span class="tok-definition">width</span> = <span class="tok-variable">newWidth</span>;
+<span class="tok-variable">canvas</span>.<span class="tok-definition">height</span> = <span class="tok-variable">newHeight</span>;
+<span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+<span class="tok-variable">state</span>.<span class="tok-definition">camera</span>?.<span class="tok-definition">taint</span>();
+  }
+};
+
+<span class="tok-keyword">const</span> <span class="tok-definition">resizeObserver</span> = <span class="tok-keyword">new</span> <span class="tok-definition">ResizeObserver</span>(<span class="tok-variable">resizeCanvas</span>);
+<span class="tok-variable">resizeObserver</span>.<span class="tok-definition">observe</span>(<span class="tok-variable">container</span>);
+
+<span class="tok-comment">// Render loop</span>
+<span class="tok-keyword">let</span> <span class="tok-definition">visible</span> = <span class="tok-literal">true</span>;
+<span class="tok-keyword">const</span> <span class="tok-definition">intersectionObserver</span> = <span class="tok-keyword">new</span> <span class="tok-definition">IntersectionObserver</span>(<span class="tok-definition">entries</span> =&gt; {
+  <span class="tok-variable">visible</span> = <span class="tok-variable">entries</span>[<span class="tok-literal">0</span>].<span class="tok-definition">intersectionRatio</span> &gt; <span class="tok-literal">0</span>;
+});
+<span class="tok-variable">intersectionObserver</span>.<span class="tok-definition">observe</span>(<span class="tok-variable">container</span>);
+
+<span class="tok-keyword">if</span> (<span class="tok-variable">state</span>.<span class="tok-definition">frame</span>) {
+  <span class="tok-variable">state</span>.<span class="tok-definition">frame</span>.<span class="tok-definition">cancel</span>();
+  <span class="tok-variable">state</span>.<span class="tok-definition">frame</span> = <span class="tok-keyword">null</span>;
+}
+<span class="tok-variable">state</span>.<span class="tok-definition">frame</span> = <span class="tok-variable">state</span>.<span class="tok-definition">regl</span>.<span class="tok-definition">frame</span>(() =&gt; {
+  <span class="tok-keyword">if</span> (!<span class="tok-variable">visible</span> || !<span class="tok-variable">state</span>.<span class="tok-definition">mesh</span>) <span class="tok-keyword">return</span>;
+
+  <span class="tok-variable">state</span>.<span class="tok-definition">camera</span>!.<span class="tok-definition">tick</span>(({ <span class="tok-definition">dirty</span>: <span class="tok-definition">cameraDirty</span> }) =&gt; {
+<span class="tok-keyword">const</span> <span class="tok-definition">shouldRender</span> = <span class="tok-variable">simulate</span> || <span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> || <span class="tok-variable">cameraDirty</span> || <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">dirty</span>;
+<span class="tok-keyword">if</span> (!<span class="tok-variable">shouldRender</span>) <span class="tok-keyword">return</span>;
+
+<span class="tok-comment">// Run physics simulation</span>
+<span class="tok-keyword">if</span> (<span class="tok-variable">simulate</span> &amp;&amp; <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>) {
+  <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>.<span class="tok-definition">frozenVertex</span> = <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">activeVertexIndex</span> ?? -<span class="tok-literal">1</span>;
+  <span class="tok-keyword">for</span> (<span class="tok-keyword">let</span> <span class="tok-definition">i</span> = <span class="tok-literal">0</span>; <span class="tok-variable">i</span> &lt; <span class="tok-variable">iterations</span>; <span class="tok-variable">i</span>++) {
+    <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>.<span class="tok-definition">iterate</span>();
+  }
+}
+
+<span class="tok-comment">// Clear and render</span>
+<span class="tok-variable">state</span>.<span class="tok-definition">regl</span>!.<span class="tok-definition">clear</span>({ <span class="tok-definition">color</span>: [<span class="tok-literal">1</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1</span>], <span class="tok-definition">depth</span>: <span class="tok-literal">1</span> });
+
+<span class="tok-variable">state</span>.<span class="tok-definition">renderer</span>?.<span class="tok-definition">render</span>(<span class="tok-variable">state</span>.<span class="tok-definition">mesh</span>!, <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>!, {
+  <span class="tok-definition">pointSize</span>,
+  <span class="tok-definition">strainColoring</span>,
+  <span class="tok-definition">showFaces</span>,
+  <span class="tok-definition">faceOpacity</span>,
+  <span class="tok-definition">selectedVertexIndex</span>: <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">selectedVertexIndex</span> ?? -<span class="tok-literal">1</span>,
+  <span class="tok-definition">hoverVertexIndex</span>: <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">hoverVertexIndex</span> ?? -<span class="tok-literal">1</span>
+});
+
+<span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">false</span>;
+<span class="tok-keyword">if</span> (<span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>) <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">false</span>;
+  });
+});
+
+<span class="tok-variable">invalidation</span>.<span class="tok-definition">then</span>(() =&gt; {
+  <span class="tok-keyword">if</span> (<span class="tok-variable">state</span>.<span class="tok-definition">frame</span>) {
+<span class="tok-variable">state</span>.<span class="tok-definition">frame</span>.<span class="tok-definition">cancel</span>();
+<span class="tok-variable">state</span>.<span class="tok-definition">frame</span> = <span class="tok-keyword">null</span>;
+  }
+  <span class="tok-variable">resizeObserver</span>.<span class="tok-definition">disconnect</span>();
+  <span class="tok-variable">intersectionObserver</span>.<span class="tok-definition">disconnect</span>();
+});
+
+<span class="tok-comment">// Create figure with canvas and caption</span>
+<span class="tok-keyword">const</span> <span class="tok-definition">figure</span> = <span class="tok-variable">html</span><span class="tok-string">`</span>
+<span class="tok-string">  &lt;figure id="main-figure" style="max-width: none; margin: 0; height: 100%;"&gt;</span>
+${<span class="tok-variable">container</span>}
+<span class="tok-string">&lt;figcaption&gt;</span>
+<span class="tok-string">  Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection.</span>
+<span class="tok-string">  &lt;kbd&gt;Space&lt;/kbd&gt; to deselect.</span>
+<span class="tok-string">  &lt;kbd&gt;Backspace&lt;/kbd&gt; deletes vertices, &lt;kbd&gt;s&lt;/kbd&gt;/&lt;kbd&gt;c&lt;/kbd&gt; splits/collapses vertices of degree 2.</span>
+<span class="tok-string">  &lt;kbd&gt;e&lt;/kbd&gt; to explode a vertex.</span>
+<span class="tok-string">  Drag to rotate, &lt;kbd&gt;Shift&lt;/kbd&gt; + drag to pan, &lt;kbd&gt;a&lt;/kbd&gt; to aim camera at selected vertex.</span>
+<span class="tok-string">&lt;/figcaption&gt;</span>
+<span class="tok-string">  &lt;/figure&gt;</span>
+<span class="tok-string">`</span>;
+
+<span class="tok-comment">// Wrap in expandable container</span>
+<span class="tok-variable">display</span>(<span class="tok-variable">expandable</span>(<span class="tok-variable">figure</span>, {
+  <span class="tok-definition">width</span>: <span class="tok-literal">640</span>,
+  <span class="tok-definition">height</span>: <span class="tok-literal">576</span>,
+  <span class="tok-definition">padding</span>: [<span class="tok-literal">0</span>, <span class="tok-literal">0</span>],
+  <span class="tok-definition">controls</span>: <span class="tok-string">'.controls-panel'</span>,
+  <span class="tok-definition">state</span>: <span class="tok-variable">state</span>.<span class="tok-definition">expandedState</span>,
+  <span class="tok-definition">onResize</span>: (<span class="tok-definition">content</span>, <span class="tok-definition">w</span>, <span class="tok-definition">h</span>, <span class="tok-definition">expanded</span>) =&gt; {
+<span class="tok-comment">// Size the container and trigger canvas resize</span>
+<span class="tok-variable">container</span>.<span class="tok-definition">style</span>.<span class="tok-definition">width</span> = <span class="tok-string">`</span>${<span class="tok-variable">w</span>}<span class="tok-string">px`</span>;
+<span class="tok-variable">container</span>.<span class="tok-definition">style</span>.<span class="tok-definition">height</span> = <span class="tok-variable">expanded</span> ? <span class="tok-string">`</span>${<span class="tok-variable">h</span> - <span class="tok-literal">60</span>}<span class="tok-string">px`</span> : <span class="tok-string">`</span>${<span class="tok-variable">h</span>}<span class="tok-string">px`</span>;  <span class="tok-comment">// Leave room for caption</span>
+<span class="tok-variable">resizeCanvas</span>();
+  }
+}));</code></pre><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
 

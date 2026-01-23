@@ -1,0 +1,421 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Toiletpaperfullerenes and Charmin Nanotubes</title>
+
+  <script id="intro" type="text/markdown">
+# Toiletpaperfullerenes and Charmin Nanotubes
+
+Interactive mesh editor for trivalent graphs (max 3 edges per vertex). Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection. Use keyboard shortcuts to edit.
+  </script>
+
+  <script id="imports" type="text/x-typescript">
+import createREGL from 'npm:regl@2.1.1';
+import createIcosphere from 'npm:icosphere@1.0.0';
+import { Mesh } from './lib/mesh.js';
+import { MeshPhysics } from './lib/mesh-physics.js';
+import { createReglCamera } from './lib/orbit-camera.js';
+import { createMeshRenderer } from './lib/mesh-renderer.js';
+import { MeshInteractions } from './lib/mesh-interactions.js';
+import { expandable } from './lib/expandable.js';
+  </script>
+
+  <script id="preset-graphs" type="text/x-typescript">
+// File hash to name mapping (based on vertex counts)
+const presetFiles: Record<string, string> = {
+  "C60 Fullerene": "285549ab8794137fcd23df05ec4e9092c4a9fa65e3b32c2c6a22ddf0320eca5e14553c6508e4977271b82a1225eda231cec6f30a027bb8440ed879d1d3431ef6.json",
+  "C180 Fullerene": "89e6cd62cbc3ba07f7f8e42357d426f9fbb8f9f607e3e0f11c7036fcc512d9dab8712b3fe3c272f93865bcaf88ab02918e2ddb226129ee9efa669eab89f9b7f3.json",
+  "C320 Fullerene": "40df7e811a5f2b9b46905da0db746bc46aff5c9ce62808034f8346d3daf566feb14aacf6cd1015d5ee97dc1ed27f42920c248bb71d1b0a211641d03126d8bfaf.json",
+  "C500 Fullerene": "85c5997bcd60d3500b3769a5790c1575b144161f77eb1f4f0a11ca567a5dbaae4750d466914794e6932be17f888982a24d5e65a9a2ba3e271d2afc9a179f675d.json",
+  "Dodecahedron": "5c4ad379870a7172f016427cfeb62e60bcc3fac83d22395ab102f8d0e94eaf6a4241a0d27b5d8ce5749698c05b0ee630b20582182e745050f0a5d9f2e9d37b0e.json",
+  "C240 Torus": "3ecdf5c8f9be6ac3a837d7b6dd37485f7017be2ed7fc94d304c2b4f67d01bea5dc9528dd5b4c0507a3bb21fa38c2d7f30c4cd0decc7a6077c18e2ce3354780b1.json",
+  "C360 Torus": "8c59424c3fbed403e573864733e1bf196fd469dd63f88893629a9dbebf68820ade9bded97d440903bf482e29b642cd27191fd9154384756152c414402b12f9d1.json",
+  "C260-I[5,7]": "a139509092ab0080b3c1241f830977069dc68e4a7ea9834d668f9d9d760961b792b8e23f0f9212337cbd94d436a85d99a788b2fc4d6ef13d562b49b2ef35a310.json",
+  "C28[5,7]-D7d": "359455189eea4a1145be307cc8807dcca71442982915a220265a52dec420ca5a42106a8488dbf449491da526f91a1f60798d599661aa0be7eb477ebb3b77d33e.json",
+  "C28-Td[5,6]": "f5e02e4b9d7f7a440b3231d45943410bfdc50ac98c4b7275dfe17f746609d7871c653b0901c2fead87d894b52cdf4caa2e523aa5e5ac2848936a9bb4790f9021.json",
+  "C120 Peanut Fulleroid": "ee4ed30808162fdbff7f048268befca6b331881585e4e5e31ea05d66aafeb6190f622b2cffad4712f835b87b364fa35de96bbaf7c7a134b279f45a877d1cf038.json",
+  "C168 Peanut Fulleroid": "b31fdfb8b21f79a14cf81320b73fa344c07421f154e7d0dbfaded7dfa5ae73ed3007ffc9ed572e262de9b4bcd031823de18f474891190a2401eb6448c5898f47.json",
+  "Double Torus": "1176e7fad2a420d228f5df155bfd24be06983f5fbf4234124abf8cfd514d24993f9e184cbdbc36ff0fecb010739e8ff5a713247944c186fdf82b877a42bf85ee.json",
+  "Capsule": "dff7700c3743989f282f9e58f71ae9d7596f5c78efa149c5e9a7717a7066a9c6b1870085b4aa7922288c7f3cdce4660b82fb0de5923185c165c3469d5b784037.json",
+  "C360-D5h[5,6,7]": "89dccf254f8755ae6a0d1910af95cf8f08d32820ad0a1bba395b71bbdfaf4f97d469ee5775e7e49552bcbf1baab5f0109a2e57ee4b02ca988358e9686ce700ad.json",
+  "Genus-3 Torus": "a148f1c143188de55a41b12791380026e0c0a5420e9d65070d034aa3dd6f7f5f914d91fc0d3ac67e70a62340eaeb466a7aeb624becb3c83f1995234c429728cc.json",
+  "Klein Quartic": "f220e2d7f29b956c39640b7dc4173f211fa43c14d7dec7b30d4dab14b4082356e621ae77b433221941bef90638b84398458b1ed0cf49ebe17151721aa0be53f8.json",
+  "Metadodecahedron": "e0e175da2922fa1d47825c0a0001cd3b6db9f9d6e872c04abf2fa068c0649cf37f8a4084ab85eac11359d01d464350f3b9b33d7a0d682b526999b95063a4ecf5.json",
+  "Genus-3 Extended": "e1fa5b0e879607a25bbbc2ffcb0170fca6ba4b5b2652a0f0df3775c751c6ccf0bbaa30687d6c2d9bfeefa71c27d394f8aac824f330620995a5d647d57ad84777.json"
+};
+
+// Load all preset graphs
+const presetGraphs: Record<string, {vertices: number[][], edges: number[][]}> = await (async () => {
+  const graphs: Record<string, {vertices: number[][], edges: number[][]}> = {
+    "Starter": {
+      vertices: [[-1, -1, 0], [-1, 1, 0], [-0.5, 0, 0], [0.5, 0, 0], [1, -1, 0], [1, 1, 0]],
+      edges: [[0, 2], [1, 2], [2, 3], [3, 4], [3, 5]]
+    }
+  };
+
+  // Load JSON files in parallel
+  const entries = Object.entries(presetFiles);
+  const results = await Promise.all(
+    entries.map(async ([name, file]) => {
+      try {
+        const response = await fetch(`./files/${file}`);
+        const data = await response.json();
+        return [name, data] as const;
+      } catch (e) {
+        console.warn(`Failed to load ${name}:`, e);
+        return null;
+      }
+    })
+  );
+
+  for (const result of results) {
+    if (result) {
+      const [name, data] = result;
+      graphs[name] = data;
+    }
+  }
+
+  return graphs;
+})();
+  </script>
+
+  <script id="controls-container" type="text/x-typescript">
+const controlsContainer = html`<div class="controls-panel"></div>`;
+
+function ctrl(input: HTMLElement) {
+  controlsContainer.appendChild(input);
+  return Generators.input(input);
+}
+
+const presetGraph = ctrl(Inputs.select(Object.keys(presetGraphs), {
+  label: "Preset",
+  value: "C260-I[5,7]"
+}));
+
+const resetButton = ctrl(Inputs.button("Reset"));
+
+const simulate = ctrl(Inputs.toggle({ label: "Simulate", value: true }));
+
+const iterations = ctrl(Inputs.range([0, 200], {
+  label: "Iterations per frame",
+  value: 1,
+  step: 1
+}));
+
+const k = ctrl(Inputs.range([0, 2], {
+  label: "Axial spring constant",
+  value: 1,
+  step: 0.01
+}));
+
+const l0 = ctrl(Inputs.range([0.1, 2], {
+  label: "Equilibrium length, l₀",
+  value: 1,
+  step: 0.01
+}));
+
+const theta0 = ctrl(Inputs.range([1, 180], {
+  label: "Equilibrium bending angle, θ₀",
+  value: 150,
+  step: 1
+}));
+
+const kBend = ctrl(Inputs.range([0, 2], {
+  label: "Bending spring constant",
+  value: 0.3,
+  step: 0.01
+}));
+
+const kTorsion = ctrl(Inputs.range([0, 0.2], {
+  label: "Torsional spring constant",
+  value: 0.1,
+  step: 0.01
+}));
+
+const strainColoring = ctrl(Inputs.range([0, 5], {
+  label: "Axial strain coloring",
+  value: 1.5,
+  step: 0.1
+}));
+
+const pointSize = ctrl(Inputs.range([0.5, 5], {
+  label: "Vertex size",
+  value: 3,
+  step: 0.5
+}));
+
+const showFaces = ctrl(Inputs.toggle({ label: "Show faces", value: true }));
+
+const faceOpacity = ctrl(Inputs.range([0, 1], {
+  label: "Face opacity",
+  value: 0.3,
+  step: 0.05
+}));
+
+display(controlsContainer);
+  </script>
+
+  <script id="state" type="text/x-typescript">
+// Mutable state object that persists across reactive updates
+const state: {
+  mesh: Mesh | null;
+  physics: MeshPhysics | null;
+  interactions: MeshInteractions | null;
+  renderer: ReturnType<typeof createMeshRenderer> | null;
+  camera: ReturnType<typeof createReglCamera> | null;
+  regl: ReturnType<typeof createREGL> | null;
+  frame: { cancel: () => void } | null;
+  dirty: boolean;
+  presetName: string;
+  expandedState: { expanded: boolean };
+} = {
+  mesh: null,
+  physics: null,
+  interactions: null,
+  renderer: null,
+  camera: null,
+  regl: null,
+  frame: null,
+  dirty: true,
+  presetName: "",
+  expandedState: { expanded: false }
+};
+  </script>
+
+  <script id="load-preset" type="text/x-typescript">
+// Load preset when changed or reset
+resetButton;
+
+const currentPreset = presetGraph || "Starter";
+if (currentPreset !== state.presetName || !state.mesh) {
+  state.presetName = currentPreset;
+  const json = presetGraphs[currentPreset];
+  if (json) {
+    state.mesh = Mesh.fromJSON(json);
+    state.mesh.center();
+
+    if (state.physics) {
+      state.physics.mesh = state.mesh;
+    }
+
+    if (state.interactions) {
+      state.interactions.mesh = state.mesh;
+      state.interactions.selectedVertexIndex = -1;
+      state.interactions.hoverVertexIndex = -1;
+    }
+
+    state.dirty = true;
+  }
+}
+  </script>
+
+  <script id="update-physics" type="text/x-typescript">
+// Update physics parameters reactively
+if (state.physics) {
+  state.physics.k = k;
+  state.physics.l0 = l0;
+  state.physics.theta0 = theta0;
+  state.physics.kBend = kBend * l0 * l0;
+  state.physics.kTorsion = kTorsion * l0 * l0;
+}
+  </script>
+
+  <script id="main-canvas" type="text/x-typescript" pinned="">
+// Container - will be sized by expandable's onResize callback
+const container = html`<div id="mesh-canvas" style="width: 100%; height: 100%;"></div>`;
+
+// Initialize WebGL context if needed
+if (!state.regl) {
+  state.regl = createREGL({
+    container,
+    pixelRatio: devicePixelRatio,
+    extensions: ['ANGLE_instanced_arrays'],
+    attributes: { preserveDrawingBuffer: true }
+  });
+
+  const icosphere = createIcosphere(1);
+  state.camera = createReglCamera(state.regl, { eye: [0, 1, -20] });
+  state.renderer = createMeshRenderer(state.regl, icosphere);
+  state.physics = new MeshPhysics(state.mesh!);
+  state.interactions = new MeshInteractions(
+    state.regl._gl.canvas,
+    state.mesh!,
+    state.camera.camera,
+    {
+      projectionView: state.camera.projectionView,
+      onChange: () => { state.dirty = true; }
+    }
+  );
+}
+
+// Resize canvas to match container
+const resizeCanvas = () => {
+  if (!state.regl) return;
+  const canvas = state.regl._gl.canvas as HTMLCanvasElement;
+  const rect = container.getBoundingClientRect();
+  const dpr = devicePixelRatio;
+  const newWidth = Math.floor(rect.width * dpr);
+  const newHeight = Math.floor(rect.height * dpr);
+  if (canvas.width !== newWidth || canvas.height !== newHeight) {
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    state.dirty = true;
+    state.camera?.taint();
+  }
+};
+
+const resizeObserver = new ResizeObserver(resizeCanvas);
+resizeObserver.observe(container);
+
+// Render loop
+let visible = true;
+const intersectionObserver = new IntersectionObserver(entries => {
+  visible = entries[0].intersectionRatio > 0;
+});
+intersectionObserver.observe(container);
+
+if (state.frame) {
+  state.frame.cancel();
+  state.frame = null;
+}
+state.frame = state.regl.frame(() => {
+  if (!visible || !state.mesh) return;
+
+  state.camera!.tick(({ dirty: cameraDirty }) => {
+    const shouldRender = simulate || state.dirty || cameraDirty || state.interactions?.dirty;
+    if (!shouldRender) return;
+
+    // Run physics simulation
+    if (simulate && state.physics) {
+      state.physics.frozenVertex = state.interactions?.activeVertexIndex ?? -1;
+      for (let i = 0; i < iterations; i++) {
+        state.physics.iterate();
+      }
+    }
+
+    // Clear and render
+    state.regl!.clear({ color: [1, 1, 1, 1], depth: 1 });
+
+    state.renderer?.render(state.mesh!, state.physics!, {
+      pointSize,
+      strainColoring,
+      showFaces,
+      faceOpacity,
+      selectedVertexIndex: state.interactions?.selectedVertexIndex ?? -1,
+      hoverVertexIndex: state.interactions?.hoverVertexIndex ?? -1
+    });
+
+    state.dirty = false;
+    if (state.interactions) state.interactions.dirty = false;
+  });
+});
+
+invalidation.then(() => {
+  if (state.frame) {
+    state.frame.cancel();
+    state.frame = null;
+  }
+  resizeObserver.disconnect();
+  intersectionObserver.disconnect();
+});
+
+// Create figure with canvas and caption
+const figure = html`
+  <figure id="main-figure" style="max-width: none; margin: 0; height: 100%;">
+    ${container}
+    <figcaption>
+      Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection.
+      <kbd>Space</kbd> to deselect.
+      <kbd>Backspace</kbd> deletes vertices, <kbd>s</kbd>/<kbd>c</kbd> splits/collapses vertices of degree 2.
+      <kbd>e</kbd> to explode a vertex.
+      Drag to rotate, <kbd>Shift</kbd> + drag to pan, <kbd>a</kbd> to aim camera at selected vertex.
+    </figcaption>
+  </figure>
+`;
+
+// Wrap in expandable container
+display(expandable(figure, {
+  width: 640,
+  height: 576,
+  padding: [0, 0],
+  controls: '.controls-panel',
+  state: state.expandedState,
+  onResize: (content, w, h, expanded) => {
+    // Size the container and trigger canvas resize
+    container.style.width = `${w}px`;
+    container.style.height = expanded ? `${h - 60}px` : `${h}px`;  // Leave room for caption
+    resizeCanvas();
+  }
+}));
+  </script>
+
+  <script id="debug-output" type="text/x-typescript">
+// Debug output - updates when mesh changes
+simulate; // dependency to trigger updates
+
+const debugData = (() => {
+  if (!state.mesh) return null;
+
+  const mesh = state.mesh;
+  const vertices = [];
+  for (let i = 0; i < mesh.vertexCount; i++) {
+    const pos = mesh.getPosition(i);
+    vertices.push({
+      index: i,
+      position: [pos[0].toFixed(2), pos[1].toFixed(2), pos[2].toFixed(2)],
+      degree: mesh.degree(i),
+      neighbors: mesh.getNeighbors(i)
+    });
+  }
+
+  const edges = [];
+  for (let i = 0; i < mesh.edgeCount; i++) {
+    edges.push([mesh.edges[i * 2], mesh.edges[i * 2 + 1]]);
+  }
+
+  // Get all faces with their signed areas (before filtering)
+  const allFaces = mesh.extractAllFaces();
+  const facesWithArea = allFaces.map(face => ({
+    vertices: face,
+    length: face.length,
+    signedArea: mesh._computeSignedArea(face).toFixed(4),
+    included: face.length <= 8 && mesh._computeSignedArea(face) > 0
+  }));
+
+  return {
+    vertexCount: mesh.vertexCount,
+    edgeCount: mesh.edgeCount,
+    vertices,
+    edges,
+    faces: facesWithArea
+  };
+})();
+
+display(html`<details>
+  <summary>Debug: Mesh Data (${state.mesh?.vertexCount ?? 0} vertices, ${state.mesh?.edgeCount ?? 0} edges, ${debugData?.faces?.filter(f => f.included).length ?? 0} faces)</summary>
+  <pre style="max-height: 300px; overflow: auto; font-size: 11px;">${JSON.stringify(debugData, null, 2)}</pre>
+</details>`);
+  </script>
+
+  <script id="styles" type="text/x-typescript">
+display(html`
+  <style>
+    kbd {
+      background-color: #eee;
+      border-radius: 3px;
+      border: 1px solid #b4b4b4;
+      box-shadow: 0 1px 1px rgba(0, 0, 0, .2), 0 2px 0 0 rgba(255, 255, 255, .7) inset;
+      color: #333;
+      display: inline-block;
+      font-size: .85em;
+      font-weight: 700;
+      line-height: 1;
+      padding: 2px 4px;
+      white-space: nowrap;
+    }
+    figure canvas {
+      border: 1px solid #eee !important;
+    }
+  </style>
+`);
+  </script>
+</notebook>
