@@ -23,8 +23,18 @@ export function createMeshRenderer(regl, icosphere) {
         selectedVertexIndex = -1,
         hoverVertexIndex = -1,
         showFaces = true,
-        faceOpacity = 0.3
+        faceOpacity = 0.3,
+        depthFalloff = false,
+        depthFalloffWidth = 7,
+        focusCenter = [0, 0, 0]
       } = opts;
+
+      const depthParams = {
+        depthFalloff: depthFalloff ? 1.0 : 0.0,
+        depthFalloffWidth,
+        focusCenter,
+        minOpacity: 0.1
+      };
 
       // Update vertex buffer
       vertexBuffer.subdata(mesh.positions.subarray(0, mesh.vertexCount * 3));
@@ -41,7 +51,8 @@ export function createMeshRenderer(regl, icosphere) {
         borderWidth,
         borderColor: [1, 1, 1, 1],
         strainColoring,
-        l0: physics.l0
+        l0: physics.l0,
+        ...depthParams
       });
 
       // Draw vertices on top
@@ -51,7 +62,8 @@ export function createMeshRenderer(regl, icosphere) {
         count: mesh.vertexCount,
         pointSize,
         selectedIndex: selectedVertexIndex,
-        hoverIndex: hoverVertexIndex
+        hoverIndex: hoverVertexIndex,
+        ...depthParams
       });
 
       // Draw faces first (behind everything)
@@ -64,7 +76,8 @@ export function createMeshRenderer(regl, icosphere) {
             faceBuffer,
             faceEdgeCountBuffer,
             count: triangleCount,
-            opacity: faceOpacity
+            opacity: faceOpacity,
+            ...depthParams
           });
         }
       }
@@ -171,33 +184,44 @@ function createDrawFaces(regl) {
       attribute vec3 position;
       attribute float edgeCount;
       uniform mat4 projectionView;
+      uniform vec3 uFocusCenter;
       varying float vEdgeCount;
+      varying float vRadialDist;
 
       void main() {
         vEdgeCount = edgeCount;
+        vRadialDist = length(position - uFocusCenter);
         gl_Position = projectionView * vec4(position, 1);
       }
     `,
     frag: `
       precision highp float;
       uniform float opacity;
+      uniform float uDepthFalloff, uDepthFalloffWidth, uMinOpacity;
       varying float vEdgeCount;
+      varying float vRadialDist;
 
       // Color faces by edge count using distinct colors
       vec3 getFaceColor(float edges) {
-        if (edges < 3.5) return vec3(1.0, 0.2, 0.2);       // Triangle: red
+        if (edges < 3.5) return vec3(1.0, 1.0, 0.5);       // Triangle: green
         if (edges < 4.5) return vec3(1.0, 0.6, 0.2);       // Quad: orange
         if (edges < 5.5) return vec3(0.2, 0.2, 1.0);       // Pentagon: blue
         if (edges < 6.5) return vec3(0.2, 0.8, 0.3);       // Hexagon: green
-        if (edges < 7.5) return vec3(1.0, 1.0, 0.5);       // Heptagon: yellow
+        if (edges < 7.5) return vec3(1.0, 0.3, 0.3);       // Heptagon: red
         return vec3(0.6, 0.2, 0.8);                         // Octagon+: purple
+      }
+
+      float depthFalloffFactor() {
+        if (uDepthFalloff < 0.5) return 1.0;
+        return mix(uMinOpacity, 1.0, 1.0 - smoothstep(0.5 * uDepthFalloffWidth, uDepthFalloffWidth, vRadialDist));
       }
 
       void main() {
         vec3 color = getFaceColor(vEdgeCount);
+        float falloff = depthFalloffFactor();
         // For reverse subtract (dst - src): output what to subtract from white
         // Subtracting (1 - color) * opacity tints toward the face color
-        gl_FragColor = vec4(1.0 - color, opacity);
+        gl_FragColor = vec4(1.0 - color, opacity * falloff);
       }
     `,
     attributes: {
@@ -213,7 +237,11 @@ function createDrawFaces(regl) {
       })
     },
     uniforms: {
-      opacity: (_, props) => props.opacity ?? 0.3
+      opacity: (_, props) => props.opacity ?? 0.3,
+      uDepthFalloff: (_, props) => props.depthFalloff ?? 0,
+      uFocusCenter: (_, props) => props.focusCenter ?? [0, 0, 0],
+      uDepthFalloffWidth: (_, props) => props.depthFalloffWidth ?? 3,
+      uMinOpacity: (_, props) => props.minOpacity ?? 0.1
     },
     blend: {
       enable: true,
@@ -251,13 +279,16 @@ function createDrawVertices(regl, icosphere) {
       attribute vec3 vertex;
       attribute float index;
       uniform mat4 projectionView;
+      uniform vec3 uFocusCenter;
       uniform float pointSize;
       uniform float selectedIndex, hoverIndex;
       varying float vIsSelected, vIsHover;
+      varying float vRadialDist;
 
       void main() {
         vIsSelected = index == selectedIndex ? 1.0 : 0.0;
         vIsHover = index == hoverIndex ? 1.0 : 0.0;
+        vRadialDist = length(vertex - uFocusCenter);
         vec4 p0 = projectionView * vec4(vertex, 1);
         float size = p0.z * pointSize;
         gl_Position = projectionView * vec4(vertex + icoPosition * size, 1);
@@ -265,13 +296,24 @@ function createDrawVertices(regl, icosphere) {
     `,
     frag: `
       precision highp float;
+      uniform float uDepthFalloff, uDepthFalloffWidth, uMinOpacity;
       varying float vIsSelected, vIsHover;
+      varying float vRadialDist;
+
+      float depthFalloffFactor() {
+        if (uDepthFalloff < 0.5) return 1.0;
+        return mix(uMinOpacity, 1.0, 1.0 - smoothstep(0.5 * uDepthFalloffWidth, uDepthFalloffWidth, vRadialDist));
+      }
 
       void main() {
         vec3 baseColor = vec3(0.14, 0.37, 0.69);
         vec3 hoverAdd = vec3(0.0, 0.5, 0.0);
         vec3 selectAdd = vec3(1.0, 0.0, 0.0);
-        gl_FragColor = vec4(baseColor + vIsHover * hoverAdd + vIsSelected * selectAdd, 1.0);
+        vec3 color = baseColor + vIsHover * hoverAdd + vIsSelected * selectAdd;
+        float falloff = depthFalloffFactor();
+        // Fade toward white (background) based on radial distance
+        color = mix(vec3(1.0), color, falloff);
+        gl_FragColor = vec4(color, 1.0);
       }
     `,
     attributes: {
@@ -290,7 +332,11 @@ function createDrawVertices(regl, icosphere) {
     uniforms: {
       pointSize: (ctx, props) => (ctx.pixelRatio * props.pointSize) / ctx.viewportHeight,
       selectedIndex: (_, props) => props.selectedIndex,
-      hoverIndex: (_, props) => props.hoverIndex
+      hoverIndex: (_, props) => props.hoverIndex,
+      uDepthFalloff: (_, props) => props.depthFalloff ?? 0,
+      uFocusCenter: (_, props) => props.focusCenter ?? [0, 0, 0],
+      uDepthFalloffWidth: (_, props) => props.depthFalloffWidth ?? 3,
+      uMinOpacity: (_, props) => props.minOpacity ?? 0.1
     },
     primitive: 'triangles',
     count: icosphere.cells.length * 3,
@@ -304,6 +350,7 @@ function createDrawEdges(regl) {
       precision highp float;
 
       uniform mat4 projectionView;
+      uniform vec3 uFocusCenter;
       uniform float uAspect, uScaleFactor, uPixelRatio, uL0, uStrainColoring;
       uniform float uBorderWidth, uLineWidth;
       attribute vec3 aPosition, aNextPosition;
@@ -312,6 +359,7 @@ function createDrawEdges(regl) {
       varying float vOffset;
       varying vec2 vStrokeEdges;
       varying vec3 vColor;
+      varying float vRadialDist;
 
       vec2 lineNormal(vec4 p, vec4 n, float aspect) {
         return normalize((p.yx / p.w - n.yx / n.w) * vec2(1, aspect));
@@ -332,6 +380,10 @@ function createDrawEdges(regl) {
         vec4 currentPoint = projectionView * vec4(aPosition, 1);
         vec4 nextPoint = projectionView * vec4(aNextPosition, 1);
 
+        // Compute radial distance at the midpoint of the edge
+        vec3 midpoint = mix(aPosition, aNextPosition, 0.5);
+        vRadialDist = length(midpoint - uFocusCenter);
+
         float strain = (length(aNextPosition - aPosition) / uL0 - 1.0);
         vColor = colormap(0.5 + strain * uStrainColoring * 2.0) * 0.8 * (uStrainColoring > 0.0 ? 1.0 : 0.0);
 
@@ -350,17 +402,26 @@ function createDrawEdges(regl) {
       precision highp float;
 
       uniform vec4 uBorderColor;
+      uniform float uDepthFalloff, uDepthFalloffWidth, uMinOpacity;
       varying float vOffset;
       varying vec3 vColor;
       varying vec2 vStrokeEdges;
+      varying float vRadialDist;
+
+      float depthFalloffFactor() {
+        if (uDepthFalloff < 0.5) return 1.0;
+        return mix(uMinOpacity, 1.0, 1.0 - smoothstep(0.5 * uDepthFalloffWidth, uDepthFalloffWidth, vRadialDist));
+      }
 
       void main() {
-        gl_FragColor = mix(
-          uBorderColor,
-          vec4(vColor, 1),
-          smoothstep(vStrokeEdges.y, vStrokeEdges.x, vOffset) *
-          smoothstep(-vStrokeEdges.y, -vStrokeEdges.x, vOffset)
-        );
+        float falloff = depthFalloffFactor();
+        // Fade both the edge color and border toward white
+        vec3 edgeColor = mix(vec3(1.0), vColor, falloff);
+        vec3 borderColor = mix(vec3(1.0), uBorderColor.rgb, falloff);
+
+        float t = smoothstep(vStrokeEdges.y, vStrokeEdges.x, vOffset) *
+                  smoothstep(-vStrokeEdges.y, -vStrokeEdges.x, vOffset);
+        gl_FragColor = vec4(mix(borderColor, edgeColor, t), 1.0);
       }
     `,
     polygonOffset: {
@@ -391,7 +452,11 @@ function createDrawEdges(regl) {
       uBorderWidth: (_, props) => props.borderWidth ?? 2,
       uAspect: ctx => ctx.viewportWidth / ctx.viewportHeight,
       uScaleFactor: ctx => ctx.pixelRatio / ctx.viewportHeight,
-      uPixelRatio: regl.context('pixelRatio')
+      uPixelRatio: regl.context('pixelRatio'),
+      uDepthFalloff: (_, props) => props.depthFalloff ?? 0,
+      uFocusCenter: (_, props) => props.focusCenter ?? [0, 0, 0],
+      uDepthFalloffWidth: (_, props) => props.depthFalloffWidth ?? 3,
+      uMinOpacity: (_, props) => props.minOpacity ?? 0.1
     },
     primitive: 'triangles',
     instances: (_, props) => props.count,

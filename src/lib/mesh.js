@@ -468,200 +468,91 @@ export class Mesh {
 
   // ============ Face Extraction ============
 
-  // Compute which vertices are part of the "core" graph (not on dangling chains)
-  // Iteratively prune vertices with effective degree < 2
-  _computeCoreVertices() {
-    const effectiveDegree = new Int32Array(this.vertexCount);
-    for (let v = 0; v < this.vertexCount; v++) {
-      effectiveDegree[v] = this.degree(v);
+  // Find all cycles up to maxLen using DFS
+  // Pure graph traversal - no geometry, no rotation system
+  _findAllCycles(maxLen = 8) {
+    const cycles = new Set();
+    const mesh = this;
+
+    // Canonical key for deduplication (rotation/reflection invariant)
+    function canonicalKey(cycle) {
+      const minVal = Math.min(...cycle);
+      const minIdx = cycle.indexOf(minVal);
+      const rotated = [...cycle.slice(minIdx), ...cycle.slice(0, minIdx)];
+      const reversed = [rotated[0], ...rotated.slice(1).reverse()];
+      const k1 = rotated.join(',');
+      const k2 = reversed.join(',');
+      return k1 < k2 ? k1 : k2;
     }
 
-    // Iteratively remove dangling vertices
-    let changed = true;
-    while (changed) {
-      changed = false;
-      for (let v = 0; v < this.vertexCount; v++) {
-        if (effectiveDegree[v] === 1) {
-          effectiveDegree[v] = 0;
-          for (const n of this.getNeighbors(v)) {
-            if (effectiveDegree[n] > 0) {
-              effectiveDegree[n]--;
-              changed = true;
-            }
+    // DFS from each vertex to find cycles
+    for (let start = 0; start < this.vertexCount; start++) {
+      function dfs(curr, path, visited) {
+        if (path.length > maxLen) return;
+
+        for (const next of mesh.getNeighbors(curr)) {
+          if (next === start && path.length >= 3) {
+            // Found a cycle back to start
+            cycles.add(canonicalKey(path));
+          } else if (next > start && !visited.has(next)) {
+            // Only explore vertices > start to avoid finding same cycle multiple times
+            visited.add(next);
+            path.push(next);
+            dfs(next, path, visited);
+            path.pop();
+            visited.delete(next);
           }
+        }
+      }
+
+      dfs(start, [start], new Set([start]));
+    }
+
+    return [...cycles].map(k => k.split(',').map(Number));
+  }
+
+  // Extract faces: find cycles and select subset where each edge appears in exactly 2 faces
+  // Uses greedy selection, preferring shorter cycles
+  extractAllFaces(maxLen = 8) {
+    const allCycles = this._findAllCycles(maxLen);
+
+    // Sort by length (prefer shorter cycles)
+    allCycles.sort((a, b) => a.length - b.length);
+
+    // Greedily select cycles: each edge can appear in at most 2 faces
+    const edgeCounts = new Map();
+    const selectedFaces = [];
+
+    for (const cycle of allCycles) {
+      // Check if adding this cycle would exceed 2 for any edge
+      let canAdd = true;
+      const cycleEdges = [];
+
+      for (let i = 0; i < cycle.length; i++) {
+        const a = cycle[i], b = cycle[(i + 1) % cycle.length];
+        const key = a < b ? `${a},${b}` : `${b},${a}`;
+        cycleEdges.push(key);
+        if ((edgeCounts.get(key) || 0) >= 2) {
+          canAdd = false;
+          break;
+        }
+      }
+
+      if (canAdd) {
+        selectedFaces.push(cycle);
+        for (const key of cycleEdges) {
+          edgeCounts.set(key, (edgeCounts.get(key) || 0) + 1);
         }
       }
     }
 
-    const coreVertices = new Set();
-    for (let v = 0; v < this.vertexCount; v++) {
-      if (effectiveDegree[v] >= 2) {
-        coreVertices.add(v);
-      }
-    }
-    return coreVertices;
-  }
-
-  // Extract all faces using rotation system (cyclic edge ordering at each vertex)
-  // Purely topological: neighbor array order defines the rotation system
-  extractAllFaces() {
-    const coreVertices = this._computeCoreVertices();
-    if (coreVertices.size === 0) return [];
-
-    // Build rotation system from neighbor array order
-    const rotationSystem = this._buildRotationSystem(coreVertices);
-
-    const faces = [];
-    const usedDirectedEdges = new Set();
-
-    // Process each edge in both directions
-    for (let e = 0; e < this.edgeCount; e++) {
-      const v0 = this.edges[e * 2];
-      const v1 = this.edges[e * 2 + 1];
-
-      // Skip edges not in core
-      if (!coreVertices.has(v0) || !coreVertices.has(v1)) continue;
-
-      // Try both directions of this edge
-      for (const [start, second] of [[v0, v1], [v1, v0]]) {
-        const dirKey = `${start},${second}`;
-        if (usedDirectedEdges.has(dirKey)) continue;
-
-        // Walk around the face using rotation system (purely combinatorial)
-        const face = this._walkFace(start, second, rotationSystem);
-
-        if (face && face.length >= 3 && face.length <= 12) {
-          faces.push(face);
-
-          // Mark all directed edges of this face as used
-          for (let i = 0; i < face.length; i++) {
-            const a = face[i];
-            const b = face[(i + 1) % face.length];
-            usedDirectedEdges.add(`${a},${b}`);
-          }
-        }
-      }
-    }
-
-    return faces;
-  }
-
-  // Build rotation system: sort neighbors by angle around each vertex
-  // This is needed because the neighbor array order doesn't encode cyclic ordering.
-  // Ideally, the mesh format would store the rotation system explicitly.
-  _buildRotationSystem(coreVertices) {
-    const centroid = this.computeCentroid();
-    const rotation = new Map();
-
-    for (const v of coreVertices) {
-      const neighbors = this.getNeighbors(v).filter(n => coreVertices.has(n));
-
-      if (neighbors.length <= 2) {
-        rotation.set(v, neighbors);
-        continue;
-      }
-
-      // Sort neighbors by angle in the tangent plane at v
-      const pV = this.getPosition(v);
-
-      // Normal direction: from centroid through vertex (outward)
-      const normal = [pV[0] - centroid[0], pV[1] - centroid[1], pV[2] - centroid[2]];
-      const nLen = Math.sqrt(normal[0]**2 + normal[1]**2 + normal[2]**2);
-      if (nLen > 1e-10) {
-        normal[0] /= nLen; normal[1] /= nLen; normal[2] /= nLen;
-      }
-
-      // Reference direction: first neighbor projected onto tangent plane
-      const pFirst = this.getPosition(neighbors[0]);
-      const toFirst = [pFirst[0] - pV[0], pFirst[1] - pV[1], pFirst[2] - pV[2]];
-      const dot = toFirst[0] * normal[0] + toFirst[1] * normal[1] + toFirst[2] * normal[2];
-      const refDir = [toFirst[0] - dot * normal[0], toFirst[1] - dot * normal[1], toFirst[2] - dot * normal[2]];
-      const refLen = Math.sqrt(refDir[0]**2 + refDir[1]**2 + refDir[2]**2);
-      if (refLen > 1e-10) {
-        refDir[0] /= refLen; refDir[1] /= refLen; refDir[2] /= refLen;
-      }
-
-      // Tangent perpendicular to normal and refDir
-      const tangent = [
-        normal[1] * refDir[2] - normal[2] * refDir[1],
-        normal[2] * refDir[0] - normal[0] * refDir[2],
-        normal[0] * refDir[1] - normal[1] * refDir[0]
-      ];
-
-      // Compute angle for each neighbor
-      const sorted = neighbors.map(n => {
-        const pN = this.getPosition(n);
-        const d = [pN[0] - pV[0], pN[1] - pV[1], pN[2] - pV[2]];
-        const x = d[0] * refDir[0] + d[1] * refDir[1] + d[2] * refDir[2];
-        const y = d[0] * tangent[0] + d[1] * tangent[1] + d[2] * tangent[2];
-        return { n, angle: Math.atan2(y, x) };
-      }).sort((a, b) => a.angle - b.angle);
-
-      rotation.set(v, sorted.map(s => s.n));
-    }
-
-    return rotation;
-  }
-
-  // Walk around a face using rotation system (purely combinatorial)
-  // At each vertex, take the next neighbor in cyclic order after the incoming edge
-  _walkFace(start, second, rotationSystem) {
-    const maxLength = 12;
-    const face = [start];
-    let prev = start;
-    let curr = second;
-
-    for (let step = 0; step < maxLength; step++) {
-      if (curr === start) return face; // Completed the face
-
-      face.push(curr);
-      const next = this._cyclicNext(curr, prev, rotationSystem);
-
-      if (next === -1) return null; // No valid next vertex
-      if (next !== start && face.includes(next)) return null; // Would revisit
-
-      prev = curr;
-      curr = next;
-    }
-
-    return null; // Face too long
-  }
-
-  // Get the next neighbor in cyclic order after 'from' at vertex 'v'
-  _cyclicNext(v, from, rotationSystem) {
-    const neighbors = rotationSystem.get(v);
-    if (!neighbors || neighbors.length === 0) return -1;
-    if (neighbors.length === 1) return neighbors[0];
-
-    const idx = neighbors.indexOf(from);
-    if (idx === -1) return neighbors[0]; // 'from' not in rotation, return first
-
-    // Return next in cyclic order
-    return neighbors[(idx + 1) % neighbors.length];
-  }
-
-  // Canonical key for face deduplication (rotation/reflection invariant)
-  _canonicalFaceKey(face) {
-    if (face.length === 0) return '';
-    let minVal = face[0];
-    let minIdx = 0;
-    for (let i = 1; i < face.length; i++) {
-      if (face[i] < minVal) {
-        minVal = face[i];
-        minIdx = i;
-      }
-    }
-    const rotated = [...face.slice(minIdx), ...face.slice(0, minIdx)];
-    const reversed = [rotated[0], ...rotated.slice(1).reverse()];
-    const key1 = rotated.join(',');
-    const key2 = reversed.join(',');
-    return key1 < key2 ? key1 : key2;
+    return selectedFaces;
   }
 
   // Extract faces (cached)
   extractFaces() {
     if (this._faces !== null) return this._faces;
-    this._faces = this.extractAllFaces();
+    this._faces = this.extractAllFaces(8);
     return this._faces;
   }
 

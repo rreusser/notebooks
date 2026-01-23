@@ -151,6 +151,12 @@ const faceOpacity = ctrl(Inputs.range([0, 1], {
   step: 0.05
 }));
 
+const depthFalloffWidth = ctrl(Inputs.range([1, 20], {
+  label: "Focus radius (×l₀)",
+  value: 7,
+  step: 0.5
+}));
+
 display(controlsContainer);
   </script>
 
@@ -167,6 +173,16 @@ const state: {
   dirty: boolean;
   presetName: string;
   expandedState: { expanded: boolean };
+  meshVersion: number;
+  meshVersionListeners: Set<() => void>;
+  // Render parameters (updated reactively)
+  renderParams: {
+    pointSize: number;
+    strainColoring: number;
+    showFaces: boolean;
+    faceOpacity: number;
+    depthFalloffWidth: number;
+  };
 } = {
   mesh: null,
   physics: null,
@@ -177,7 +193,16 @@ const state: {
   frame: null,
   dirty: true,
   presetName: "",
-  expandedState: { expanded: false }
+  expandedState: { expanded: false },
+  meshVersion: 0,
+  meshVersionListeners: new Set<() => void>(),
+  renderParams: {
+    pointSize: 3,
+    strainColoring: 1.5,
+    showFaces: true,
+    faceOpacity: 0.3,
+    depthFalloffWidth: 7
+  }
 };
   </script>
 
@@ -204,6 +229,8 @@ if (currentPreset !== state.presetName || !state.mesh) {
     }
 
     state.dirty = true;
+    state.meshVersion++;
+    state.meshVersionListeners.forEach(listener => listener());
   }
 }
   </script>
@@ -217,6 +244,16 @@ if (state.physics) {
   state.physics.kBend = kBend * l0 * l0;
   state.physics.kTorsion = kTorsion * l0 * l0;
 }
+  </script>
+
+  <script id="update-render-params" type="text/x-typescript">
+// Update render parameters reactively
+state.renderParams.pointSize = pointSize;
+state.renderParams.strainColoring = strainColoring;
+state.renderParams.showFaces = showFaces;
+state.renderParams.faceOpacity = faceOpacity;
+state.renderParams.depthFalloffWidth = depthFalloffWidth * l0;
+state.dirty = true;
   </script>
 
   <script id="main-canvas" type="text/x-typescript" pinned="">
@@ -242,7 +279,11 @@ if (!state.regl) {
     state.camera.camera,
     {
       projectionView: state.camera.projectionView,
-      onChange: () => { state.dirty = true; }
+      onChange: () => {
+        state.dirty = true;
+        state.meshVersion++;
+        state.meshVersionListeners.forEach(listener => listener());
+      }
     }
   );
 }
@@ -295,13 +336,20 @@ state.frame = state.regl.frame(() => {
     // Clear and render
     state.regl!.clear({ color: [1, 1, 1, 1], depth: 1 });
 
+    const selectedIdx = state.interactions?.selectedVertexIndex ?? -1;
+    const hasFocus = selectedIdx >= 0;
+    const focusCenter = hasFocus ? state.mesh!.getPosition(selectedIdx) : [0, 0, 0];
+
     state.renderer?.render(state.mesh!, state.physics!, {
-      pointSize,
-      strainColoring,
-      showFaces,
-      faceOpacity,
-      selectedVertexIndex: state.interactions?.selectedVertexIndex ?? -1,
-      hoverVertexIndex: state.interactions?.hoverVertexIndex ?? -1
+      pointSize: state.renderParams.pointSize,
+      strainColoring: state.renderParams.strainColoring,
+      showFaces: state.renderParams.showFaces,
+      faceOpacity: state.renderParams.faceOpacity,
+      selectedVertexIndex: selectedIdx,
+      hoverVertexIndex: state.interactions?.hoverVertexIndex ?? -1,
+      depthFalloff: hasFocus,
+      depthFalloffWidth: state.renderParams.depthFalloffWidth,
+      focusCenter
     });
 
     state.dirty = false;
@@ -348,9 +396,19 @@ display(expandable(figure, {
 }));
   </script>
 
+  <script id="mesh-version-generator" type="text/x-typescript">
+// Generator that yields whenever the mesh topology changes
+const meshVersion = Generators.observe((notify) => {
+  const listener = () => notify(state.meshVersion);
+  state.meshVersionListeners.add(listener);
+  notify(state.meshVersion); // Initial value
+  return () => state.meshVersionListeners.delete(listener);
+});
+  </script>
+
   <script id="debug-output" type="text/x-typescript">
 // Debug output - updates when mesh changes
-simulate; // dependency to trigger updates
+meshVersion; // dependency to trigger updates
 
 const debugData = (() => {
   if (!state.mesh) return null;
@@ -372,26 +430,31 @@ const debugData = (() => {
     edges.push([mesh.edges[i * 2], mesh.edges[i * 2 + 1]]);
   }
 
-  // Get all faces with their signed areas (before filtering)
-  const allFaces = mesh.extractAllFaces();
-  const facesWithArea = allFaces.map(face => ({
+  // Get faces (uses cycle-finding with greedy selection)
+  const faces = mesh.extractFaces();
+  const faceData = faces.map(face => ({
     vertices: face,
-    length: face.length,
-    signedArea: mesh._computeSignedArea(face).toFixed(4),
-    included: face.length <= 8 && mesh._computeSignedArea(face) > 0
+    length: face.length
   }));
+
+  // Count by edge count
+  const faceCounts = {};
+  for (const f of faces) {
+    faceCounts[f.length] = (faceCounts[f.length] || 0) + 1;
+  }
 
   return {
     vertexCount: mesh.vertexCount,
     edgeCount: mesh.edgeCount,
     vertices,
     edges,
-    faces: facesWithArea
+    faces: faceData,
+    faceCounts
   };
 })();
 
 display(html`<details>
-  <summary>Debug: Mesh Data (${state.mesh?.vertexCount ?? 0} vertices, ${state.mesh?.edgeCount ?? 0} edges, ${debugData?.faces?.filter(f => f.included).length ?? 0} faces)</summary>
+  <summary>Debug: Mesh Data (${state.mesh?.vertexCount ?? 0} vertices, ${state.mesh?.edgeCount ?? 0} edges, ${debugData?.faces?.length ?? 0} faces)</summary>
   <pre style="max-height: 300px; overflow: auto; font-size: 11px;">${JSON.stringify(debugData, null, 2)}</pre>
 </details>`);
   </script>
