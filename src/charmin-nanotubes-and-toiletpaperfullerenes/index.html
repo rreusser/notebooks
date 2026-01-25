@@ -17,7 +17,7 @@ This notebook represents my attempt to step things up. It provides some basic in
   <script id="figure-spikyball" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/2bd5ec5f8ffe634d501442964b31454eb84d22d969110af8735a4195e2a543a9006475ab026c38ca4c936158bd8a9185482332f5d4a7817abf78ae6852d7d785.jpeg" style="width: 600px; max-width: 100%">
+  <img src="${await FileAttachment("./files/2bd5ec5f8ffe634d501442964b31454eb84d22d969110af8735a4195e2a543a9006475ab026c38ca4c936158bd8a9185482332f5d4a7817abf78ae6852d7d785.jpeg").url()}" style="width: 600px; max-width: 100%">
   <figcaption>The finished product, composed of 49 recycled toilet paper tubes (and which I realize after building sorta brings things full circle and looks a bit like a coronavirus).</figcaption>
 </figure>
 `);
@@ -38,7 +38,7 @@ The pattern below illustrates the required cuts. The angle required for three ed
   <script id="figure-measurements" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/bba3f0212ace95304b9a51f0123c4abc3b62330683f86a642463d991b174d9becbaf99999805bffaac6104b94bb6123ee6ddf74894a51e4d066291e7ddcec820.jpeg" style="width: 400px; max-width: 100%">
+  <img src="${await FileAttachment("./files/bba3f0212ace95304b9a51f0123c4abc3b62330683f86a642463d991b174d9becbaf99999805bffaac6104b94bb6123ee6ddf74894a51e4d066291e7ddcec820.jpeg").url()}" style="width: 400px; max-width: 100%">
   <figcaption>The pattern of cuts illustrated on a flattened toilet paper tube.</figcaption>
 </figure>
 `);
@@ -53,7 +53,7 @@ The illustration below shows how the joints interlock. I'd give more instruction
   <script id="figure-interlock" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/9a6266c785181387edd1e4cab63c282ce15797fce68a88b21c6ab716c4a7951d8a4b70cd513e377662bc0d1894b0b3a7b4f53c020e5fd47513a82d2d554e923e.jpeg" style="width: 400px; max-width: 100%">
+  <img src="${await FileAttachment("./files/9a6266c785181387edd1e4cab63c282ce15797fce68a88b21c6ab716c4a7951d8a4b70cd513e377662bc0d1894b0b3a7b4f53c020e5fd47513a82d2d554e923e.jpeg").url()}" style="width: 400px; max-width: 100%">
   <figcaption>Three loops link together to form an interlocked joint.</figcaption>
 </figure>
 `);
@@ -68,7 +68,7 @@ In my initial attempt, I started making a torus and failed to appreciate just ho
   <script id="figure-tunnel" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/3429461afc80952329592004ff09f1be2a5b3b48e4fa31b56f68fe0337d82c06e0adfad4249735479028522344af6de3df0a999536056b611151122c881db283.jpeg" style="width: 600px; max-width: 100%">
+  <img src="${await FileAttachment("./files/3429461afc80952329592004ff09f1be2a5b3b48e4fa31b56f68fe0337d82c06e0adfad4249735479028522344af6de3df0a999536056b611151122c881db283.jpeg").url()}" style="width: 600px; max-width: 100%">
   <figcaption>A semi-completed Y-joint tunnel with rabbit (barely visible, hiding from curious dog) inside.</figcaption>
 </figure>
 `);
@@ -109,57 +109,28 @@ import { expandable } from './shared-lib/expandable.js';
   </script>
 
   <script id="preset-graphs" type="text/x-typescript">
-// Model files from models/ directory with display names
-const presetFiles: Record<string, string> = {
-  "Starter": "starter.json",
-  "Bent Tube": "bent-tube.json",
-  "C28 Td[5,6]": "C28-Td[5,6].json",
-  "C28[5,7] D7d": "C28[5,7]-D7d.json",
-  "C60 Fullerene": "c60-fullerene.json",
-  "C120 5d[5,6,7] Peanut Fulleroid": "C120-5d[5,6,7]-peanut-fulleroid.json",
-  "C168 D3d[5,6,7] Peanut Fulleroid": "C168-D3d[5,6,7]-peanut-fulleroid.json",
-  "C180 Fullerene": "c180-fullerene.json",
-  "C240 Torus": "c240-torus.json",
-  "C260 I[5,7]": "C260-I[5,7].json",
-  "C320 Fullerene": "c320-fullerene.json",
-  "C360 Torus": "c360-torus.json",
-  "C360 D5h[5,6,7]": "C360-D5h[5,6,7].json",
-  "C500 Fullerene": "c500-fullerene.json",
-  "Capsule": "capsule.json",
-  "Dodecahedron": "dodecahedron.json",
-  "Double Torus": "double-torus.json",
-  "Genus 3 Torus": "genus-3-torus.json",
-  "Metadodecahedron": "metadodecahedron.json"
+// Load all preset graphs from models/ directory using FileAttachment
+const presetGraphs: Record<string, {vertices: number[][], edges: number[][]}> = {
+  "Starter": await FileAttachment("./models/starter.json").json(),
+  "Bent Tube": await FileAttachment("./models/bent-tube.json").json(),
+  "C28 Td[5,6]": await FileAttachment("./models/C28-Td[5,6].json").json(),
+  "C28[5,7] D7d": await FileAttachment("./models/C28[5,7]-D7d.json").json(),
+  "C60 Fullerene": await FileAttachment("./models/c60-fullerene.json").json(),
+  "C120 5d[5,6,7] Peanut Fulleroid": await FileAttachment("./models/C120-5d[5,6,7]-peanut-fulleroid.json").json(),
+  "C168 D3d[5,6,7] Peanut Fulleroid": await FileAttachment("./models/C168-D3d[5,6,7]-peanut-fulleroid.json").json(),
+  "C180 Fullerene": await FileAttachment("./models/c180-fullerene.json").json(),
+  "C240 Torus": await FileAttachment("./models/c240-torus.json").json(),
+  "C260 I[5,7]": await FileAttachment("./models/C260-I[5,7].json").json(),
+  "C320 Fullerene": await FileAttachment("./models/c320-fullerene.json").json(),
+  "C360 Torus": await FileAttachment("./models/c360-torus.json").json(),
+  "C360 D5h[5,6,7]": await FileAttachment("./models/C360-D5h[5,6,7].json").json(),
+  "C500 Fullerene": await FileAttachment("./models/c500-fullerene.json").json(),
+  "Capsule": await FileAttachment("./models/capsule.json").json(),
+  "Dodecahedron": await FileAttachment("./models/dodecahedron.json").json(),
+  "Double Torus": await FileAttachment("./models/double-torus.json").json(),
+  "Genus 3 Torus": await FileAttachment("./models/genus-3-torus.json").json(),
+  "Metadodecahedron": await FileAttachment("./models/metadodecahedron.json").json()
 };
-
-// Load all preset graphs from models/ directory
-const presetGraphs: Record<string, {vertices: number[][], edges: number[][]}> = await (async () => {
-  const graphs: Record<string, {vertices: number[][], edges: number[][]}> = {};
-
-  // Load JSON files in parallel
-  const entries = Object.entries(presetFiles);
-  const results = await Promise.all(
-    entries.map(async ([name, file]) => {
-      try {
-        const response = await fetch(`./models/${file}`);
-        const data = await response.json();
-        return [name, data] as const;
-      } catch (e) {
-        console.warn(`Failed to load ${name}:`, e);
-        return null;
-      }
-    })
-  );
-
-  for (const result of results) {
-    if (result) {
-      const [name, data] = result;
-      graphs[name] = data;
-    }
-  }
-
-  return graphs;
-})();
   </script>
 
   <script id="controls-container" type="text/x-typescript">
@@ -572,7 +543,7 @@ The concept of gradient descent is simple. We compute the change in energy with 
   <script id="figure-descent" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885.png" style="width: 400px; max-width: 100%">
+  <img src="${await FileAttachment("./files/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885.png").url()}" style="width: 400px; max-width: 100%">
   <figcaption>Gradient descent minimizes energy by taking incremental steps downhill.</figcaption>
 </figure>
 `);
@@ -601,7 +572,7 @@ We start simple and add lengthwise (axial) stiffness to enforce uniform length. 
   <script id="figure-axial" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/108bab81caf1bb59f7a55d16ec43bcb7b6ae442d7712a2add0c7a2410dfbbbf8d67385f03e158e0fee1ba8f7a486d8728a6440b50e4a0666cc6f4bd142ed81b5.png" style="width: 300px; max-width: 100%">
+  <img src="${await FileAttachment("./files/108bab81caf1bb59f7a55d16ec43bcb7b6ae442d7712a2add0c7a2410dfbbbf8d67385f03e158e0fee1ba8f7a486d8728a6440b50e4a0666cc6f4bd142ed81b5.png").url()}" style="width: 300px; max-width: 100%">
   <figcaption>Points a and b are separated by radius r<sub>ab</sub>.</figcaption>
 </figure>
 `);
@@ -820,7 +791,7 @@ display(axialFigure);
   <script id="figure-angular" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/ba8cea49ce0f777b3b5bcf52ba928eac0ca2ca6e4f37deb6a04068064c5111d8bc378d66692083d12b4f07431e23da7bcfe8a45e2a859dd6378d3f040d9908c7.png" style="width: 400px; max-width: 100%">
+  <img src="${await FileAttachment("./files/ba8cea49ce0f777b3b5bcf52ba928eac0ca2ca6e4f37deb6a04068064c5111d8bc378d66692083d12b4f07431e23da7bcfe8a45e2a859dd6378d3f040d9908c7.png").url()}" style="width: 400px; max-width: 100%">
   <figcaption>The segment connecting a, b, and c form angle θ.</figcaption>
 </figure>
 `);
@@ -1069,7 +1040,7 @@ Finally we tackle torsion about an edge.
   <script id="figure-torsion" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/215010cb67fc5d9382293f1b124f4795cca60c3a5e83d3737607af3569b50a45187ead920dd062ce09406f0c4462bd9cffb2aacb2445c295bdbce85f892b7d46.png" style="width: 400px; max-width: 100%">
+  <img src="${await FileAttachment("./files/215010cb67fc5d9382293f1b124f4795cca60c3a5e83d3737607af3569b50a45187ead920dd062ce09406f0c4462bd9cffb2aacb2445c295bdbce85f892b7d46.png").url()}" style="width: 400px; max-width: 100%">
   <figcaption>Stiffness of the cardboard from which we construct the model generates a moment which pushes the six vertices toward a flat configuration.</figcaption>
 </figure>
 `);
@@ -1105,7 +1076,7 @@ Computing the gradient of the above function without an explosion of terms is a 
 Consider an edge connecting vertices ${tex`a`} and ${tex`b`}, with additional vertices ${tex`c`}, ${tex`d`} adjacent to ${tex`a`}, and vertices ${tex`e`}, ${tex`f`} adjacent to ${tex`b`}:
 
 <figure>
-  <img src="./files/06397d180d434869e0902d4b309d5cd3c0a4906d503fde826ba604bbe60bf3c6b524826dadce9f2886e96aaa1b138e6b7db37b30b0d0b5824761344e077ad3da.png" style="width: 500px; max-width: 100%">
+  <img src="${await FileAttachment("./files/06397d180d434869e0902d4b309d5cd3c0a4906d503fde826ba604bbe60bf3c6b524826dadce9f2886e96aaa1b138e6b7db37b30b0d0b5824761344e077ad3da.png").url()}" style="width: 500px; max-width: 100%">
   <figcaption>Unit vectors α, β, and γ based on the six adjacent vertices.</figcaption>
 </figure>
 
