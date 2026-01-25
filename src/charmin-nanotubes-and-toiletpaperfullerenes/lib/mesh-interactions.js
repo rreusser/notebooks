@@ -56,6 +56,7 @@ export class MeshInteractions {
     el.addEventListener('wheel', this._onWheel, { passive: false });
     el.addEventListener('keydown', this._onKeyDown);
     el.addEventListener('keyup', this._onKeyUp);
+    el.addEventListener('contextmenu', (e) => e.preventDefault());
   }
 
   destroy() {
@@ -142,8 +143,8 @@ export class MeshInteractions {
       this.dragMode = 'vertex';
       this.element.style.cursor = 'move';
     } else {
-      // Camera control
-      this.dragMode = event.shiftKey ? 'pan' : 'rotate';
+      // Camera control - right click or shift+left click = pan
+      this.dragMode = (event.shiftKey || event.button === 2) ? 'pan' : 'rotate';
       this.element.style.cursor = 'grabbing';
     }
 

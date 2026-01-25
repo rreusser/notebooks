@@ -88,21 +88,19 @@ main details[open] > summary {
   margin-bottom: 0.5em;
 }
 
-main .observablehq--cell:has(figure) {
-  text-align: center;
-}
-
 main figure {
-  display: inline-flex;
-  flex-direction: column;
-  align-items: flex-start;
-  text-align: left;
-  margin: 4em 0;
+  width: fit-content;
+  margin: 4em auto;
   max-width: 100%;
 }
 
+main figure img {
+  display: block;
+}
+
 main figure figcaption {
-  text-align: left;
+  width: 0;
+  min-width: 100%;
 }
 
 main figure.fluid {

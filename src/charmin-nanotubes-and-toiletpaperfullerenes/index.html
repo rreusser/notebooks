@@ -17,7 +17,7 @@ This notebook represents my attempt to step things up. It provides some basic in
   <script id="figure-spikyball" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/2bd5ec5f8ffe634d501442964b31454eb84d22d969110af8735a4195e2a543a9006475ab026c38ca4c936158bd8a9185482332f5d4a7817abf78ae6852d7d785.jpeg" style="max-width: min(100%, 600px)">
+  <img src="./files/2bd5ec5f8ffe634d501442964b31454eb84d22d969110af8735a4195e2a543a9006475ab026c38ca4c936158bd8a9185482332f5d4a7817abf78ae6852d7d785.jpeg" style="width: 600px; max-width: 100%">
   <figcaption>The finished product, composed of 49 recycled toilet paper tubes (and which I realize after building sorta brings things full circle and looks a bit like a coronavirus).</figcaption>
 </figure>
 `);
@@ -38,7 +38,7 @@ The pattern below illustrates the required cuts. The angle required for three ed
   <script id="figure-measurements" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/9a6266c785181387edd1e4cab63c282ce15797fce68a88b21c6ab716c4a7951d8a4b70cd513e377662bc0d1894b0b3a7b4f53c020e5fd47513a82d2d554e923e.jpeg" style="max-width: min(100%, 400px)">
+  <img src="./files/bba3f0212ace95304b9a51f0123c4abc3b62330683f86a642463d991b174d9becbaf99999805bffaac6104b94bb6123ee6ddf74894a51e4d066291e7ddcec820.jpeg" style="width: 400px; max-width: 100%">
   <figcaption>The pattern of cuts illustrated on a flattened toilet paper tube.</figcaption>
 </figure>
 `);
@@ -53,7 +53,7 @@ The illustration below shows how the joints interlock. I'd give more instruction
   <script id="figure-interlock" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/bba3f0212ace95304b9a51f0123c4abc3b62330683f86a642463d991b174d9becbaf99999805bffaac6104b94bb6123ee6ddf74894a51e4d066291e7ddcec820.jpeg" style="max-width: min(100%, 400px)">
+  <img src="./files/9a6266c785181387edd1e4cab63c282ce15797fce68a88b21c6ab716c4a7951d8a4b70cd513e377662bc0d1894b0b3a7b4f53c020e5fd47513a82d2d554e923e.jpeg" style="width: 400px; max-width: 100%">
   <figcaption>Three loops link together to form an interlocked joint.</figcaption>
 </figure>
 `);
@@ -68,7 +68,7 @@ In my initial attempt, I started making a torus and failed to appreciate just ho
   <script id="figure-tunnel" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/684aea6362248aa27e8c96c490f94030bf98bf3a3d243d8e42779ebd98fd304718752bfaa08668d051946cf14125f2c1fc9e52f8368cab372a904bdc120ffbae.jpeg" style="max-width: min(100%, 600px)">
+  <img src="./files/3429461afc80952329592004ff09f1be2a5b3b48e4fa31b56f68fe0337d82c06e0adfad4249735479028522344af6de3df0a999536056b611151122c881db283.jpeg" style="width: 600px; max-width: 100%">
   <figcaption>A semi-completed Y-joint tunnel with rabbit (barely visible, hiding from curious dog) inside.</figcaption>
 </figure>
 `);
@@ -77,7 +77,7 @@ display(html`
   <script id="fabrication-outro" type="text/markdown">
 With quiet sheltered-in-place weekends and little access to toilet paper (at which point these constructions quickly became the least of my worries), I dismantled my initial constructions, explored construction via simulation, and eventually settled on the model pictured at the top of the notebook. The rest of this notebook steps through simulation of these models.
 
-I now return to the material collection phase.
+I now return to the material collection phase. 🧻🧻🧻🧻🧻🧻🧻
   </script>
 
   <script id="simulation-intro" type="text/markdown">
@@ -109,44 +109,39 @@ import { expandable } from './shared-lib/expandable.js';
   </script>
 
   <script id="preset-graphs" type="text/x-typescript">
-// File hash to name mapping (based on vertex counts)
+// Model files from models/ directory with display names
 const presetFiles: Record<string, string> = {
-  "C60 Fullerene": "285549ab8794137fcd23df05ec4e9092c4a9fa65e3b32c2c6a22ddf0320eca5e14553c6508e4977271b82a1225eda231cec6f30a027bb8440ed879d1d3431ef6.json",
-  "C180 Fullerene": "89e6cd62cbc3ba07f7f8e42357d426f9fbb8f9f607e3e0f11c7036fcc512d9dab8712b3fe3c272f93865bcaf88ab02918e2ddb226129ee9efa669eab89f9b7f3.json",
-  "C320 Fullerene": "40df7e811a5f2b9b46905da0db746bc46aff5c9ce62808034f8346d3daf566feb14aacf6cd1015d5ee97dc1ed27f42920c248bb71d1b0a211641d03126d8bfaf.json",
-  "C500 Fullerene": "85c5997bcd60d3500b3769a5790c1575b144161f77eb1f4f0a11ca567a5dbaae4750d466914794e6932be17f888982a24d5e65a9a2ba3e271d2afc9a179f675d.json",
-  "Dodecahedron": "5c4ad379870a7172f016427cfeb62e60bcc3fac83d22395ab102f8d0e94eaf6a4241a0d27b5d8ce5749698c05b0ee630b20582182e745050f0a5d9f2e9d37b0e.json",
-  "C240 Torus": "3ecdf5c8f9be6ac3a837d7b6dd37485f7017be2ed7fc94d304c2b4f67d01bea5dc9528dd5b4c0507a3bb21fa38c2d7f30c4cd0decc7a6077c18e2ce3354780b1.json",
-  "C360 Torus": "8c59424c3fbed403e573864733e1bf196fd469dd63f88893629a9dbebf68820ade9bded97d440903bf482e29b642cd27191fd9154384756152c414402b12f9d1.json",
-  "C260-I[5,7]": "a139509092ab0080b3c1241f830977069dc68e4a7ea9834d668f9d9d760961b792b8e23f0f9212337cbd94d436a85d99a788b2fc4d6ef13d562b49b2ef35a310.json",
-  "C28[5,7]-D7d": "359455189eea4a1145be307cc8807dcca71442982915a220265a52dec420ca5a42106a8488dbf449491da526f91a1f60798d599661aa0be7eb477ebb3b77d33e.json",
-  "C28-Td[5,6]": "f5e02e4b9d7f7a440b3231d45943410bfdc50ac98c4b7275dfe17f746609d7871c653b0901c2fead87d894b52cdf4caa2e523aa5e5ac2848936a9bb4790f9021.json",
-  "C120 Peanut Fulleroid": "ee4ed30808162fdbff7f048268befca6b331881585e4e5e31ea05d66aafeb6190f622b2cffad4712f835b87b364fa35de96bbaf7c7a134b279f45a877d1cf038.json",
-  "C168 Peanut Fulleroid": "b31fdfb8b21f79a14cf81320b73fa344c07421f154e7d0dbfaded7dfa5ae73ed3007ffc9ed572e262de9b4bcd031823de18f474891190a2401eb6448c5898f47.json",
-  "Double Torus": "1176e7fad2a420d228f5df155bfd24be06983f5fbf4234124abf8cfd514d24993f9e184cbdbc36ff0fecb010739e8ff5a713247944c186fdf82b877a42bf85ee.json",
-  "Capsule": "dff7700c3743989f282f9e58f71ae9d7596f5c78efa149c5e9a7717a7066a9c6b1870085b4aa7922288c7f3cdce4660b82fb0de5923185c165c3469d5b784037.json",
-  "C360-D5h[5,6,7]": "89dccf254f8755ae6a0d1910af95cf8f08d32820ad0a1bba395b71bbdfaf4f97d469ee5775e7e49552bcbf1baab5f0109a2e57ee4b02ca988358e9686ce700ad.json",
-  "Genus-3 Torus": "a148f1c143188de55a41b12791380026e0c0a5420e9d65070d034aa3dd6f7f5f914d91fc0d3ac67e70a62340eaeb466a7aeb624becb3c83f1995234c429728cc.json",
-  "Klein Quartic": "f220e2d7f29b956c39640b7dc4173f211fa43c14d7dec7b30d4dab14b4082356e621ae77b433221941bef90638b84398458b1ed0cf49ebe17151721aa0be53f8.json",
-  "Metadodecahedron": "e0e175da2922fa1d47825c0a0001cd3b6db9f9d6e872c04abf2fa068c0649cf37f8a4084ab85eac11359d01d464350f3b9b33d7a0d682b526999b95063a4ecf5.json",
-  "Genus-3 Extended": "e1fa5b0e879607a25bbbc2ffcb0170fca6ba4b5b2652a0f0df3775c751c6ccf0bbaa30687d6c2d9bfeefa71c27d394f8aac824f330620995a5d647d57ad84777.json"
+  "Starter": "starter.json",
+  "Bent Tube": "bent-tube.json",
+  "C28 Td[5,6]": "C28-Td[5,6].json",
+  "C28[5,7] D7d": "C28[5,7]-D7d.json",
+  "C60 Fullerene": "c60-fullerene.json",
+  "C120 5d[5,6,7] Peanut Fulleroid": "C120-5d[5,6,7]-peanut-fulleroid.json",
+  "C168 D3d[5,6,7] Peanut Fulleroid": "C168-D3d[5,6,7]-peanut-fulleroid.json",
+  "C180 Fullerene": "c180-fullerene.json",
+  "C240 Torus": "c240-torus.json",
+  "C260 I[5,7]": "C260-I[5,7].json",
+  "C320 Fullerene": "c320-fullerene.json",
+  "C360 Torus": "c360-torus.json",
+  "C360 D5h[5,6,7]": "C360-D5h[5,6,7].json",
+  "C500 Fullerene": "c500-fullerene.json",
+  "Capsule": "capsule.json",
+  "Dodecahedron": "dodecahedron.json",
+  "Double Torus": "double-torus.json",
+  "Genus 3 Torus": "genus-3-torus.json",
+  "Metadodecahedron": "metadodecahedron.json"
 };
 
-// Load all preset graphs
+// Load all preset graphs from models/ directory
 const presetGraphs: Record<string, {vertices: number[][], edges: number[][]}> = await (async () => {
-  const graphs: Record<string, {vertices: number[][], edges: number[][]}> = {
-    "Starter": {
-      vertices: [[-1, -1, 0], [-1, 1, 0], [-0.5, 0, 0], [0.5, 0, 0], [1, -1, 0], [1, 1, 0]],
-      edges: [[0, 2], [1, 2], [2, 3], [3, 4], [3, 5]]
-    }
-  };
+  const graphs: Record<string, {vertices: number[][], edges: number[][]}> = {};
 
   // Load JSON files in parallel
   const entries = Object.entries(presetFiles);
   const results = await Promise.all(
     entries.map(async ([name, file]) => {
       try {
-        const response = await fetch(`./files/${file}`);
+        const response = await fetch(`./models/${file}`);
         const data = await response.json();
         return [name, data] as const;
       } catch (e) {
@@ -177,75 +172,82 @@ function ctrl(input: HTMLElement) {
 
 const presetGraph = ctrl(Inputs.select(Object.keys(presetGraphs), {
   label: "Preset",
-  value: "C260-I[5,7]"
+  value: "C60 Fullerene"
 }));
 
 const resetButton = ctrl(Inputs.button("Reset"));
 
 const simulate = ctrl(Inputs.toggle({ label: "Simulate", value: true }));
 
-const iterations = ctrl(Inputs.range([0, 200], {
+display(controlsContainer);
+  </script>
+
+  <script id="secondary-controls" type="text/x-typescript">
+const secondaryControlsContainer = html`<div class="controls-panel secondary-controls-panel"></div>`;
+
+function ctrl2(input: HTMLElement) {
+  secondaryControlsContainer.appendChild(input);
+  return Generators.input(input);
+}
+
+const iterations = ctrl2(Inputs.range([0, 200], {
   label: "Iterations per frame",
-  value: 1,
+  value: 5,
   step: 1
 }));
 
-const k = ctrl(Inputs.range([0, 2], {
+const k = ctrl2(Inputs.range([0, 2], {
   label: "Axial spring constant",
   value: 1,
   step: 0.01
 }));
 
-const l0 = ctrl(Inputs.range([0.1, 2], {
+const l0 = ctrl2(Inputs.range([0.1, 2], {
   label: "Equilibrium length, l₀",
   value: 1,
   step: 0.01
 }));
 
-const theta0 = ctrl(Inputs.range([1, 180], {
-  label: "Equilibrium bending angle, θ₀",
-  value: 150,
-  step: 1
+const strainColoring = ctrl2(Inputs.toggle({
+  label: "Axial strain coloring",
+  value: false
 }));
 
-const kBend = ctrl(Inputs.range([0, 2], {
-  label: "Bending spring constant",
+const kBend = ctrl2(Inputs.range([0, 2], {
+  label: "Dihedral spring constant",
   value: 0.3,
   step: 0.01
 }));
 
-const kTorsion = ctrl(Inputs.range([0, 0.2], {
+const theta0 = ctrl2(Inputs.range([1, 180], {
+  label: "Equilibrium dihedral angle, θ₀",
+  value: 150,
+  step: 1
+}));
+
+const kTorsion = ctrl2(Inputs.range([0, 0.2], {
   label: "Torsional spring constant",
   value: 0.1,
   step: 0.01
 }));
 
-const strainColoring = ctrl(Inputs.toggle({
-  label: "Axial strain coloring",
-  value: false
-}));
-
-const pointSize = ctrl(Inputs.range([0.5, 5], {
+const pointSize = ctrl2(Inputs.range([0.5, 5], {
   label: "Vertex size",
   value: 3,
   step: 0.5
 }));
 
-const showFaces = ctrl(Inputs.toggle({ label: "Show faces", value: true }));
-
-const faceOpacity = ctrl(Inputs.range([0, 1], {
+const faceOpacity = ctrl2(Inputs.range([0, 1], {
   label: "Face opacity",
   value: 0.3,
   step: 0.05
 }));
 
-const depthFalloffWidth = ctrl(Inputs.range([1, 20], {
+const depthFalloffWidth = ctrl2(Inputs.range([1, 20], {
   label: "Focus radius (×l₀)",
   value: 7,
   step: 0.5
 }));
-
-display(controlsContainer);
   </script>
 
   <script id="state" type="text/x-typescript">
@@ -286,6 +288,7 @@ const state: {
   expandedState: { expanded: false },
   meshVersion: 0,
   meshVersionListeners: new Set<() => void>(),
+  lastResetCount: 0,
   renderParams: {
     simulate: true,
     iterations: 1,
@@ -300,10 +303,12 @@ const state: {
 
   <script id="load-preset" type="text/x-typescript">
 // Load preset when changed or reset
-resetButton;
+const resetCount = resetButton;
 
 const currentPreset = presetGraph || "Starter";
-if (currentPreset !== state.presetName || !state.mesh) {
+const shouldReset = resetCount !== state.lastResetCount;
+if (currentPreset !== state.presetName || !state.mesh || shouldReset) {
+  state.lastResetCount = resetCount;
   state.presetName = currentPreset;
   const json = presetGraphs[currentPreset];
   if (json) {
@@ -344,14 +349,13 @@ state.renderParams.simulate = simulate;
 state.renderParams.iterations = iterations;
 state.renderParams.pointSize = pointSize;
 state.renderParams.strainColoring = strainColoring ? 1.5 : 0;
-state.renderParams.showFaces = showFaces;
+state.renderParams.showFaces = faceOpacity > 0;
 state.renderParams.faceOpacity = faceOpacity;
 state.renderParams.depthFalloffWidth = depthFalloffWidth * l0;
 state.dirty = true;
   </script>
 
-  <script id="main-canvas" type="text/x-typescript" pinned="">
-// Container - will be sized by expandable's onResize callback
+  <script id="main-canvas" type="text/x-typescript">
 const container = html`<div id="mesh-canvas" style="width: 100%; height: 100%;"></div>`;
 
 // Initialize WebGL context if needed
@@ -464,7 +468,7 @@ invalidation.then(() => {
 const figure = html`
   <figure id="main-figure" style="max-width: none; margin: 0; height: 100%;">
     ${container}
-    <figcaption>
+    <figcaption style="padding:0 10px">
       Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection.
       <kbd>Space</kbd> to deselect.
       <kbd>Backspace</kbd> deletes vertices, <kbd>s</kbd>/<kbd>c</kbd> splits/collapses vertices of degree 2.
@@ -488,6 +492,10 @@ display(expandable(figure, {
     resizeCanvas();
   }
 }));
+  </script>
+
+  <script id="display-secondary-controls" type="text/x-typescript">
+display(secondaryControlsContainer);
   </script>
 
   <script id="mesh-version-generator" type="text/x-typescript">
@@ -564,7 +572,7 @@ The concept of gradient descent is simple. We compute the change in energy with 
   <script id="figure-descent" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/06397d180d434869e0902d4b309d5cd3c0a4906d503fde826ba604bbe60bf3c6b524826dadce9f2886e96aaa1b138e6b7db37b30b0d0b5824761344e077ad3da.png" style="max-width: min(100%, 500px)">
+  <img src="./files/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885.png" style="width: 400px; max-width: 100%">
   <figcaption>Gradient descent minimizes energy by taking incremental steps downhill.</figcaption>
 </figure>
 `);
@@ -593,7 +601,7 @@ We start simple and add lengthwise (axial) stiffness to enforce uniform length. 
   <script id="figure-axial" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/108bab81caf1bb59f7a55d16ec43bcb7b6ae442d7712a2add0c7a2410dfbbbf8d67385f03e158e0fee1ba8f7a486d8728a6440b50e4a0666cc6f4bd142ed81b5.png" style="max-width: min(100%, 300px)">
+  <img src="./files/108bab81caf1bb59f7a55d16ec43bcb7b6ae442d7712a2add0c7a2410dfbbbf8d67385f03e158e0fee1ba8f7a486d8728a6440b50e4a0666cc6f4bd142ed81b5.png" style="width: 300px; max-width: 100%">
   <figcaption>Points a and b are separated by radius r<sub>ab</sub>.</figcaption>
 </figure>
 `);
@@ -745,7 +753,7 @@ axialCanvas.addEventListener('mousedown', (e: MouseEvent) => {
   axialInteraction.dragging = axialGetVertex(x, y);
 });
 
-axialCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+function axialMouseMove(e: MouseEvent) {
   const rect = axialCanvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
@@ -761,6 +769,11 @@ axialCanvas.addEventListener('mousemove', (e: MouseEvent) => {
     axialInteraction.hoverIndex = axialGetVertex(x, y);
     axialCanvas.style.cursor = axialInteraction.hoverIndex >= 0 ? 'move' : 'default';
   }
+}
+
+axialCanvas.addEventListener('mousemove', axialMouseMove);
+window.addEventListener('mousemove', (e) => {
+  if (axialInteraction.dragging >= 0) axialMouseMove(e);
 });
 
 window.addEventListener('mouseup', () => {
@@ -807,7 +820,7 @@ display(axialFigure);
   <script id="figure-angular" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/ba8cea49ce0f777b3b5bcf52ba928eac0ca2ca6e4f37deb6a04068064c5111d8bc378d66692083d12b4f07431e23da7bcfe8a45e2a859dd6378d3f040d9908c7.png" style="max-width: min(100%, 400px)">
+  <img src="./files/ba8cea49ce0f777b3b5bcf52ba928eac0ca2ca6e4f37deb6a04068064c5111d8bc378d66692083d12b4f07431e23da7bcfe8a45e2a859dd6378d3f040d9908c7.png" style="width: 400px; max-width: 100%">
   <figcaption>The segment connecting a, b, and c form angle θ.</figcaption>
 </figure>
 `);
@@ -987,7 +1000,7 @@ dihedralCanvas.addEventListener('mousedown', (e: MouseEvent) => {
   dihedralInteraction.dragging = dihedralGetVertex(x, y);
 });
 
-dihedralCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+function dihedralMouseMove(e: MouseEvent) {
   const rect = dihedralCanvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
@@ -1003,6 +1016,11 @@ dihedralCanvas.addEventListener('mousemove', (e: MouseEvent) => {
     dihedralInteraction.hoverIndex = dihedralGetVertex(x, y);
     dihedralCanvas.style.cursor = dihedralInteraction.hoverIndex >= 0 ? 'move' : 'default';
   }
+}
+
+dihedralCanvas.addEventListener('mousemove', dihedralMouseMove);
+window.addEventListener('mousemove', (e) => {
+  if (dihedralInteraction.dragging >= 0) dihedralMouseMove(e);
 });
 
 window.addEventListener('mouseup', () => {
@@ -1051,7 +1069,7 @@ Finally we tackle torsion about an edge.
   <script id="figure-torsion" type="text/x-typescript">
 display(html`
 <figure>
-  <img src="./files/215010cb67fc5d9382293f1b124f4795cca60c3a5e83d3737607af3569b50a45187ead920dd062ce09406f0c4462bd9cffb2aacb2445c295bdbce85f892b7d46.png" style="max-width: min(100%, 400px)">
+  <img src="./files/215010cb67fc5d9382293f1b124f4795cca60c3a5e83d3737607af3569b50a45187ead920dd062ce09406f0c4462bd9cffb2aacb2445c295bdbce85f892b7d46.png" style="width: 400px; max-width: 100%">
   <figcaption>Stiffness of the cardboard from which we construct the model generates a moment which pushes the six vertices toward a flat configuration.</figcaption>
 </figure>
 `);
@@ -1061,19 +1079,10 @@ display(html`
 The figure above shows six adjacent vertices connected by an edge. Torsional stiffness of the cardboard produces a rotational force which causes vertices ${tex`c`}, ${tex`d`}, ${tex`e`}, and ${tex`f`} to rotate toward flat.
   </script>
 
-  <script id="figure-torsion-setup" type="text/x-typescript">
-display(html`
-<figure>
-  <img src="./files/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885.png" style="max-width: min(100%, 600px)">
-  <figcaption>We define unit vectors α, β, and γ based on the six adjacent vertices.</figcaption>
-</figure>
-`);
-  </script>
-
   <script id="torsional-stiffness-math" type="text/markdown">
 Without the sort of physical justification required for a scientifically valid molecular dynamics simulation, we simply pick an energy function that's minimized when the outer vertices are not twisted. We therefore define the unit vectors ${tex`\vec{\alpha}`}, ${tex`\vec{\beta}`}, and ${tex`\vec{\gamma}`}:
 
-${tex.block`\vec{\alpha} \equiv \frac{\vec{b} - \vec{a}}{|\vec{b} - \vec{a}|} = \alpha(a, b),\;\;\;\vec{\beta} \equiv \frac{\vec{d} - \vec{c}}{|\vec{d} - \vec{c}|} = \beta(c, d),\;\;\;\vec{\gamma} \equiv \frac{\vec{f} - \vec{e}}{|\vec{f} - \vec{e}|} = \gamma(e, f)`}
+${tex.block`\vec{\alpha} \equiv \frac{\vec{b} - \vec{a}}{|\vec{b} - \vec{a}|},\;\;\;\vec{\beta} \equiv \frac{\vec{d} - \vec{c}}{|\vec{d} - \vec{c}|},\;\;\;\vec{\gamma} \equiv \frac{\vec{f} - \vec{e}}{|\vec{f} - \vec{e}|}`}
 
 and define the energy function:
 
@@ -1084,20 +1093,8 @@ Due to the square, this function takes the value ${tex`-1`} when ${tex`\vec{\alp
 Note importantly that if we did not normalize vectors ${tex`\vec{\alpha}`}, ${tex`\vec{\beta}`}, and ${tex`\vec{\gamma}`}, then ${tex`E_{torsion}`} would depend upon the distance between the vertices, and the simulation would either blow up or collapse to a point, depending on the sign of ${tex`E_{torsion}`}. As it stands though, the constraint that ${tex`\vec{\alpha}`}, ${tex`\vec{\beta}`}, and ${tex`\vec{\gamma}`} are unit vectors produces a strictly torsional force.
 
 Computing the gradient of the above function without an explosion of terms is a bit challenging. I spent a couple sheets of paper giving it a try before recalling why [Einstein summation notation](https://en.wikipedia.org/wiki/Einstein_notation) is so useful in vector calculus.
-
-The page below illustrates the full derivation of all eighteen components of the gradient.
   </script>
 
-  <script id="figure-derivation" type="text/x-typescript">
-display(html`
-<figure>
-  <a href="./files/3429461afc80952329592004ff09f1be2a5b3b48e4fa31b56f68fe0337d82c06e0adfad4249735479028522344af6de3df0a999536056b611151122c881db283.jpeg" target="_blank">
-    <img src="./files/3429461afc80952329592004ff09f1be2a5b3b48e4fa31b56f68fe0337d82c06e0adfad4249735479028522344af6de3df0a999536056b611151122c881db283.jpeg" style="max-width: min(100%, 600px)">
-  </a>
-  <figcaption>The full derivation of the torsional energy gradient (click to enlarge).</figcaption>
-</figure>
-`);
-  </script>
 
   <script id="torsion-derivation" type="text/markdown">
 <details>
@@ -1107,8 +1104,9 @@ display(html`
 
 Consider an edge connecting vertices ${tex`a`} and ${tex`b`}, with additional vertices ${tex`c`}, ${tex`d`} adjacent to ${tex`a`}, and vertices ${tex`e`}, ${tex`f`} adjacent to ${tex`b`}:
 
-<figure style="margin: 1em 0;">
-  <img src="./files/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885.png" style="max-width: min(100%, 500px)">
+<figure>
+  <img src="./files/06397d180d434869e0902d4b309d5cd3c0a4906d503fde826ba604bbe60bf3c6b524826dadce9f2886e96aaa1b138e6b7db37b30b0d0b5824761344e077ad3da.png" style="width: 500px; max-width: 100%">
+  <figcaption>Unit vectors α, β, and γ based on the six adjacent vertices.</figcaption>
 </figure>
 
 We define unit vectors along each edge:
@@ -1149,7 +1147,7 @@ ${tex.block`\frac{\partial \alpha_i}{\partial a_j} = \frac{1}{r_{ab}}(\alpha_i \
 
 ${tex.block`\frac{\partial \alpha_i}{\partial b_j} = \frac{1}{r_{ab}}(\delta_{ij} - \alpha_i \alpha_j)`}
 
-where ${tex`\delta_{ij}`} is the Kronecker delta. The analogous expressions hold for ${tex`\vec{\beta}`} and ${tex`\vec{\gamma}`}.
+where ${tex`\delta_{ij}`} is the Kronecker delta. The analogous expressions hold for ${tex`\vec{\beta}`} and ${tex`\vec{\gamma}.`}
 
 ### Gradient Computation
 
@@ -1242,54 +1240,136 @@ torsionControlsContainer.appendChild(torsionKTorsionInput);
   </script>
 
   <script id="torsion-demo" type="text/x-typescript">
-// Simple 2D canvas demo for torsional stiffness (shown as projection)
+import { mat4, vec3, quat } from 'npm:gl-matrix@3.4.3';
+
+// 3D torsional stiffness demo with orbit camera
 const torsionCanvas = html`<canvas id="torsion-canvas" width="600" height="400"></canvas>`;
 const torsionCtx2D = torsionCanvas.getContext('2d');
 
-// Linear graph with branching endpoints (2D projection of 3D)
+// 3D graph with branching endpoints
 const torsionGraph = {
   vertices: [
-    [-1, 0.5], [-1, -0.5],  // Left branches (c, d)
-    [-0.5, 0],              // Left junction (a)
-    [0.5, 0],               // Right junction (b)
-    [1, -0.5], [1, 0.5]     // Right branches (e, f)
+    [-1, 0.5, 0.3], [-1, -0.5, -0.3],  // Left branches (c, d) - slightly out of plane
+    [-0.5, 0, 0],                       // Left junction (a)
+    [0.5, 0, 0],                        // Right junction (b)
+    [1, -0.5, -0.2], [1, 0.5, 0.2]      // Right branches (e, f) - slightly out of plane
   ],
   edges: [[0, 2], [1, 2], [2, 3], [3, 4], [3, 5]]
 };
 
-// Interaction state
-const torsionInteraction = {
-  dragging: -1,
-  hoverIndex: -1
+// Orbit camera state
+const torsionCamera = {
+  rotation: quat.create(),
+  distance: 5,
+  center: vec3.fromValues(0, 0, 0),
+  viewMatrix: mat4.create(),
+  projMatrix: mat4.create(),
+
+  rotate(dx: number, dy: number) {
+    const qx = quat.create();
+    const qy = quat.create();
+    quat.setAxisAngle(qx, [0, 1, 0], -dx * 0.01);
+    quat.setAxisAngle(qy, [1, 0, 0], -dy * 0.01);
+    quat.multiply(this.rotation, qx, this.rotation);
+    quat.multiply(this.rotation, this.rotation, qy);
+    quat.normalize(this.rotation, this.rotation);
+  },
+
+  getViewMatrix() {
+    const eye = vec3.fromValues(0, 0, this.distance);
+    vec3.transformQuat(eye, eye, this.rotation);
+    vec3.add(eye, eye, this.center);
+    mat4.lookAt(this.viewMatrix, eye, this.center, [0, 1, 0]);
+    return this.viewMatrix;
+  },
+
+  project(p: number[], w: number, h: number): [number, number, number] {
+    const v = vec3.fromValues(p[0], p[1], p[2]);
+    vec3.transformMat4(v, v, this.getViewMatrix());
+    // Simple perspective projection
+    const fov = 0.8;
+    const z = -v[2];
+    const scale = (h / 2) / (z * Math.tan(fov / 2));
+    return [w / 2 + v[0] * scale, h / 2 - v[1] * scale, z];
+  }
 };
 
-function torsionDist(a: number[], b: number[]): number {
-  const dx = a[0] - b[0], dy = a[1] - b[1];
-  return Math.sqrt(dx * dx + dy * dy);
+// Initialize camera rotation for a nice viewing angle
+quat.setAxisAngle(torsionCamera.rotation, [1, 0, 0], 0.3);
+const qy = quat.create();
+quat.setAxisAngle(qy, [0, 1, 0], 0.5);
+quat.multiply(torsionCamera.rotation, qy, torsionCamera.rotation);
+
+// Interaction state
+const torsionInteraction = {
+  orbitDragging: false,
+  vertexDragging: -1,
+  hoverVertex: -1,
+  lastX: 0,
+  lastY: 0
+};
+
+function torsionGetVertex(x: number, y: number): number {
+  const w = torsionCanvas.width;
+  const h = torsionCanvas.height;
+  for (let i = 0; i < torsionGraph.vertices.length; i++) {
+    const [px, py] = torsionCamera.project(torsionGraph.vertices[i], w, h);
+    const dx = x - px, dy = y - py;
+    if (dx * dx + dy * dy < 200) return i;
+  }
+  return -1;
 }
 
-function torsionIterate(graph, l0: number, k: number, theta0: number, kBend: number, kTorsion: number, gamma = 0.1): void {
-  const gradient = new Array(graph.vertices.length).fill(null).map(() => [0, 0]);
+function vec3Dist(a: number[], b: number[]): number {
+  const dx = a[0] - b[0], dy = a[1] - b[1], dz = a[2] - b[2];
+  return Math.sqrt(dx * dx + dy * dy + dz * dz);
+}
+
+function vec3Normalize(v: number[]): number[] {
+  const len = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+  if (len < 0.0001) return [0, 0, 0];
+  return [v[0] / len, v[1] / len, v[2] / len];
+}
+
+function vec3Cross(a: number[], b: number[]): number[] {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0]
+  ];
+}
+
+function vec3Dot(a: number[], b: number[]): number {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+}
+
+function vec3Sub(a: number[], b: number[]): number[] {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function vec3Len(v: number[]): number {
+  return Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+}
+
+function torsionIterate3D(graph, l0: number, k: number, theta0: number, kBend: number, kTorsion: number, gamma = 0.1): void {
+  const gradient = graph.vertices.map(() => [0, 0, 0]);
 
   // Axial springs
   for (const [i0, i1] of graph.edges) {
     const p0 = graph.vertices[i0];
     const p1 = graph.vertices[i1];
-    const l = torsionDist(p0, p1);
+    const l = vec3Dist(p0, p1);
     if (l < 0.001) continue;
     const c = k * (1 - l0 / l);
-    const fx = c * (p0[0] - p1[0]);
-    const fy = c * (p0[1] - p1[1]);
-    gradient[i0][0] += fx;
-    gradient[i0][1] += fy;
-    gradient[i1][0] -= fx;
-    gradient[i1][1] -= fy;
+    for (let d = 0; d < 3; d++) {
+      const f = c * (p0[d] - p1[d]);
+      gradient[i0][d] += f;
+      gradient[i1][d] -= f;
+    }
   }
 
   // Dihedral (bending) springs at junctions
   const cosTheta0 = Math.cos(theta0 * Math.PI / 180);
-
-  // Junction at vertex 2 (connections: 0, 1, 3)
   const junctions = [
     { center: 2, neighbors: [0, 1, 3] },
     { center: 3, neighbors: [2, 4, 5] }
@@ -1304,38 +1384,33 @@ function torsionIterate(graph, l0: number, k: number, theta0: number, kBend: num
         const a = graph.vertices[ia];
         const c = graph.vertices[ic];
 
-        const bax = a[0] - b[0], bay = a[1] - b[1];
-        const bcx = c[0] - b[0], bcy = c[1] - b[1];
+        const ba = vec3Sub(a, b);
+        const bc = vec3Sub(c, b);
+        const baLen = vec3Len(ba);
+        const bcLen = vec3Len(bc);
+        if (baLen < 0.001 || bcLen < 0.001) continue;
 
-        const ba = Math.sqrt(bax * bax + bay * bay);
-        const bc = Math.sqrt(bcx * bcx + bcy * bcy);
-        if (ba < 0.001 || bc < 0.001) continue;
+        const ba_bc = vec3Dot(ba, bc);
+        const cosTheta = ba_bc / (baLen * bcLen);
+        const f = (kBend * 2 * (cosTheta - cosTheta0)) / (baLen * bcLen);
+        const r = baLen / bcLen;
 
-        const ba_bc = bax * bcx + bay * bcy;
-        const cosTheta = ba_bc / (ba * bc);
-        const f = (kBend * 2 * (cosTheta - cosTheta0)) / (ba * bc);
-        const r = ba / bc;
-
-        const fax = f * (bcx - (cosTheta / r) * bax);
-        const fay = f * (bcy - (cosTheta / r) * bay);
-        const fcx = f * (bax - cosTheta * r * bcx);
-        const fcy = f * (bay - cosTheta * r * bcy);
-
-        gradient[ia][0] += fax;
-        gradient[ia][1] += fay;
-        gradient[center][0] -= fax + fcx;
-        gradient[center][1] -= fay + fcy;
-        gradient[ic][0] += fcx;
-        gradient[ic][1] += fcy;
+        for (let d = 0; d < 3; d++) {
+          const fa = f * (bc[d] - (cosTheta / r) * ba[d]);
+          const fc = f * (ba[d] - cosTheta * r * bc[d]);
+          gradient[ia][d] += fa;
+          gradient[center][d] -= fa + fc;
+          gradient[ic][d] += fc;
+        }
       }
     }
   }
 
-  // Torsional spring - keeps c,d,e,f coplanar (in 2D, this means aligned)
-  // For the central edge (2-3), compute the "torsion" as misalignment of branches
+  // Torsional springs - full 3D implementation
+  // For edge (a,b), with branches (c,d) off a and (e,f) off b
   const iA = 2, iB = 3;
-  const iC = 0, iD = 1;  // branches off A
-  const iE = 4, iF = 5;  // branches off B
+  const iC = 0, iD = 1;
+  const iE = 4, iF = 5;
 
   const a = graph.vertices[iA];
   const b = graph.vertices[iB];
@@ -1344,135 +1419,194 @@ function torsionIterate(graph, l0: number, k: number, theta0: number, kBend: num
   const e = graph.vertices[iE];
   const f = graph.vertices[iF];
 
-  // In 2D, compute "perpendicular" alignment
-  // alpha = b - a (normalized)
-  const alphax = b[0] - a[0], alphay = b[1] - a[1];
-  const alphaLen = Math.sqrt(alphax * alphax + alphay * alphay);
-  if (alphaLen > 0.001) {
-    const ax = alphax / alphaLen, ay = alphay / alphaLen;
+  // alpha = (b - a) / |b - a|
+  const alphaVec = vec3Sub(b, a);
+  const rAB = vec3Len(alphaVec);
+  if (rAB < 0.001) return;
+  const alpha = vec3Normalize(alphaVec);
 
-    // beta = d - c (normalized)
-    const betax = d[0] - c[0], betay = d[1] - c[1];
-    const betaLen = Math.sqrt(betax * betax + betay * betay);
+  // beta = (d - c) / |d - c|
+  const betaVec = vec3Sub(d, c);
+  const rCD = vec3Len(betaVec);
+  if (rCD < 0.001) return;
+  const beta = vec3Normalize(betaVec);
 
-    // gamma = f - e (normalized)
-    const gammax = f[0] - e[0], gammay = f[1] - e[1];
-    const gammaLen = Math.sqrt(gammax * gammax + gammay * gammay);
+  // gamma = (f - e) / |f - e|
+  const gammaVec = vec3Sub(f, e);
+  const rEF = vec3Len(gammaVec);
+  if (rEF < 0.001) return;
+  const gam = vec3Normalize(gammaVec);
 
-    if (betaLen > 0.001 && gammaLen > 0.001) {
-      const bx = betax / betaLen, by = betay / betaLen;
-      const gx = gammax / gammaLen, gy = gammay / gammaLen;
+  // E0 = (beta . gamma) - (alpha . beta)(alpha . gamma)
+  const ab = vec3Dot(alpha, beta);
+  const ag = vec3Dot(alpha, gam);
+  const bg = vec3Dot(beta, gam);
+  const E0 = bg - ab * ag;
 
-      // In 2D, "cross product" gives scalar (z-component)
-      const ab_cross = ax * by - ay * bx;  // alpha x beta
-      const ag_cross = ax * gy - ay * gx;  // alpha x gamma
+  // E = -E0^2, gradient = 2 * E0 * dE0/dx (flipped sign to drive toward coplanar)
+  const coeff = 2 * E0 * kTorsion;
 
-      // Energy: -((alpha x beta) . (alpha x gamma))^2
-      // In 2D this is -(ab_cross * ag_cross)^2
-      const E0 = ab_cross * ag_cross * kTorsion;
+  // Gradient contributions (simplified from full derivation)
+  // dE0/da = terms involving alpha derivatives
+  for (let l = 0; l < 3; l++) {
+    // Gradient w.r.t. a (affects alpha)
+    const dAlpha_da = (alpha[l] * ab - beta[l]) * ag + ab * (alpha[l] * ag - gam[l]);
+    gradient[iA][l] += coeff * dAlpha_da / rAB;
+    gradient[iB][l] -= coeff * dAlpha_da / rAB;
 
-      // Simplified gradient (drives toward alignment)
-      const torsionForce = E0 * 2;
+    // Gradient w.r.t. c (affects beta)
+    const dBeta_dc = gam[l] - bg * beta[l] - ag * (alpha[l] - ab * beta[l]);
+    gradient[iC][l] += coeff * dBeta_dc / rCD;
+    gradient[iD][l] -= coeff * dBeta_dc / rCD;
 
-      // Apply force to move c,d to align with e,f
-      gradient[iC][0] += torsionForce * ay / betaLen;
-      gradient[iC][1] -= torsionForce * ax / betaLen;
-      gradient[iD][0] -= torsionForce * ay / betaLen;
-      gradient[iD][1] += torsionForce * ax / betaLen;
-
-      gradient[iE][0] -= torsionForce * ay / gammaLen;
-      gradient[iE][1] += torsionForce * ax / gammaLen;
-      gradient[iF][0] += torsionForce * ay / gammaLen;
-      gradient[iF][1] -= torsionForce * ax / gammaLen;
-    }
+    // Gradient w.r.t. e (affects gamma)
+    const dGamma_de = beta[l] - bg * gam[l] - ab * (alpha[l] - ag * gam[l]);
+    gradient[iE][l] += coeff * dGamma_de / rEF;
+    gradient[iF][l] -= coeff * dGamma_de / rEF;
   }
 
+  // Apply gradients (skip frozen vertex)
   for (let i = 0; i < graph.vertices.length; i++) {
-    if (i === torsionInteraction.dragging) continue;
-    graph.vertices[i][0] -= gradient[i][0] * gamma;
-    graph.vertices[i][1] -= gradient[i][1] * gamma;
+    if (i === torsionInteraction.vertexDragging) continue;
+    for (let d = 0; d < 3; d++) {
+      graph.vertices[i][d] -= gradient[i][d] * gamma;
+    }
   }
 }
 
-function torsionDraw(): void {
+function torsionDraw3D(): void {
   const ctx = torsionCtx2D;
   const w = torsionCanvas.width;
   const h = torsionCanvas.height;
-  const scale = 150;
-  const cx = w / 2, cy = h / 2;
 
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, w, h);
 
+  // Project all vertices
+  const projected = torsionGraph.vertices.map(v => torsionCamera.project(v, w, h));
+
+  // Sort edges by average depth for proper ordering
+  const edgesWithDepth = torsionGraph.edges.map(([i0, i1]) => ({
+    i0, i1,
+    depth: (projected[i0][2] + projected[i1][2]) / 2
+  }));
+  edgesWithDepth.sort((a, b) => b.depth - a.depth);
+
   // Draw edges
-  ctx.strokeStyle = '#333';
   ctx.lineWidth = 3;
-  for (const [i0, i1] of torsionGraph.edges) {
-    const p0 = torsionGraph.vertices[i0];
-    const p1 = torsionGraph.vertices[i1];
+  for (const { i0, i1 } of edgesWithDepth) {
+    const p0 = projected[i0];
+    const p1 = projected[i1];
+    // Color based on depth
+    const avgDepth = (p0[2] + p1[2]) / 2;
+    const brightness = Math.max(50, Math.min(200, 150 - avgDepth * 20));
+    ctx.strokeStyle = `rgb(${brightness}, ${brightness}, ${brightness})`;
     ctx.beginPath();
-    ctx.moveTo(cx + p0[0] * scale, cy - p0[1] * scale);
-    ctx.lineTo(cx + p1[0] * scale, cy - p1[1] * scale);
+    ctx.moveTo(p0[0], p0[1]);
+    ctx.lineTo(p1[0], p1[1]);
     ctx.stroke();
   }
 
+  // Sort vertices by depth
+  const verticesWithDepth = projected.map((p, i) => ({ p, i, depth: p[2] }));
+  verticesWithDepth.sort((a, b) => b.depth - a.depth);
+
   // Draw vertices
-  for (let i = 0; i < torsionGraph.vertices.length; i++) {
-    const p = torsionGraph.vertices[i];
-    const isHover = i === torsionInteraction.hoverIndex;
-    const isDragging = i === torsionInteraction.dragging;
+  for (const { p, i, depth } of verticesWithDepth) {
+    const size = Math.max(4, 10 - depth);
+    const isHover = i === torsionInteraction.hoverVertex;
+    const isDragging = i === torsionInteraction.vertexDragging;
 
-    ctx.fillStyle = isDragging ? '#f00' : (isHover ? '#0a0' : '#2366af');
+    if (isDragging) {
+      ctx.fillStyle = '#f00';
+    } else if (isHover) {
+      ctx.fillStyle = '#0a0';
+    } else {
+      const brightness = Math.max(30, Math.min(200, 100 - depth * 15));
+      ctx.fillStyle = `rgb(${brightness}, ${brightness + 50}, ${brightness + 100})`;
+    }
     ctx.beginPath();
-    ctx.arc(cx + p[0] * scale, cy - p[1] * scale, 8, 0, Math.PI * 2);
+    ctx.arc(p[0], p[1], size, 0, Math.PI * 2);
     ctx.fill();
+    ctx.strokeStyle = '#333';
+    ctx.lineWidth = 1;
+    ctx.stroke();
   }
-}
-
-function torsionGetVertex(x: number, y: number): number {
-  const w = torsionCanvas.width;
-  const h = torsionCanvas.height;
-  const scale = 150;
-  const cx = w / 2, cy = h / 2;
-
-  for (let i = 0; i < torsionGraph.vertices.length; i++) {
-    const p = torsionGraph.vertices[i];
-    const px = cx + p[0] * scale;
-    const py = cy - p[1] * scale;
-    const dx = x - px, dy = y - py;
-    if (dx * dx + dy * dy < 400) return i;
-  }
-  return -1;
 }
 
 torsionCanvas.addEventListener('mousedown', (e: MouseEvent) => {
   const rect = torsionCanvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
-  torsionInteraction.dragging = torsionGetVertex(x, y);
+
+  const vertexIdx = torsionGetVertex(x, y);
+  if (vertexIdx >= 0) {
+    torsionInteraction.vertexDragging = vertexIdx;
+    torsionCanvas.style.cursor = 'move';
+  } else {
+    torsionInteraction.orbitDragging = true;
+    torsionCanvas.style.cursor = 'grabbing';
+  }
+  torsionInteraction.lastX = e.clientX;
+  torsionInteraction.lastY = e.clientY;
 });
 
-torsionCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+function torsionMouseMove(e: MouseEvent) {
   const rect = torsionCanvas.getBoundingClientRect();
   const x = e.clientX - rect.left;
   const y = e.clientY - rect.top;
 
-  if (torsionInteraction.dragging >= 0) {
-    const w = torsionCanvas.width;
-    const h = torsionCanvas.height;
-    const scale = 150;
-    const cx = w / 2, cy = h / 2;
-    torsionGraph.vertices[torsionInteraction.dragging][0] = (x - cx) / scale;
-    torsionGraph.vertices[torsionInteraction.dragging][1] = -(y - cy) / scale;
+  if (torsionInteraction.vertexDragging >= 0) {
+    // Move vertex in screen plane
+    const dx = (e.clientX - torsionInteraction.lastX) * 0.01;
+    const dy = -(e.clientY - torsionInteraction.lastY) * 0.01;
+
+    // Get camera right and up vectors for screen-space movement
+    const view = torsionCamera.getViewMatrix();
+    const right = [view[0], view[4], view[8]];
+    const up = [view[1], view[5], view[9]];
+
+    const v = torsionGraph.vertices[torsionInteraction.vertexDragging];
+    v[0] += right[0] * dx + up[0] * dy;
+    v[1] += right[1] * dx + up[1] * dy;
+    v[2] += right[2] * dx + up[2] * dy;
+
+    torsionInteraction.lastX = e.clientX;
+    torsionInteraction.lastY = e.clientY;
+  } else if (torsionInteraction.orbitDragging) {
+    const dx = e.clientX - torsionInteraction.lastX;
+    const dy = e.clientY - torsionInteraction.lastY;
+    torsionCamera.rotate(dx, dy);
+    torsionInteraction.lastX = e.clientX;
+    torsionInteraction.lastY = e.clientY;
   } else {
-    torsionInteraction.hoverIndex = torsionGetVertex(x, y);
-    torsionCanvas.style.cursor = torsionInteraction.hoverIndex >= 0 ? 'move' : 'default';
+    // Hover detection
+    const vertexIdx = torsionGetVertex(x, y);
+    torsionInteraction.hoverVertex = vertexIdx;
+    torsionCanvas.style.cursor = vertexIdx >= 0 ? 'move' : 'grab';
+  }
+}
+
+torsionCanvas.addEventListener('mousemove', torsionMouseMove);
+window.addEventListener('mousemove', (e) => {
+  if (torsionInteraction.vertexDragging >= 0 || torsionInteraction.orbitDragging) {
+    torsionMouseMove(e);
   }
 });
 
 window.addEventListener('mouseup', () => {
-  torsionInteraction.dragging = -1;
+  torsionInteraction.orbitDragging = false;
+  torsionInteraction.vertexDragging = -1;
+  torsionCanvas.style.cursor = torsionInteraction.hoverVertex >= 0 ? 'move' : 'grab';
 });
+
+torsionCanvas.addEventListener('wheel', (e: WheelEvent) => {
+  e.preventDefault();
+  torsionCamera.distance *= Math.exp(e.deltaY * 0.001);
+  torsionCamera.distance = Math.max(2, Math.min(20, torsionCamera.distance));
+});
+
+torsionCanvas.style.cursor = 'grab';
 
 let torsionRunning = true;
 let torsionVisible = false;
@@ -1480,8 +1614,8 @@ let torsionVisible = false;
 function torsionLoop(): void {
   if (!torsionRunning) return;
   if (torsionVisible) {
-    torsionIterate(torsionGraph, 1.0, 1.0, 180, 0.5, torsionKTorsionInput.value);
-    torsionDraw();
+    torsionIterate3D(torsionGraph, 1.0, 1.0, 180, 0.5, torsionKTorsionInput.value);
+    torsionDraw3D();
   }
   requestAnimationFrame(torsionLoop);
 }
@@ -1491,7 +1625,7 @@ const torsionFigure = html`
 <figure id="torsion-figure">
   ${torsionControlsContainer}
   ${torsionCanvas}
-  <figcaption>Move the vertices above and observe that the addition of torsional stiffness keeps the above structure planar.</figcaption>
+  <figcaption>Drag vertices to move them, drag elsewhere to rotate. The torsional spring drives the structure toward a planar configuration. Scroll to zoom.</figcaption>
 </figure>`;
 
 const torsionObserver = new IntersectionObserver(entries => {
