@@ -1548,7 +1548,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 720px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Instanced Lines</title>  <script type="module" crossorigin src="/notebooks/assets/index-c0chx3IK.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Instanced Lines</title>  <script type="module" crossorigin src="/notebooks/assets/index-Jp7BHg2T.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1576,8 +1576,8 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"><div><h1>WebGPU Instanced Lines</h1>
-<p><a href="https://www.npmjs.com/package/webgpu-instanced-lines">webgpu-instanced-lines</a> is a library for high-performance, customizable line rendering for WebGPU using instanced triangle strips. It is a WebGPU port of <a href="https://github.com/rreusser/regl-gpu-lines">regl-gpu-lines</a>. This notebook is where I originally developed the implementation. The source now lives on <a href="https://github.com/rreusser/webgpu-instanced-lines">GitHub</a>.</p>
+    <main><div id="cell-2" class="observablehq observablehq--cell"><div><p>I’ve made various attempts over the years to produce a robust line rendering library, at least robust and flexible enough for <em>my</em> needs. Something particularly interesting to me has been getting details of joins and caps right without sacrificing flexibility. I want custom attributes, custom shaders, in-shader projection and line width computation. Though I understand why it’s critical in some places, perfect handling of complex joins and self-intersections is much less interesting to me.</p>
+<p>I’ll spare you details of all the intermediate attempts; <a href="https://www.npmjs.com/package/webgpu-instanced-lines">webgpu-instanced-lines</a> is a library for high-performance, customizable line rendering for WebGPU using instanced triangle strips. It’s mostly a direct WebGPU port of <a href="https://github.com/rreusser/regl-gpu-lines">regl-gpu-lines</a>. This notebook is where I originally developed the implementation, but the source now lives on <a href="https://github.com/rreusser/webgpu-instanced-lines">GitHub</a>.</p>
 <h2 id="interactive-demo" tabindex="-1"><a href="#interactive-demo">Interactive Demo</a></h2>
 <p>Explore the line rendering options with interactive demo below. Drag handles to edit vertices, drag the background to pan, and scroll to zoom. Enable <strong>Debug view</strong> to see the underlying triangle strip structure. Alternating colors indicate separate instances.</p>
 </div></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"><div><h2 id="rationale" tabindex="-1"><a href="#rationale">Rationale</a></h2>
