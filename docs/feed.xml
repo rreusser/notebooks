@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Sun, 25 Jan 2026 06:06:06 GMT</lastBuildDate>
+    <lastBuildDate>Sun, 25 Jan 2026 06:07:07 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Multi-Scale Turing Patterns in WebGPU</title>
@@ -38,6 +38,14 @@
       <pubDate>Tue, 13 Jan 2026 08:00:00 GMT</pubDate>
       <description>Interactive mathematical plotting in Observable Notebook Kit</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/plot-with-zoom.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Toiletpaperfullerenes and Charmin Nanotubes</title>
+      <link>https://rreusser.github.io/notebooks/charmin-nanotubes-and-toiletpaperfullerenes/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/charmin-nanotubes-and-toiletpaperfullerenes/</guid>
+      <pubDate>Tue, 13 Jan 2026 08:00:00 GMT</pubDate>
+      <description>Constructing fullerene models with toilet paper tubes</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/charmin-nanotubes-and-toiletpaperfullerenes.jpg" medium="image" />
     </item>
     <item>
       <title>Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU</title>
