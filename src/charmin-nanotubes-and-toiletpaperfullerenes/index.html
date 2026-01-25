@@ -154,7 +154,7 @@ display(controlsContainer);
   </script>
 
   <script id="secondary-controls" type="text/x-typescript">
-const secondaryControlsContainer = html`<div class="controls-panel secondary-controls-panel"></div>`;
+const secondaryControlsContainer = html`<div id="secondary-controls" class="controls-panel secondary-controls-panel"></div>`;
 
 function ctrl2(input: HTMLElement) {
   secondaryControlsContainer.appendChild(input);
@@ -454,7 +454,7 @@ display(expandable(figure, {
   width: 640,
   height: 576,
   padding: [0, 0],
-  controls: '#primary-controls',
+  controls: ['#primary-controls', '#secondary-controls'],
   state: state.expandedState,
   onResize: (content, w, h, expanded) => {
     // Size the container and trigger canvas resize
