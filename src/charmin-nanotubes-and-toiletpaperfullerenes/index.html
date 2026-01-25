@@ -134,7 +134,7 @@ const presetGraphs: Record<string, {vertices: number[][], edges: number[][]}> = 
   </script>
 
   <script id="controls-container" type="text/x-typescript">
-const controlsContainer = html`<div class="controls-panel"></div>`;
+const controlsContainer = html`<div id="primary-controls" class="controls-panel"></div>`;
 
 function ctrl(input: HTMLElement) {
   controlsContainer.appendChild(input);
@@ -454,7 +454,7 @@ display(expandable(figure, {
   width: 640,
   height: 576,
   padding: [0, 0],
-  controls: '.controls-panel',
+  controls: '#primary-controls',
   state: state.expandedState,
   onResize: (content, w, h, expanded) => {
     // Size the container and trigger canvas resize
