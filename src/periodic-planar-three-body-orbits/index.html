@@ -627,7 +627,6 @@
       });
 
       const jacobiWrapper = document.createElement('figure');
-      jacobiWrapper.style.margin = '0';
       jacobiWrapper.appendChild(jacobiFig.node);
       const jacobiCaption = document.createElement('figcaption');
       jacobiCaption.textContent = 'Jacobi coordinates. Drag the masses to see the effect in shape space.';
@@ -646,7 +645,6 @@
       canvas.style.cursor = 'grab';
 
       const sphereWrapper = document.createElement('figure');
-      sphereWrapper.style.margin = '0';
       sphereWrapper.appendChild(canvas);
       const sphereCaption = document.createElement('figcaption');
       sphereCaption.textContent = 'Shape sphere with collision points. Drag to rotate.';

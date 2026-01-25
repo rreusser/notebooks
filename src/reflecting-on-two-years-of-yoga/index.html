@@ -18,7 +18,7 @@
   </script>
   <script id="499" type="text/x-typescript">
     display(html`
-    <figure style="padding-top:3em;padding-bottom:3em;">
+    <figure>
     ${Calendar(events24, {
       fy: { reverse: false },
       width: width / respScale,
@@ -82,7 +82,7 @@
     //cal.style.transformOrigin = 'center left';
     //cal.style.transform = `scale(${respScale},${respScale})`;
     display(html`
-    <figure style="padding-top:3em;padding-bottom:3em;">
+    <figure>
     ${cal}
     <figcaption>Classes throughout 2025. Hover over dates to inspect.</figcaption>
     </figure>`);
@@ -91,14 +91,13 @@
     The environment was also a nice change. Almost my entire adult life has been spent in places where I am the default: white, male, working in software or engineering. In yoga, I’m often unsure of myself, sometimes literally and figuratively out of place. The only obvious thing people really have in common is that they showed up to struggle for an hour, which is nice.
   </script>
   <script id="517" type="text/markdown">
-    Certainly one thing that has contributed to my attendance record is when I started attending [Jody Hahn](https://jodyhahnyoga.com/)’s classes. The wrong instructor focuses your attention on your limitations<sup><a id="footnote-2-src" href="#footnote-2">[2]</a></sup>. The right instructor focuses your energy on what’s accessible to you. In the unlikely event she's reading this, hey Jody 👋. Gosh, she’s a great instructor. She said she'd received at least one bad Yelp review for providing too much assistance, but her attention to detail is precisely the thing that finally tipped the scales and helped me feel at home rather than out of my element in the yoga studio.
+    Certainly one thing that has contributed to my attendance record is when I started attending [Jody Hahn](https://jodyhahnyoga.com/)’s classes. The wrong instructor focuses your attention on your limitations. The right instructor focuses your energy on what’s accessible to you. In the unlikely event she's reading this, hey Jody 👋. Gosh, she’s a great instructor. She said she'd received at least one bad Yelp review for providing too much assistance, but her attention to detail is precisely the thing that finally tipped the scales and helped me feel at home rather than out of my element in the yoga studio.
   </script>
   <script id="523" type="text/markdown">
     In aggregate, and apart from some traveling, I’ve transitioned from attending about once per week to about five times per week.
   </script>
   <script id="508" type="text/x-typescript">
-    display(html`
-    ${Plot.plot({
+    const fig = Plot.plot({
       color: {
         type: "categorical",
         range: scheme,
@@ -129,11 +128,12 @@
         ),
         Plot.ruleY([0])
       ]
-    })}`)
+    });
+    fig.style.margin = 0;
+    display(fig);
   </script>
   <script id="496" type="text/x-typescript">
-    display(html`<div style="margin-bottom:4em;">
-    ${Plot.plot({
+    const fig = Plot.plot({
       color: {
         type: "categorical",
         range: scheme,
@@ -164,8 +164,12 @@
         ),
         Plot.ruleY([0])
       ]
-    })}
-    ${color}</div>`);
+    });
+    fig.style.marginTop = 0;
+    fig.style.marginBottom = '3em';
+    color.style.marginTop = '1em';
+    fig.appendChild(color);
+    display(fig);
   </script>
   <script id="520" type="text/markdown">
     So I guess the obvious question is whether it’s had any effect, whether I’m flexible or good at yoga now or something.
@@ -179,8 +183,6 @@
   <script id="531" type="text/markdown">
     ---
     <small><a href="#footnote-1-src" id="footnote-1">[1]</a>: Still is.</small>
-
-    <small><a href="#footnote-2-src" id="footnote-2">[2]</a>: Or worse, is not-even-subtly dickish, but whatever, water under the bridge pose, I won’t get into that.</small>
   </script>
   <script id="489" type="text/x-typescript">
     import {Calendar} from "observable:@observablehq/calendar-component"

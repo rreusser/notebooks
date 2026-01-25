@@ -9,6 +9,7 @@
   <meta name="subject" content="Fullerenes">
   <meta name="description" content="Fullerenes">
   <meta property="og:description" content="Fullerenes">
+  <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1253,15 +1254,40 @@ main h6 {
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
 }
+    main summary {
+  cursor: pointer;
+}
+    main details {
+  margin: 1.5em 0;
+}
+    main details[open] {
+  border-left: 3px solid #ccc;
+  padding-left: 1em;
+}
+    main details[open] > summary {
+  margin-left: -1em;
+  padding-left: 1em;
+  border-left: 3px solid transparent;
+  margin-bottom: 0.5em;
+}
     main figure {
+  display: table;
+  margin: 4em auto;
   max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: max-content;
 }
     main figure figcaption {
+  display: table-caption;
+  caption-side: bottom;
   text-align: left;
-  align-self: stretch;
+  margin-top: 1em;
+}
+    main figure.fluid {
+  width: auto;
+}
+    main figure.fluid figcaption {
+  width: auto;
+  min-width: 0;
 }
     hr {
   margin: 3em 0;
@@ -1316,6 +1342,7 @@ main h4,
 main h5,
 main h6 {
   font-weight: 400;
+  margin-bottom: 1em;
 }
     main h2 {
   margin-top: 3em;
@@ -1431,12 +1458,26 @@ main h6 {
   color: white;
   font-family: "Open Sans", sans-serif;
   padding: 30px 20px;
-  text-align: right;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
     .footer__attrib {
-  max-width: 640px;
-  margin: auto;
-
+}
+    .footer__rss[href],
+.footer__rss[href]:visited {
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+    .footer__rss:hover {
+  opacity: 0.8;
+}
+    .footer__rss .icon {
+  width: 14px;
+  height: 14px;
 }
     .index {
   padding: 0;
@@ -1504,7 +1545,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Toiletpaperfullerenes and Charmin Nanotubes</title>  <script type="module" crossorigin src="/notebooks/assets/index-Cl98jlHT.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Toiletpaperfullerenes and Charmin Nanotubes</title>  <script type="module" crossorigin src="/notebooks/assets/index-BbqLTaaY.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1532,8 +1573,35 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Interactive mesh editor for trivalent graphs (max 3 edges per vertex). Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection. Use keyboard shortcuts to edit.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-comment">// Container - will be sized by expandable's onResize callback</span>
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Toilet paper tubes have the curious property that you can flatten them, cut out loops, and link the loops together without fasteners.</p>
+<p>For a couple years now, I’ve hoarded every used cardboard toilet paper tube that’s passed through our home. Feeling inspired after seeing a tweet (with apologies, author long since forgotten), I stockpiled tubes and built a <a href="https://en.wikipedia.org/wiki/Buckminsterfullerene">Buckyball</a>. Vines in the bedroom now climb a six foot <a href="https://en.wikipedia.org/wiki/Carbon_nanotube">carbon nanotube</a> trellis (<em>Charmin nanotube</em>, if you will, and not exactly <em>nano</em> either, for that matter). And <a href="https://mastodon.social/@alisonmartin57">Alison Martin’s work</a> continuously inspires me.</p>
+<p><em>Update: I’ve tracked down some precedent, though perhaps not the actual tweet that inspired me as this seems to be a popular project! See tweets by <a href="https://twitter.com/Ian_Willey/status/1119257024649474049">@Ian_Willey</a> and—with excellent instructions—<a href="https://twitter.com/mrallanmaths/status/1125438241774166017">@mrallanmaths</a>.</em></p>
+<p>This notebook represents my attempt to step things up. It provides some basic instructions and suggestions, as well as a simulator to help the toilet-paper-tube-constrained make the best use of what they have. In hindsight, the simulation certainly wasn’t necessary. And at any rate, there’s really no upper limit to tackling this with trial and error; the recyclability means there’s no need to open a family dialogue about where to store the large geometric constructions that result.</p>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"><div><h2 id="fabrication" tabindex="-1"><a href="#fabrication">Fabrication</a></h2>
+<p>My brand is regular Trader Joe’s toilet paper, though I have no reason to believe anything about the brand is particularly important, beyond consistency of diameter—with the exception of those cowards who make tube-free toilet paper rolls. Those won’t work. I’ve considered side-stepping material collection and waiting to buy tag board when shelter-in-place eases, though to be honest, the recycled nature of the raw materials is a primary factor which draws me to this project.</p>
+<p>Accumulating raw materials is simple. Flatten the tubes and—if you live with family—stash them somewhere a family member is unlikely to find them, lest you be required to explain yourself. Conversely, you may wish to avoid much wailing and gnashing of teeth and discuss your hoarding early on to prevent your stash from getting casually recycled.</p>
+<p>The pattern below illustrates the required cuts. The angle required for three edges to join gracefully is , which makes the measurements easy. I’ve found a far easier method than measuring every tube though is to add opposing marks to one tube and use it as a template. I get about eight strips per tube.</p>
+<p><em>Update: I’ve trended toward thicker strips, as it makes the final constructions a bit more robust. The only limit on thickness is they can’t be so thick that the joints on opposite ends interfere and prevent linking. Further simplifying, even cutting strips at flat 0° angles produces a visually appealing look and may save a bit of trouble.</em></p>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"><div><p>Assembling the joints is straightforward. The pieces lock together in pleasing  angles, requiring no additional fasteners up until the very last piece of the model, which requires a cut and some tape.</p>
+<p>The illustration below shows how the joints interlock. I’d give more instruction, but if you actually want to do this, there’s no better way to learn than through experimentation. After some fumbling around, I learned to always attach new pieces by branching off in the same direction, after which it becomes quite repetitive.</p>
+</div></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"><div><p>Assembling larger patterns is where things start to get frustrating and difficult. I have little advice here except to rely heavily on patterns, examples, and patience. And perhaps the simulator below. For inspiration, the best paper I found is <a href="https://onlinelibrary.wiley.com/doi/full/10.1002/wcms.1207">“The Topology of Fullerenes”</a> by Schwerdtfeger, Wirz, and Avery.</p>
+<p>In my initial attempt, I started making a torus and failed to appreciate just how much of a material shortage I’d encounter. After some iteration though, I tried out different constructions. My favorite so far is our rabbit tunnel.</p>
+</div></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"><div><p>With quiet sheltered-in-place weekends and little access to toilet paper (at which point these constructions quickly became the least of my worries), I dismantled my initial constructions, explored construction via simulation, and eventually settled on the model pictured at the top of the notebook. The rest of this notebook steps through simulation of these models.</p>
+<p>I now return to the material collection phase.</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"><div><h2 id="simulation" tabindex="-1"><a href="#simulation">Simulation</a></h2>
+<p>We’ll get right to the point and present the finished simulator, followed by an explanation of how it works. It’s really non-scientific in the sense that I’ve pulled forces and energies out of the sky to get it to look nice. It’s not without some physical justification, but there’s little motivation by legit physical chemistry, and the optimization method is staggeringly inefficient.</p>
+<p>We represent the model as a graph consisting of vertices and edges. The topology follows one rule:</p>
+<ul>
+<li>Every vertex has no more than three outgoing edges.</li>
+</ul>
+<p>This rule is enough to constrain the topology, though it says nothing about the particular geometry of the result in three-dimensional space.</p>
+<p><strong>Notes</strong>:</p>
+<ul>
+<li>You’ll need a desktop computer to use the simulator.</li>
+<li>The genus 3 torus comes from the lovely <a href="https://twitter.com/alisonmartin57/status/1254050723077279745">construction of Alison Martin</a>, whose work has certainly inspired a lot of this exploration to begin with!</li>
+<li>Most of the other constructions come from the paper listed above, <a href="https://onlinelibrary.wiley.com/doi/full/10.1002/wcms.1207">“The Topology of Fullerenes”</a> by Schwerdtfeger, Wirz, and Avery.</li>
+</ul>
+</div></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><pre data-language="ts"><code class="language-ts"><span class="tok-comment">// Container - will be sized by expandable's onResize callback</span>
 <span class="tok-keyword">const</span> <span class="tok-definition">container</span> = <span class="tok-variable">html</span><span class="tok-string">`&lt;div id="mesh-canvas" style="width: 100%; height: 100%;"&gt;&lt;/div&gt;`</span>;
 
 <span class="tok-comment">// Initialize WebGL context if needed</span>
@@ -1555,7 +1623,11 @@ main h6 {
 <span class="tok-variable">state</span>.<span class="tok-definition">camera</span>.<span class="tok-definition">camera</span>,
 {
   <span class="tok-definition">projectionView</span>: <span class="tok-variable">state</span>.<span class="tok-definition">camera</span>.<span class="tok-definition">projectionView</span>,
-  <span class="tok-definition">onChange</span>: () =&gt; { <span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>; }
+  <span class="tok-definition">onChange</span>: () =&gt; {
+    <span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">true</span>;
+    <span class="tok-variable">state</span>.<span class="tok-definition">meshVersion</span>++;
+    <span class="tok-variable">state</span>.<span class="tok-definition">meshVersionListeners</span>.<span class="tok-definition">forEach</span>(<span class="tok-definition">listener</span> =&gt; <span class="tok-variable">listener</span>());
+  }
 }
   );
 }
@@ -1594,13 +1666,13 @@ main h6 {
   <span class="tok-keyword">if</span> (!<span class="tok-variable">visible</span> || !<span class="tok-variable">state</span>.<span class="tok-definition">mesh</span>) <span class="tok-keyword">return</span>;
 
   <span class="tok-variable">state</span>.<span class="tok-definition">camera</span>!.<span class="tok-definition">tick</span>(({ <span class="tok-definition">dirty</span>: <span class="tok-definition">cameraDirty</span> }) =&gt; {
-<span class="tok-keyword">const</span> <span class="tok-definition">shouldRender</span> = <span class="tok-variable">simulate</span> || <span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> || <span class="tok-variable">cameraDirty</span> || <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">dirty</span>;
+<span class="tok-keyword">const</span> <span class="tok-definition">shouldRender</span> = <span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">simulate</span> || <span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> || <span class="tok-variable">cameraDirty</span> || <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">dirty</span>;
 <span class="tok-keyword">if</span> (!<span class="tok-variable">shouldRender</span>) <span class="tok-keyword">return</span>;
 
 <span class="tok-comment">// Run physics simulation</span>
-<span class="tok-keyword">if</span> (<span class="tok-variable">simulate</span> &amp;&amp; <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>) {
+<span class="tok-keyword">if</span> (<span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">simulate</span> &amp;&amp; <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>) {
   <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>.<span class="tok-definition">frozenVertex</span> = <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">activeVertexIndex</span> ?? -<span class="tok-literal">1</span>;
-  <span class="tok-keyword">for</span> (<span class="tok-keyword">let</span> <span class="tok-definition">i</span> = <span class="tok-literal">0</span>; <span class="tok-variable">i</span> &lt; <span class="tok-variable">iterations</span>; <span class="tok-variable">i</span>++) {
+  <span class="tok-keyword">for</span> (<span class="tok-keyword">let</span> <span class="tok-definition">i</span> = <span class="tok-literal">0</span>; <span class="tok-variable">i</span> &lt; <span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">iterations</span>; <span class="tok-variable">i</span>++) {
     <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>.<span class="tok-definition">iterate</span>();
   }
 }
@@ -1608,13 +1680,20 @@ main h6 {
 <span class="tok-comment">// Clear and render</span>
 <span class="tok-variable">state</span>.<span class="tok-definition">regl</span>!.<span class="tok-definition">clear</span>({ <span class="tok-definition">color</span>: [<span class="tok-literal">1</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1</span>, <span class="tok-literal">1</span>], <span class="tok-definition">depth</span>: <span class="tok-literal">1</span> });
 
+<span class="tok-keyword">const</span> <span class="tok-definition">selectedIdx</span> = <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">selectedVertexIndex</span> ?? -<span class="tok-literal">1</span>;
+<span class="tok-keyword">const</span> <span class="tok-definition">hasFocus</span> = <span class="tok-variable">selectedIdx</span> &gt;= <span class="tok-literal">0</span>;
+<span class="tok-keyword">const</span> <span class="tok-definition">focusCenter</span> = <span class="tok-variable">hasFocus</span> ? <span class="tok-variable">state</span>.<span class="tok-definition">mesh</span>!.<span class="tok-definition">getPosition</span>(<span class="tok-variable">selectedIdx</span>) : [<span class="tok-literal">0</span>, <span class="tok-literal">0</span>, <span class="tok-literal">0</span>];
+
 <span class="tok-variable">state</span>.<span class="tok-definition">renderer</span>?.<span class="tok-definition">render</span>(<span class="tok-variable">state</span>.<span class="tok-definition">mesh</span>!, <span class="tok-variable">state</span>.<span class="tok-definition">physics</span>!, {
-  <span class="tok-definition">pointSize</span>,
-  <span class="tok-definition">strainColoring</span>,
-  <span class="tok-definition">showFaces</span>,
-  <span class="tok-definition">faceOpacity</span>,
-  <span class="tok-definition">selectedVertexIndex</span>: <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">selectedVertexIndex</span> ?? -<span class="tok-literal">1</span>,
-  <span class="tok-definition">hoverVertexIndex</span>: <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">hoverVertexIndex</span> ?? -<span class="tok-literal">1</span>
+  <span class="tok-definition">pointSize</span>: <span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">pointSize</span>,
+  <span class="tok-definition">strainColoring</span>: <span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">strainColoring</span>,
+  <span class="tok-definition">showFaces</span>: <span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">showFaces</span>,
+  <span class="tok-definition">faceOpacity</span>: <span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">faceOpacity</span>,
+  <span class="tok-definition">selectedVertexIndex</span>: <span class="tok-variable">selectedIdx</span>,
+  <span class="tok-definition">hoverVertexIndex</span>: <span class="tok-variable">state</span>.<span class="tok-definition">interactions</span>?.<span class="tok-definition">hoverVertexIndex</span> ?? -<span class="tok-literal">1</span>,
+  <span class="tok-definition">depthFalloff</span>: <span class="tok-variable">hasFocus</span>,
+  <span class="tok-definition">depthFalloffWidth</span>: <span class="tok-variable">state</span>.<span class="tok-definition">renderParams</span>.<span class="tok-definition">depthFalloffWidth</span>,
+  <span class="tok-definition">focusCenter</span>
 });
 
 <span class="tok-variable">state</span>.<span class="tok-definition">dirty</span> = <span class="tok-literal">false</span>;
@@ -1658,9 +1737,88 @@ ${<span class="tok-variable">container</span>}
 <span class="tok-variable">container</span>.<span class="tok-definition">style</span>.<span class="tok-definition">height</span> = <span class="tok-variable">expanded</span> ? <span class="tok-string">`</span>${<span class="tok-variable">h</span> - <span class="tok-literal">60</span>}<span class="tok-string">px`</span> : <span class="tok-string">`</span>${<span class="tok-variable">h</span>}<span class="tok-string">px`</span>;  <span class="tok-comment">// Leave room for caption</span>
 <span class="tok-variable">resizeCanvas</span>();
   }
-}));</code></pre><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div></main>
+}));</code></pre><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"><div><h2 id="physical-model" tabindex="-1"><a href="#physical-model">Physical model</a></h2>
+<p>The sections below outline how the simulation works. We take a simple approach to computing physical configuration in three dimensions. We write down an energy function that’s minimized by nice, physically pleasant configurations, then directly minimize the energy via <a href="https://en.wikipedia.org/wiki/Gradient_descent">gradient descent</a> on the vertex positions.</p>
+<p>The concept of gradient descent is simple. We compute the change in energy with respect to independent changes in each vertex position, then move each vertex slightly downhill, opposite the direction of the gradient. There are more efficient ways to minimize energy, but we simply take a simultaneous small step for all vertices.</p>
+</div></div><div id="cell-22" class="observablehq observablehq--cell"></div><div id="cell-23" class="observablehq observablehq--cell"><div><h3 id="mathematical-statement" tabindex="-1"><a href="#mathematical-statement">Mathematical Statement</a></h3>
+<p>We write an arbitrary energy function for our graph that maps the configuration to a single real number,</p>
+<p>where  and  are the  vertex and  edge of the graph, respectively.  here is any useful function, picked out of the sky, such that it’s minimized when the graph reaches a desirable configuration. We compute the gradient with respect to the <em>x-y-z</em> coordinates of all  vertex positions,</p>
+<p>In the sense of rolling down a hill, this gradient points uphill so that we update the solution in the direction of a small downhill step. We compute the  step of vertex  as</p>
+<p>where  is some small number.</p>
+<p>It’s no more complicated than that, but we must now select a function .</p>
+</div></div><div id="cell-24" class="observablehq observablehq--cell"><div><h2 id="axial-stiffness" tabindex="-1"><a href="#axial-stiffness">Axial stiffness</a></h2>
+<p>We start simple and add lengthwise (axial) stiffness to enforce uniform length. Given an edge connecting vertices  and , we denote the length of the edge  and the equilibrium length .</p>
+</div></div><div id="cell-25" class="observablehq observablehq--cell"></div><div id="cell-26" class="observablehq observablehq--cell"><div><p>The minimum-energy configuration occurs when , so we construct an energy function</p>
+<p>where  is the axial stiffness. Note that  when . Since  is strictly non-negative, this is just fancy way of saying that the energy can’t get any lower than when the length is equal to the desired length; it’s the bottom of the hill.</p>
+<p>If we differentiate this function with respect to the position of the two endpoints, then we obtain the gradient. For example, the energy gradient with respect to the coordinates of vertex  is</p>
+<p>The gradient with respect to the coordinates of vertex  are equal and opposite.</p>
+</div></div><div id="cell-27" class="observablehq observablehq--cell"></div><div id="cell-28" class="observablehq observablehq--cell"></div><div id="cell-29" class="observablehq observablehq--cell"><div><h2 id="dihedral-stiffness" tabindex="-1"><a href="#dihedral-stiffness">Dihedral stiffness</a></h2>
+</div></div><div id="cell-30" class="observablehq observablehq--cell"></div><div id="cell-31" class="observablehq observablehq--cell"><div><p>Axial stiffness alone clearly does not accomplish our goal of maintaining pleasant configurations. We now add an additional type of stiffness: <em>dihedral stiffness</em>. The rationale is that edges meet at a preferred angle, . We therefore define the energy function</p>
+<p>I’m sure chemistry has a lot to say about this topic, but it seems to be the case based on the structures produced that  is the desired pairwise dihedral angle, and that angles of  are simply the resulting compromise wherever three edges meet a vertex and result in three pairwise dihedral angles.</p>
+</div></div><div id="cell-32" class="observablehq observablehq--cell"></div><div id="cell-33" class="observablehq observablehq--cell"></div><div id="cell-34" class="observablehq observablehq--cell"><div><h2 id="torsional-stiffness" tabindex="-1"><a href="#torsional-stiffness">Torsional stiffness</a></h2>
+<p>Finally we tackle torsion about an edge.</p>
+</div></div><div id="cell-35" class="observablehq observablehq--cell"></div><div id="cell-36" class="observablehq observablehq--cell"><div><p>The figure above shows six adjacent vertices connected by an edge. Torsional stiffness of the cardboard produces a rotational force which causes vertices , , , and  to rotate toward flat.</p>
+</div></div><div id="cell-37" class="observablehq observablehq--cell"></div><div id="cell-38" class="observablehq observablehq--cell"><div><p>Without the sort of physical justification required for a scientifically valid molecular dynamics simulation, we simply pick an energy function that’s minimized when the outer vertices are not twisted. We therefore define the unit vectors , , and :</p>
+<p>and define the energy function:</p>
+<p>Due to the square, this function takes the value  when  is either parallel <em>or</em> antiparallel to . In words, this means that the value is minimized when vertices , , , and  exhibit no rotation relative to the central edge, .</p>
+<p>Note importantly that if we did not normalize vectors , , and , then  would depend upon the distance between the vertices, and the simulation would either blow up or collapse to a point, depending on the sign of . As it stands though, the constraint that , , and  are unit vectors produces a strictly torsional force.</p>
+<p>Computing the gradient of the above function without an explosion of terms is a bit challenging. I spent a couple sheets of paper giving it a try before recalling why <a href="https://en.wikipedia.org/wiki/Einstein_notation">Einstein summation notation</a> is so useful in vector calculus.</p>
+<p>The page below illustrates the full derivation of all eighteen components of the gradient.</p>
+</div></div><div id="cell-39" class="observablehq observablehq--cell"></div><div id="cell-40" class="observablehq observablehq--cell"><div><details>
+<summary>Full derivation of the torsional energy gradient</summary>
+<h3 id="setup" tabindex="-1"><a href="#setup">Setup</a></h3>
+<p>Consider an edge connecting vertices  and , with additional vertices ,  adjacent to , and vertices ,  adjacent to :</p>
+<figure style="margin: 1em 0;">
+  <img src="/notebooks/assets/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885-xeFWATvb.png" style="max-width: min(100%, 500px)">
+</figure>
+<p>We define unit vectors along each edge:</p>
+<p>where , etc.</p>
+<h3 id="energy-function" tabindex="-1"><a href="#energy-function">Energy Function</a></h3>
+<p>The torsional energy measures misalignment between the planes defined by branches on either side of the central edge. We define:</p>
+<p>This is minimized (equals ) when  is parallel or antiparallel to , meaning the branches are coplanar.</p>
+<h3 id="simplification-using-bac-cab" tabindex="-1"><a href="#simplification-using-bac-cab">Simplification Using BAC-CAB</a></h3>
+<p>Using the <a href="https://en.wikipedia.org/wiki/Triple_product#Vector_triple_product">BAC-CAB identity</a> for the scalar triple product:</p>
+<p>Since  is a unit vector (), this simplifies to:</p>
+<p>so that .</p>
+<p>In Einstein summation notation (repeated indices imply summation):</p>
+<h3 id="derivatives-of-unit-vectors" tabindex="-1"><a href="#derivatives-of-unit-vectors">Derivatives of Unit Vectors</a></h3>
+<p>To compute gradients, we need the derivatives of unit vectors with respect to their endpoint positions. For :</p>
+<p>where  is the Kronecker delta. The analogous expressions hold for  and .</p>
+<h3 id="gradient-computation" tabindex="-1"><a href="#gradient-computation">Gradient Computation</a></h3>
+<p>Applying the chain rule to :</p>
+<p>Since , we differentiate term by term.</p>
+<p><strong>Gradient with respect to :</strong></p>
+<p>Only  depends on :</p>
+<p>Substituting the derivative:</p>
+<p>Multiplying by  and rearranging terms (noting that ):</p>
+<p><strong>Gradient with respect to :</strong></p>
+<p>The derivative  has opposite sign:</p>
+<p>Note that , as expected since shifting both  and  together should not change the energy.</p>
+<p><strong>Gradient with respect to :</strong></p>
+<p>Only  depends on . Since :</p>
+<p>Multiplying by  and simplifying:</p>
+<p><strong>Gradient with respect to :</strong></p>
+<p>Since , we have :</p>
+<p><strong>Gradient with respect to :</strong></p>
+<p>Only  depends on . Since :</p>
+<p>Multiplying by  and simplifying:</p>
+<p><strong>Gradient with respect to :</strong></p>
+<p>Since , we have :</p>
+<h3 id="summary" tabindex="-1"><a href="#summary">Summary</a></h3>
+<p>These eighteen gradient components (three spatial coordinates for each of six vertices) drive the simulation toward configurations where the branches on either side of each edge are coplanar. The normalization of , , and  ensures that these forces are purely torsional and do not depend on edge lengths.</p>
+</details></div></div><div id="cell-41" class="observablehq observablehq--cell"></div><div id="cell-42" class="observablehq observablehq--cell"></div><div id="cell-43" class="observablehq observablehq--cell"></div></main>
   </div>
-  <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
+  <footer>
+    <div class="footer__attrib">© 2026 Ricky Reusser</div>
+    <a href="/notebooks/feed.xml" class="footer__rss">
+      <svg class="icon" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+        <circle cx="6.5" cy="17.5" r="2.5"></circle>
+        <path d="M4 4a16 16 0 0 1 16 16h-4A12 12 0 0 0 4 8V4z"></path>
+        <path d="M4 10a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6v-4z"></path>
+      </svg>
+      RSS
+    </a>
+  </footer>
 
 
 <style type="text/css">:root {

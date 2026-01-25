@@ -12,6 +12,7 @@
   <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.jpg">
   <meta name="twitter:card" content="summary_large_image">
   <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/webgpu-lines.jpg">
+  <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1256,15 +1257,40 @@ main h6 {
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
 }
+    main summary {
+  cursor: pointer;
+}
+    main details {
+  margin: 1.5em 0;
+}
+    main details[open] {
+  border-left: 3px solid #ccc;
+  padding-left: 1em;
+}
+    main details[open] > summary {
+  margin-left: -1em;
+  padding-left: 1em;
+  border-left: 3px solid transparent;
+  margin-bottom: 0.5em;
+}
     main figure {
+  display: table;
+  margin: 4em auto;
   max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: max-content;
 }
     main figure figcaption {
+  display: table-caption;
+  caption-side: bottom;
   text-align: left;
-  align-self: stretch;
+  margin-top: 1em;
+}
+    main figure.fluid {
+  width: auto;
+}
+    main figure.fluid figcaption {
+  width: auto;
+  min-width: 0;
 }
     hr {
   margin: 3em 0;
@@ -1319,6 +1345,7 @@ main h4,
 main h5,
 main h6 {
   font-weight: 400;
+  margin-bottom: 1em;
 }
     main h2 {
   margin-top: 3em;
@@ -1434,12 +1461,26 @@ main h6 {
   color: white;
   font-family: "Open Sans", sans-serif;
   padding: 30px 20px;
-  text-align: right;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
     .footer__attrib {
-  max-width: 640px;
-  margin: auto;
-
+}
+    .footer__rss[href],
+.footer__rss[href]:visited {
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+    .footer__rss:hover {
+  opacity: 0.8;
+}
+    .footer__rss .icon {
+  width: 14px;
+  height: 14px;
 }
     .index {
   padding: 0;
@@ -1507,7 +1548,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 720px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Instanced Lines</title>  <script type="module" crossorigin src="/notebooks/assets/index-BE6mXOOr.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Instanced Lines</title>  <script type="module" crossorigin src="/notebooks/assets/index-c0chx3IK.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1535,10 +1576,11 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p><a href="https://www.npmjs.com/package/webgpu-instanced-lines">webgpu-instanced-lines</a> is a library for high-performance, customizable line rendering for WebGPU using instanced triangle strips. It is a WebGPU port of <a href="https://github.com/rreusser/regl-gpu-lines">regl-gpu-lines</a>. This notebook is where I originally developed the implementation. The source now lives on <a href="https://github.com/rreusser/webgpu-instanced-lines">GitHub</a>.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"><div><h2 id="interactive-demo" tabindex="-1"><a href="#interactive-demo">Interactive Demo</a></h2>
+    <main><div id="cell-1" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"><div><h1>WebGPU Instanced Lines</h1>
+<p><a href="https://www.npmjs.com/package/webgpu-instanced-lines">webgpu-instanced-lines</a> is a library for high-performance, customizable line rendering for WebGPU using instanced triangle strips. It is a WebGPU port of <a href="https://github.com/rreusser/regl-gpu-lines">regl-gpu-lines</a>. This notebook is where I originally developed the implementation. The source now lives on <a href="https://github.com/rreusser/webgpu-instanced-lines">GitHub</a>.</p>
+<h2 id="interactive-demo" tabindex="-1"><a href="#interactive-demo">Interactive Demo</a></h2>
 <p>Explore the line rendering options with interactive demo below. Drag handles to edit vertices, drag the background to pan, and scroll to zoom. Enable <strong>Debug view</strong> to see the underlying triangle strip structure. Alternating colors indicate separate instances.</p>
-</div></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="rationale" tabindex="-1"><a href="#rationale">Rationale</a></h2>
+</div></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"><div><h2 id="rationale" tabindex="-1"><a href="#rationale">Rationale</a></h2>
 <p>Drawing lines on the GPU is surprisingly difficult. The hardware primitive <code>LINE_STRIP</code> produces lines exactly one pixel wide, which is rarely what you want. To get variable-width lines with proper joins and caps, you need to expand lines into triangles yourself.</p>
 <p>This library takes a pragmatic approach: it uses instanced rendering with triangle strips to draw one segment per instance, including half of each join on either end. This avoids the complexity of full stroke expansion algorithms while still producing good results for most use cases.</p>
 <p>The tradeoff is that the library does not handle self-intersecting lines correctly. For scientific visualization, data plots, and UI elements, this is usually acceptable. For complex vector graphics with many overlapping strokes, you may need a more sophisticated solution.</p>
@@ -1546,7 +1588,17 @@ main h6 {
 <p>For background on GPU line rendering, see Matt DesLauriers’ <a href="https://mattdesl.svbtle.com/drawing-lines-is-hard">Drawing Lines is Hard</a> and Rye Terrell’s <a href="https://wwwtyro.net/2019/11/18/instanced-lines.html">Instanced Line Rendering</a>.</p>
 </div></div></main>
   </div>
-  <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
+  <footer>
+    <div class="footer__attrib">© 2026 Ricky Reusser</div>
+    <a href="/notebooks/feed.xml" class="footer__rss">
+      <svg class="icon" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+        <circle cx="6.5" cy="17.5" r="2.5"></circle>
+        <path d="M4 4a16 16 0 0 1 16 16h-4A12 12 0 0 0 4 8V4z"></path>
+        <path d="M4 10a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6v-4z"></path>
+      </svg>
+      RSS
+    </a>
+  </footer>
 
 
 <style type="text/css">:root {

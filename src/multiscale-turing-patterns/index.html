@@ -22,10 +22,11 @@
   <script id="imports" type="module">
     import { createWebGPUContext, isWebGPUAvailable } from './webgpu-context.js';
     import { createTuringPipelines } from './pipeline.js';
-    import { executeFFT2D, createVec4FFTPipelines, executeVec4FFT2D } from './lib/webgpu-fft/fft.js';
+    import { createVec4FFTPipelines } from './lib/webgpu-fft/fft.js';
     import { createElementStack } from './lib/element-stack.js';
     import { createZoomableAxes } from './lib/zoomable-axes.js';
     import { expandable } from './lib/expandable.js';
+    import { createScaleParamsInput, createTuringSimulation } from './turing-simulation.js';
   </script>
 
   <script id="context" type="module">
@@ -63,6 +64,10 @@
     // Plain object to hold grid size - no dependencies, created once
     // This allows other cells to read N without depending on it
     const gridSizeState = { N: 512 };
+
+    // Reference grid size for domain scaling
+    // At N=512, shows 1 copy of pattern. At N=1024, shows 2x2 copies.
+    const referenceN = 512;
   </script>
 
   <script id="expandable-state" type="module">
@@ -91,264 +96,12 @@
   </script>
 
   <script id="scale-params-input" type="module">
-    numScales; // dependencies (reads gridSizeState.N without depending on N)
-
-    // HSV to RGB conversion (h in [0,1], s and v in [0,1])
-    function hsvToRgb(h, s, v) {
-      const i = Math.floor(h * 6);
-      const f = h * 6 - i;
-      const p = v * (1 - s);
-      const q = v * (1 - f * s);
-      const t = v * (1 - (1 - f) * s);
-      const mod = i % 6;
-      const r = [v, q, p, p, t, v][mod];
-      const g = [t, v, v, q, p, p][mod];
-      const b = [p, p, t, v, v, q][mod];
-      return [r, g, b];
-    }
-
-    // Generate default color with randomized hue, full saturation
-    function randomColor() {
-      const h = Math.random();
-      return hsvToRgb(Math.random(), Math.random(), 1);
-    }
-
-    // Generate array of vibrant colors
-    const defaultColors = Array.from({ length: 10 }, randomColor);
-
-    // Create scale parameters input control
-    function createScaleParamsInput(numScales, gridSize, existingParams = []) {
-      const container = document.createElement('div');
-      container.className = 'scale-params-container symmetry-hidden';
-
-      // Add CSS for label toggling based on expandable state
-      // Full labels when collapsed (more space), abbreviated when expanded (floating panel)
-      const style = document.createElement('style');
-      style.textContent = `
-        .scale-params-container .label-full { display: inline; }
-        .scale-params-container .label-short { display: none; }
-        .expandable-expanded .scale-params-container .label-full { display: none; }
-        .expandable-expanded .scale-params-container .label-short { display: inline; }
-        .expandable-expanded .scale-params-container .input-activator { width: 40px !important; }
-        .expandable-expanded .scale-params-container .input-inhibitor-ratio { width: 40px !important; }
-        .expandable-expanded .scale-params-container .input-symmetry { width: 32px !important; }
-        .scale-params-container.symmetry-hidden .symmetry-col { display: none; }
-      `;
-      container.appendChild(style);
-
-      // Create table
-      const table = document.createElement('table');
-      table.style.cssText = 'border-collapse: collapse; width: 100%; font-size: 11px; margin: 4px 0;';
-
-      // Header row with both full and abbreviated labels
-      const thead = document.createElement('thead');
-      thead.innerHTML = `
-        <tr style="text-align: left;">
-          <th style="padding: 2px 4px;"><span class="label-short">A</span><span class="label-full">Activator</span></th>
-          <th style="padding: 2px 4px;"><span class="label-short">I/A</span><span class="label-full">Inh/Act</span></th>
-          <th style="padding: 2px 4px;"><span class="label-short">K</span><span class="label-full">Kernel</span></th>
-          <th style="padding: 2px 4px;"><span class="label-short">Δ</span><span class="label-full">Amount</span></th>
-          <th style="padding: 2px 4px;"><span class="label-short">W</span><span class="label-full">Weight</span></th>
-          <th class="symmetry-col" style="padding: 2px 4px;"><span class="label-short">S</span><span class="label-full">Symmetry</span></th>
-          <th style="padding: 2px 4px;"></th>
-        </tr>
-      `;
-      table.appendChild(thead);
-
-      const tbody = document.createElement('tbody');
-      const rows = [];
-
-      function emitUpdate() {
-        container.value = rows.map(r => ({
-          activatorRadius: parseFloat(r.activator.value) || 2,
-          inhibitorRatio: parseFloat(r.inhibitorRatio.value) || 2,
-          kernelType: r.kernel.value === 'circular' ? 1 : 0,
-          amount: parseFloat(r.amount.value) || 0.05,
-          weight: parseFloat(r.weight.value) || 1,
-          symmetry: parseInt(r.symmetry.value) || 1,
-          color: hexToRgb(r.color.value)
-        }));
-        container.dispatchEvent(new CustomEvent('input'));
-      }
-
-      function hexToRgb(hex) {
-        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-        return result ? [
-          parseInt(result[1], 16) / 255,
-          parseInt(result[2], 16) / 255,
-          parseInt(result[3], 16) / 255
-        ] : [0.5, 0.5, 0.5];
-      }
-
-      function rgbToHex(rgb) {
-        const r = Math.round(rgb[0] * 255);
-        const g = Math.round(rgb[1] * 255);
-        const b = Math.round(rgb[2] * 255);
-        return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('');
-      }
-
-      // Generate random radius: logarithmically from 3 to gridSize/8
-      function randomExpRadius(scaleIndex) {
-        const minRadius = 3;
-        // Use gridSizeState.N to get current grid size (not stale captured value)
-        const maxRadius = gridSizeState.N / 8;
-        // Logarithmic interpolation: radius = minRadius * (maxRadius/minRadius)^(t)
-        // where t goes from 0 to 1 across scales
-        const t = numScales > 1 ? scaleIndex / (numScales - 1) : 0;
-        const base = minRadius * Math.pow(maxRadius / minRadius, t);
-        const randomFactor = 0.7 + Math.random() * 0.6; // 0.7 to 1.3
-        return Math.round(base * randomFactor);
-      }
-
-      // Generate random values for a scale
-      function randomScaleValues(scaleIndex) {
-        // Common symmetry values that produce interesting patterns
-        const symmetryOptions = [1, 1, 2, 3, 4, 6, 8];
-        return {
-          activatorRadius: randomExpRadius(scaleIndex),
-          inhibitorRatio: (1.5 + Math.random() * 2.5).toFixed(1),
-          kernelType: Math.random() > 0.5 ? 1 : 0,
-          amount: (0.1 + 0.9 * Math.random()).toFixed(2), // 0.1-1.0
-          weight: (0.1 + Math.random() * 0.9).toFixed(2),
-          symmetry: symmetryOptions[Math.floor(Math.random() * symmetryOptions.length)],
-          color: randomColor()
-        };
-      }
-
-      for (let i = 0; i < numScales; i++) {
-        const existing = existingParams[i];
-        const defaults = existing || randomScaleValues(i);
-
-        const tr = document.createElement('tr');
-
-        // Activator radius
-        const activator = document.createElement('input');
-        activator.type = 'number';
-        activator.className = 'input-activator';
-        activator.value = defaults.activatorRadius;
-        activator.min = 1;
-        activator.max = 200;
-        activator.step = 1;
-        activator.style.cssText = 'width: 50px; padding: 2px;';
-        activator.oninput = emitUpdate;
-
-        // Inhibitor/Activator ratio
-        const inhibitorRatio = document.createElement('input');
-        inhibitorRatio.type = 'number';
-        inhibitorRatio.className = 'input-inhibitor-ratio';
-        inhibitorRatio.value = defaults.inhibitorRatio;
-        inhibitorRatio.min = 1;
-        inhibitorRatio.max = 10;
-        inhibitorRatio.step = 0.1;
-        inhibitorRatio.style.cssText = 'width: 50px; padding: 2px;';
-        inhibitorRatio.oninput = emitUpdate;
-
-        // Kernel type toggle (visual dot: blurred = gaussian, sharp = circular)
-        const kernel = document.createElement('button');
-        kernel.type = 'button';
-        kernel.value = (defaults.kernelType === 1) ? 'circular' : 'gaussian';
-        kernel.style.cssText = `
-          width: 24px; height: 22px; padding: 0; border: 1px solid #ccc;
-          border-radius: 4px; background: #fff; cursor: pointer;
-          display: flex; align-items: center; justify-content: center;
-        `;
-        const kernelDot = document.createElement('div');
-        kernelDot.style.cssText = `
-          width: 12px; height: 12px; border-radius: 50%; background: #333;
-          filter: ${kernel.value === 'gaussian' ? 'blur(3px)' : 'none'};
-          transition: filter 0.15s ease;
-        `;
-        kernel.appendChild(kernelDot);
-        kernel._dot = kernelDot; // Store reference for randomize
-        kernel.title = kernel.value === 'gaussian' ? 'Gaussian (click for circular)' : 'Circular (click for gaussian)';
-        kernel.onclick = () => {
-          kernel.value = kernel.value === 'gaussian' ? 'circular' : 'gaussian';
-          kernelDot.style.filter = kernel.value === 'gaussian' ? 'blur(3px)' : 'none';
-          kernel.title = kernel.value === 'gaussian' ? 'Gaussian (click for circular)' : 'Circular (click for gaussian)';
-          emitUpdate();
-        };
-
-        // Amount
-        const amount = document.createElement('input');
-        amount.type = 'number';
-        amount.value = defaults.amount;
-        amount.min = 0.001;
-        amount.max = 1;
-        amount.step = 0.001;
-        amount.style.cssText = 'width: 55px; padding: 2px;';
-        amount.oninput = emitUpdate;
-
-        // Weight
-        const weight = document.createElement('input');
-        weight.type = 'number';
-        weight.value = defaults.weight;
-        weight.min = 0;
-        weight.max = 1;
-        weight.step = 0.01;
-        weight.style.cssText = 'width: 50px; padding: 2px;';
-        weight.oninput = emitUpdate;
-
-        // Symmetry
-        const symmetry = document.createElement('input');
-        symmetry.type = 'number';
-        symmetry.className = 'input-symmetry';
-        symmetry.value = defaults.symmetry ?? 1;
-        symmetry.min = 1;
-        symmetry.max = 8;
-        symmetry.step = 1;
-        symmetry.style.cssText = 'width: 40px; padding: 2px;';
-        symmetry.oninput = emitUpdate;
-
-        // Color
-        const color = document.createElement('input');
-        color.type = 'color';
-        color.value = rgbToHex(defaults.color);
-        color.style.cssText = 'width: 36px; height: 22px; padding: 0; border: 1px solid #ccc;';
-        color.oninput = emitUpdate;
-
-        // Add cells
-        [activator, inhibitorRatio, kernel, amount, weight, symmetry, color].forEach((input, idx) => {
-          const td = document.createElement('td');
-          td.style.padding = '1px 2px';
-          if (idx === 5) td.className = 'symmetry-col'; // symmetry column
-          td.appendChild(input);
-          tr.appendChild(td);
-        });
-
-        tbody.appendChild(tr);
-        rows.push({ activator, inhibitorRatio, kernel, amount, weight, symmetry, color });
-      }
-
-      table.appendChild(tbody);
-      container.appendChild(table);
-
-      // Expose randomize method on container
-      container.randomize = () => {
-        for (let i = 0; i < rows.length; i++) {
-          const row = rows[i];
-          const vals = randomScaleValues(i);
-          row.activator.value = vals.activatorRadius;
-          row.inhibitorRatio.value = vals.inhibitorRatio;
-          row.kernel.value = vals.kernelType === 1 ? 'circular' : 'gaussian';
-          row.kernel._dot.style.filter = vals.kernelType === 1 ? 'none' : 'blur(3px)';
-          row.amount.value = vals.amount;
-          row.weight.value = vals.weight;
-          row.symmetry.value = vals.symmetry;
-          row.color.value = rgbToHex(vals.color);
-        }
-        emitUpdate();
-      };
-
-      // Initialize value
-      emitUpdate();
-
-      return container;
-    }
+    numScales; // dependency
 
     // Get existing params from previous instance if available
     const existingScaleParams = (this?.value) || [];
 
-    const scaleParamsInput = createScaleParamsInput(numScales, gridSizeState.N, existingScaleParams);
+    const scaleParamsInput = createScaleParamsInput(numScales, gridSizeState, existingScaleParams);
     const scaleParamsValue = view(scaleParamsInput);
 
     display(html`<div id="turing-scale-params">${scaleParamsInput}</div>`);
@@ -429,8 +182,8 @@
       onResize(el, w, h) {
         stack.resize(w, h);
         axes.updateScales(
-          d3.scaleLinear().domain([0, gridSizeState.N]).range([0, w]),
-          d3.scaleLinear().domain([0, gridSizeState.N]).range([h, 0])
+          d3.scaleLinear().domain([0, referenceN]).range([0, w]),
+          d3.scaleLinear().domain([0, referenceN]).range([h, 0])
         );
         simState.dirty = true;
       }
@@ -574,7 +327,7 @@
 
   <script id="display-controls" type="module">
     const contrastInput = Inputs.range([0, 0.99], {
-      value: 0.4,
+      value: 0.5,
       step: 0.01,
       label: 'Contrast'
     });
@@ -594,7 +347,7 @@
     });
     const gammaValue = view(gammaInput);
 
-    const colorStrengthInput = Inputs.range([0, 1], {
+    const colorStrengthInput = Inputs.range([0, 4], {
       value: 1.0,
       step: 0.1,
       label: 'Color strength'
@@ -746,7 +499,7 @@
   </script>
 
   <script id="stack" type="module">
-    canvas; ctx; N; // dependencies
+    canvas; ctx; // dependencies
 
     const dpr = window.devicePixelRatio || 1;
 
@@ -781,8 +534,6 @@
   </script>
 
   <script id="canvas" type="module">
-    N; // dependency
-
     const canvas = document.createElement('canvas');
     canvas.id = 'turing-canvas';
     // Size will be set properly by the stack with devicePixelRatio support
@@ -853,14 +604,17 @@
   </script>
 
   <script id="axes" type="module">
-    stack; N; // dependencies (simState accessed in callbacks only)
+    stack; // dependencies (simState accessed in callbacks only)
 
+    // Use fixed referenceN domain so view doesn't reset when grid size changes
+    // scaleExtent: [0.05, 20] allows zooming out to see 20x domain (for 4096+ grids)
     const axes = createZoomableAxes({
       d3,
       element: stack.element,
-      xScale: d3.scaleLinear().domain([0, N]).range([0, stack.width]),
-      yScale: d3.scaleLinear().domain([0, N]).range([stack.height, 0]),
+      xScale: d3.scaleLinear().domain([0, referenceN]).range([0, stack.width]),
+      yScale: d3.scaleLinear().domain([0, referenceN]).range([stack.height, 0]),
       aspectRatio: 1,
+      scaleExtent: [0.02, 20],
       onChange: () => {
         simState.dirty = true;
       }
@@ -871,8 +625,9 @@
 
   <script id="simulation-loop" type="module">
     // Dependencies
-    device; ctx; canvas; N; numScales; pipelines;
+    device; ctx; canvas; N; numScales; pipelines; bytesPerFloat;
     solution; fhat; fhatFreq; fftTemp; activatorInhibitor;
+    vec4FftWork; vec4FftTemp; vec4FftPipelines;
     extractParamsBuffer; convolveParamsBuffer; updateParamsBuffer;
     scaleParamsBuffer; visualizeParamsBuffer; viewInverseBuffer;
     scaleParams; axes; simState; statusEl; symmetryState;
@@ -880,401 +635,56 @@
     contrast; brightness; gamma; colorStrength; invert;
     memoryInfo;
 
-    // Trigger redraw when display params change (even if not simulating)
-    simState.dirty = true;
-
-    const workgroups = Math.ceil(N / 16);
-
-    // Write initial extract params
-    const extractParams = new Uint32Array([N, N, 0, 0]);
-    device.queue.writeBuffer(extractParamsBuffer, 0, extractParams);
-
-    // Create visualize bind groups
-    const visualizeBindGroups = [
-      device.createBindGroup({
-        label: 'Visualize bind group 0',
-        layout: pipelines.bindGroupLayouts.visualize,
-        entries: [
-          { binding: 0, resource: { buffer: solution[0] } },
-          { binding: 1, resource: { buffer: visualizeParamsBuffer } },
-          { binding: 2, resource: { buffer: viewInverseBuffer } }
-        ]
-      }),
-      device.createBindGroup({
-        label: 'Visualize bind group 1',
-        layout: pipelines.bindGroupLayouts.visualize,
-        entries: [
-          { binding: 0, resource: { buffer: solution[1] } },
-          { binding: 1, resource: { buffer: visualizeParamsBuffer } },
-          { binding: 2, resource: { buffer: viewInverseBuffer } }
-        ]
-      })
-    ];
-
-    // Create update bind groups
-    const updateBindGroups = [
-      device.createBindGroup({
-        label: 'Update bind group 0->1',
-        layout: pipelines.bindGroupLayouts.update,
-        entries: [
-          { binding: 0, resource: { buffer: solution[0] } },
-          { binding: 1, resource: { buffer: activatorInhibitor } },
-          { binding: 2, resource: { buffer: solution[1] } },
-          { binding: 3, resource: { buffer: updateParamsBuffer } },
-          { binding: 4, resource: { buffer: scaleParamsBuffer } }
-        ]
-      }),
-      device.createBindGroup({
-        label: 'Update bind group 1->0',
-        layout: pipelines.bindGroupLayouts.update,
-        entries: [
-          { binding: 0, resource: { buffer: solution[1] } },
-          { binding: 1, resource: { buffer: activatorInhibitor } },
-          { binding: 2, resource: { buffer: solution[0] } },
-          { binding: 3, resource: { buffer: updateParamsBuffer } },
-          { binding: 4, resource: { buffer: scaleParamsBuffer } }
-        ]
-      })
-    ];
-
-    function updateParams() {
-      // Scale params (apply symmetry override based on symmetryState)
-      const scaleData = new Float32Array(numScales * 8);
-      for (let i = 0; i < numScales; i++) {
-        const s = scaleParams[i];
-        const offset = i * 8;
-        scaleData[offset + 0] = s.weight;
-        scaleData[offset + 1] = s.amount;
-        scaleData[offset + 2] = symmetryState.enabled ? s.symmetry : 1;
-        scaleData[offset + 3] = 0.0;
-        scaleData[offset + 4] = s.color[0];
-        scaleData[offset + 5] = s.color[1];
-        scaleData[offset + 6] = s.color[2];
-        scaleData[offset + 7] = 0.0;
-      }
-      device.queue.writeBuffer(scaleParamsBuffer, 0, scaleData);
-
-      // Update params (32 bytes: vec2<u32> + u32 + 5*f32)
-      const updateData = new Float32Array(8);
-      const updateDataU32 = new Uint32Array(updateData.buffer);
-      updateDataU32[0] = N;
-      updateDataU32[1] = N;
-      updateDataU32[2] = numScales;
-      updateData[3] = stepSize;
-      updateData[4] = colorRate;
-      // indices 5, 6, 7 are padding
-      device.queue.writeBuffer(updateParamsBuffer, 0, updateData);
-
-      // Visualize params (40 bytes with padding for vec2 alignment)
-      const visData = new Float32Array(10);
-      const visDataU32 = new Uint32Array(visData.buffer);
-      visDataU32[0] = N;                    // resolution.x
-      visDataU32[1] = N;                    // resolution.y
-      visData[2] = contrast;
-      visData[3] = brightness;
-      visData[4] = colorStrength;
-      visData[5] = gamma;
-      visDataU32[6] = invert ? 1 : 0;
-      // visData[7] is padding for vec2 alignment
-      visData[8] = N;                       // domainSize.x
-      visData[9] = N;                       // domainSize.y
-      device.queue.writeBuffer(visualizeParamsBuffer, 0, visData);
-
-      // View matrix
-      device.queue.writeBuffer(viewInverseBuffer, 0, axes.viewInverse);
-    }
-
-    function simulationStep() {
-      const encoder = device.createCommandEncoder({ label: `Simulation step ${simState.iteration}` });
-
-      // 1. Extract scalar field from current solution
-      const extractBG = device.createBindGroup({
-        layout: pipelines.bindGroupLayouts.extract,
-        entries: [
-          { binding: 0, resource: { buffer: solution[simState.solutionIndex] } },
-          { binding: 1, resource: { buffer: fhat } },
-          { binding: 2, resource: { buffer: extractParamsBuffer } }
-        ]
-      });
-
-      const extractPass = encoder.beginComputePass({ label: 'Extract pass' });
-      extractPass.setPipeline(pipelines.extract);
-      extractPass.setBindGroup(0, extractBG);
-      extractPass.dispatchWorkgroups(workgroups, workgroups, 1);
-      extractPass.end();
-
-      device.queue.submit([encoder.finish()]);
-
-      // 2. FFT forward
-      executeFFT2D({
-        device,
-        pipelines: pipelines.fft,
-        input: fhat,
-        output: fhatFreq,
-        temp: fftTemp,
-        N,
-        forward: true,
-        splitNormalization: true
-      });
-
-      // 3. Convolve with kernels for each scale pair
-      const numScalePairs = Math.ceil(numScales / 2);
-      for (let pairIdx = 0; pairIdx < numScalePairs; pairIdx++) {
-        const scaleIdx1 = pairIdx * 2;
-        const scaleIdx2 = Math.min(pairIdx * 2 + 1, numScales - 1);
-
-        const s1 = scaleParams[scaleIdx1];
-        const s2 = scaleParams[scaleIdx2];
-
-        // ConvolveParams struct layout (with vec4 alignment padding):
-        // offset 0:  resolution (vec2<u32>, 8 bytes)
-        // offset 8:  PADDING (8 bytes) to align radii to 16 bytes
-        // offset 16: radii (vec4<f32>, 16 bytes)
-        // offset 32: types (vec4<u32>, 16 bytes)
-        const convParams = new Float32Array(12);
-        const convParamsU32 = new Uint32Array(convParams.buffer);
-        convParamsU32[0] = N;                                      // resolution.x (offset 0)
-        convParamsU32[1] = N;                                      // resolution.y (offset 4)
-        // offset 8-15: padding
-        convParams[4] = s1.activatorRadius;                        // radii.x (offset 16)
-        convParams[5] = s1.activatorRadius * s1.inhibitorRatio;    // radii.y (offset 20)
-        convParams[6] = s2.activatorRadius;                        // radii.z (offset 24)
-        convParams[7] = s2.activatorRadius * s2.inhibitorRatio;    // radii.w (offset 28)
-        convParamsU32[8] = s1.kernelType;                          // types.x (offset 32)
-        convParamsU32[9] = s1.kernelType;                          // types.y (offset 36)
-        convParamsU32[10] = s2.kernelType;                         // types.z (offset 40)
-        convParamsU32[11] = s2.kernelType;                         // types.w (offset 44)
-        device.queue.writeBuffer(convolveParamsBuffer, 0, convParams);
-
-        const aiPairSize = N * N * 4 * bytesPerFloat;  // vec4 per pixel per pair
-        const aiOffset = pairIdx * aiPairSize;
-
-        const convEncoder = device.createCommandEncoder({ label: `Convolve pair ${pairIdx}` });
-        const convBG = device.createBindGroup({
-          layout: pipelines.bindGroupLayouts.convolve,
-          entries: [
-            { binding: 0, resource: { buffer: fhatFreq } },
-            { binding: 1, resource: { buffer: activatorInhibitor, offset: aiOffset, size: aiPairSize } },
-            { binding: 2, resource: { buffer: convolveParamsBuffer } }
-          ]
-        });
-
-        const convPass = convEncoder.beginComputePass({ label: `Convolve pass ${pairIdx}` });
-        convPass.setPipeline(pipelines.convolve);
-        convPass.setBindGroup(0, convBG);
-        convPass.dispatchWorkgroups(workgroups, workgroups, 1);
-        convPass.end();
-
-        device.queue.submit([convEncoder.finish()]);
-
-        // 3b. Inverse FFT the convolution result using single vec4 FFT
-        // The convolution output is vec4: (re1, im1, re2, im2) = two complex numbers
-        // After inverse FFT, real parts are activators, imag parts are inhibitors
-
-        // Copy convolution result to vec4 work buffer
-        const copyToWorkEncoder = device.createCommandEncoder({ label: `Copy to vec4 work ${pairIdx}` });
-        copyToWorkEncoder.copyBufferToBuffer(activatorInhibitor, aiOffset, vec4FftWork, 0, aiPairSize);
-        device.queue.submit([copyToWorkEncoder.finish()]);
-
-        // Single vec4 inverse FFT
-        executeVec4FFT2D({
-          device,
-          pipelines: vec4FftPipelines,
-          input: vec4FftWork,
-          output: vec4FftWork,
-          temp: vec4FftTemp,
-          N,
-          forward: false,
-          splitNormalization: true
-        });
-
-        // Copy result back to activatorInhibitor
-        const copyFromWorkEncoder = device.createCommandEncoder({ label: `Copy from vec4 work ${pairIdx}` });
-        copyFromWorkEncoder.copyBufferToBuffer(vec4FftWork, 0, activatorInhibitor, aiOffset, aiPairSize);
-        device.queue.submit([copyFromWorkEncoder.finish()]);
-      }
-
-      // 4. Update solution
-      const updateEncoder = device.createCommandEncoder({ label: `Update ${simState.iteration}` });
-      const updatePass = updateEncoder.beginComputePass({ label: 'Update pass' });
-      updatePass.setPipeline(pipelines.update);
-      updatePass.setBindGroup(0, updateBindGroups[simState.solutionIndex]);
-      updatePass.dispatchWorkgroups(workgroups, workgroups, 1);
-      updatePass.end();
-
-      device.queue.submit([updateEncoder.finish()]);
-
-      // Swap buffers
-      simState.solutionIndex = 1 - simState.solutionIndex;
-      simState.iteration++;
-    }
-
-    function render() {
-      const renderEncoder = device.createCommandEncoder({ label: 'Render' });
-      const renderPass = renderEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: ctx.getCurrentTexture().createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearValue: { r: 0, g: 0, b: 0, a: 1 }
-        }]
-      });
-      renderPass.setPipeline(pipelines.visualize);
-      renderPass.setBindGroup(0, visualizeBindGroups[simState.solutionIndex]);
-      renderPass.draw(3, 1, 0, 0);
-      renderPass.end();
-
-      device.queue.submit([renderEncoder.finish()]);
-    }
-
-    let animationId;
-
-    // Download PNG function
-    async function downloadPNG() {
-      const width = N;
-      const height = N;
-      const bytesPerRow = Math.ceil(width * 4 / 256) * 256; // Align to 256
-
-      // Create render texture
-      const renderTexture = device.createTexture({
-        size: [width, height],
-        format: canvasFormat,
-        usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
-      });
-
-      // Create staging buffer
-      const stagingBuffer = device.createBuffer({
-        size: bytesPerRow * height,
-        usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST
-      });
-
-      // Update params for full resolution render
-      const visData = new Float32Array(10);
-      const visDataU32 = new Uint32Array(visData.buffer);
-      visDataU32[0] = width;
-      visDataU32[1] = height;
-      visData[2] = contrast;
-      visData[3] = brightness;
-      visData[4] = colorStrength;
-      visData[5] = gamma;
-      visDataU32[6] = invert ? 1 : 0;
-      visData[8] = width;
-      visData[9] = height;
-      device.queue.writeBuffer(visualizeParamsBuffer, 0, visData);
-
-      // View matrix for full image: maps clip [-1,1] to data [0, domainSize]
-      // data = (clip + 1) * domainSize / 2
-      const fullViewMatrix = new Float32Array([
-        width / 2, 0, 0, 0,           // column 0
-        0, height / 2, 0, 0,          // column 1
-        0, 0, 1, 0,                   // column 2
-        width / 2, height / 2, 0, 1   // column 3 (translation)
-      ]);
-      device.queue.writeBuffer(viewInverseBuffer, 0, fullViewMatrix);
-
-      // Render to texture
-      const renderEncoder = device.createCommandEncoder({ label: 'Download render' });
-      const renderPass = renderEncoder.beginRenderPass({
-        colorAttachments: [{
-          view: renderTexture.createView(),
-          loadOp: 'clear',
-          storeOp: 'store',
-          clearValue: { r: 0, g: 0, b: 0, a: 1 }
-        }]
-      });
-      renderPass.setPipeline(pipelines.visualize);
-      renderPass.setBindGroup(0, visualizeBindGroups[simState.solutionIndex]);
-      renderPass.draw(3, 1, 0, 0);
-      renderPass.end();
-
-      // Copy texture to buffer
-      renderEncoder.copyTextureToBuffer(
-        { texture: renderTexture },
-        { buffer: stagingBuffer, bytesPerRow },
-        [width, height]
-      );
-
-      device.queue.submit([renderEncoder.finish()]);
-
-      // Map and read buffer
-      await stagingBuffer.mapAsync(GPUMapMode.READ);
-      const data = new Uint8Array(stagingBuffer.getMappedRange());
-
-      // Create canvas and draw image
-      const downloadCanvas = document.createElement('canvas');
-      downloadCanvas.width = width;
-      downloadCanvas.height = height;
-      const ctx2d = downloadCanvas.getContext('2d');
-      const imageData = ctx2d.createImageData(width, height);
-
-      // Copy data (handle row alignment)
-      for (let y = 0; y < height; y++) {
-        for (let x = 0; x < width; x++) {
-          const srcIdx = y * bytesPerRow + x * 4;
-          const dstIdx = (y * width + x) * 4;
-          // BGRA to RGBA conversion (WebGPU uses BGRA on some platforms)
-          if (canvasFormat === 'bgra8unorm') {
-            imageData.data[dstIdx + 0] = data[srcIdx + 2]; // R
-            imageData.data[dstIdx + 1] = data[srcIdx + 1]; // G
-            imageData.data[dstIdx + 2] = data[srcIdx + 0]; // B
-            imageData.data[dstIdx + 3] = 255;              // A
-          } else {
-            imageData.data[dstIdx + 0] = data[srcIdx + 0]; // R
-            imageData.data[dstIdx + 1] = data[srcIdx + 1]; // G
-            imageData.data[dstIdx + 2] = data[srcIdx + 2]; // B
-            imageData.data[dstIdx + 3] = 255;              // A
-          }
-        }
-      }
-
-      ctx2d.putImageData(imageData, 0, 0);
-
-      stagingBuffer.unmap();
-      stagingBuffer.destroy();
-      renderTexture.destroy();
-
-      // Restore view matrix
-      device.queue.writeBuffer(viewInverseBuffer, 0, axes.viewInverse);
-      simState.dirty = true;
-
-      // Trigger download
-      const link = document.createElement('a');
-      link.download = `turing-pattern-${N}x${N}-${Date.now()}.png`;
-      link.href = downloadCanvas.toDataURL('image/png');
-      link.click();
-    }
+    // Create simulation instance with initial params
+    const simulation = createTuringSimulation({
+      device,
+      canvasFormat,
+      ctx,
+      canvas,
+      pipelines,
+      N,
+      numScales,
+      bytesPerFloat,
+      referenceN,
+      solution,
+      fhat,
+      fhatFreq,
+      fftTemp,
+      vec4FftWork,
+      vec4FftTemp,
+      vec4FftPipelines,
+      activatorInhibitor,
+      extractParamsBuffer,
+      convolveParamsBuffer,
+      updateParamsBuffer,
+      scaleParamsBuffer,
+      visualizeParamsBuffer,
+      viewInverseBuffer,
+      simState,
+      symmetryState,
+      statusEl,
+      memoryInfo,
+      axes,
+      // Initial simulation params
+      scaleParams,
+      stepSize,
+      colorRate,
+      stepsPerFrame,
+      simulate,
+      contrast,
+      brightness,
+      gamma,
+      colorStrength,
+      invert
+    });
 
     // Wire up download button
     const downloadBtnEl = document.querySelector('#turing-download-btn');
     if (downloadBtnEl) {
-      downloadBtnEl._download = downloadPNG;
+      downloadBtnEl._download = () => simulation.downloadPNG();
     }
 
-    function animate() {
-      updateParams();
-
-      if (simulate) {
-        for (let i = 0; i < stepsPerFrame; i++) {
-          simulationStep();
-        }
-        simState.dirty = true;
-      }
-
-      if (simState.dirty) {
-        render();
-        simState.dirty = false;
-      }
-
-      statusEl.textContent = `Grid: ${N}×${N} | Scales: ${numScales} | ${memoryInfo.precision} | Memory: ${memoryInfo.formatted} | Iteration: ${simState.iteration}`;
-
-      animationId = requestAnimationFrame(animate);
-    }
-
-    animate();
-
-    invalidation.then(() => {
-      cancelAnimationFrame(animationId);
-    });
+    invalidation.then(() => simulation.dispose());
   </script>
 
   <script id="docs" type="text/markdown">
@@ -1282,27 +692,1053 @@
 
     Each row in the scale parameters table defines a pattern scale:
 
-    - **A** (Activator radius): The radius of the activator kernel in pixels. Smaller radii create finer details; larger radii create broader structures.
-    - **I/A** (Inhibitor/Activator ratio): The inhibitor radius as a multiple of the activator radius. Higher ratios (e.g., 2.0) create more separation between features. Must be > 1.
-    - **S** (Symmetry): Rotational symmetry order of the kernel. 1 = no symmetry (standard Gaussian/circle), 2-8 = creates n-fold symmetric patterns like stripes (2), triangles (3), squares (4), or hexagons (6).
-    - **Kernel**: Shape of the convolution kernel—Gaussian (smooth falloff) or Circle (sharp cutoff). Gaussian kernels tend to produce smoother features.
-    - **Amount**: Step size multiplier for this scale. Controls how strongly this scale influences the pattern evolution. Small values (0.01-0.1) give subtle influence; larger values dominate.
-    - **Weight**: Relative importance when computing pattern variation. Higher weights make a scale more likely to "win" and drive the local pattern.
+    - **Activator radius (A)**: The radius of the activator kernel in pixels. Smaller radii create finer details; larger radii create broader structures.
+    - **Inhibitor/Activator ratio (I/A)**: The inhibitor radius as a multiple of the activator radius. Higher ratios (e.g., 2.0) create more separation between features. Must be > 1.
+    - **Kernel (K)**: Shape of the convolution kernel. Gaussian has smooth falloff; Circle has a sharp cutoff. Gaussian kernels tend to produce smoother features.
+    - **Amount (Δ)**: Step size multiplier for this scale. Controls how strongly this scale influences the pattern evolution. Small values (0.01-0.1) give subtle influence; larger values dominate.
+    - **Weight (W)**: Relative importance when computing pattern variation. Higher weights make a scale more likely to "win" and drive the local pattern.
+    - **Symmetry (S)**: Rotational symmetry order of the kernel. 1 = no symmetry (standard Gaussian/circle), 2-8 = creates n-fold symmetric patterns like stripes (2), triangles (3), squares (4), or hexagons (6).
 
     Use mouse to zoom and pan the visualization. Click the expand button to view fullscreen.
   </script>
 
-  <script id="algorithm" type="text/markdown">
-    ## Algorithm
+  <script id="gray-scott-equations" type="text/markdown">
+    ### The Gray-Scott Model
 
-    Multiscale Turing patterns are a reaction-diffusion system where multiple scales of activator-inhibitor dynamics compete. At each point:
+    Reaction-diffusion can mean a lot of things. The first model I learned about--or really learned *of*, to be more precise--is the Gray-Scott model. The Gray-Scott model describes a chemical reaction between substances ${tex`u`} and ${tex`v`} which diffuse in space at different rates and react, producing an interesting landscape of complicated behaviors.
+
+    ${tex.block`\frac{\partial u}{\partial t} = D_u \nabla^2 u - uv^2 + f(1-u)`}
+    ${tex.block`\frac{\partial v}{\partial t} = D_v \nabla^2 v + uv^2 - (f+k)v`}
+
+    In these equations, ${tex`D_u`} and ${tex`D_v`} are diffusion coefficients, ${tex`f`} is the feed rate, and ${tex`k`} is the kill rate. 
+
+    I've been a long-term fan, in particular because the Gray-Scott model is unusually forgiving to simulate. Second order finite differences for diffusion and explicit Euler time-stepping are perfectly adequate.
+
+    John Pearson's 1993 paper ["Complex Patterns in a Simple System"](https://arxiv.org/abs/patt-sol/9304003) maps out the parameter space and documents a remarkable variety of behaviors including self-replicating spots, traveling waves, and labyrinthine patterns. [Karl Sims has a nice tutorial](https://www.karlsims.com/rd.html) which discusses the dynamics. Below, in that style, I've implemented a simple two-dimensional version of the above PDE.
+  </script>
+
+  <script id="gray-scott-2d" type="module">
+    import createREGL from 'npm:regl@2.1.1';
+    import { reglCanvas } from './lib/regl-canvas.js';
+    import { createGrayScott2D } from './gray-scott-2d.js';
+
+    const w = 256;
+    const h = w / 2;
+    const canvas2d = reglCanvas(createREGL, {
+      extensions: ['OES_texture_float'],
+      attributes: { preserveDrawingBuffer: true },
+      pixelRatio: 1
+    });
+    const regl = canvas2d.value;
+    canvas2d.width = w;
+    canvas2d.height = h;
+    canvas2d.style.border = '1px solid #ccc';
+    canvas2d.style.width = '512px';
+    canvas2d.style.maxWidth = '100%';
+    canvas2d.style.height = 'auto';
+    canvas2d.style.aspectRatio = '2 / 1';
+    canvas2d.style.cursor = 'pointer';
+    canvas2d.style.boxSizing = 'border-box';
+
+    const gsSim = createGrayScott2D(regl, { width: w, height: h });
+    gsSim.restart();
+
+    function getMouseUV(e) {
+      const rect = canvas2d.getBoundingClientRect();
+      return [
+        (e.clientX - rect.left) / rect.width,
+        1.0 - (e.clientY - rect.top) / rect.height
+      ];
+    }
+    function getTouchUV(e) {
+      const rect = canvas2d.getBoundingClientRect();
+      const touch = e.touches[0];
+      return [
+        (touch.clientX - rect.left) / rect.width,
+        1.0 - (touch.clientY - rect.top) / rect.height
+      ];
+    }
+
+    canvas2d.addEventListener('mousedown', e => gsSim.setMouse(getMouseUV(e)));
+    canvas2d.addEventListener('mousemove', e => { if (e.buttons & 1) gsSim.setMouse(getMouseUV(e)); });
+    canvas2d.addEventListener('mouseup', () => gsSim.setMouse(null));
+    canvas2d.addEventListener('mouseleave', () => gsSim.setMouse(null));
+    canvas2d.addEventListener('touchstart', e => { e.preventDefault(); gsSim.setMouse(getTouchUV(e)); }, { passive: false });
+    canvas2d.addEventListener('touchmove', e => { e.preventDefault(); gsSim.setMouse(getTouchUV(e)); }, { passive: false });
+    canvas2d.addEventListener('touchend', () => gsSim.setMouse(null));
+    canvas2d.addEventListener('touchcancel', () => gsSim.setMouse(null));
+
+    const loop = regl.frame(() => {
+      for (let j = 0; j < 10; j++) gsSim.step();
+      gsSim.render();
+    });
+
+    invalidation.then(() => loop.cancel());
+
+    const gsRestartBtn = html`<button>Restart</button>`;
+    gsRestartBtn.onclick = () => gsSim.restart();
+    gsRestartBtn.style.position = 'absolute';
+    gsRestartBtn.style.right = '10px';
+    gsRestartBtn.style.bottom = '10px';
+
+    const gsFigure = html`<figure id="gray-scott-2d-figure" style="overflow: hidden;">
+      <div style="position:relative">
+        ${canvas2d}
+        ${gsRestartBtn}
+      </div>
+      <figcaption>2D Gray-Scott reaction-diffusion. Click and drag to paint.</figcaption>
+    </figure>`;
+
+    display(gsFigure);
+  </script>
+
+  <script id="gray-scott-params" type="module">
+    // Shared state for Gray-Scott parameters (allows phase diagram to update simulation)
+    const gsParams = { k: 0.062, f: 0.055 };
+  </script>
+
+  <script id="gray-scott-phase-diagram" type="module">
+    gsSim; // dependency - need simulation to be ready
+
+    // Phase diagram of the Gray-Scott system from linear stability analysis
+    // Saddle-node bifurcation: f = (1 ± √(1-16k))² / 16 for 0 ≤ k ≤ 1/16
+    // Hopf bifurcation: v² = k at steady state, giving f = [(√k - 2k) + √(k(1 - 4√k))] / 2
+
+    const nPoints = 100;
+    const kDomain = [0, 0.08];
+    const fDomain = [0, 0.14];
+    const plotWidth = 340;
+    const plotHeight = 280;
+    const marginLeft = 50;
+    const marginBottom = 40;
+    const marginTop = 25;
+    const marginRight = 10;
+
+    // Saddle-node bifurcation curve
+    const saddleNodeCurve = [];
+    for (let i = 0; i <= nPoints; i++) {
+      const k = (i / nPoints) * 0.0625;
+      const disc = 1 - 16 * k;
+      if (disc >= 0) {
+        const fUpper = Math.pow(1 + Math.sqrt(disc), 2) / 16;
+        saddleNodeCurve.push({ k, f: fUpper });
+      }
+    }
+    for (let i = nPoints; i >= 0; i--) {
+      const k = (i / nPoints) * 0.0625;
+      const disc = 1 - 16 * k;
+      if (disc >= 0) {
+        const fLower = Math.pow(1 - Math.sqrt(disc), 2) / 16;
+        saddleNodeCurve.push({ k, f: fLower });
+      }
+    }
+
+    // Hopf bifurcation curve (numerical iteration)
+    // At steady state: f(1-u) = uv², uv = f+k
+    // Hopf condition: trace(J) = 0 → v² = k (simplified for Du >> Dv)
+    // We iterate: given k, find v = √k, then solve for u and f
+    const hopfCurve = [];
+    const kMin = 0.015;  // Skip unstable region near origin
+    for (let i = 0; i <= nPoints; i++) {
+      const k = kMin + (i / nPoints) * (0.0625 - kMin);
+      // Hopf condition gives v² = k
+      const v = Math.sqrt(k);
+      // From steady state: uv = f + k, so u = (f + k) / v
+      // Also: f(1-u) = uv² = uk, so f - fu = uk, so f = u(f + k)
+      // Therefore: f = u(f + k) → f(1 - u) = uk → f = uk / (1-u)
+      // And from uv = f + k: u√k = uk/(1-u) + k = k(u + 1 - u)/(1-u) = k/(1-u)
+      // So u = √k / (1-u) → u(1-u) = √k → u - u² = √k → u² - u + √k = 0
+      // u = (1 - √(1 - 4√k)) / 2 (taking the smaller root for stability)
+      const disc = 1 - 4 * Math.sqrt(k);
+      if (disc >= 0) {
+        const u = (1 - Math.sqrt(disc)) / 2;
+        const f = u * k / (1 - u);
+        // Check f is inside saddle-node region
+        const snDisc = 1 - 16 * k;
+        if (snDisc >= 0 && f > 0) {
+          const fUpper = Math.pow(1 + Math.sqrt(snDisc), 2) / 16;
+          const fLower = Math.pow(1 - Math.sqrt(snDisc), 2) / 16;
+          if (f > fLower && f < fUpper) {
+            hopfCurve.push({ k, f });
+          }
+        }
+      }
+    }
+
+    // Create scales for coordinate conversion
+    const xScale = d3.scaleLinear().domain(kDomain).range([marginLeft, plotWidth - marginRight]);
+    const yScale = d3.scaleLinear().domain(fDomain).range([plotHeight - marginBottom, marginTop]);
+
+    // Create base plot with both curves
+    const basePlot = Plot.plot({
+      width: plotWidth,
+      height: plotHeight,
+      marginLeft,
+      marginBottom,
+      marginTop,
+      marginRight,
+      x: { label: "k (kill rate)", domain: kDomain },
+      y: { label: "f (feed rate)", domain: fDomain },
+      marks: [
+        // Saddle-node bifurcation curve (solid)
+        Plot.line(saddleNodeCurve, { x: "k", y: "f", stroke: "#333", strokeWidth: 2 }),
+        // Hopf bifurcation curve (dashed)
+        Plot.line(hopfCurve, { x: "k", y: "f", stroke: "#333", strokeWidth: 1.5, strokeDasharray: "4,3" }),
+        // Region labels
+        Plot.text([{ k: 0.035, f: 0.023, text: "Pattern\nformation" }], {
+          x: "k", y: "f", text: "text", fontSize: 10, fill: "#666",
+          lineAnchor: "middle", textAnchor: "middle"
+        })
+      ]
+    });
+
+    // Create container with SVG overlay for draggable dot
+    const container = html`<div id="phase-diagram-container" style="position: relative; width: ${plotWidth}px; height: ${plotHeight}px;">`;
+    container.appendChild(basePlot);
+
+    // Create draggable dot as an SVG overlay
+    const dotSvg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    dotSvg.setAttribute("width", plotWidth);
+    dotSvg.setAttribute("height", plotHeight);
+    dotSvg.style.position = "absolute";
+    dotSvg.style.top = "0";
+    dotSvg.style.left = "0";
+    dotSvg.style.pointerEvents = "none";
+
+    const dot = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    dot.setAttribute("r", "7");
+    dot.setAttribute("fill", "#e63946");
+    dot.setAttribute("stroke", "rgba(255,0,0,0.2)");
+    dot.setAttribute("stroke-width", "20");
+    dot.style.cursor = "grab";
+    dot.style.pointerEvents = "auto";
+    dotSvg.appendChild(dot);
+    container.appendChild(dotSvg);
+
+    // Update dot position from params
+    function updateDotPosition() {
+      dot.setAttribute("cx", xScale(gsParams.k));
+      dot.setAttribute("cy", yScale(gsParams.f));
+    }
+    updateDotPosition();
+
+    // Dragging logic
+    let isDragging = false;
+
+    function clamp(val, min, max) {
+      return Math.max(min, Math.min(max, val));
+    }
+
+    function updateFromPosition(clientX, clientY) {
+      const rect = container.getBoundingClientRect();
+      const x = clientX - rect.left;
+      const y = clientY - rect.top;
+
+      gsParams.k = clamp(xScale.invert(x), 0.001, 0.079);
+      gsParams.f = clamp(yScale.invert(y), 0.001, 0.139);
+
+      updateDotPosition();
+      gsSim.setParams(gsParams.f, gsParams.k);
+    }
+
+    dot.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      dot.style.cursor = "grabbing";
+      e.preventDefault();
+    });
+
+    document.addEventListener("mousemove", (e) => {
+      if (isDragging) {
+        updateFromPosition(e.clientX, e.clientY);
+      }
+    });
+
+    document.addEventListener("mouseup", () => {
+      if (isDragging) {
+        isDragging = false;
+        dot.style.cursor = "grab";
+      }
+    });
+
+    // Touch support
+    dot.addEventListener("touchstart", (e) => {
+      isDragging = true;
+      e.preventDefault();
+    }, { passive: false });
+
+    document.addEventListener("touchmove", (e) => {
+      if (isDragging && e.touches.length > 0) {
+        updateFromPosition(e.touches[0].clientX, e.touches[0].clientY);
+      }
+    }, { passive: false });
+
+    document.addEventListener("touchend", () => {
+      isDragging = false;
+    });
+
+    // Parameter display
+    const paramDisplay = html`<div id="gs-param-display" style="font-family: monospace; font-size: 11px; color: #666; margin-top: 4px;">
+      k = ${gsParams.k.toFixed(4)}, f = ${gsParams.f.toFixed(4)}
+    </div>`;
+
+    // Update display periodically
+    function updateDisplay() {
+      paramDisplay.textContent = `k = ${gsParams.k.toFixed(4)}, f = ${gsParams.f.toFixed(4)}`;
+      requestAnimationFrame(updateDisplay);
+    }
+    updateDisplay();
+
+    display(html`<figure id="gray-scott-phase-figure" style="max-width: ${plotWidth}px;">
+      ${container}
+      ${paramDisplay}
+      <figcaption style="font-size: 11px;">Phase diagram. Drag the red dot to change parameters. Inside the curve: patterns form.</figcaption>
+    </figure>`);
+  </script>
+
+  <script id="hopf-derivation" type="text/markdown">
+    <details>
+      <summary>Derivation of the Hopf bifurcation curve</summary>
+
+The Gray-Scott model consists of two coupled reaction-diffusion equations:
+
+${tex.block`\frac{\partial u}{\partial t} = D_u \nabla^2 u - uv^2 + f(1-u)`}
+${tex.block`\frac{\partial v}{\partial t} = D_v \nabla^2 v + uv^2 - (f+k)v`}
+
+where ${tex`u`} and ${tex`v`} are the concentrations of two chemical species, ${tex`f`} is the feed rate, and ${tex`k`} is the kill rate.
+
+**Steady states.** Setting the time derivatives to zero (ignoring diffusion for spatially uniform states):
+
+${tex.block`uv^2 = f(1-u), \quad uv = f + k`}
+
+From the second equation, ${tex`v = (f+k)/u`}. Substituting into the first:
+
+${tex.block`u \cdot \frac{(f+k)^2}{u^2} = f(1-u) \implies (f+k)^2 = fu(1-u)`}
+
+**Jacobian matrix.** To determine stability, we examine how small deviations ${tex`\tilde{u} = u - u^*`} and ${tex`\tilde{v} = v - v^*`} from the steady state evolve. The Jacobian matrix, formed from partial derivatives of the reaction terms evaluated at the steady state, governs this evolution:
+
+${tex.block`J = \begin{pmatrix} \partial_u(-uv^2 + f(1-u)) & \partial_v(-uv^2 + f(1-u)) \\ \partial_u(uv^2 - (f+k)v) & \partial_v(uv^2 - (f+k)v) \end{pmatrix}`}
+
+${tex.block`\phantom{J} = \begin{pmatrix} -v^2 - f & -2uv \\ v^2 & 2uv - (f+k) \end{pmatrix}`}
+
+Using ${tex`uv = f+k`} at steady state, the element ${tex`J_{22} = 2(f+k) - (f+k) = f+k`}.
+
+**Hopf bifurcation condition.** The eigenvalues of ${tex`J`} determine stability. For a 2×2 matrix, ${tex`\lambda = \tfrac{1}{2}(\text{Tr} \pm \sqrt{\text{Tr}^2 - 4\det})`}. When ${tex`\det > 0`} and ${tex`\text{Tr} < 0`}, both eigenvalues have negative real parts. These eigenvalues dictate growth and decay of perturbations, so negative real parts means perturbations decay and the steady state is stable. When ${tex`\text{Tr} > 0`}, perturbations grow exponentially.
+
+The boundary ${tex`\text{Tr} = 0`} (with ${tex`\det > 0`}) marks a *Hopf bifurcation*: the eigenvalues become purely imaginary, and the system transitions from stable equilibrium to sustained oscillations. Setting ${tex`\text{Tr}(J) = J_{11} + J_{22} = 0`}:
+
+${tex.block`(-v^2 - f) + (f + k) = 0 \implies v^2 = k`}
+
+So at the Hopf bifurcation, ${tex`v = \sqrt{k}`}.
+
+**Solving for the curve.** Combining ${tex`v = \sqrt{k}`} with the steady-state condition ${tex`uv = f+k`}:
+
+${tex.block`u\sqrt{k} = f + k`}
+
+From ${tex`f(1-u) = uv^2 = uk`}, we get ${tex`f = uk/(1-u)`}. Substituting:
+
+${tex.block`u\sqrt{k} = \frac{uk}{1-u} + k = \frac{uk + k(1-u)}{1-u} = \frac{k}{1-u}`}
+
+Therefore ${tex`u(1-u) = \sqrt{k}`}, giving the quadratic:
+
+${tex.block`u^2 - u + \sqrt{k} = 0`}
+
+Solving: ${tex`u = \frac{1 - \sqrt{1 - 4\sqrt{k}}}{2}`} (taking the smaller root for stability).
+
+Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
+
+**Saddle-node bifurcation.** The solid curve marks where non-trivial steady states exist. Recall the steady-state condition ${tex`(f+k)^2 = fu(1-u)`}. Viewing this as a quadratic in ${tex`u`}, solutions exist only when the discriminant is non-negative: ${tex`f^2 - 4f(f+k)^2 \geq 0`}. The boundary where this discriminant equals zero gives the saddle-node curve ${tex`f = \tfrac{1}{16}(1 \pm \sqrt{1-16k})^2`}. Outside this curve, only the trivial state ${tex`(u,v) = (1,0)`} exists. Inside, a second steady state with ${tex`v > 0`} appears.
+
+**Interpreting the phase diagram.** Outside the dashed Hopf curve, the system settles to a spatially uniform state (no patterns). Inside the dashed curve, the uniform state becomes unstable, and small perturbations grow into the spots and stripes we observe.
+
+    </details>
+  </script>
+
+  <script id="mechanism-intro" type="text/markdown">
+    ## The activator-inhibitor model
+
+    As interesting as the Gray-Scott model is, we can isolate dynamics of striped and spotted patterns with a simpler *activator-inhibitor* model. The idea, proposed by Alan Turing in 1952, is that two interacting substances with different diffusion rates can spontaneously break spatial symmetry. The key ingredients are:
+
+    1. A slowly-diffusing **activator** that promotes its own growth
+    2. A faster-diffusing **inhibitor** that suppresses the activator
+
+    Consider a small bump in the concentration field. The activator, diffusing slowly, remains concentrated near the bump and reinforces local growth. The inhibitor diffuses faster, spreading outward before it can fully suppress the peak. But once the inhibitor reaches the surrounding region, it dominates there, preventing the bump from spreading. The result is a sharpening instability: peaks grow while their surroundings are suppressed, creating the characteristic spacing of Turing patterns.
+
+  </script>
+
+  <script id="gaussian-figure" type="module">
+    const sigma_a = 1;
+    const sigma_i = 2;
+    const xs = d3.range(-6, 6.01, 0.05);
+
+    const gaussianKernel = (x, sigma) => Math.exp(-x * x / (2 * sigma * sigma));
+
+    const activatorData = xs.map(x => ({ x, y: 0.6 * gaussianKernel(x, sigma_a), type: "activator" }));
+    const inhibitorData = xs.map(x => ({ x, y: -0.4 * gaussianKernel(x, sigma_i), type: "inhibitor" }));
+    const differenceData = xs.map(x => ({
+      x,
+      y: 0.6 * gaussianKernel(x, sigma_a) - 0.4 * gaussianKernel(x, sigma_i),
+      type: "difference"
+    }));
+
+    const gaussianPlot = Plot.plot({
+      width: 500,
+      height: 280,
+      marginLeft: 50,
+      marginBottom: 35,
+      x: { label: "Position", domain: [-5, 5] },
+      y: { label: null, domain: [-0.5, 0.8] },
+      color: {
+        domain: ["activator", "inhibitor", "difference"],
+        range: ["#2563eb", "#dc2626", "#16a34a"]
+      },
+      marks: [
+        Plot.ruleY([0], { stroke: "#999", strokeWidth: 1 }),
+        Plot.line(activatorData, { x: "x", y: "y", stroke: "type", strokeWidth: 2, curve: "natural" }),
+        Plot.line(inhibitorData, { x: "x", y: "y", stroke: "type", strokeWidth: 2, curve: "natural" }),
+        Plot.line(differenceData, { x: "x", y: "y", stroke: "type", strokeWidth: 2.5, strokeDasharray: "6,3", curve: "natural" }),
+        Plot.text([{ x: 2.8, y: 0.52, text: "Activator (narrow)" }], { x: "x", y: "y", text: "text", fill: "#2563eb", fontSize: 12, fontWeight: 500 }),
+        Plot.text([{ x: 3.2, y: -0.32, text: "Inhibitor (wide)" }], { x: "x", y: "y", text: "text", fill: "#dc2626", fontSize: 12, fontWeight: 500 }),
+        Plot.text([{ x: -3.2, y: 0.35, text: "Difference (update)" }], { x: "x", y: "y", text: "text", fill: "#16a34a", fontSize: 12, fontWeight: 500 })
+      ]
+    });
+
+    display(html`<figure id="gaussian-mechanism-figure" style="max-width: 500px;">
+      ${gaussianPlot}
+      <figcaption>The narrow activator (blue) responds strongly to the peak while the wide inhibitor (red) averages over a broader region. Their difference (green dashed) drives the update: positive at the center, negative at the flanks.</figcaption>
+    </figure>`);
+  </script>
+
+  <script id="cell-80" type="text/markdown">
+    The figure below illustrates this with Gaussian kernels of different widths standing in for the activator and inhibitor influence. The narrow activator kernel responds strongly to the peak, while the wider inhibitor kernel averages over a broader region. Their difference drives the update: positive at the center, negative at the flanks.
+  </script>
+
+  <script id="single-scale-turing" type="text/markdown">
+    ### 1D Turing pattern model
+
+    The simulation below implements the activator-inhibitor model in one dimension. We maintain a scalar field and use the [Fast Fourier Transform](https://en.wikipedia.org/wiki/Fast_Fourier_transform) (FFT) to repeatedly convolve it with two Gaussian kernels: a narrow activator and a wider inhibitor. At each step, we add the difference to the field, then apply an ${tex`\arctan`} function to keep values bounded.
+
+    The ratio of inhibitor to activator width determines the characteristic spacing of the pattern. A 2:1 ratio creates tight spacing; larger ratios spread the features further apart. Try adjusting the activator radius to see how it affects the emerging pattern. The colored bars below the simulation show the relative widths of the activator (blue) and inhibitor (red) kernels.
+  </script>
+
+  <script id="activator-input" type="module">
+    // Shared slider - will be bound to 2D slider
+    const activatorInput = Inputs.range([2, 25], {
+      value: 15,
+      step: 0.1,
+      label: 'Activator radius'
+    });
+  </script>
+
+  <script id="turing-1d-simulation" type="module">
+    import { createTuring1D } from './turing-1d.js';
+
+    const turing1dN = 256;  // Grid resolution (displayed at 2x for 0.5 pixel ratio)
+    const turing1dStepSize = 0.5;
+    const turing1dToneMapRange = 1.0;
+    const turing1dInhibitorRatio = 2;
+
+    const turingSim = createTuring1D(turing1dN);
+    turingSim.initialize();
+    turingSim.setKernels(15, turing1dInhibitorRatio);
+
+    // Use the shared slider
+    activatorInput.addEventListener('input', () => {
+      turingSim.setKernels(activatorInput.value, turing1dInhibitorRatio);
+    });
+
+    const turingCanvas = document.createElement('canvas');
+    turingCanvas.id = 'turing-1d-canvas';
+    turingCanvas.width = turing1dN;
+    turingCanvas.height = 75;  // Half height to match 0.5 pixel ratio
+    turingCanvas.style.width = '512px';
+    turingCanvas.style.maxWidth = '100%';
+    turingCanvas.style.height = 'auto';
+    turingCanvas.style.aspectRatio = '512 / 150';
+    turingCanvas.style.border = '1px solid #ccc';
+    turingCanvas.style.cursor = 'crosshair';
+
+    const turingCtx = turingCanvas.getContext('2d');
+
+    // Mouse/touch interaction for painting
+    function getMouseX(e) {
+      const rect = turingCanvas.getBoundingClientRect();
+      return (e.clientX - rect.left) / rect.width;
+    }
+    function getTouchX(e) {
+      const rect = turingCanvas.getBoundingClientRect();
+      return (e.touches[0].clientX - rect.left) / rect.width;
+    }
+    turingCanvas.addEventListener('mousedown', e => turingSim.setMouse(getMouseX(e)));
+    turingCanvas.addEventListener('mousemove', e => { if (e.buttons & 1) turingSim.setMouse(getMouseX(e)); });
+    turingCanvas.addEventListener('mouseup', () => turingSim.setMouse(null));
+    turingCanvas.addEventListener('mouseleave', () => turingSim.setMouse(null));
+    turingCanvas.addEventListener('touchstart', e => { e.preventDefault(); turingSim.setMouse(getTouchX(e)); }, { passive: false });
+    turingCanvas.addEventListener('touchmove', e => { e.preventDefault(); turingSim.setMouse(getTouchX(e)); }, { passive: false });
+    turingCanvas.addEventListener('touchend', () => turingSim.setMouse(null));
+    turingCanvas.addEventListener('touchcancel', () => turingSim.setMouse(null));
+
+    const turing1dRestartBtn = html`<button style="position: absolute; right: 10px; bottom: 10px;">Restart</button>`;
+    turing1dRestartBtn.onclick = () => {
+      turingSim.initialize();
+      turingSim.setKernels(activatorInput.value, turing1dInhibitorRatio);
+    };
+
+    const kernelIndicator = html`<div id="kernel-indicator-1d" style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 11px; font-family: sans-serif;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span style="width: 80px; text-align: right; color: #2563eb;">Activator</span>
+        <div id="activator-bar-1d" style="height: 8px; background: #2563eb; border-radius: 2px;"></div>
+      </div>
+      <div style="display: flex; align-items: center; gap: 8px; position: relative;">
+        <span style="width: 80px; text-align: right; color: #dc2626;">Inhibitor (2×)</span>
+        <div id="inhibitor-bar-1d" style="height: 8px; background: #dc2626; border-radius: 2px;"></div>
+        <svg id="drag-handle-1d" style="position: absolute; left: 88px; top: 50%; transform: translateY(-50%); overflow: visible; pointer-events: none;" width="10" height="10">
+          <circle id="drag-dot-1d" cx="0" cy="5" r="6" fill="#e63946" stroke="rgba(255,0,0,0.2)" stroke-width="25" style="cursor: grab; pointer-events: auto;" />
+        </svg>
+      </div>
+    </div>`;
+
+    const plotCanvas = document.createElement('canvas');
+    plotCanvas.id = 'turing-1d-plot';
+    plotCanvas.width = 512;
+    plotCanvas.height = 120;
+    plotCanvas.style.width = '512px';
+    plotCanvas.style.maxWidth = '100%';
+    plotCanvas.style.height = 'auto';
+    plotCanvas.style.aspectRatio = '512 / 120';
+    plotCanvas.style.display = 'block';
+    const plotCtx = plotCanvas.getContext('2d');
+
+    display(html`<figure>
+      <div style="position: relative;">
+        ${turingCanvas}
+        ${turing1dRestartBtn}
+      </div>
+      ${plotCanvas}
+      ${kernelIndicator}
+      <figcaption style="font-size: 12px; color: #666; margin-top: 8px;">Single-scale Turing pattern. Drag the red dot to adjust kernel size. The plot shows the activator (blue) and negated inhibitor (red) convolutions, with their difference (green dashed).</figcaption>
+    </figure>`);
+
+    // Check if initially visible
+    const rect = turingCanvas.getBoundingClientRect();
+    let isVisible = rect.top < window.innerHeight && rect.bottom > 0;
+    const visibilityObserver = new IntersectionObserver((entries) => {
+      isVisible = entries[0].isIntersecting;
+    }, { threshold: 0.01 });
+    visibilityObserver.observe(turingCanvas);
+
+    const activatorBar1D = document.getElementById('activator-bar-1d');
+    const inhibitorBar1D = document.getElementById('inhibitor-bar-1d');
+    const dragHandle1D = document.getElementById('drag-handle-1d');
+    const dragDot1D = document.getElementById('drag-dot-1d');
+
+    function updateKernelIndicator() {
+      const canvasWidth = turingCanvas.getBoundingClientRect().width;
+      const scale = canvasWidth / turing1dN;
+      const radius = activatorInput.value;
+      const inhibitorWidth = radius * turing1dInhibitorRatio * 2 * scale;
+      activatorBar1D.style.width = (radius * 2 * scale) + 'px';
+      inhibitorBar1D.style.width = inhibitorWidth + 'px';
+      dragHandle1D.style.left = (88 + inhibitorWidth) + 'px';
+    }
+    updateKernelIndicator();
+    activatorInput.addEventListener('input', updateKernelIndicator);
+
+    const resizeObserver = new ResizeObserver(() => updateKernelIndicator());
+    resizeObserver.observe(turingCanvas);
+
+    // Drag handling for kernel size
+    let isDragging1D = false;
+    dragDot1D.addEventListener('mousedown', (e) => {
+      isDragging1D = true;
+      dragDot1D.style.cursor = 'grabbing';
+      e.preventDefault();
+    });
+    document.addEventListener('mousemove', (e) => {
+      if (!isDragging1D) return;
+      const indicatorRect = kernelIndicator.getBoundingClientRect();
+      const canvasWidth = turingCanvas.getBoundingClientRect().width;
+      const scale = canvasWidth / turing1dN;
+      const x = e.clientX - indicatorRect.left - 88; // 88px = label width + gap
+      const inhibitorWidth = Math.max(20, Math.min(canvasWidth, x));
+      const radius = inhibitorWidth / (turing1dInhibitorRatio * 2 * scale);
+      const clampedRadius = Math.max(2, Math.min(25, radius));
+      activatorInput.value = clampedRadius;
+      activatorInput.dispatchEvent(new Event('input'));
+      turingSim.setKernels(clampedRadius, turing1dInhibitorRatio);
+    });
+    document.addEventListener('mouseup', () => {
+      if (isDragging1D) {
+        isDragging1D = false;
+        dragDot1D.style.cursor = 'grab';
+      }
+    });
+    // Touch support
+    dragDot1D.addEventListener('touchstart', (e) => {
+      isDragging1D = true;
+      e.preventDefault();
+    }, { passive: false });
+    document.addEventListener('touchmove', (e) => {
+      if (!isDragging1D || !e.touches.length) return;
+      const indicatorRect = kernelIndicator.getBoundingClientRect();
+      const canvasWidth = turingCanvas.getBoundingClientRect().width;
+      const scale = canvasWidth / turing1dN;
+      const x = e.touches[0].clientX - indicatorRect.left - 88;
+      const inhibitorWidth = Math.max(20, Math.min(canvasWidth, x));
+      const radius = inhibitorWidth / (turing1dInhibitorRatio * 2 * scale);
+      const clampedRadius = Math.max(2, Math.min(25, radius));
+      activatorInput.value = clampedRadius;
+      activatorInput.dispatchEvent(new Event('input'));
+      turingSim.setKernels(clampedRadius, turing1dInhibitorRatio);
+    }, { passive: false });
+    document.addEventListener('touchend', () => { isDragging1D = false; });
+
+    function updatePlot() {
+      const w = plotCanvas.width;
+      const h = plotCanvas.height;
+      const scaleX = w / turing1dN;
+      const scaleY = h / 2;  // Map [-1, 1] to [h, 0]
+
+      plotCtx.fillStyle = '#fff';
+      plotCtx.fillRect(0, 0, w, h);
+
+      // Zero line
+      plotCtx.strokeStyle = '#ccc';
+      plotCtx.lineWidth = 1;
+      plotCtx.beginPath();
+      plotCtx.moveTo(0, h / 2);
+      plotCtx.lineTo(w, h / 2);
+      plotCtx.stroke();
+
+      // Helper to draw a line
+      function drawLine(data, color, dashed = false) {
+        plotCtx.strokeStyle = color;
+        plotCtx.lineWidth = 1.5;
+        plotCtx.setLineDash(dashed ? [6, 4] : []);
+        plotCtx.beginPath();
+        for (let i = 0; i < turing1dN; i++) {
+          const x = i * scaleX;
+          const y = h / 2 - data[i] * scaleY;
+          if (i === 0) plotCtx.moveTo(x, y);
+          else plotCtx.lineTo(x, y);
+        }
+        plotCtx.stroke();
+        plotCtx.setLineDash([]);
+      }
+
+      drawLine(turingSim.activator, '#2563eb');
+
+      // Negate inhibitor for display
+      const negInhibitor = new Float64Array(turing1dN);
+      for (let i = 0; i < turing1dN; i++) negInhibitor[i] = -turingSim.inhibitor[i];
+      drawLine(negInhibitor, '#dc2626');
+
+      // Difference (activator - inhibitor) as dashed line
+      const diff = new Float64Array(turing1dN);
+      for (let i = 0; i < turing1dN; i++) diff[i] = turingSim.activator[i] - turingSim.inhibitor[i];
+      drawLine(diff, '#16a34a', true);
+    }
+
+    let turing1dAnimationId;
+    function animate() {
+      if (isVisible) {
+        turingSim.step(turing1dStepSize, turing1dToneMapRange);
+        turingSim.render(turingCtx, turingCanvas.width, turingCanvas.height);
+        updatePlot();
+      }
+      turing1dAnimationId = requestAnimationFrame(animate);
+    }
+    animate();
+
+    invalidation.then(() => {
+      cancelAnimationFrame(turing1dAnimationId);
+      visibilityObserver.disconnect();
+      resizeObserver.disconnect();
+    });
+  </script>
+
+  <script id="turing-2d-intro" type="text/markdown">
+    ### 2D Turing pattern model
+
+    The same dynamics work in two dimensions. Below is a WebGPU implementation using FFT-based convolution on a 256×256 grid.
+  </script>
+
+  <script id="turing-2d-simulation" type="module">
+    import { createTuring2D } from './turing-2d.js';
+
+    if (!navigator.gpu) {
+      display(html`<div style="color: #666; padding: 12px; border: 1px solid #ccc; background: #f9f9f9; border-radius: 4px; font-size: 13px;">WebGPU is not available.</div>`);
+    } else {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        display(html`<div style="color: #666;">WebGPU adapter not found.</div>`);
+      } else {
+        const turing2dDevice = await adapter.requestDevice();
+        const turing2dCanvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+        const turing2dN = 256;
+        const turing2dStepSize = 0.5;
+        const turing2dToneMapRange = 1.0;
+        const turing2dInhibitorRatio = 2;
+
+        const turing2dSim = createTuring2D(turing2dDevice, {
+          width: turing2dN,
+          height: turing2dN,
+          activatorRadius: 15,
+          inhibitorRatio: turing2dInhibitorRatio,
+          stepSize: turing2dStepSize,
+          toneMapRange: turing2dToneMapRange,
+        });
+
+        turing2dSim.initialize();
+
+        // Slider for 2D simulation, bound to the 1D slider
+        const activatorInput2D = Inputs.range([2, 25], {
+          value: activatorInput.value,
+          step: 0.1,
+          label: 'Activator radius'
+        });
+        Inputs.bind(activatorInput2D, activatorInput, invalidation);
+
+        const turing2dCanvas = document.createElement('canvas');
+        turing2dCanvas.id = 'turing-2d-canvas';
+        turing2dCanvas.width = turing2dN;
+        turing2dCanvas.height = turing2dN;
+        turing2dCanvas.style.width = '512px';
+        turing2dCanvas.style.maxWidth = '100%';
+        turing2dCanvas.style.height = 'auto';
+        turing2dCanvas.style.aspectRatio = '1 / 1';
+        turing2dCanvas.style.border = '1px solid #ccc';
+        turing2dCanvas.style.cursor = 'crosshair';
+
+        const turing2dCtx = turing2dCanvas.getContext('webgpu');
+        turing2dCtx.configure({ device: turing2dDevice, format: turing2dCanvasFormat, alphaMode: 'opaque' });
+
+        const turing2dRenderer = turing2dSim.createRenderer(turing2dCanvasFormat);
+
+        // Mouse/touch interaction for painting
+        function getMouseUV(e) {
+          const rect = turing2dCanvas.getBoundingClientRect();
+          return [
+            (e.clientX - rect.left) / rect.width,
+            (e.clientY - rect.top) / rect.height  // Y not flipped - buffer y=0 is at top
+          ];
+        }
+        function getTouchUV(e) {
+          const rect = turing2dCanvas.getBoundingClientRect();
+          const touch = e.touches[0];
+          return [
+            (touch.clientX - rect.left) / rect.width,
+            (touch.clientY - rect.top) / rect.height
+          ];
+        }
+        turing2dCanvas.addEventListener('mousedown', e => turing2dSim.setMouse(getMouseUV(e)));
+        turing2dCanvas.addEventListener('mousemove', e => { if (e.buttons & 1) turing2dSim.setMouse(getMouseUV(e)); });
+        turing2dCanvas.addEventListener('mouseup', () => turing2dSim.setMouse(null));
+        turing2dCanvas.addEventListener('mouseleave', () => turing2dSim.setMouse(null));
+        turing2dCanvas.addEventListener('touchstart', e => { e.preventDefault(); turing2dSim.setMouse(getTouchUV(e)); }, { passive: false });
+        turing2dCanvas.addEventListener('touchmove', e => { e.preventDefault(); turing2dSim.setMouse(getTouchUV(e)); }, { passive: false });
+        turing2dCanvas.addEventListener('touchend', () => turing2dSim.setMouse(null));
+        turing2dCanvas.addEventListener('touchcancel', () => turing2dSim.setMouse(null));
+
+        const turing2dRestartBtn = html`<button style="position: absolute; right: 10px; bottom: 10px;">Restart</button>`;
+        turing2dRestartBtn.onclick = () => {
+          turing2dSim.setKernels(activatorInput2D.value, turing2dInhibitorRatio);
+          turing2dSim.initialize();
+        };
+
+        const kernelIndicator2D = html`<div id="kernel-indicator-2d" style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 11px; font-family: sans-serif;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 80px; text-align: right; color: #2563eb;">Activator</span>
+            <div id="activator-bar-2d" style="height: 8px; background: #2563eb; border-radius: 2px;"></div>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px; position: relative;">
+            <span style="width: 80px; text-align: right; color: #dc2626;">Inhibitor (2×)</span>
+            <div id="inhibitor-bar-2d" style="height: 8px; background: #dc2626; border-radius: 2px;"></div>
+            <svg id="drag-handle-2d" style="position: absolute; left: 88px; top: 50%; transform: translateY(-50%); overflow: visible; pointer-events: none;" width="10" height="10">
+              <circle id="drag-dot-2d" cx="0" cy="5" r="6" fill="#e63946" stroke="rgba(255,0,0,0.2)" stroke-width="16" style="cursor: grab; pointer-events: auto;" />
+            </svg>
+          </div>
+        </div>`;
+
+        display(html`<figure id="turing-2d-figure">
+          <div style="position: relative; display: inline-block;">
+            ${turing2dCanvas}
+            ${turing2dRestartBtn}
+          </div>
+          ${kernelIndicator2D}
+          <figcaption style="font-size: 12px; color: #666; margin-top: 8px;">2D single-scale Turing pattern. Drag the red dot to adjust kernel size.</figcaption>
+        </figure>`);
+
+        const activatorBar2D = document.getElementById('activator-bar-2d');
+        const inhibitorBar2D = document.getElementById('inhibitor-bar-2d');
+        const dragHandle2D = document.getElementById('drag-handle-2d');
+        const dragDot2D = document.getElementById('drag-dot-2d');
+
+        function updateKernelIndicator2D() {
+          const canvasWidth = turing2dCanvas.getBoundingClientRect().width;
+          const scale = canvasWidth / turing2dN;
+          const radius = activatorInput2D.value;
+          const inhibitorWidth = radius * turing2dInhibitorRatio * 2 * scale;
+          activatorBar2D.style.width = (radius * 2 * scale) + 'px';
+          inhibitorBar2D.style.width = inhibitorWidth + 'px';
+          dragHandle2D.style.left = (88 + inhibitorWidth) + 'px';
+        }
+        updateKernelIndicator2D();
+
+        activatorInput2D.addEventListener('input', () => {
+          turing2dSim.setKernels(activatorInput2D.value, turing2dInhibitorRatio);
+          updateKernelIndicator2D();
+        });
+        // Also listen to the first slider (Inputs.bind syncs values but not events)
+        activatorInput.addEventListener('input', () => {
+          turing2dSim.setKernels(activatorInput.value, turing2dInhibitorRatio);
+          updateKernelIndicator2D();
+        });
+
+        const turing2dResizeObserver = new ResizeObserver(() => updateKernelIndicator2D());
+        turing2dResizeObserver.observe(turing2dCanvas);
+
+        // Drag handling for 2D kernel size
+        let isDragging2D = false;
+        dragDot2D.addEventListener('mousedown', (e) => {
+          isDragging2D = true;
+          dragDot2D.style.cursor = 'grabbing';
+          e.preventDefault();
+        });
+        document.addEventListener('mousemove', (e) => {
+          if (!isDragging2D) return;
+          const indicatorRect = kernelIndicator2D.getBoundingClientRect();
+          const canvasWidth = turing2dCanvas.getBoundingClientRect().width;
+          const scale = canvasWidth / turing2dN;
+          const x = e.clientX - indicatorRect.left - 88;
+          const inhibitorWidth = Math.max(20, Math.min(canvasWidth, x));
+          const radius = inhibitorWidth / (turing2dInhibitorRatio * 2 * scale);
+          const clampedRadius = Math.max(2, Math.min(25, radius));
+          activatorInput2D.value = clampedRadius;
+          activatorInput.value = clampedRadius;
+          activatorInput.dispatchEvent(new Event('input'));
+          turing2dSim.setKernels(clampedRadius, turing2dInhibitorRatio);
+          updateKernelIndicator2D();
+        });
+        document.addEventListener('mouseup', () => {
+          if (isDragging2D) {
+            isDragging2D = false;
+            dragDot2D.style.cursor = 'grab';
+          }
+        });
+        // Touch support
+        dragDot2D.addEventListener('touchstart', (e) => {
+          isDragging2D = true;
+          e.preventDefault();
+        }, { passive: false });
+        document.addEventListener('touchmove', (e) => {
+          if (!isDragging2D || !e.touches.length) return;
+          const indicatorRect = kernelIndicator2D.getBoundingClientRect();
+          const canvasWidth = turing2dCanvas.getBoundingClientRect().width;
+          const scale = canvasWidth / turing2dN;
+          const x = e.touches[0].clientX - indicatorRect.left - 88;
+          const inhibitorWidth = Math.max(20, Math.min(canvasWidth, x));
+          const radius = inhibitorWidth / (turing2dInhibitorRatio * 2 * scale);
+          const clampedRadius = Math.max(2, Math.min(25, radius));
+          activatorInput2D.value = clampedRadius;
+          activatorInput.value = clampedRadius;
+          activatorInput.dispatchEvent(new Event('input'));
+          turing2dSim.setKernels(clampedRadius, turing2dInhibitorRatio);
+          updateKernelIndicator2D();
+        }, { passive: false });
+        document.addEventListener('touchend', () => { isDragging2D = false; });
+
+        // Check if initially visible
+        const rect2d = turing2dCanvas.getBoundingClientRect();
+        let turing2dIsVisible = rect2d.top < window.innerHeight && rect2d.bottom > 0;
+        const turing2dVisibilityObserver = new IntersectionObserver((entries) => {
+          turing2dIsVisible = entries[0].isIntersecting;
+        }, { threshold: 0.01 });
+        turing2dVisibilityObserver.observe(turing2dCanvas);
+
+        let turing2dAnimationId;
+        function animate() {
+          if (turing2dIsVisible) {
+            turing2dSim.step();
+            turing2dRenderer.render(turing2dCtx.getCurrentTexture().createView());
+          }
+          turing2dAnimationId = requestAnimationFrame(animate);
+        }
+        animate();
+
+        invalidation.then(() => {
+          cancelAnimationFrame(turing2dAnimationId);
+          turing2dVisibilityObserver.disconnect();
+          turing2dResizeObserver.disconnect();
+          turing2dSim.destroy();
+          turing2dDevice.destroy();
+        });
+      }
+    }
+  </script>
+
+  <script id="multiscale-extension" type="text/markdown">
+    ## Extension to Multiple Scales
+
+    The single-scale algorithm produces patterns with a characteristic wavelength determined by the kernel ratio. To create the rich, nested structures of true multiscale Turing patterns, we run multiple scales simultaneously and let them compete.
+
+    At each point in the field, we compute activator and inhibitor values for several scales. Each scale proposes an update direction based on the sign of its ${tex`(a - b)`} difference. The question is which scale should "win" at each location.
+
+    The answer comes from looking at the magnitude ${tex`|a - b|`} at each scale. Where this variation is small, the field is already near equilibrium for that scale—further updates would create excessive local contrast. Where variation is large, the scale has strong opinions about which direction to push.
+
+    The algorithm selects the scale with minimum variation at each point and steps in the direction that scale indicates. The effect is that coarse scales dominate in regions where fine scales would fight against each other, while fine scales fill in details where coarse scales have nothing to say. The result is a hierarchy of nested patterns spanning the full range of scales.
+  </script>
+
+  <script id="two-scale-intro" type="text/markdown">
+    ## Two-Scale Demo
+
+    The simulation below demonstrates this scale-selection logic with just two scales: a fine scale and a coarse scale. Each scale computes its own activator-inhibitor difference, and at each pixel the scale with minimum ${tex`|a - b|`} controls the update direction.
+
+    Check "Show scale selection" to visualize which scale wins at each location. Blue regions are controlled by the fine scale, orange by the coarse scale. 
+  </script>
+
+  <script id="two-scale-simulation" type="module">
+    import { createTuring2Scale } from './turing-2scale.js';
+
+    if (!navigator.gpu) {
+      display(html`<div style="color: #666; padding: 12px; border: 1px solid #ccc; background: #f9f9f9; border-radius: 4px; font-size: 13px;">WebGPU is not available.</div>`);
+    } else {
+      const adapter = await navigator.gpu.requestAdapter();
+      if (!adapter) {
+        display(html`<div style="color: #666;">WebGPU adapter not found.</div>`);
+      } else {
+        const twoScaleDevice = await adapter.requestDevice();
+        const twoScaleCanvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+        const twoScaleN = 256;
+
+        const twoScaleSim = createTuring2Scale(twoScaleDevice, {
+          width: twoScaleN,
+          height: twoScaleN,
+          activatorRadius1: 2,
+          inhibitorRatio1: 2,
+          activatorRadius2: 25,
+          inhibitorRatio2: 2,
+          stepSize: 0.005,
+          toneMapRange: 1.0,
+        });
+
+        twoScaleSim.initialize();
+
+        const twoScaleCanvas = document.createElement('canvas');
+        twoScaleCanvas.id = 'turing-2scale-canvas';
+        twoScaleCanvas.width = twoScaleN;
+        twoScaleCanvas.height = twoScaleN;
+        twoScaleCanvas.style.width = '512px';
+        twoScaleCanvas.style.maxWidth = '100%';
+        twoScaleCanvas.style.height = 'auto';
+        twoScaleCanvas.style.aspectRatio = '1 / 1';
+        twoScaleCanvas.style.border = '1px solid #ccc';
+        twoScaleCanvas.style.cursor = 'crosshair';
+
+        const twoScaleCtx = twoScaleCanvas.getContext('webgpu');
+        twoScaleCtx.configure({ device: twoScaleDevice, format: twoScaleCanvasFormat, alphaMode: 'opaque' });
+
+        const twoScaleRenderer = twoScaleSim.createRenderer(twoScaleCanvasFormat);
+
+        // Mouse/touch interaction
+        function getMouseUV(e) {
+          const rect = twoScaleCanvas.getBoundingClientRect();
+          return [
+            (e.clientX - rect.left) / rect.width,
+            (e.clientY - rect.top) / rect.height
+          ];
+        }
+        function getTouchUV(e) {
+          const rect = twoScaleCanvas.getBoundingClientRect();
+          const touch = e.touches[0];
+          return [
+            (touch.clientX - rect.left) / rect.width,
+            (touch.clientY - rect.top) / rect.height
+          ];
+        }
+        twoScaleCanvas.addEventListener('mousedown', e => twoScaleSim.setMouse(getMouseUV(e)));
+        twoScaleCanvas.addEventListener('mousemove', e => { if (e.buttons & 1) twoScaleSim.setMouse(getMouseUV(e)); });
+        twoScaleCanvas.addEventListener('mouseup', () => twoScaleSim.setMouse(null));
+        twoScaleCanvas.addEventListener('mouseleave', () => twoScaleSim.setMouse(null));
+        twoScaleCanvas.addEventListener('touchstart', e => { e.preventDefault(); twoScaleSim.setMouse(getTouchUV(e)); }, { passive: false });
+        twoScaleCanvas.addEventListener('touchmove', e => { e.preventDefault(); twoScaleSim.setMouse(getTouchUV(e)); }, { passive: false });
+        twoScaleCanvas.addEventListener('touchend', () => twoScaleSim.setMouse(null));
+        twoScaleCanvas.addEventListener('touchcancel', () => twoScaleSim.setMouse(null));
+
+        const twoScaleRestartBtn = html`<button style="position: absolute; right: 10px; bottom: 10px;">Restart</button>`;
+        twoScaleRestartBtn.onclick = () => twoScaleSim.initialize();
+
+        // Scale tint checkbox
+        const tintCheckbox = html`<label style="display: flex; align-items: center; gap: 6px; font-size: 12px; cursor: pointer;">
+          <input type="checkbox" id="scale-tint-checkbox" checked>
+          Show scale selection
+        </label>`;
+        const twoScaleCheckbox = tintCheckbox.querySelector('input');
+        twoScaleCheckbox.onchange = () => twoScaleSim.setShowScaleTint(twoScaleCheckbox.checked);
+
+        // Kernel indicators
+        const twoScaleKernelIndicator = html`<div id="kernel-indicator-2scale" style="display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: 11px; font-family: sans-serif;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 100px; text-align: right; color: #3b82f6;">Fine scale (A≈3)</span>
+            <div style="height: 8px; background: #3b82f6; border-radius: 2px; width: 12px;"></div>
+            <div style="height: 8px; background: #93c5fd; border-radius: 2px; width: 24px;"></div>
+            <span style="color: #666; font-size: 10px;">activator / inhibitor</span>
+          </div>
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="width: 100px; text-align: right; color: #f97316;">Coarse scale (A≈20)</span>
+            <div style="height: 8px; background: #f97316; border-radius: 2px; width: 80px;"></div>
+            <div style="height: 8px; background: #fdba74; border-radius: 2px; width: 160px;"></div>
+          </div>
+        </div>`;
+
+        display(html`<figure id="turing-2scale-figure">
+          <div style="position: relative; display: inline-block;">
+            ${twoScaleCanvas}
+            ${twoScaleRestartBtn}
+          </div>
+          ${twoScaleKernelIndicator}
+          <div style="margin-top: 8px;">${tintCheckbox}</div>
+          <figcaption style="font-size: 12px; color: #666; margin-top: 8px;">Two-scale Turing pattern. Blue tint = fine scale selected, orange tint = coarse scale selected.</figcaption>
+        </figure>`);
+
+        // Check if initially visible
+        const rectTwoScale = twoScaleCanvas.getBoundingClientRect();
+        let twoScaleIsVisible = rectTwoScale.top < window.innerHeight && rectTwoScale.bottom > 0;
+        const twoScaleVisibilityObserver = new IntersectionObserver((entries) => {
+          twoScaleIsVisible = entries[0].isIntersecting;
+        }, { threshold: 0.01 });
+        twoScaleVisibilityObserver.observe(twoScaleCanvas);
+
+        let twoScaleAnimationId;
+        function animate() {
+          if (twoScaleIsVisible) {
+            twoScaleSim.step();
+            twoScaleRenderer.render(twoScaleCtx.getCurrentTexture().createView());
+          }
+          twoScaleAnimationId = requestAnimationFrame(animate);
+        }
+        animate();
+
+        invalidation.then(() => {
+          cancelAnimationFrame(twoScaleAnimationId);
+          twoScaleVisibilityObserver.disconnect();
+          twoScaleSim.destroy();
+          twoScaleDevice.destroy();
+        });
+      }
+    }
+  </script>
+
+  <script id="implementation" type="text/markdown">
+    ## Multi-scale Turing pattern Implementation notes
+
+    The visualization at the top of the page puts all the pieces together and performs a multi-scale simulation. Getting it to work efficiently is a moderate undertaking with a few tricks and caveats documented below. The rough algorithm, from Jonathan McCabe's [Cyclic Symmetric Multi-Scale Turing Patterns](http://www.archive.bridgesmathart.org/2010/bridges2010-387.pdf) is:
 
     1. Convolve the field with Gaussian or circular kernels at different radii to compute activator and inhibitor values
     2. Find the scale with minimum variation (smallest |activator - inhibitor|)
     3. Step the field in the direction indicated by that scale (positive if activator > inhibitor)
     4. Mix the color toward the dominant scale's color
-
-    ### Implementation
 
     This implementation uses several techniques to maximize throughput on the GPU:
 
@@ -1314,7 +1750,7 @@
 
     ${tex.block`(\hat{A}_n + i\hat{I}_n,\; \hat{A}_{n+1} + i\hat{I}_{n+1})`}
 
-    where ${tex`\hat{A}`} and ${tex`\hat{I}`} are the frequency-domain activator and inhibitor kernels. After a single forward FFT, we multiply by two sets of frequency-domain kernels and perform one inverse FFT to recover all four convolved outputs.
+    where ${tex`\hat{A}`} and ${tex`\hat{I}`} are the frequency-domain activator and inhibitor kernels. After a single forward FFT, we multiply by two sets of frequency-domain kernels and perform one inverse FFT to recover all four convolved outputs. It's interesting to note that even thought the real and complex components of the two kernels end up intermingled in frequency space, the final inverse FFT separates them nicely into the real-valued convolutions we seek.
 
     **Analytical frequency-domain kernels**: Rather than storing precomputed kernel textures, we evaluate kernels analytically in the shader. The Fourier transform of a Gaussian with standard deviation ${tex`\sigma`} is another Gaussian:
 

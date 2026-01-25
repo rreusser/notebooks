@@ -5,7 +5,96 @@
   <script id="intro" type="text/markdown">
 # Toiletpaperfullerenes and Charmin Nanotubes
 
-Interactive mesh editor for trivalent graphs (max 3 edges per vertex). Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection. Use keyboard shortcuts to edit.
+Toilet paper tubes have the curious property that you can flatten them, cut out loops, and link the loops together without fasteners.
+
+For a couple years now, I've hoarded every used cardboard toilet paper tube that's passed through our home. Feeling inspired after seeing a tweet (with apologies, author long since forgotten), I stockpiled tubes and built a [Buckyball](https://en.wikipedia.org/wiki/Buckminsterfullerene). Vines in the bedroom now climb a six foot [carbon nanotube](https://en.wikipedia.org/wiki/Carbon_nanotube) trellis (*Charmin nanotube*, if you will, and not exactly *nano* either, for that matter). And [Alison Martin's work](https://mastodon.social/@alisonmartin57) continuously inspires me.
+
+*Update: I've tracked down some precedent, though perhaps not the actual tweet that inspired me as this seems to be a popular project! See tweets by [@Ian_Willey](https://twitter.com/Ian_Willey/status/1119257024649474049) and—with excellent instructions—[@mrallanmaths](https://twitter.com/mrallanmaths/status/1125438241774166017).*
+
+This notebook represents my attempt to step things up. It provides some basic instructions and suggestions, as well as a simulator to help the toilet-paper-tube-constrained make the best use of what they have. In hindsight, the simulation certainly wasn't necessary. And at any rate, there's really no upper limit to tackling this with trial and error; the recyclability means there's no need to open a family dialogue about where to store the large geometric constructions that result.
+  </script>
+
+  <script id="figure-spikyball" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/2bd5ec5f8ffe634d501442964b31454eb84d22d969110af8735a4195e2a543a9006475ab026c38ca4c936158bd8a9185482332f5d4a7817abf78ae6852d7d785.jpeg" style="max-width: min(100%, 600px)">
+  <figcaption>The finished product, composed of 49 recycled toilet paper tubes (and which I realize after building sorta brings things full circle and looks a bit like a coronavirus).</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="fabrication-intro" type="text/markdown">
+## Fabrication
+
+My brand is regular Trader Joe's toilet paper, though I have no reason to believe anything about the brand is particularly important, beyond consistency of diameter—with the exception of those cowards who make tube-free toilet paper rolls. Those won't work. I've considered side-stepping material collection and waiting to buy tag board when shelter-in-place eases, though to be honest, the recycled nature of the raw materials is a primary factor which draws me to this project.
+
+Accumulating raw materials is simple. Flatten the tubes and—if you live with family—stash them somewhere a family member is unlikely to find them, lest you be required to explain yourself. Conversely, you may wish to avoid much wailing and gnashing of teeth and discuss your hoarding early on to prevent your stash from getting casually recycled.
+
+The pattern below illustrates the required cuts. The angle required for three edges to join gracefully is ${tex`30°`}, which makes the measurements easy. I've found a far easier method than measuring every tube though is to add opposing marks to one tube and use it as a template. I get about eight strips per tube.
+
+*Update: I've trended toward thicker strips, as it makes the final constructions a bit more robust. The only limit on thickness is they can't be so thick that the joints on opposite ends interfere and prevent linking. Further simplifying, even cutting strips at flat 0° angles produces a visually appealing look and may save a bit of trouble.*
+  </script>
+
+  <script id="figure-measurements" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/9a6266c785181387edd1e4cab63c282ce15797fce68a88b21c6ab716c4a7951d8a4b70cd513e377662bc0d1894b0b3a7b4f53c020e5fd47513a82d2d554e923e.jpeg" style="max-width: min(100%, 400px)">
+  <figcaption>The pattern of cuts illustrated on a flattened toilet paper tube.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="fabrication-joints" type="text/markdown">
+Assembling the joints is straightforward. The pieces lock together in pleasing ${tex`120°`} angles, requiring no additional fasteners up until the very last piece of the model, which requires a cut and some tape.
+
+The illustration below shows how the joints interlock. I'd give more instruction, but if you actually want to do this, there's no better way to learn than through experimentation. After some fumbling around, I learned to always attach new pieces by branching off in the same direction, after which it becomes quite repetitive.
+  </script>
+
+  <script id="figure-interlock" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/bba3f0212ace95304b9a51f0123c4abc3b62330683f86a642463d991b174d9becbaf99999805bffaac6104b94bb6123ee6ddf74894a51e4d066291e7ddcec820.jpeg" style="max-width: min(100%, 400px)">
+  <figcaption>Three loops link together to form an interlocked joint.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="fabrication-patterns" type="text/markdown">
+Assembling larger patterns is where things start to get frustrating and difficult. I have little advice here except to rely heavily on patterns, examples, and patience. And perhaps the simulator below. For inspiration, the best paper I found is ["The Topology of Fullerenes"](https://onlinelibrary.wiley.com/doi/full/10.1002/wcms.1207) by Schwerdtfeger, Wirz, and Avery.
+
+In my initial attempt, I started making a torus and failed to appreciate just how much of a material shortage I'd encounter. After some iteration though, I tried out different constructions. My favorite so far is our rabbit tunnel.
+  </script>
+
+  <script id="figure-tunnel" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/684aea6362248aa27e8c96c490f94030bf98bf3a3d243d8e42779ebd98fd304718752bfaa08668d051946cf14125f2c1fc9e52f8368cab372a904bdc120ffbae.jpeg" style="max-width: min(100%, 600px)">
+  <figcaption>A semi-completed Y-joint tunnel with rabbit (barely visible, hiding from curious dog) inside.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="fabrication-outro" type="text/markdown">
+With quiet sheltered-in-place weekends and little access to toilet paper (at which point these constructions quickly became the least of my worries), I dismantled my initial constructions, explored construction via simulation, and eventually settled on the model pictured at the top of the notebook. The rest of this notebook steps through simulation of these models.
+
+I now return to the material collection phase.
+  </script>
+
+  <script id="simulation-intro" type="text/markdown">
+## Simulation
+
+We'll get right to the point and present the finished simulator, followed by an explanation of how it works. It's really non-scientific in the sense that I've pulled forces and energies out of the sky to get it to look nice. It's not without some physical justification, but there's little motivation by legit physical chemistry, and the optimization method is staggeringly inefficient.
+
+We represent the model as a graph consisting of vertices and edges. The topology follows one rule:
+
+- Every vertex has no more than three outgoing edges.
+
+This rule is enough to constrain the topology, though it says nothing about the particular geometry of the result in three-dimensional space.
+
+**Notes**:
+- You'll need a desktop computer to use the simulator.
+- The genus 3 torus comes from the lovely [construction of Alison Martin](https://twitter.com/alisonmartin57/status/1254050723077279745), whose work has certainly inspired a lot of this exploration to begin with!
+- Most of the other constructions come from the paper listed above, ["The Topology of Fullerenes"](https://onlinelibrary.wiley.com/doi/full/10.1002/wcms.1207) by Schwerdtfeger, Wirz, and Avery.
   </script>
 
   <script id="imports" type="text/x-typescript">
@@ -13,10 +102,10 @@ import createREGL from 'npm:regl@2.1.1';
 import createIcosphere from 'npm:icosphere@1.0.0';
 import { Mesh } from './lib/mesh.js';
 import { MeshPhysics } from './lib/mesh-physics.js';
-import { createReglCamera } from './lib/orbit-camera.js';
+import { createReglCamera } from './shared-lib/orbit-camera.js';
 import { createMeshRenderer } from './lib/mesh-renderer.js';
 import { MeshInteractions } from './lib/mesh-interactions.js';
-import { expandable } from './lib/expandable.js';
+import { expandable } from './shared-lib/expandable.js';
   </script>
 
   <script id="preset-graphs" type="text/x-typescript">
@@ -131,10 +220,9 @@ const kTorsion = ctrl(Inputs.range([0, 0.2], {
   step: 0.01
 }));
 
-const strainColoring = ctrl(Inputs.range([0, 5], {
+const strainColoring = ctrl(Inputs.toggle({
   label: "Axial strain coloring",
-  value: 1.5,
-  step: 0.1
+  value: false
 }));
 
 const pointSize = ctrl(Inputs.range([0.5, 5], {
@@ -177,6 +265,8 @@ const state: {
   meshVersionListeners: Set<() => void>;
   // Render parameters (updated reactively)
   renderParams: {
+    simulate: boolean;
+    iterations: number;
     pointSize: number;
     strainColoring: number;
     showFaces: boolean;
@@ -197,8 +287,10 @@ const state: {
   meshVersion: 0,
   meshVersionListeners: new Set<() => void>(),
   renderParams: {
+    simulate: true,
+    iterations: 1,
     pointSize: 3,
-    strainColoring: 1.5,
+    strainColoring: 0,
     showFaces: true,
     faceOpacity: 0.3,
     depthFalloffWidth: 7
@@ -248,8 +340,10 @@ if (state.physics) {
 
   <script id="update-render-params" type="text/x-typescript">
 // Update render parameters reactively
+state.renderParams.simulate = simulate;
+state.renderParams.iterations = iterations;
 state.renderParams.pointSize = pointSize;
-state.renderParams.strainColoring = strainColoring;
+state.renderParams.strainColoring = strainColoring ? 1.5 : 0;
 state.renderParams.showFaces = showFaces;
 state.renderParams.faceOpacity = faceOpacity;
 state.renderParams.depthFalloffWidth = depthFalloffWidth * l0;
@@ -322,13 +416,13 @@ state.frame = state.regl.frame(() => {
   if (!visible || !state.mesh) return;
 
   state.camera!.tick(({ dirty: cameraDirty }) => {
-    const shouldRender = simulate || state.dirty || cameraDirty || state.interactions?.dirty;
+    const shouldRender = state.renderParams.simulate || state.dirty || cameraDirty || state.interactions?.dirty;
     if (!shouldRender) return;
 
     // Run physics simulation
-    if (simulate && state.physics) {
+    if (state.renderParams.simulate && state.physics) {
       state.physics.frozenVertex = state.interactions?.activeVertexIndex ?? -1;
-      for (let i = 0; i < iterations; i++) {
+      for (let i = 0; i < state.renderParams.iterations; i++) {
         state.physics.iterate();
       }
     }
@@ -459,6 +553,960 @@ display(html`<details>
 </details>`);
   </script>
 
+  <script id="physical-model-intro" type="text/markdown">
+## Physical model
+
+The sections below outline how the simulation works. We take a simple approach to computing physical configuration in three dimensions. We write down an energy function that's minimized by nice, physically pleasant configurations, then directly minimize the energy via [gradient descent](https://en.wikipedia.org/wiki/Gradient_descent) on the vertex positions.
+
+The concept of gradient descent is simple. We compute the change in energy with respect to independent changes in each vertex position, then move each vertex slightly downhill, opposite the direction of the gradient. There are more efficient ways to minimize energy, but we simply take a simultaneous small step for all vertices.
+  </script>
+
+  <script id="figure-descent" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/06397d180d434869e0902d4b309d5cd3c0a4906d503fde826ba604bbe60bf3c6b524826dadce9f2886e96aaa1b138e6b7db37b30b0d0b5824761344e077ad3da.png" style="max-width: min(100%, 500px)">
+  <figcaption>Gradient descent minimizes energy by taking incremental steps downhill.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="mathematical-statement" type="text/markdown">
+### Mathematical Statement
+
+We write an arbitrary energy function for our graph that maps the configuration to a single real number,
+${tex.block`E = E(v_i, e_j) \in \mathbb{R}`}
+where ${tex`v_i`} and ${tex`e_j`} are the ${tex`i^{th}`} vertex and ${tex`j^{th}`} edge of the graph, respectively. ${tex`E`} here is any useful function, picked out of the sky, such that it's minimized when the graph reaches a desirable configuration. We compute the gradient with respect to the *x-y-z* coordinates of all ${tex`N`} vertex positions,
+${tex.block`\nabla E = \left(\frac{\partial E}{\partial v_{0,x}}, \frac{\partial E}{\partial v_{0,y}}, \frac{\partial E}{\partial v_{0,z}}, \frac{\partial E}{\partial v_{1,x}}, \ldots, \frac{\partial E}{\partial v_{N - 1,z}}\right).`}
+In the sense of rolling down a hill, this gradient points uphill so that we update the solution in the direction of a small downhill step. We compute the ${tex`n + 1^{th}`} step of vertex ${tex`v_i`} as
+${tex.block`v_i^{n + 1} = v_i^n - \gamma \frac{\partial E}{\partial v_i}`}
+where ${tex`\gamma`} is some small number.
+
+It's no more complicated than that, but we must now select a function ${tex`E`}.
+  </script>
+
+  <script id="axial-stiffness-intro" type="text/markdown">
+## Axial stiffness
+
+We start simple and add lengthwise (axial) stiffness to enforce uniform length. Given an edge connecting vertices ${tex`a`} and ${tex`b`}, we denote the length of the edge ${tex`r_{ab}`} and the equilibrium length ${tex`r_0`}.
+  </script>
+
+  <script id="figure-axial" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/108bab81caf1bb59f7a55d16ec43bcb7b6ae442d7712a2add0c7a2410dfbbbf8d67385f03e158e0fee1ba8f7a486d8728a6440b50e4a0666cc6f4bd142ed81b5.png" style="max-width: min(100%, 300px)">
+  <figcaption>Points a and b are separated by radius r<sub>ab</sub>.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="axial-stiffness-math" type="text/markdown">
+The minimum-energy configuration occurs when ${tex`r_{ab} = r_0`}, so we construct an energy function
+${tex.block`E_{axial} = k_{axial} (r_{ab} - r_0)^2`}
+where ${tex`k_{axial}`} is the axial stiffness. Note that ${tex`E_{axial} = 0`} when ${tex`r_{ab} = r_0`}. Since ${tex`E_{axial}`} is strictly non-negative, this is just fancy way of saying that the energy can't get any lower than when the length is equal to the desired length; it's the bottom of the hill.
+
+If we differentiate this function with respect to the position of the two endpoints, then we obtain the gradient. For example, the energy gradient with respect to the coordinates of vertex ${tex`a`} is
+
+${tex.block`\frac{\partial E}{\partial v_{a, x}} = k_{axial}  \left(1 - \frac{r_0}{r_{ab}}\right) \left(v_{a,x} - v_{b, x}\right)`}
+
+${tex.block`\frac{\partial E}{\partial v_{a, y}} = k_{axial}  \left(1 - \frac{r_0}{r_{ab}}\right) \left(v_{a,y} - v_{b, y}\right)`}
+
+${tex.block`\frac{\partial E}{\partial v_{a, z}} = k_{axial}  \left(1 - \frac{r_0}{r_{ab}}\right) \left(v_{a,z} - v_{b, z}\right)`}
+
+The gradient with respect to the coordinates of vertex ${tex`b`} are equal and opposite.
+  </script>
+
+  <script id="axial-demo-controls" type="text/x-typescript">
+const axialControlsContainer = html`<div class="demo-controls"></div>`;
+
+const axialL0Input = Inputs.range([0.3, 1.5], {
+  label: "Equilibrium length",
+  value: 1.0,
+  step: 0.01
+});
+axialControlsContainer.appendChild(axialL0Input);
+
+const axialKInput = Inputs.range([0, 2], {
+  label: "Axial spring constant",
+  value: 1.0,
+  step: 0.01
+});
+axialControlsContainer.appendChild(axialKInput);
+  </script>
+
+  <script id="axial-demo" type="text/x-typescript">
+// Simple 2D canvas demo for axial stiffness
+const axialCanvas = html`<canvas id="axial-canvas" width="600" height="400"></canvas>`;
+const axialCtx2D = axialCanvas.getContext('2d');
+
+// Simple hexagon ring graph (2D)
+const axialGraph = {
+  vertices: [
+    [-1, 0], [-0.5, -0.866], [0.5, -0.866],
+    [1, 0], [0.5, 0.866], [-0.5, 0.866]
+  ],
+  edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]
+};
+
+// Interaction state
+const axialInteraction = {
+  dragging: -1,
+  hoverIndex: -1
+};
+
+function axialDist(a: number[], b: number[]): number {
+  const dx = a[0] - b[0], dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function axialIterate(graph, l0: number, k: number, gamma = 0.1): void {
+  const gradient = new Array(graph.vertices.length).fill(null).map(() => [0, 0]);
+
+  for (const [i0, i1] of graph.edges) {
+    const p0 = graph.vertices[i0];
+    const p1 = graph.vertices[i1];
+    const l = axialDist(p0, p1);
+    if (l < 0.001) continue;
+    const c = k * (1 - l0 / l);
+    const fx = c * (p0[0] - p1[0]);
+    const fy = c * (p0[1] - p1[1]);
+    gradient[i0][0] += fx;
+    gradient[i0][1] += fy;
+    gradient[i1][0] -= fx;
+    gradient[i1][1] -= fy;
+  }
+
+  for (let i = 0; i < graph.vertices.length; i++) {
+    if (i === axialInteraction.dragging) continue;
+    graph.vertices[i][0] -= gradient[i][0] * gamma;
+    graph.vertices[i][1] -= gradient[i][1] * gamma;
+  }
+}
+
+function axialDraw(): void {
+  const ctx = axialCtx2D;
+  const w = axialCanvas.width;
+  const h = axialCanvas.height;
+  const scale = 120;
+  const cx = w / 2, cy = h / 2;
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw edges with strain coloring
+  for (const [i0, i1] of axialGraph.edges) {
+    const p0 = axialGraph.vertices[i0];
+    const p1 = axialGraph.vertices[i1];
+    const l = axialDist(p0, p1);
+    const strain = (l / axialL0Input.value) - 1;
+    const r = Math.max(0, Math.min(255, 128 + strain * 300));
+    const b = Math.max(0, Math.min(255, 128 - strain * 300));
+
+    ctx.strokeStyle = `rgb(${r}, 80, ${b})`;
+    ctx.lineWidth = 3;
+    ctx.beginPath();
+    ctx.moveTo(cx + p0[0] * scale, cy - p0[1] * scale);
+    ctx.lineTo(cx + p1[0] * scale, cy - p1[1] * scale);
+    ctx.stroke();
+  }
+
+  // Draw vertices
+  for (let i = 0; i < axialGraph.vertices.length; i++) {
+    const p = axialGraph.vertices[i];
+    const isHover = i === axialInteraction.hoverIndex;
+    const isDragging = i === axialInteraction.dragging;
+
+    ctx.fillStyle = isDragging ? '#f00' : (isHover ? '#0a0' : '#2366af');
+    ctx.beginPath();
+    ctx.arc(cx + p[0] * scale, cy - p[1] * scale, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function axialGetVertex(x: number, y: number): number {
+  const w = axialCanvas.width;
+  const h = axialCanvas.height;
+  const scale = 120;
+  const cx = w / 2, cy = h / 2;
+
+  for (let i = 0; i < axialGraph.vertices.length; i++) {
+    const p = axialGraph.vertices[i];
+    const px = cx + p[0] * scale;
+    const py = cy - p[1] * scale;
+    const dx = x - px, dy = y - py;
+    if (dx * dx + dy * dy < 400) return i;
+  }
+  return -1;
+}
+
+axialCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+  const rect = axialCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  axialInteraction.dragging = axialGetVertex(x, y);
+});
+
+axialCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+  const rect = axialCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (axialInteraction.dragging >= 0) {
+    const w = axialCanvas.width;
+    const h = axialCanvas.height;
+    const scale = 120;
+    const cx = w / 2, cy = h / 2;
+    axialGraph.vertices[axialInteraction.dragging][0] = (x - cx) / scale;
+    axialGraph.vertices[axialInteraction.dragging][1] = -(y - cy) / scale;
+  } else {
+    axialInteraction.hoverIndex = axialGetVertex(x, y);
+    axialCanvas.style.cursor = axialInteraction.hoverIndex >= 0 ? 'move' : 'default';
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  axialInteraction.dragging = -1;
+});
+
+let axialRunning = true;
+let axialVisible = false;
+
+function axialLoop(): void {
+  if (!axialRunning) return;
+  if (axialVisible) {
+    axialIterate(axialGraph, axialL0Input.value, axialKInput.value);
+    axialDraw();
+  }
+  requestAnimationFrame(axialLoop);
+}
+axialLoop();
+
+const axialFigure = html`
+<figure id="axial-figure">
+  ${axialControlsContainer}
+  ${axialCanvas}
+  <figcaption>Axial stiffness enforces edge length but doesn't adequately constrain the structure. Move the points and observe that the structure is not maintained.</figcaption>
+</figure>`;
+
+const axialObserver = new IntersectionObserver(entries => {
+  axialVisible = entries[0].intersectionRatio > 0;
+});
+axialObserver.observe(axialFigure);
+
+invalidation.then(() => {
+  axialRunning = false;
+  axialObserver.disconnect();
+});
+
+display(axialFigure);
+  </script>
+
+  <script id="dihedral-stiffness-intro" type="text/markdown">
+## Dihedral stiffness
+  </script>
+
+  <script id="figure-angular" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/ba8cea49ce0f777b3b5bcf52ba928eac0ca2ca6e4f37deb6a04068064c5111d8bc378d66692083d12b4f07431e23da7bcfe8a45e2a859dd6378d3f040d9908c7.png" style="max-width: min(100%, 400px)">
+  <figcaption>The segment connecting a, b, and c form angle θ.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="dihedral-stiffness-math" type="text/markdown">
+Axial stiffness alone clearly does not accomplish our goal of maintaining pleasant configurations. We now add an additional type of stiffness: *dihedral stiffness*. The rationale is that edges meet at a preferred angle, ${tex`\theta_0`}. We therefore define the energy function
+${tex.block`E_{dihedral} = k_{dihedral}(\theta - \theta_0)^2.`}
+I'm sure chemistry has a lot to say about this topic, but it seems to be the case based on the structures produced that ${tex`180°`} is the desired pairwise dihedral angle, and that angles of ${tex`120°`} are simply the resulting compromise wherever three edges meet a vertex and result in three pairwise dihedral angles.
+  </script>
+
+  <script id="dihedral-demo-controls" type="text/x-typescript">
+const dihedralControlsContainer = html`<div class="demo-controls"></div>`;
+
+const dihedralKBendInput = Inputs.range([0, 2], {
+  label: "Bending spring constant",
+  value: 0.3,
+  step: 0.01
+});
+dihedralControlsContainer.appendChild(dihedralKBendInput);
+
+const dihedralTheta0Input = Inputs.range([60, 180], {
+  label: "Equilibrium angle, θ₀",
+  value: 120,
+  step: 1
+});
+dihedralControlsContainer.appendChild(dihedralTheta0Input);
+  </script>
+
+  <script id="dihedral-demo" type="text/x-typescript">
+// Simple 2D canvas demo for dihedral stiffness
+const dihedralCanvas = html`<canvas id="dihedral-canvas" width="600" height="400"></canvas>`;
+const dihedralCtx2D = dihedralCanvas.getContext('2d');
+
+// Simple hexagon ring graph (2D)
+const dihedralGraph = {
+  vertices: [
+    [-1, 0], [-0.5, -0.866], [0.5, -0.866],
+    [1, 0], [0.5, 0.866], [-0.5, 0.866]
+  ],
+  edges: [[0, 1], [1, 2], [2, 3], [3, 4], [4, 5], [5, 0]]
+};
+
+// Interaction state
+const dihedralInteraction = {
+  dragging: -1,
+  hoverIndex: -1
+};
+
+function dihedralDist(a: number[], b: number[]): number {
+  const dx = a[0] - b[0], dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function dihedralIterate(graph, l0: number, k: number, theta0: number, kBend: number, gamma = 0.1): void {
+  const gradient = new Array(graph.vertices.length).fill(null).map(() => [0, 0]);
+
+  // Axial springs
+  for (const [i0, i1] of graph.edges) {
+    const p0 = graph.vertices[i0];
+    const p1 = graph.vertices[i1];
+    const l = dihedralDist(p0, p1);
+    if (l < 0.001) continue;
+    const c = k * (1 - l0 / l);
+    const fx = c * (p0[0] - p1[0]);
+    const fy = c * (p0[1] - p1[1]);
+    gradient[i0][0] += fx;
+    gradient[i0][1] += fy;
+    gradient[i1][0] -= fx;
+    gradient[i1][1] -= fy;
+  }
+
+  // Dihedral (bending) springs - for each triplet of consecutive vertices
+  const cosTheta0 = Math.cos(theta0 * Math.PI / 180);
+  const n = graph.vertices.length;
+
+  for (let i = 0; i < n; i++) {
+    const ia = i;
+    const ib = (i + 1) % n;
+    const ic = (i + 2) % n;
+
+    const a = graph.vertices[ia];
+    const b = graph.vertices[ib];
+    const c = graph.vertices[ic];
+
+    // Vectors from b to a and b to c
+    const bax = a[0] - b[0], bay = a[1] - b[1];
+    const bcx = c[0] - b[0], bcy = c[1] - b[1];
+
+    const ba = Math.sqrt(bax * bax + bay * bay);
+    const bc = Math.sqrt(bcx * bcx + bcy * bcy);
+    if (ba < 0.001 || bc < 0.001) continue;
+
+    const ba_bc = bax * bcx + bay * bcy;
+    const cosTheta = ba_bc / (ba * bc);
+    const f = (kBend * 2 * (cosTheta - cosTheta0)) / (ba * bc);
+    const r = ba / bc;
+
+    // Gradient for vertex a
+    const fax = f * (bcx - (cosTheta / r) * bax);
+    const fay = f * (bcy - (cosTheta / r) * bay);
+
+    // Gradient for vertex c
+    const fcx = f * (bax - cosTheta * r * bcx);
+    const fcy = f * (bay - cosTheta * r * bcy);
+
+    gradient[ia][0] += fax;
+    gradient[ia][1] += fay;
+    gradient[ib][0] -= fax + fcx;
+    gradient[ib][1] -= fay + fcy;
+    gradient[ic][0] += fcx;
+    gradient[ic][1] += fcy;
+  }
+
+  for (let i = 0; i < graph.vertices.length; i++) {
+    if (i === dihedralInteraction.dragging) continue;
+    graph.vertices[i][0] -= gradient[i][0] * gamma;
+    graph.vertices[i][1] -= gradient[i][1] * gamma;
+  }
+}
+
+function dihedralDraw(): void {
+  const ctx = dihedralCtx2D;
+  const w = dihedralCanvas.width;
+  const h = dihedralCanvas.height;
+  const scale = 120;
+  const cx = w / 2, cy = h / 2;
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw edges
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 3;
+  for (const [i0, i1] of dihedralGraph.edges) {
+    const p0 = dihedralGraph.vertices[i0];
+    const p1 = dihedralGraph.vertices[i1];
+    ctx.beginPath();
+    ctx.moveTo(cx + p0[0] * scale, cy - p0[1] * scale);
+    ctx.lineTo(cx + p1[0] * scale, cy - p1[1] * scale);
+    ctx.stroke();
+  }
+
+  // Draw vertices
+  for (let i = 0; i < dihedralGraph.vertices.length; i++) {
+    const p = dihedralGraph.vertices[i];
+    const isHover = i === dihedralInteraction.hoverIndex;
+    const isDragging = i === dihedralInteraction.dragging;
+
+    ctx.fillStyle = isDragging ? '#f00' : (isHover ? '#0a0' : '#2366af');
+    ctx.beginPath();
+    ctx.arc(cx + p[0] * scale, cy - p[1] * scale, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function dihedralGetVertex(x: number, y: number): number {
+  const w = dihedralCanvas.width;
+  const h = dihedralCanvas.height;
+  const scale = 120;
+  const cx = w / 2, cy = h / 2;
+
+  for (let i = 0; i < dihedralGraph.vertices.length; i++) {
+    const p = dihedralGraph.vertices[i];
+    const px = cx + p[0] * scale;
+    const py = cy - p[1] * scale;
+    const dx = x - px, dy = y - py;
+    if (dx * dx + dy * dy < 400) return i;
+  }
+  return -1;
+}
+
+dihedralCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+  const rect = dihedralCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  dihedralInteraction.dragging = dihedralGetVertex(x, y);
+});
+
+dihedralCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+  const rect = dihedralCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (dihedralInteraction.dragging >= 0) {
+    const w = dihedralCanvas.width;
+    const h = dihedralCanvas.height;
+    const scale = 120;
+    const cx = w / 2, cy = h / 2;
+    dihedralGraph.vertices[dihedralInteraction.dragging][0] = (x - cx) / scale;
+    dihedralGraph.vertices[dihedralInteraction.dragging][1] = -(y - cy) / scale;
+  } else {
+    dihedralInteraction.hoverIndex = dihedralGetVertex(x, y);
+    dihedralCanvas.style.cursor = dihedralInteraction.hoverIndex >= 0 ? 'move' : 'default';
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  dihedralInteraction.dragging = -1;
+});
+
+let dihedralRunning = true;
+let dihedralVisible = false;
+
+function dihedralLoop(): void {
+  if (!dihedralRunning) return;
+  if (dihedralVisible) {
+    dihedralIterate(dihedralGraph, 1.0, 1.0, dihedralTheta0Input.value, dihedralKBendInput.value);
+    dihedralDraw();
+  }
+  requestAnimationFrame(dihedralLoop);
+}
+dihedralLoop();
+
+const dihedralFigure = html`
+<figure id="dihedral-figure">
+  ${dihedralControlsContainer}
+  ${dihedralCanvas}
+  <figcaption>The combination of dihedral and axial stiffness is enough to maintain structure. Move the points and observe that the ring maintains its structure.</figcaption>
+</figure>`;
+
+const dihedralObserver = new IntersectionObserver(entries => {
+  dihedralVisible = entries[0].intersectionRatio > 0;
+});
+dihedralObserver.observe(dihedralFigure);
+
+invalidation.then(() => {
+  dihedralRunning = false;
+  dihedralObserver.disconnect();
+});
+
+display(dihedralFigure);
+  </script>
+
+  <script id="torsional-stiffness-intro" type="text/markdown">
+## Torsional stiffness
+
+Finally we tackle torsion about an edge.
+  </script>
+
+  <script id="figure-torsion" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/215010cb67fc5d9382293f1b124f4795cca60c3a5e83d3737607af3569b50a45187ead920dd062ce09406f0c4462bd9cffb2aacb2445c295bdbce85f892b7d46.png" style="max-width: min(100%, 400px)">
+  <figcaption>Stiffness of the cardboard from which we construct the model generates a moment which pushes the six vertices toward a flat configuration.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="torsional-stiffness-text" type="text/markdown">
+The figure above shows six adjacent vertices connected by an edge. Torsional stiffness of the cardboard produces a rotational force which causes vertices ${tex`c`}, ${tex`d`}, ${tex`e`}, and ${tex`f`} to rotate toward flat.
+  </script>
+
+  <script id="figure-torsion-setup" type="text/x-typescript">
+display(html`
+<figure>
+  <img src="./files/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885.png" style="max-width: min(100%, 600px)">
+  <figcaption>We define unit vectors α, β, and γ based on the six adjacent vertices.</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="torsional-stiffness-math" type="text/markdown">
+Without the sort of physical justification required for a scientifically valid molecular dynamics simulation, we simply pick an energy function that's minimized when the outer vertices are not twisted. We therefore define the unit vectors ${tex`\vec{\alpha}`}, ${tex`\vec{\beta}`}, and ${tex`\vec{\gamma}`}:
+
+${tex.block`\vec{\alpha} \equiv \frac{\vec{b} - \vec{a}}{|\vec{b} - \vec{a}|} = \alpha(a, b),\;\;\;\vec{\beta} \equiv \frac{\vec{d} - \vec{c}}{|\vec{d} - \vec{c}|} = \beta(c, d),\;\;\;\vec{\gamma} \equiv \frac{\vec{f} - \vec{e}}{|\vec{f} - \vec{e}|} = \gamma(e, f)`}
+
+and define the energy function:
+
+${tex.block`E_{torsion} = -((\vec{\alpha} \times \vec{\beta}) \cdot (\vec{\alpha} \times \vec{\gamma}))^2.`}
+
+Due to the square, this function takes the value ${tex`-1`} when ${tex`\vec{\alpha} \times \vec{\beta}`} is either parallel *or* antiparallel to ${tex`\vec{\alpha} \times \vec{\gamma}`}. In words, this means that the value is minimized when vertices ${tex`c`}, ${tex`d`}, ${tex`e`}, and ${tex`f`} exhibit no rotation relative to the central edge, ${tex`e_{ab}`}.
+
+Note importantly that if we did not normalize vectors ${tex`\vec{\alpha}`}, ${tex`\vec{\beta}`}, and ${tex`\vec{\gamma}`}, then ${tex`E_{torsion}`} would depend upon the distance between the vertices, and the simulation would either blow up or collapse to a point, depending on the sign of ${tex`E_{torsion}`}. As it stands though, the constraint that ${tex`\vec{\alpha}`}, ${tex`\vec{\beta}`}, and ${tex`\vec{\gamma}`} are unit vectors produces a strictly torsional force.
+
+Computing the gradient of the above function without an explosion of terms is a bit challenging. I spent a couple sheets of paper giving it a try before recalling why [Einstein summation notation](https://en.wikipedia.org/wiki/Einstein_notation) is so useful in vector calculus.
+
+The page below illustrates the full derivation of all eighteen components of the gradient.
+  </script>
+
+  <script id="figure-derivation" type="text/x-typescript">
+display(html`
+<figure>
+  <a href="./files/3429461afc80952329592004ff09f1be2a5b3b48e4fa31b56f68fe0337d82c06e0adfad4249735479028522344af6de3df0a999536056b611151122c881db283.jpeg" target="_blank">
+    <img src="./files/3429461afc80952329592004ff09f1be2a5b3b48e4fa31b56f68fe0337d82c06e0adfad4249735479028522344af6de3df0a999536056b611151122c881db283.jpeg" style="max-width: min(100%, 600px)">
+  </a>
+  <figcaption>The full derivation of the torsional energy gradient (click to enlarge).</figcaption>
+</figure>
+`);
+  </script>
+
+  <script id="torsion-derivation" type="text/markdown">
+<details>
+<summary>Full derivation of the torsional energy gradient</summary>
+
+### Setup
+
+Consider an edge connecting vertices ${tex`a`} and ${tex`b`}, with additional vertices ${tex`c`}, ${tex`d`} adjacent to ${tex`a`}, and vertices ${tex`e`}, ${tex`f`} adjacent to ${tex`b`}:
+
+<figure style="margin: 1em 0;">
+  <img src="./files/19f229d9bfb51c5702f7764d7a81c56abb93cd141312e01034d3152fc1e9a42a90151707f573b16d1b7c04169a26c71e15b6b2f82fafdeb3ba5011148aee5885.png" style="max-width: min(100%, 500px)">
+</figure>
+
+We define unit vectors along each edge:
+
+${tex.block`\vec{\alpha} \equiv \frac{\vec{b} - \vec{a}}{r_{ab}},\quad \vec{\beta} \equiv \frac{\vec{d} - \vec{c}}{r_{cd}},\quad \vec{\gamma} \equiv \frac{\vec{f} - \vec{e}}{r_{ef}}`}
+
+where ${tex`r_{ab} = |\vec{b} - \vec{a}|`}, etc.
+
+### Energy Function
+
+The torsional energy measures misalignment between the planes defined by branches on either side of the central edge. We define:
+
+${tex.block`E = -((\vec{\alpha} \times \vec{\beta}) \cdot (\vec{\alpha} \times \vec{\gamma}))^2`}
+
+This is minimized (equals ${tex`-1`}) when ${tex`\vec{\alpha} \times \vec{\beta}`} is parallel or antiparallel to ${tex`\vec{\alpha} \times \vec{\gamma}`}, meaning the branches are coplanar.
+
+### Simplification Using BAC-CAB
+
+Using the [BAC-CAB identity](https://en.wikipedia.org/wiki/Triple_product#Vector_triple_product) for the scalar triple product:
+
+${tex.block`(\vec{\alpha} \times \vec{\beta}) \cdot (\vec{\alpha} \times \vec{\gamma}) = (\vec{\alpha} \cdot \vec{\alpha})(\vec{\beta} \cdot \vec{\gamma}) - (\vec{\alpha} \cdot \vec{\beta})(\vec{\alpha} \cdot \vec{\gamma})`}
+
+Since ${tex`\vec{\alpha}`} is a unit vector (${tex`|\vec{\alpha}| = 1`}), this simplifies to:
+
+${tex.block`E_0 \equiv (\vec{\beta} \cdot \vec{\gamma}) - (\vec{\alpha} \cdot \vec{\beta})(\vec{\alpha} \cdot \vec{\gamma})`}
+
+so that ${tex`E = -E_0^2`}.
+
+In Einstein summation notation (repeated indices imply summation):
+
+${tex.block`\boxed{E_0 = \gamma_i \beta_i - (\alpha_j \beta_j)(\alpha_k \gamma_k)}`}
+
+### Derivatives of Unit Vectors
+
+To compute gradients, we need the derivatives of unit vectors with respect to their endpoint positions. For ${tex`\vec{\alpha} = (\vec{b} - \vec{a}) / r_{ab}`}:
+
+${tex.block`\frac{\partial \alpha_i}{\partial a_j} = \frac{1}{r_{ab}}(\alpha_i \alpha_j - \delta_{ij})`}
+
+${tex.block`\frac{\partial \alpha_i}{\partial b_j} = \frac{1}{r_{ab}}(\delta_{ij} - \alpha_i \alpha_j)`}
+
+where ${tex`\delta_{ij}`} is the Kronecker delta. The analogous expressions hold for ${tex`\vec{\beta}`} and ${tex`\vec{\gamma}`}.
+
+### Gradient Computation
+
+Applying the chain rule to ${tex`E = -E_0^2`}:
+
+${tex.block`\frac{\partial E}{\partial x} = -2 E_0 \frac{\partial E_0}{\partial x}`}
+
+Since ${tex`E_0 = \gamma_i \beta_i - (\alpha_j \beta_j)(\alpha_k \gamma_k)`}, we differentiate term by term.
+
+**Gradient with respect to ${tex`a_\ell`}:**
+
+Only ${tex`\vec{\alpha}`} depends on ${tex`\vec{a}`}:
+
+${tex.block`\frac{\partial E_0}{\partial a_\ell} = -\frac{\partial \alpha_j}{\partial a_\ell} \beta_j (\alpha_k \gamma_k) - (\alpha_j \beta_j) \frac{\partial \alpha_k}{\partial a_\ell} \gamma_k`}
+
+Substituting the derivative:
+
+${tex.block`= -\frac{1}{r_{ab}}(\alpha_j \alpha_\ell - \delta_{j\ell}) \beta_j (\alpha_k \gamma_k) - (\alpha_j \beta_j) \frac{1}{r_{ab}}(\alpha_k \alpha_\ell - \delta_{k\ell}) \gamma_k`}
+
+${tex.block`= \frac{1}{r_{ab}}\left[(\beta_\ell - \alpha_\ell(\alpha_j\beta_j))(\alpha_k\gamma_k) + (\alpha_j\beta_j)(\gamma_\ell - \alpha_\ell(\alpha_k\gamma_k))\right]`}
+
+Multiplying by ${tex`-2E_0`} and rearranging terms (noting that ${tex`(\beta_\ell - X) = -(X - \beta_\ell)`}):
+
+${tex.block`\boxed{\frac{\partial E}{\partial a_\ell} = \frac{2E_0}{r_{ab}}\left[(\alpha_\ell(\alpha_j\beta_j) - \beta_\ell)(\alpha_k\gamma_k) + (\alpha_j\beta_j)(\alpha_\ell(\alpha_k\gamma_k) - \gamma_\ell)\right]}`}
+
+**Gradient with respect to ${tex`b_\ell`}:**
+
+The derivative ${tex`\partial \alpha_i / \partial b_j`} has opposite sign:
+
+${tex.block`\boxed{\frac{\partial E}{\partial b_\ell} = \frac{2E_0}{r_{ab}}\left[(\beta_\ell - \alpha_\ell(\alpha_j\beta_j))(\alpha_k\gamma_k) + (\alpha_j\beta_j)(\gamma_\ell - \alpha_\ell(\alpha_k\gamma_k))\right]}`}
+
+Note that ${tex`\frac{\partial E}{\partial a_\ell} = -\frac{\partial E}{\partial b_\ell}`}, as expected since shifting both ${tex`a`} and ${tex`b`} together should not change the energy.
+
+**Gradient with respect to ${tex`c_\ell`}:**
+
+Only ${tex`\vec{\beta}`} depends on ${tex`\vec{c}`}. Since ${tex`\vec{\beta} = (\vec{d} - \vec{c})/r_{cd}`}:
+
+${tex.block`\frac{\partial \beta_i}{\partial c_j} = \frac{1}{r_{cd}}(\beta_i\beta_j - \delta_{ij})`}
+
+${tex.block`\frac{\partial E_0}{\partial c_\ell} = \gamma_i \frac{\partial \beta_i}{\partial c_\ell} - \alpha_j \frac{\partial \beta_j}{\partial c_\ell} (\alpha_k \gamma_k)`}
+
+${tex.block`= \frac{1}{r_{cd}}\left[(\gamma_i\beta_i)\beta_\ell - \gamma_\ell - (\alpha_k\gamma_k)((\alpha_j\beta_j)\beta_\ell - \alpha_\ell)\right]`}
+
+Multiplying by ${tex`-2E_0`} and simplifying:
+
+${tex.block`\boxed{\frac{\partial E}{\partial c_\ell} = \frac{2E_0}{r_{cd}}\left[\gamma_\ell - (\gamma_i\beta_i)\beta_\ell + (\alpha_k\gamma_k)((\alpha_j\beta_j)\beta_\ell - \alpha_\ell)\right]}`}
+
+**Gradient with respect to ${tex`d_\ell`}:**
+
+Since ${tex`\frac{\partial \beta_i}{\partial d_j} = -\frac{\partial \beta_i}{\partial c_j}`}, we have ${tex`\frac{\partial E}{\partial d_\ell} = -\frac{\partial E}{\partial c_\ell}`}:
+
+${tex.block`\boxed{\frac{\partial E}{\partial d_\ell} = \frac{2E_0}{r_{cd}}\left[(\gamma_i\beta_i)\beta_\ell - \gamma_\ell - (\alpha_k\gamma_k)((\alpha_j\beta_j)\beta_\ell - \alpha_\ell)\right]}`}
+
+**Gradient with respect to ${tex`e_\ell`}:**
+
+Only ${tex`\vec{\gamma}`} depends on ${tex`\vec{e}`}. Since ${tex`\vec{\gamma} = (\vec{f} - \vec{e})/r_{ef}`}:
+
+${tex.block`\frac{\partial \gamma_i}{\partial e_j} = \frac{1}{r_{ef}}(\gamma_i\gamma_j - \delta_{ij})`}
+
+${tex.block`\frac{\partial E_0}{\partial e_\ell} = \beta_i \frac{\partial \gamma_i}{\partial e_\ell} - (\alpha_j\beta_j)\alpha_k\frac{\partial \gamma_k}{\partial e_\ell}`}
+
+${tex.block`= \frac{1}{r_{ef}}\left[(\beta_i\gamma_i)\gamma_\ell - \beta_\ell - (\alpha_j\beta_j)((\alpha_k\gamma_k)\gamma_\ell - \alpha_\ell)\right]`}
+
+Multiplying by ${tex`-2E_0`} and simplifying:
+
+${tex.block`\boxed{\frac{\partial E}{\partial e_\ell} = \frac{2E_0}{r_{ef}}\left[\beta_\ell - (\beta_i\gamma_i)\gamma_\ell + (\alpha_j\beta_j)((\alpha_k\gamma_k)\gamma_\ell - \alpha_\ell)\right]}`}
+
+**Gradient with respect to ${tex`f_\ell`}:**
+
+Since ${tex`\frac{\partial \gamma_i}{\partial f_j} = -\frac{\partial \gamma_i}{\partial e_j}`}, we have ${tex`\frac{\partial E}{\partial f_\ell} = -\frac{\partial E}{\partial e_\ell}`}:
+
+${tex.block`\boxed{\frac{\partial E}{\partial f_\ell} = \frac{2E_0}{r_{ef}}\left[(\beta_i\gamma_i)\gamma_\ell - \beta_\ell - (\alpha_j\beta_j)((\alpha_k\gamma_k)\gamma_\ell - \alpha_\ell)\right]}`}
+
+### Summary
+
+These eighteen gradient components (three spatial coordinates for each of six vertices) drive the simulation toward configurations where the branches on either side of each edge are coplanar. The normalization of ${tex`\vec{\alpha}`}, ${tex`\vec{\beta}`}, and ${tex`\vec{\gamma}`} ensures that these forces are purely torsional and do not depend on edge lengths.
+
+</details>
+  </script>
+
+  <script id="torsion-demo-controls" type="text/x-typescript">
+const torsionControlsContainer = html`<div class="demo-controls"></div>`;
+
+const torsionKTorsionInput = Inputs.range([0, 0.05], {
+  label: "Torsional spring constant",
+  value: 0.025,
+  step: 0.001
+});
+torsionControlsContainer.appendChild(torsionKTorsionInput);
+  </script>
+
+  <script id="torsion-demo" type="text/x-typescript">
+// Simple 2D canvas demo for torsional stiffness (shown as projection)
+const torsionCanvas = html`<canvas id="torsion-canvas" width="600" height="400"></canvas>`;
+const torsionCtx2D = torsionCanvas.getContext('2d');
+
+// Linear graph with branching endpoints (2D projection of 3D)
+const torsionGraph = {
+  vertices: [
+    [-1, 0.5], [-1, -0.5],  // Left branches (c, d)
+    [-0.5, 0],              // Left junction (a)
+    [0.5, 0],               // Right junction (b)
+    [1, -0.5], [1, 0.5]     // Right branches (e, f)
+  ],
+  edges: [[0, 2], [1, 2], [2, 3], [3, 4], [3, 5]]
+};
+
+// Interaction state
+const torsionInteraction = {
+  dragging: -1,
+  hoverIndex: -1
+};
+
+function torsionDist(a: number[], b: number[]): number {
+  const dx = a[0] - b[0], dy = a[1] - b[1];
+  return Math.sqrt(dx * dx + dy * dy);
+}
+
+function torsionIterate(graph, l0: number, k: number, theta0: number, kBend: number, kTorsion: number, gamma = 0.1): void {
+  const gradient = new Array(graph.vertices.length).fill(null).map(() => [0, 0]);
+
+  // Axial springs
+  for (const [i0, i1] of graph.edges) {
+    const p0 = graph.vertices[i0];
+    const p1 = graph.vertices[i1];
+    const l = torsionDist(p0, p1);
+    if (l < 0.001) continue;
+    const c = k * (1 - l0 / l);
+    const fx = c * (p0[0] - p1[0]);
+    const fy = c * (p0[1] - p1[1]);
+    gradient[i0][0] += fx;
+    gradient[i0][1] += fy;
+    gradient[i1][0] -= fx;
+    gradient[i1][1] -= fy;
+  }
+
+  // Dihedral (bending) springs at junctions
+  const cosTheta0 = Math.cos(theta0 * Math.PI / 180);
+
+  // Junction at vertex 2 (connections: 0, 1, 3)
+  const junctions = [
+    { center: 2, neighbors: [0, 1, 3] },
+    { center: 3, neighbors: [2, 4, 5] }
+  ];
+
+  for (const { center, neighbors } of junctions) {
+    const b = graph.vertices[center];
+    for (let i = 0; i < neighbors.length; i++) {
+      for (let j = i + 1; j < neighbors.length; j++) {
+        const ia = neighbors[i];
+        const ic = neighbors[j];
+        const a = graph.vertices[ia];
+        const c = graph.vertices[ic];
+
+        const bax = a[0] - b[0], bay = a[1] - b[1];
+        const bcx = c[0] - b[0], bcy = c[1] - b[1];
+
+        const ba = Math.sqrt(bax * bax + bay * bay);
+        const bc = Math.sqrt(bcx * bcx + bcy * bcy);
+        if (ba < 0.001 || bc < 0.001) continue;
+
+        const ba_bc = bax * bcx + bay * bcy;
+        const cosTheta = ba_bc / (ba * bc);
+        const f = (kBend * 2 * (cosTheta - cosTheta0)) / (ba * bc);
+        const r = ba / bc;
+
+        const fax = f * (bcx - (cosTheta / r) * bax);
+        const fay = f * (bcy - (cosTheta / r) * bay);
+        const fcx = f * (bax - cosTheta * r * bcx);
+        const fcy = f * (bay - cosTheta * r * bcy);
+
+        gradient[ia][0] += fax;
+        gradient[ia][1] += fay;
+        gradient[center][0] -= fax + fcx;
+        gradient[center][1] -= fay + fcy;
+        gradient[ic][0] += fcx;
+        gradient[ic][1] += fcy;
+      }
+    }
+  }
+
+  // Torsional spring - keeps c,d,e,f coplanar (in 2D, this means aligned)
+  // For the central edge (2-3), compute the "torsion" as misalignment of branches
+  const iA = 2, iB = 3;
+  const iC = 0, iD = 1;  // branches off A
+  const iE = 4, iF = 5;  // branches off B
+
+  const a = graph.vertices[iA];
+  const b = graph.vertices[iB];
+  const c = graph.vertices[iC];
+  const d = graph.vertices[iD];
+  const e = graph.vertices[iE];
+  const f = graph.vertices[iF];
+
+  // In 2D, compute "perpendicular" alignment
+  // alpha = b - a (normalized)
+  const alphax = b[0] - a[0], alphay = b[1] - a[1];
+  const alphaLen = Math.sqrt(alphax * alphax + alphay * alphay);
+  if (alphaLen > 0.001) {
+    const ax = alphax / alphaLen, ay = alphay / alphaLen;
+
+    // beta = d - c (normalized)
+    const betax = d[0] - c[0], betay = d[1] - c[1];
+    const betaLen = Math.sqrt(betax * betax + betay * betay);
+
+    // gamma = f - e (normalized)
+    const gammax = f[0] - e[0], gammay = f[1] - e[1];
+    const gammaLen = Math.sqrt(gammax * gammax + gammay * gammay);
+
+    if (betaLen > 0.001 && gammaLen > 0.001) {
+      const bx = betax / betaLen, by = betay / betaLen;
+      const gx = gammax / gammaLen, gy = gammay / gammaLen;
+
+      // In 2D, "cross product" gives scalar (z-component)
+      const ab_cross = ax * by - ay * bx;  // alpha x beta
+      const ag_cross = ax * gy - ay * gx;  // alpha x gamma
+
+      // Energy: -((alpha x beta) . (alpha x gamma))^2
+      // In 2D this is -(ab_cross * ag_cross)^2
+      const E0 = ab_cross * ag_cross * kTorsion;
+
+      // Simplified gradient (drives toward alignment)
+      const torsionForce = E0 * 2;
+
+      // Apply force to move c,d to align with e,f
+      gradient[iC][0] += torsionForce * ay / betaLen;
+      gradient[iC][1] -= torsionForce * ax / betaLen;
+      gradient[iD][0] -= torsionForce * ay / betaLen;
+      gradient[iD][1] += torsionForce * ax / betaLen;
+
+      gradient[iE][0] -= torsionForce * ay / gammaLen;
+      gradient[iE][1] += torsionForce * ax / gammaLen;
+      gradient[iF][0] += torsionForce * ay / gammaLen;
+      gradient[iF][1] -= torsionForce * ax / gammaLen;
+    }
+  }
+
+  for (let i = 0; i < graph.vertices.length; i++) {
+    if (i === torsionInteraction.dragging) continue;
+    graph.vertices[i][0] -= gradient[i][0] * gamma;
+    graph.vertices[i][1] -= gradient[i][1] * gamma;
+  }
+}
+
+function torsionDraw(): void {
+  const ctx = torsionCtx2D;
+  const w = torsionCanvas.width;
+  const h = torsionCanvas.height;
+  const scale = 150;
+  const cx = w / 2, cy = h / 2;
+
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, w, h);
+
+  // Draw edges
+  ctx.strokeStyle = '#333';
+  ctx.lineWidth = 3;
+  for (const [i0, i1] of torsionGraph.edges) {
+    const p0 = torsionGraph.vertices[i0];
+    const p1 = torsionGraph.vertices[i1];
+    ctx.beginPath();
+    ctx.moveTo(cx + p0[0] * scale, cy - p0[1] * scale);
+    ctx.lineTo(cx + p1[0] * scale, cy - p1[1] * scale);
+    ctx.stroke();
+  }
+
+  // Draw vertices
+  for (let i = 0; i < torsionGraph.vertices.length; i++) {
+    const p = torsionGraph.vertices[i];
+    const isHover = i === torsionInteraction.hoverIndex;
+    const isDragging = i === torsionInteraction.dragging;
+
+    ctx.fillStyle = isDragging ? '#f00' : (isHover ? '#0a0' : '#2366af');
+    ctx.beginPath();
+    ctx.arc(cx + p[0] * scale, cy - p[1] * scale, 8, 0, Math.PI * 2);
+    ctx.fill();
+  }
+}
+
+function torsionGetVertex(x: number, y: number): number {
+  const w = torsionCanvas.width;
+  const h = torsionCanvas.height;
+  const scale = 150;
+  const cx = w / 2, cy = h / 2;
+
+  for (let i = 0; i < torsionGraph.vertices.length; i++) {
+    const p = torsionGraph.vertices[i];
+    const px = cx + p[0] * scale;
+    const py = cy - p[1] * scale;
+    const dx = x - px, dy = y - py;
+    if (dx * dx + dy * dy < 400) return i;
+  }
+  return -1;
+}
+
+torsionCanvas.addEventListener('mousedown', (e: MouseEvent) => {
+  const rect = torsionCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  torsionInteraction.dragging = torsionGetVertex(x, y);
+});
+
+torsionCanvas.addEventListener('mousemove', (e: MouseEvent) => {
+  const rect = torsionCanvas.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+
+  if (torsionInteraction.dragging >= 0) {
+    const w = torsionCanvas.width;
+    const h = torsionCanvas.height;
+    const scale = 150;
+    const cx = w / 2, cy = h / 2;
+    torsionGraph.vertices[torsionInteraction.dragging][0] = (x - cx) / scale;
+    torsionGraph.vertices[torsionInteraction.dragging][1] = -(y - cy) / scale;
+  } else {
+    torsionInteraction.hoverIndex = torsionGetVertex(x, y);
+    torsionCanvas.style.cursor = torsionInteraction.hoverIndex >= 0 ? 'move' : 'default';
+  }
+});
+
+window.addEventListener('mouseup', () => {
+  torsionInteraction.dragging = -1;
+});
+
+let torsionRunning = true;
+let torsionVisible = false;
+
+function torsionLoop(): void {
+  if (!torsionRunning) return;
+  if (torsionVisible) {
+    torsionIterate(torsionGraph, 1.0, 1.0, 180, 0.5, torsionKTorsionInput.value);
+    torsionDraw();
+  }
+  requestAnimationFrame(torsionLoop);
+}
+torsionLoop();
+
+const torsionFigure = html`
+<figure id="torsion-figure">
+  ${torsionControlsContainer}
+  ${torsionCanvas}
+  <figcaption>Move the vertices above and observe that the addition of torsional stiffness keeps the above structure planar.</figcaption>
+</figure>`;
+
+const torsionObserver = new IntersectionObserver(entries => {
+  torsionVisible = entries[0].intersectionRatio > 0;
+});
+torsionObserver.observe(torsionFigure);
+
+invalidation.then(() => {
+  torsionRunning = false;
+  torsionObserver.disconnect();
+});
+
+display(torsionFigure);
+  </script>
+
   <script id="styles" type="text/x-typescript">
 display(html`
   <style>
@@ -474,9 +1522,6 @@ display(html`
       line-height: 1;
       padding: 2px 4px;
       white-space: nowrap;
-    }
-    figure canvas {
-      border: 1px solid #eee !important;
     }
   </style>
 `);

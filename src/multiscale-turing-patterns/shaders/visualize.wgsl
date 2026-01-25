@@ -17,6 +17,7 @@ struct VisualizeParams {
   colorStrength: f32,
   gamma: f32,
   invert: u32,
+  domainScale: f32,  // N / referenceN - tiles the pattern to show larger domain at higher res
   domainSize: vec2<f32>,
 }
 
@@ -71,7 +72,8 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
   let uv_transformed = data.xy / params.domainSize;
 
   // Convert to pixel coordinates (centered on pixels)
-  let pixel_coord = uv_transformed * res_f - vec2<f32>(0.5);
+  // Divide by domainScale so larger grids show the pattern at the same visual size
+  let pixel_coord = uv_transformed * res_f / params.domainScale - vec2<f32>(0.5);
 
   // Sample solution with bilinear interpolation
   let sample = sampleSolution(pixel_coord, resolution);

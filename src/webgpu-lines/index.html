@@ -1,10 +1,36 @@
 <!doctype html>
 <notebook theme="air">
   <title>WebGPU Instanced Lines</title>
+  <script id="0" type="module">
+    const link = html`<a href="https://github.com/rreusser/webgpu-instanced-lines" target="_blank" style="
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 12px;
+      background: #24292e;
+      color: white;
+      border-radius: 6px;
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      float: right;
+      margin: 0 0 10px 10px;
+    ">
+      <svg height="20" width="20" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/>
+      </svg>
+      View on GitHub
+    </a>`;
+    display(link);
+  </script>
   <script id="1" type="text/markdown">
     # WebGPU Instanced Lines
 
     [webgpu-instanced-lines](https://www.npmjs.com/package/webgpu-instanced-lines) is a library for high-performance, customizable line rendering for WebGPU using instanced triangle strips. It is a WebGPU port of [regl-gpu-lines](https://github.com/rreusser/regl-gpu-lines). This notebook is where I originally developed the implementation. The source now lives on [GitHub](https://github.com/rreusser/webgpu-instanced-lines).
+
+    ## Interactive Demo
+
+    Explore the line rendering options with interactive demo below. Drag handles to edit vertices, drag the background to pan, and scroll to zoom. Enable **Debug view** to see the underlying triangle strip structure. Alternating colors indicate separate instances.
   </script>
   <script id="2" type="module">
     // Initialize WebGPU for interactive demo
@@ -22,11 +48,6 @@
     const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 
     invalidation.then(() => device.destroy());
-  </script>
-  <script id="3" type="text/markdown">
-    ## Interactive Demo
-
-    Explore the line rendering options with interactive demo below. Drag handles to edit vertices, drag the background to pan, and scroll to zoom. Enable **Debug view** to see the underlying triangle strip structure. Alternating colors indicate separate instances.
   </script>
   <script id="5" type="module">
     import { createElementStack } from './lib/element-stack.js'
@@ -49,6 +70,7 @@
           canvas.height = Math.floor(height * dpr);
           canvas.style.width = `${width}px`;
           canvas.style.height = `${height}px`;
+          canvas.style.border = '1px solid rgba(0,0,0,0.2)';
           return canvas;
         }
       }, {
@@ -87,7 +109,7 @@
 
     const figure = html`<figure style="margin: 0;">
       ${stack.element}
-      <figcaption>Drag handles to edit vertices. Drag background to pan, scroll to zoom.</figcaption>
+      <figcaption style="margin-top:5px">Drag handles to edit vertices. Drag background to pan, scroll to zoom.</figcaption>
     </figure>`;
 
     display(expandable(figure, {
@@ -106,13 +128,13 @@
     }));
   </script>
   <script id="6" type="module">
-    const lineWidthInput = Inputs.range([1, 100], { label: 'Line width', value: 50, step: 0.5 });
+    const lineWidthInput = Inputs.range([1, 100], { label: 'Line width', value: 70, step: 0.5 });
     const lineWidth = view(lineWidthInput);
 
     const joinTypeInput = Inputs.select(['bevel', 'miter', 'round'], { label: 'Join type', value: 'miter' });
     const joinType = view(joinTypeInput);
 
-    const capTypeInput = Inputs.select(['round', 'square', 'none'], { label: 'Cap type', value: 'round' });
+    const capTypeInput = Inputs.select(['round', 'square', 'butt'], { label: 'Cap type', value: 'round' });
     const capType = view(capTypeInput);
 
     const patternInput = Inputs.select(['wave', 'zigzag', 'spiral'], { label: 'Pattern', value: 'zigzag' });
@@ -135,6 +157,12 @@
 
     const debugViewInput = Inputs.toggle({ label: 'Debug view', value: 'Debug view' });
     const debugView = view(debugViewInput);
+
+    const depthTestInput = Inputs.toggle({ label: 'Depth test' });
+    const depthTest = view(depthTestInput);
+
+    const cullBackFacesInput = Inputs.toggle({ label: 'Cull back faces' });
+    const cullBackFaces = view(cullBackFacesInput);
   </script>
   <script id="7" type="module">
     const miterLimitInput = Inputs.range([1, 10], {
@@ -162,6 +190,9 @@
       disabled: capType !== 'round'
     });
     const capResolution = view(capResolutionInput);
+
+    const downloadButtonInput = Inputs.button('Download PNG');
+    const downloadButton = view(downloadButtonInput);
   </script>
   <script id="10" type="module">
     display(html`<div class="lines-controls">
@@ -178,6 +209,9 @@
       ${stripesInput}
       ${varyingWidthInput}
       ${debugViewInput}
+      ${depthTestInput}
+      ${cullBackFacesInput}
+      ${downloadButtonInput}
     </div>`);
   </script>
   <script id="11" type="module">
@@ -350,11 +384,13 @@
     stack.addEventListener('update', updateHandlePositions);
   </script>
   <script id="13" type="module">
-    joinType; joinResolution; miterLimit; capType; capResolution; sdfStrokeWidth; alpha; stripes; varyingWidth; debugView; lineWidth;
+    // Only depend on shader-affecting parameters (join/cap type, shader options)
+    // Resolution and miterLimit are now runtime parameters passed to draw()
+    joinType; capType; sdfStrokeWidth; alpha; stripes; varyingWidth; debugView; depthTest; cullBackFaces;
 
     const useSdfMode = sdfStrokeWidth > 0;
     const useBlend = useSdfMode || alpha < 1 || debugView;
-    const baseWidth = lineWidth * dpr;
+    const depthFormat = depthTest ? 'depth24plus' : null;
 
     // Vertex shader body with position buffer, distance buffer, and view matrix
     const vertexShaderBody = /* wgsl */`
@@ -367,6 +403,7 @@
         dpr: f32,
       }
       @group(1) @binding(4) var<uniform> debug: DebugUniforms;
+      @group(1) @binding(5) var<uniform> lineWidthUniform: f32;
 
       struct Vertex {
         position: vec4f,
@@ -379,8 +416,9 @@
         let p = positions[index];
         let d = distances[index];
         let projected = viewMatrix * vec4f(p.xyz, 1.0);
+        // Reference totalDistance to ensure it's included in bind group layout
         let normalizedDist = d / totalDistance;
-        let w = ${varyingWidth ? `${baseWidth.toFixed(1)} * (0.5 + 1.5 * normalizedDist)` : `${baseWidth.toFixed(1)}`};
+        let w = ${varyingWidth ? 'lineWidthUniform * (0.5 + 1.5 * normalizedDist)' : 'lineWidthUniform'};
         return Vertex(vec4f(projected.xyz, p.w * projected.w), w, d, w);
       }
     `;
@@ -423,12 +461,11 @@
         // Layer 1: Base fill color (debug instance color or normal color)
         var baseColor: vec3f;
         if (debug.enabled == 1u) {
-          let iInstanceID = floor(instanceID + 0.5);
-          if (iInstanceID < 0.0) {
-            baseColor = vec3f(0.8, 0.1, 0.4);  // Red/pink for caps
-          } else {
-            baseColor = select(vec3f(0.8, 0.1, 0.4), vec3f(0.1, 0.7, 1.0), i32(iInstanceID) % 2 == 0);
-          }
+          // instanceID encodes: non-negative = segment index, negative = cap with index (-id - 1)
+          let isCap = instanceID < 0.0;
+          let segmentIndex = select(instanceID, -instanceID - 1.0, isCap);
+          let iSegmentIndex = i32(floor(segmentIndex + 0.5));
+          baseColor = select(vec3f(0.8, 0.1, 0.4), vec3f(0.1, 0.7, 1.0), iSegmentIndex % 2 == 0);
         } else {
           baseColor = vec3f(0.1, 0.7, 1.0);
         }
@@ -438,6 +475,17 @@
         let stripe = step(0.5, fract(dist * stripeFreq));
         let stripeColor = baseColor * 0.4;  // Darker version of base
         var color = ${stripes ? 'mix(baseColor, stripeColor, stripe)' : 'baseColor'};
+
+        // Layer 2.5: Tint caps - green for start cap (x < 0), purple for end cap (x > 0)
+        // Only show in debug mode
+        if (debug.enabled == 1u) {
+          let green = vec3f(0.2, 0.9, 0.3);
+          let purple = vec3f(0.8, 0.3, 0.9);
+          let isStart = step(lineCoord.x, -0.01);  // 1 if x < -0.01
+          let isEnd = step(0.01, lineCoord.x);     // 1 if x > 0.01
+          color = mix(color, green, isStart * 0.5);
+          color = mix(color, purple, isEnd * 0.5);
+        }
 
         // Layer 3: Apply stroke (50% black in debug mode, dark blue in normal mode)
         color = mix(color, vec3f(0.0), strokeMask * 0.7);
@@ -452,21 +500,27 @@
       }
     `;
 
+    // Use max resolutions at init time to allow runtime adjustment up to these values
+    // Runtime values (miterLimit, joinResolution, capResolution) are passed to draw()
+    const blend = useBlend ? {
+      color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+      alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
+    } : undefined;
+
     const gpuLines = createGPULines(device, {
-      colorTargets: [{
-        format: canvasFormat,
-        blend: useBlend ? {
-          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
-          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' }
-        } : undefined
-      }],
+      colorTargets: blend ? { format: canvasFormat, blend } : { format: canvasFormat },
+      depthStencil: depthFormat ? {
+        format: depthFormat,
+        depthWriteEnabled: true,
+        depthCompare: 'less'
+      } : undefined,
+      primitive: { cullMode: cullBackFaces ? 'back' : 'none' },
       join: joinType,
-      joinResolution: joinResolution,
-      miterLimit: miterLimit,
+      maxJoinResolution: 16,  // Allow up to 16 at runtime
+      maxCapResolution: 16,   // Allow up to 16 at runtime
       cap: capType,
-      capResolution: capResolution,
       vertexShaderBody,
-      fragmentShaderBody
+      fragmentShaderBody,
     });
 
     // Create view matrix buffer
@@ -483,6 +537,13 @@
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
 
+    // Create line width uniform buffer
+    const lineWidthBuffer = device.createBuffer({
+      label: 'line-width-uniform',
+      size: 4,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
     // Create bind group for user data (group 1)
     const dataBindGroup = device.createBindGroup({
       layout: gpuLines.getBindGroupLayout(1),
@@ -491,20 +552,28 @@
         { binding: 1, resource: { buffer: distanceBuffer } },
         { binding: 2, resource: { buffer: viewMatrixBuffer } },
         { binding: 3, resource: { buffer: totalDistanceBuffer } },
-        { binding: 4, resource: { buffer: debugBuffer } }
+        { binding: 4, resource: { buffer: debugBuffer } },
+        { binding: 5, resource: { buffer: lineWidthBuffer } }
       ]
     });
 
     invalidation.then(() => {
       gpuLines.destroy();
       viewMatrixBuffer.destroy();
+      lineWidthBuffer.destroy();
       debugBuffer.destroy();
     });
   </script>
   <script id="14" type="module">
     import { createFrameLoop } from './lib/frame-loop.js';
 
-    lineWidth; debugView; renderState.dirty = true;
+    // Depend on runtime parameters that don't require pipeline recreation
+    lineWidth; debugView; miterLimit; joinResolution; capResolution; renderState.dirty = true;
+
+    // Depth texture for depth testing (created lazily, resized as needed)
+    let depthTexture = null;
+    let depthTextureWidth = 0;
+    let depthTextureHeight = 0;
 
     const loop = createFrameLoop(() => {
       if (renderState.dirty) {
@@ -517,21 +586,54 @@
         new Float32Array(debugData, 4, 1)[0] = dpr;
         device.queue.writeBuffer(debugBuffer, 0, debugData);
 
+        // Update line width uniform
+        device.queue.writeBuffer(lineWidthBuffer, 0, new Float32Array([lineWidth * dpr]));
+
+        // Create/resize depth texture if depth testing is enabled
+        if (depthFormat) {
+          if (!depthTexture || depthTextureWidth !== canvas.width || depthTextureHeight !== canvas.height) {
+            if (depthTexture) depthTexture.destroy();
+            depthTexture = device.createTexture({
+              size: [canvas.width, canvas.height],
+              format: depthFormat,
+              usage: GPUTextureUsage.RENDER_ATTACHMENT
+            });
+            depthTextureWidth = canvas.width;
+            depthTextureHeight = canvas.height;
+          }
+        }
+
         const encoder = device.createCommandEncoder();
 
-        const pass = encoder.beginRenderPass({
+        const renderPassDescriptor = {
           colorAttachments: [{
             view: gpuContext.getCurrentTexture().createView(),
             loadOp: 'clear',
             storeOp: 'store',
-            clearValue: { r: 1.0, g: 1.0, b: 1.0, a: 1 }
+            clearValue: { r: 0, g: 0, b: 0, a: 0 }
           }]
-        });
+        };
 
+        // Add depth attachment if depth testing is enabled
+        if (depthFormat && depthTexture) {
+          renderPassDescriptor.depthStencilAttachment = {
+            view: depthTexture.createView(),
+            depthClearValue: 1.0,
+            depthLoadOp: 'clear',
+            depthStoreOp: 'store'
+          };
+        }
+
+        const pass = encoder.beginRenderPass(renderPassDescriptor);
+
+        // Pass runtime parameters (miterLimit, joinResolution, capResolution)
+        // These update uniforms without recreating the pipeline
         gpuLines.draw(pass, {
           vertexCount: numPoints,
-          width: lineWidth * dpr,
-          resolution: [canvas.width, canvas.height]
+          resolution: [canvas.width, canvas.height],
+          miterLimit: miterLimit,
+          joinResolution: joinResolution,
+          capResolution: capResolution
         }, [dataBindGroup]);
 
         pass.end();
@@ -540,7 +642,34 @@
       }
     });
 
-    invalidation.then(() => loop.cancel());
+    invalidation.then(() => {
+      loop.cancel();
+      if (depthTexture) depthTexture.destroy();
+    });
+  </script>
+  <script id="14a" type="module">
+    if (downloadButton > 0) {
+      function downloadURI(uri, filename) {
+        const link = document.createElement("a");
+        link.target = '_blank';
+        link.download = filename;
+        link.href = uri;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+
+      // Force a render
+      renderState.dirty = true;
+
+      // Wait for the render to complete
+      await new Promise(resolve => requestAnimationFrame(resolve));
+      await device.queue.onSubmittedWorkDone();
+
+      // Capture the canvas
+      const uri = canvas.toDataURL('image/png');
+      downloadURI(uri, 'webgpu-lines-demo.png');
+    }
   </script>
   <script id="15" type="text/markdown">
     ## Rationale

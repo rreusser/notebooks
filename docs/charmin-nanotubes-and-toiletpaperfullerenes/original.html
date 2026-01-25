@@ -9,6 +9,7 @@
   <meta name="subject" content="Fullerenes">
   <meta name="description" content="Fullerenes">
   <meta property="og:description" content="Fullerenes">
+  <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
     :root {
@@ -1253,15 +1254,40 @@ main h6 {
   font-family: "Open Sans", sans-serif;
   -webkit-font-smoothing: auto;
 }
+    main summary {
+  cursor: pointer;
+}
+    main details {
+  margin: 1.5em 0;
+}
+    main details[open] {
+  border-left: 3px solid #ccc;
+  padding-left: 1em;
+}
+    main details[open] > summary {
+  margin-left: -1em;
+  padding-left: 1em;
+  border-left: 3px solid transparent;
+  margin-bottom: 0.5em;
+}
     main figure {
+  display: table;
+  margin: 4em auto;
   max-width: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  width: max-content;
 }
     main figure figcaption {
+  display: table-caption;
+  caption-side: bottom;
   text-align: left;
-  align-self: stretch;
+  margin-top: 1em;
+}
+    main figure.fluid {
+  width: auto;
+}
+    main figure.fluid figcaption {
+  width: auto;
+  min-width: 0;
 }
     hr {
   margin: 3em 0;
@@ -1316,6 +1342,7 @@ main h4,
 main h5,
 main h6 {
   font-weight: 400;
+  margin-bottom: 1em;
 }
     main h2 {
   margin-top: 3em;
@@ -1431,12 +1458,26 @@ main h6 {
   color: white;
   font-family: "Open Sans", sans-serif;
   padding: 30px 20px;
-  text-align: right;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 20px;
 }
     .footer__attrib {
-  max-width: 640px;
-  margin: auto;
-
+}
+    .footer__rss[href],
+.footer__rss[href]:visited {
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+    .footer__rss:hover {
+  opacity: 0.8;
+}
+    .footer__rss .icon {
+  width: 14px;
+  height: 14px;
 }
     .index {
   padding: 0;
@@ -1537,7 +1578,17 @@ main h6 {
   <figcaption>A semi-completed Y-joint tunnel with rabbit (barely visible, hiding from curious dog) inside.</figcaption>
 </figure></div></div><div id="cell-3431" class="observablehq observablehq--cell"></div><div id="cell-2675" class="observablehq observablehq--cell"></div><div id="cell-3466" class="observablehq observablehq--cell"></div><div id="cell-2607" class="observablehq observablehq--cell"></div><div id="cell-2606" class="observablehq observablehq--cell"></div><div id="cell-2648" class="observablehq observablehq--cell"></div><div id="cell-3814" class="observablehq observablehq--cell"></div><div id="cell-232" class="observablehq observablehq--cell"></div><div id="cell-4061" class="observablehq observablehq--cell"></div><div id="cell-4023" class="observablehq observablehq--cell"></div><div id="cell-4018" class="observablehq observablehq--cell"></div><div id="cell-1010" class="observablehq observablehq--cell"></div><div id="cell-2635" class="observablehq observablehq--cell"></div><div id="cell-218" class="observablehq observablehq--cell"></div><div id="cell-276" class="observablehq observablehq--cell"></div><div id="cell-393" class="observablehq observablehq--cell"></div><div id="cell-411" class="observablehq observablehq--cell"></div><div id="cell-1270" class="observablehq observablehq--cell"></div><div id="cell-3863" class="observablehq observablehq--cell"></div><div id="cell-3011" class="observablehq observablehq--cell"></div><div id="cell-3050" class="observablehq observablehq--cell"></div><div id="cell-2512" class="observablehq observablehq--cell"></div><div id="cell-3094" class="observablehq observablehq--cell"></div><div id="cell-3096" class="observablehq observablehq--cell"></div><div id="cell-2718" class="observablehq observablehq--cell"></div><div id="cell-3166" class="observablehq observablehq--cell"></div><div id="cell-3583" class="observablehq observablehq--cell"></div><div id="cell-3646" class="observablehq observablehq--cell"></div><div id="cell-158" class="observablehq observablehq--cell"></div><div id="cell-3158" class="observablehq observablehq--cell"></div><div id="cell-3128" class="observablehq observablehq--cell"></div><div id="cell-3174" class="observablehq observablehq--cell"></div><div id="cell-3190" class="observablehq observablehq--cell"></div><div id="cell-3119" class="observablehq observablehq--cell"></div><div id="cell-3125" class="observablehq observablehq--cell"></div><div id="cell-3687" class="observablehq observablehq--cell"></div><div id="cell-3689" class="observablehq observablehq--cell"></div><div id="cell-3169" class="observablehq observablehq--cell"></div><div id="cell-333" class="observablehq observablehq--cell"></div><div id="cell-3171" class="observablehq observablehq--cell"></div><div id="cell-3207" class="observablehq observablehq--cell"></div><div id="cell-3203" class="observablehq observablehq--cell"></div><div id="cell-3205" class="observablehq observablehq--cell"></div><div id="cell-3198" class="observablehq observablehq--cell"></div><div id="cell-3200" class="observablehq observablehq--cell"></div><div id="cell-3218" class="observablehq observablehq--cell"></div><div id="cell-3869" class="observablehq observablehq--cell"></div><div id="cell-2866" class="observablehq observablehq--cell"></div><div id="cell-3704" class="observablehq observablehq--cell"></div><div id="cell-2876" class="observablehq observablehq--cell"></div><div id="cell-2898" class="observablehq observablehq--cell"></div><div id="cell-3694" class="observablehq observablehq--cell"></div><div id="cell-3435" class="observablehq observablehq--cell"></div><div id="cell-500" class="observablehq observablehq--cell"></div><div id="cell-3261" class="observablehq observablehq--cell"></div><div id="cell-3276" class="observablehq observablehq--cell"></div><div id="cell-3295" class="observablehq observablehq--cell"></div><div id="cell-3267" class="observablehq observablehq--cell"></div><div id="cell-3269" class="observablehq observablehq--cell"></div><div id="cell-2552" class="observablehq observablehq--cell"></div><div id="cell-2692" class="observablehq observablehq--cell"></div><div id="cell-2704" class="observablehq observablehq--cell"></div><div id="cell-1284" class="observablehq observablehq--cell"></div><div id="cell-1158" class="observablehq observablehq--cell"></div><div id="cell-306" class="observablehq observablehq--cell"></div><div id="cell-2012" class="observablehq observablehq--cell"></div><div id="cell-2709" class="observablehq observablehq--cell"></div><div id="cell-1999" class="observablehq observablehq--cell"></div><div id="cell-1892" class="observablehq observablehq--cell"></div><div id="cell-1764" class="observablehq observablehq--cell"></div><div id="cell-1990" class="observablehq observablehq--cell"></div><div id="cell-3933" class="observablehq observablehq--cell"></div><div id="cell-3977" class="observablehq observablehq--cell"></div><div id="cell-526" class="observablehq observablehq--cell"></div><div id="cell-2563" class="observablehq observablehq--cell"></div><div id="cell-2565" class="observablehq observablehq--cell"></div><div id="cell-2684" class="observablehq observablehq--cell"></div><div id="cell-239" class="observablehq observablehq--cell"></div><div id="cell-2502" class="observablehq observablehq--cell"></div><div id="cell-1329" class="observablehq observablehq--cell"></div><div id="cell-2525" class="observablehq observablehq--cell"></div><div id="cell-45" class="observablehq observablehq--cell"></div><div id="cell-1295" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-2493" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-661" class="observablehq observablehq--cell"></div><div id="cell-699" class="observablehq observablehq--cell"></div><div id="cell-2980" class="observablehq observablehq--cell"></div><div id="cell-3116" class="observablehq observablehq--cell"></div><div id="cell-3195" class="observablehq observablehq--cell"></div><div id="cell-3263" class="observablehq observablehq--cell"></div><div id="cell-2521" class="observablehq observablehq--cell"></div><div id="cell-2712" class="observablehq observablehq--cell"></div><div id="cell-761" class="observablehq observablehq--cell"></div><div id="cell-784" class="observablehq observablehq--cell"></div><div id="cell-1031" class="observablehq observablehq--cell"></div><div id="cell-1038" class="observablehq observablehq--cell"></div><div id="cell-1547" class="observablehq observablehq--cell"></div><div id="cell-1541" class="observablehq observablehq--cell"></div><div id="cell-2486" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-677" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-662" class="observablehq observablehq--cell"></div><div id="cell-682" class="observablehq observablehq--cell"></div><div id="cell-1034" class="observablehq observablehq--cell"></div><div id="cell-1369" class="observablehq observablehq--cell"></div><div id="cell-3409" class="observablehq observablehq--cell"></div><div id="cell-1256" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-978" class="observablehq observablehq--cell"></div><div id="cell-1372" class="observablehq observablehq--cell"></div><div id="cell-2469" class="observablehq observablehq--cell"></div><div id="cell-3878" class="observablehq observablehq--cell"></div><div id="cell-3873" class="observablehq observablehq--cell"></div></main>
   </div>
-  <footer><div class="footer__attrib">© 2026 Ricky Reusser</div></footer>
+  <footer>
+    <div class="footer__attrib">© 2026 Ricky Reusser</div>
+    <a href="/notebooks/feed.xml" class="footer__rss">
+      <svg class="icon" viewBox="0 0 24 24" fill="currentColor" width="14" height="14">
+        <circle cx="6.5" cy="17.5" r="2.5"></circle>
+        <path d="M4 4a16 16 0 0 1 16 16h-4A12 12 0 0 0 4 8V4z"></path>
+        <path d="M4 10a10 10 0 0 1 10 10h-4a6 6 0 0 0-6-6v-4z"></path>
+      </svg>
+      RSS
+    </a>
+  </footer>
 
 
 <style type="text/css">:root {
