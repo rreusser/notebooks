@@ -267,7 +267,7 @@
     );
 
     // (a) Input function modulo 1.
-    display(Plot.plot({
+    const plotA = Plot.plot({
       width: smallCanvas.width,
       height: 120,
       x: { domain: [0, xmax] },
@@ -282,10 +282,10 @@
           { x: "x", y: "y", stroke: "#27c" }
         ),
       ]
-    }));
+    });
 
     // (b) Triangle wave scaled by screen-space derivative.
-    display(Plot.plot({
+    const plotB = Plot.plot({
       width: smallCanvas.width,
       height: 120,
       x: { domain: [0, xmax] },
@@ -293,14 +293,6 @@
       marginTop: 10,
       marginBottom: 30,
       marks: [
-        /*Plot.areaY(
-          [
-            ...x.map((d, i) => ({ x: d, y: clippedTriangle[i] })),
-            { x: xmax, y: lineWidth },
-            { x: 0, y: lineWidth }
-          ],
-          { x: "x", y: "y", fill: "#27c", fillOpacity: 0.25 }
-        ),*/
         Plot.line(
           x.map((d, i) => ({ x: d, y: triangle[i] })),
           { x: "x", y: "y", stroke: "#27c" }
@@ -314,10 +306,10 @@
           { stroke: "#bbb", strokeDasharray: "4,4" }
         )
       ]
-    }));
+    });
 
     // (c) Smooth thresholded output.
-    display(Plot.plot({
+    const plotC = Plot.plot({
       width: smallCanvas.width,
       height: 120,
       x: { domain: [0, xmax] },
@@ -334,7 +326,14 @@
           { x: "x", y: "y", stroke: "#27c" }
         )
       ]
-    }));
+    });
+
+    display(html`<figure id="contour-transformation-figure">
+      ${plotA}
+      ${plotB}
+      ${plotC}
+      <figcaption>The screen-space derivative transformation: (a) input function modulo 1, (b) triangle wave divided by the screen-space gradient with threshold lines, (c) the resulting antialiased contour signal.</figcaption>
+    </figure>`);
   </script>
   <script id="508" type="text/x-typescript">
     const contourSpacing = view(Inputs.range([0.5, 10], {
@@ -800,45 +799,48 @@
       { x: xmax, y: 0 }
     ];
 
-    display(Plot.plot({
-      width: smallCanvas.width,
-      height: 300,
-      y: { domain: [0, 1.5] },
-      marginTop: 20,
-      marginRight: 20,
-      marginBottom: 40,
-      marginLeft: 40,
-      marks: [
-        // Filled antialiasing wedge.
-        Plot.areaY(areaShape, {
-          x: "x",
-          y: "y",
-          fill: "#27c",
-          fillOpacity: 0.25
-        }),
+    display(html`<figure id="antialiasing-ramp-figure">
+      ${Plot.plot({
+        width: smallCanvas.width,
+        height: 300,
+        y: { domain: [0, 1.5] },
+        marginTop: 20,
+        marginRight: 20,
+        marginBottom: 40,
+        marginLeft: 40,
+        marks: [
+          // Filled antialiasing wedge.
+          Plot.areaY(areaShape, {
+            x: "x",
+            y: "y",
+            fill: "#27c",
+            fillOpacity: 0.25
+          }),
 
-        // Main solid line with endpoints emphasized.
-        Plot.line(baseLine, {
-          x: "x",
-          y: "y",
-          stroke: "#27c"
-        }),
-        Plot.dot(baseLine, {
-          x: "x",
-          y: "y",
-          fill: "#27c",
-          r: 3
-        }),
+          // Main solid line with endpoints emphasized.
+          Plot.line(baseLine, {
+            x: "x",
+            y: "y",
+            stroke: "#27c"
+          }),
+          Plot.dot(baseLine, {
+            x: "x",
+            y: "y",
+            fill: "#27c",
+            r: 3
+          }),
 
-        // Dashed falloff line.
-        Plot.line(dashedLine, {
-          x: "x",
-          y: "y",
-          stroke: "#27c",
-          strokeDasharray: "4,4"
-        })
-      ]
-    }));
+          // Dashed falloff line.
+          Plot.line(dashedLine, {
+            x: "x",
+            y: "y",
+            stroke: "#27c",
+            strokeDasharray: "4,4"
+          })
+        ]
+      })}
+      <figcaption>The antialiasing ramp: the solid line shows the shading function going from 0 to 1, with a corner cut off (shaded region) to provide smooth antialiasing at the discontinuity.</figcaption>
+    </figure>`);
   </script>
   <script id="2386" type="application/vnd.observable.javascript">
     viewof antialiasing4 = Inputs.range([0, 2], {
@@ -887,29 +889,32 @@
     const data = x.map(d => ({ x: d, y: f(d) }));
 
     // Plot.
-    display(Plot.plot({
-      width: smallCanvas.width,
-      height: 300,
-      y: { domain: [0, 1] },
-      marginTop: 20,
-      marginRight: 20,
-      marginBottom: 40,
-      marginLeft: 40,
-      marks: [
-        Plot.areaY(data, {
-          x: "x",
-          y: "y",
-          fill: "#27c",
-          fillOpacity: 0.25
-        }),
-        Plot.line(data, {
-          x: "x",
-          y: "y",
-          stroke: "#27c",
-          strokeWidth: 1
-        })
-      ]
-    }));
+    display(html`<figure id="contrast-ramp-figure">
+      ${Plot.plot({
+        width: smallCanvas.width,
+        height: 300,
+        y: { domain: [0, 1] },
+        marginTop: 20,
+        marginRight: 20,
+        marginBottom: 40,
+        marginLeft: 40,
+        marks: [
+          Plot.areaY(data, {
+            x: "x",
+            y: "y",
+            fill: "#27c",
+            fillOpacity: 0.25
+          }),
+          Plot.line(data, {
+            x: "x",
+            y: "y",
+            stroke: "#27c",
+            strokeWidth: 1
+          })
+        ]
+      })}
+      <figcaption>The contrast ramp function blended across multiple octaves, creating a Shepard-tone-like pattern that maintains consistent visual density.</figcaption>
+    </figure>`);
   </script>
   <script id="2498" type="text/x-typescript">
     const rampPower4 = shadedCtrl(Inputs.range([1, 4], {
@@ -1314,35 +1319,6 @@
       // Quick approximate gamma correction
       return pow(color, vec3(0.454));
     }`;
-  </script>
-  <script id="639" type="text/html">
-    <style>
-    .observablehq figcaption {
-      color: black;
-      font-size: 1em;
-      font-family: serif;
-      margin-top: 1em;
-      max-width: 600px;
-      text-align: left;
-      margin-left: auto;
-      margin-right: auto;
-      text-align: center;
-    }
-    .observablehq figcaption > p {
-      display: inline-block;
-      max-width: 600px;
-      margin: auto;
-      text-align: left;
-    }
-    .observablehq figure {
-      padding-bottom: 2em;
-    }
-
-    .observablehq form.wide input {
-      width: 500px;
-      max-width:100%;
-    }
-    </style>
   </script>
   <script id="92" type="text/x-typescript">
     import createREGL from 'npm:regl@2.1.1'
