@@ -1,0 +1,161 @@
+// Advection Shader (Semi-Lagrangian)
+// Advects velocity field by tracing particles backward
+// Uses monotone cubic interpolation (Fedkiw et al., "Visual Simulation of Smoke")
+
+struct SimParams {
+  resolution: vec2<u32>,
+  dt: f32,
+  viscosity: f32,
+  dyeDecay: f32,
+  wallThicknessX: f32,
+  wallThicknessY: f32,
+  padding: f32,
+}
+
+@group(0) @binding(0) var<storage, read> velocityField: array<vec4<f32>>;
+@group(0) @binding(1) var<storage, read> input: array<vec4<f32>>;
+@group(0) @binding(2) var<storage, read_write> output: array<vec4<f32>>;
+@group(0) @binding(3) var<uniform> params: SimParams;
+
+// Wrap index with periodic boundary
+fn wrapIndex(i: i32, N: i32) -> u32 {
+  var idx = i % N;
+  if (idx < 0) { idx += N; }
+  return u32(idx);
+}
+
+// Clamp index to wall boundaries
+fn clampIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
+  let minIdx = i32(wallThickness);
+  let maxIdx = N - 1 - i32(wallThickness);
+  return u32(clamp(i, minIdx, maxIdx));
+}
+
+// Get index handling boundary conditions
+fn getIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
+  if (wallThickness > 0.0) {
+    return clampIndex(i, N, wallThickness);
+  } else {
+    return wrapIndex(i, N);
+  }
+}
+
+// Sample input at integer grid position
+fn sampleAt(ix: i32, iy: i32, N: i32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let x = getIndex(ix, N, wallX);
+  let y = getIndex(iy, N, wallY);
+  return input[y * u32(N) + x];
+}
+
+// Monotone cubic Hermite interpolation for a single component
+// Interpolates between f[1] and f[2] with t in [0,1]
+// f[0], f[1], f[2], f[3] are the four sample values
+fn monotoneCubic1D(f0: f32, f1: f32, f2: f32, f3: f32, t: f32) -> f32 {
+  // Central difference slopes at f1 and f2
+  var d1 = (f2 - f0) * 0.5;
+  var d2 = (f3 - f1) * 0.5;
+
+  // Delta between f1 and f2
+  let delta = f2 - f1;
+
+  // Monotonicity constraint: set slopes to zero if they differ in sign from delta
+  // or if delta is zero (flat region)
+  if (abs(delta) < 1e-10) {
+    d1 = 0.0;
+    d2 = 0.0;
+  } else {
+    if (sign(d1) != sign(delta)) { d1 = 0.0; }
+    if (sign(d2) != sign(delta)) { d2 = 0.0; }
+  }
+
+  // Hermite basis coefficients
+  // f(t) = a3*t^3 + a2*t^2 + a1*t + a0
+  let a0 = f1;
+  let a1 = d1;
+  let a2 = 3.0 * delta - 2.0 * d1 - d2;
+  let a3 = d1 + d2 - 2.0 * delta;
+
+  return a0 + t * (a1 + t * (a2 + t * a3));
+}
+
+// Monotone cubic interpolation for vec4
+fn monotoneCubic1D_vec4(f0: vec4<f32>, f1: vec4<f32>, f2: vec4<f32>, f3: vec4<f32>, t: f32) -> vec4<f32> {
+  return vec4<f32>(
+    monotoneCubic1D(f0.x, f1.x, f2.x, f3.x, t),
+    monotoneCubic1D(f0.y, f1.y, f2.y, f3.y, t),
+    monotoneCubic1D(f0.z, f1.z, f2.z, f3.z, t),
+    monotoneCubic1D(f0.w, f1.w, f2.w, f3.w, t)
+  );
+}
+
+// Sample input field with monotone cubic interpolation (separable)
+// Handles separate X/Y wall boundaries
+fn sampleInput(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  // Convert physical position to grid coordinates
+  var p = pos - vec2<f32>(0.5);
+
+  // Handle X boundary (clamp if walls, wrap if periodic)
+  if (wallX > 0.0) {
+    let minX = wallX + 0.5;
+    let maxX = Nf - wallX - 1.5;
+    p.x = clamp(p.x, minX, maxX);
+  } else {
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  // Handle Y boundary (clamp if walls, wrap if periodic)
+  if (wallY > 0.0) {
+    let minY = wallY + 0.5;
+    let maxY = Nf - wallY - 1.5;
+    p.y = clamp(p.y, minY, maxY);
+  } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  // Integer coordinates (p is between [x0, x0+1] and [y0, y0+1])
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+
+  // Fractional parts
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  // Sample 4x4 grid of values for bicubic interpolation
+  // First, interpolate along x for each of the 4 rows
+  var col: array<vec4<f32>, 4>;
+  for (var j = 0; j < 4; j++) {
+    let yj = y0 - 1 + j;
+    let f0 = sampleAt(x0 - 1, yj, Ni, wallX, wallY);
+    let f1 = sampleAt(x0, yj, Ni, wallX, wallY);
+    let f2 = sampleAt(x0 + 1, yj, Ni, wallX, wallY);
+    let f3 = sampleAt(x0 + 2, yj, Ni, wallX, wallY);
+    col[j] = monotoneCubic1D_vec4(f0, f1, f2, f3, fx);
+  }
+
+  // Then interpolate along y
+  return monotoneCubic1D_vec4(col[0], col[1], col[2], col[3], fy);
+}
+
+@compute @workgroup_size(16, 16)
+fn advect_velocity(@builtin(global_invocation_id) id: vec3<u32>) {
+  let N = params.resolution.x;
+  if (id.x >= N || id.y >= N) { return; }
+
+  let idx = id.y * N + id.x;
+  let Nf = f32(N);
+
+  // Current position (cell-centered)
+  let pos = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
+
+  // Get velocity at current position
+  let vel = velocityField[idx];
+
+  // Backtrace: find where the particle came from
+  let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
+
+  // Sample input at backtraced position
+  output[idx] = sampleInput(backPos, N, params.wallThicknessX, params.wallThicknessY);
+}
