@@ -314,37 +314,9 @@
       mouseState.dy = 0;
     });
 
-    // Touch support
-    canvas.addEventListener('touchstart', (e) => {
-      e.preventDefault();
-      mouseState.down = true;
-      const touch = e.touches[0];
-      const pos = getMousePos(touch);
-      mouseState.x = pos.x;
-      mouseState.y = pos.y;
-      mouseState.prevX = pos.x;
-      mouseState.prevY = pos.y;
-    });
-
-    canvas.addEventListener('touchmove', (e) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const pos = getMousePos(touch);
-      mouseState.prevX = mouseState.x;
-      mouseState.prevY = mouseState.y;
-      mouseState.x = pos.x;
-      mouseState.y = pos.y;
-      if (mouseState.down) {
-        mouseState.dx = mouseState.x - mouseState.prevX;
-        mouseState.dy = mouseState.y - mouseState.prevY;
-      }
-    });
-
-    canvas.addEventListener('touchend', () => {
-      mouseState.down = false;
-      mouseState.dx = 0;
-      mouseState.dy = 0;
-    });
+    // Prevent default touch behavior (scrolling) so pointer events work properly
+    canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
+    canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
   </script>
   <script id="11" type="module">
     // Simulation parameters
