@@ -46,6 +46,13 @@ fn sampleAt(ix: i32, iy: i32, N: i32, wallX: f32, wallY: f32) -> vec4<f32> {
   return input[y * u32(N) + x];
 }
 
+// Sample velocity field at integer grid position (for RK2 midpoint)
+fn sampleVelAt(ix: i32, iy: i32, N: i32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let x = getIndex(ix, N, wallX);
+  let y = getIndex(iy, N, wallY);
+  return velocityField[y * u32(N) + x];
+}
+
 // Monotone cubic Hermite interpolation for a single component
 // Interpolates between f[1] and f[2] with t in [0,1]
 // f[0], f[1], f[2], f[3] are the four sample values
@@ -92,6 +99,38 @@ fn bilinear_vec4(f00: vec4<f32>, f10: vec4<f32>, f01: vec4<f32>, f11: vec4<f32>,
   let top = mix(f00, f10, fx);
   let bottom = mix(f01, f11, fx);
   return mix(top, bottom, fy);
+}
+
+// Sample velocity field with bilinear interpolation (for RK2 midpoint)
+fn sampleVelocityLinear(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  var p = pos - vec2<f32>(0.5);
+
+  if (wallX > 0.0) {
+    p.x = clamp(p.x, 0.0, Nf - 1.0);
+  } else {
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  if (wallY > 0.0) {
+    p.y = clamp(p.y, 0.0, Nf - 1.0);
+  } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  let f00 = sampleVelAt(x0, y0, Ni, wallX, wallY);
+  let f10 = sampleVelAt(x0 + 1, y0, Ni, wallX, wallY);
+  let f01 = sampleVelAt(x0, y0 + 1, Ni, wallX, wallY);
+  let f11 = sampleVelAt(x0 + 1, y0 + 1, Ni, wallX, wallY);
+
+  return bilinear_vec4(f00, f10, f01, f11, fx, fy);
 }
 
 // Sample input field with bilinear interpolation
@@ -189,6 +228,8 @@ fn advect_velocity(@builtin(global_invocation_id) id: vec3<u32>) {
 
   let idx = id.y * N + id.x;
   let Nf = f32(N);
+  let wallX = params.wallThicknessX;
+  let wallY = params.wallThicknessY;
 
   // Current position (cell-centered)
   let pos = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
@@ -196,13 +237,20 @@ fn advect_velocity(@builtin(global_invocation_id) id: vec3<u32>) {
   // Get velocity at current position
   let vel = velocityField[idx];
 
-  // Backtrace: find where the particle came from
-  let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
+  // RK2 (midpoint method) backtrace
+  // Step 1: Half step to midpoint
+  let midPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt * 0.5;
+
+  // Step 2: Sample velocity at midpoint
+  let midVel = sampleVelocityLinear(midPos, N, wallX, wallY);
+
+  // Step 3: Full step using midpoint velocity
+  let backPos = pos - vec2<f32>(midVel.x, midVel.z) * Nf * params.dt;
 
   // Sample input at backtraced position using selected interpolation method
   if (params.useLinearInterp == 1u) {
-    output[idx] = sampleInputLinear(backPos, N, params.wallThicknessX, params.wallThicknessY);
+    output[idx] = sampleInputLinear(backPos, N, wallX, wallY);
   } else {
-    output[idx] = sampleInputCubic(backPos, N, params.wallThicknessX, params.wallThicknessY);
+    output[idx] = sampleInputCubic(backPos, N, wallX, wallY);
   }
 }

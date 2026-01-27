@@ -1,4 +1,4 @@
-import{createFFTPipelines as Z}from"./fft-Chkx7JT6.js";const J=`// Add Force Shader
+import{createFFTPipelines as q}from"./fft-Chkx7JT6.js";const Z=`// Add Force Shader
 // Applies velocity-matching force: f = (v_target - v_current) * damping
 // This smoothly accelerates/decelerates fluid to match mouse velocity
 
@@ -56,7 +56,7 @@ fn add_force(@builtin(global_invocation_id) id: vec3<u32>) {
   d.x = min(d.x, 1.0);
   dye[idx] = d;
 }
-`,K=`// Advection Shader (Semi-Lagrangian)
+`,J=`// Advection Shader (Semi-Lagrangian)
 // Advects velocity field by tracing particles backward
 // Uses monotone cubic interpolation (Fedkiw et al., "Visual Simulation of Smoke")
 
@@ -102,6 +102,13 @@ fn sampleAt(ix: i32, iy: i32, N: i32, wallX: f32, wallY: f32) -> vec4<f32> {
   let x = getIndex(ix, N, wallX);
   let y = getIndex(iy, N, wallY);
   return input[y * u32(N) + x];
+}
+
+// Sample velocity field at integer grid position (for RK2 midpoint)
+fn sampleVelAt(ix: i32, iy: i32, N: i32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let x = getIndex(ix, N, wallX);
+  let y = getIndex(iy, N, wallY);
+  return velocityField[y * u32(N) + x];
 }
 
 // Monotone cubic Hermite interpolation for a single component
@@ -150,6 +157,38 @@ fn bilinear_vec4(f00: vec4<f32>, f10: vec4<f32>, f01: vec4<f32>, f11: vec4<f32>,
   let top = mix(f00, f10, fx);
   let bottom = mix(f01, f11, fx);
   return mix(top, bottom, fy);
+}
+
+// Sample velocity field with bilinear interpolation (for RK2 midpoint)
+fn sampleVelocityLinear(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  var p = pos - vec2<f32>(0.5);
+
+  if (wallX > 0.0) {
+    p.x = clamp(p.x, 0.0, Nf - 1.0);
+  } else {
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  if (wallY > 0.0) {
+    p.y = clamp(p.y, 0.0, Nf - 1.0);
+  } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  let f00 = sampleVelAt(x0, y0, Ni, wallX, wallY);
+  let f10 = sampleVelAt(x0 + 1, y0, Ni, wallX, wallY);
+  let f01 = sampleVelAt(x0, y0 + 1, Ni, wallX, wallY);
+  let f11 = sampleVelAt(x0 + 1, y0 + 1, Ni, wallX, wallY);
+
+  return bilinear_vec4(f00, f10, f01, f11, fx, fy);
 }
 
 // Sample input field with bilinear interpolation
@@ -247,6 +286,8 @@ fn advect_velocity(@builtin(global_invocation_id) id: vec3<u32>) {
 
   let idx = id.y * N + id.x;
   let Nf = f32(N);
+  let wallX = params.wallThicknessX;
+  let wallY = params.wallThicknessY;
 
   // Current position (cell-centered)
   let pos = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
@@ -254,14 +295,21 @@ fn advect_velocity(@builtin(global_invocation_id) id: vec3<u32>) {
   // Get velocity at current position
   let vel = velocityField[idx];
 
-  // Backtrace: find where the particle came from
-  let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
+  // RK2 (midpoint method) backtrace
+  // Step 1: Half step to midpoint
+  let midPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt * 0.5;
+
+  // Step 2: Sample velocity at midpoint
+  let midVel = sampleVelocityLinear(midPos, N, wallX, wallY);
+
+  // Step 3: Full step using midpoint velocity
+  let backPos = pos - vec2<f32>(midVel.x, midVel.z) * Nf * params.dt;
 
   // Sample input at backtraced position using selected interpolation method
   if (params.useLinearInterp == 1u) {
-    output[idx] = sampleInputLinear(backPos, N, params.wallThicknessX, params.wallThicknessY);
+    output[idx] = sampleInputLinear(backPos, N, wallX, wallY);
   } else {
-    output[idx] = sampleInputCubic(backPos, N, params.wallThicknessX, params.wallThicknessY);
+    output[idx] = sampleInputCubic(backPos, N, wallX, wallY);
   }
 }
 `,Q=`// Advect Scalar Shader
@@ -312,6 +360,13 @@ fn sampleAt(ix: i32, iy: i32, N: i32, wallX: f32, wallY: f32) -> vec2<f32> {
   return input[y * u32(N) + x];
 }
 
+// Sample velocity field at integer grid position (for RK2 midpoint)
+fn sampleVelAt(ix: i32, iy: i32, N: i32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let x = getIndex(ix, N, wallX);
+  let y = getIndex(iy, N, wallY);
+  return velocity[y * u32(N) + x];
+}
+
 // Monotone cubic Hermite interpolation for a single component
 // Interpolates between f[1] and f[2] with t in [0,1]
 // f[0], f[1], f[2], f[3] are the four sample values
@@ -356,6 +411,45 @@ fn bilinear_vec2(f00: vec2<f32>, f10: vec2<f32>, f01: vec2<f32>, f11: vec2<f32>,
   let top = mix(f00, f10, fx);
   let bottom = mix(f01, f11, fx);
   return mix(top, bottom, fy);
+}
+
+// Bilinear interpolation for vec4
+fn bilinear_vec4(f00: vec4<f32>, f10: vec4<f32>, f01: vec4<f32>, f11: vec4<f32>, fx: f32, fy: f32) -> vec4<f32> {
+  let top = mix(f00, f10, fx);
+  let bottom = mix(f01, f11, fx);
+  return mix(top, bottom, fy);
+}
+
+// Sample velocity field with bilinear interpolation (for RK2 midpoint)
+fn sampleVelocityLinear(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  var p = pos - vec2<f32>(0.5);
+
+  if (wallX > 0.0) {
+    p.x = clamp(p.x, 0.0, Nf - 1.0);
+  } else {
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  if (wallY > 0.0) {
+    p.y = clamp(p.y, 0.0, Nf - 1.0);
+  } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  let f00 = sampleVelAt(x0, y0, Ni, wallX, wallY);
+  let f10 = sampleVelAt(x0 + 1, y0, Ni, wallX, wallY);
+  let f01 = sampleVelAt(x0, y0 + 1, Ni, wallX, wallY);
+  let f11 = sampleVelAt(x0 + 1, y0 + 1, Ni, wallX, wallY);
+
+  return bilinear_vec4(f00, f10, f01, f11, fx, fy);
 }
 
 // Sample scalar field with bilinear interpolation
@@ -453,21 +547,30 @@ fn advect_scalar(@builtin(global_invocation_id) id: vec3<u32>) {
 
   let idx = id.y * N + id.x;
   let Nf = f32(N);
+  let wallX = params.wallThicknessX;
+  let wallY = params.wallThicknessY;
 
   let pos = vec2<f32>(f32(id.x) + 0.5, f32(id.y) + 0.5);
 
   // Get velocity at current position
   let vel = velocity[idx];
 
-  // Backtrace
-  let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
+  // RK2 (midpoint method) backtrace
+  // Step 1: Half step to midpoint
+  let midPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt * 0.5;
+
+  // Step 2: Sample velocity at midpoint
+  let midVel = sampleVelocityLinear(midPos, N, wallX, wallY);
+
+  // Step 3: Full step using midpoint velocity
+  let backPos = pos - vec2<f32>(midVel.x, midVel.z) * Nf * params.dt;
 
   // Sample using selected interpolation method and apply decay
   var result: vec2<f32>;
   if (params.useLinearInterp == 1u) {
-    result = sampleScalarLinear(backPos, N, params.wallThicknessX, params.wallThicknessY);
+    result = sampleScalarLinear(backPos, N, wallX, wallY);
   } else {
-    result = sampleScalarCubic(backPos, N, params.wallThicknessX, params.wallThicknessY);
+    result = sampleScalarCubic(backPos, N, wallX, wallY);
   }
   result *= params.dyeDecay;
 
@@ -620,7 +723,7 @@ fn fullscreen(@builtin(vertex_index) vertex_index: u32) -> VertexOutput {
 
   return output;
 }
-`,an=`// Visualization Shader
+`,ln=`// Visualization Shader
 // Renders dye field with velocity magnitude overlay
 
 struct VertexOutput {
@@ -715,7 +818,7 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
 
   return vec4<f32>(color, 1.0);
 }
-`,ln=`// Vorticity Confinement Shader
+`,an=`// Vorticity Confinement Shader
 // Computes vorticity (curl) and applies confinement force to preserve swirling motion
 
 struct SimParams {
@@ -903,7 +1006,7 @@ fn enforce_boundary(@builtin(global_invocation_id) id: vec3<u32>) {
   // This ensures interpolation gives zero velocity at the wall surface
   velocity[idx] = -velocity[mirrorIdx];
 }
-`,sn=`// Buoyancy Shader
+`,fn=`// Buoyancy Shader
 // Applies upward force proportional to dye concentration (simulating hot air rising)
 
 struct BuoyancyParams {
@@ -932,4 +1035,4 @@ fn apply_buoyancy(@builtin(global_invocation_id) id: vec3<u32>) {
   vel.z += params.strength * dyeVal * params.dt;
   velocity[idx] = vel;
 }
-`;async function un(n,f,p){const y=Z(n,p),m=n.createShaderModule({label:"Add force shader",code:J}),v=n.createShaderModule({label:"Advect shader",code:K}),g=n.createShaderModule({label:"Advect scalar shader",code:Q}),b=n.createShaderModule({label:"Split velocity shader",code:$}),x=n.createShaderModule({label:"Project FFT shader",code:nn}),w=n.createShaderModule({label:"Merge velocity shader",code:en}),N=n.createShaderModule({label:"Fullscreen vertex shader",code:tn}),h=n.createShaderModule({label:"Visualize shader",code:an}),S=n.createShaderModule({label:"Vorticity shader",code:ln}),P=n.createShaderModule({label:"Apply vorticity shader",code:on}),k=n.createShaderModule({label:"Boundary shader",code:rn}),C=n.createShaderModule({label:"Buoyancy shader",code:sn}),e=n.createBindGroupLayout({label:"Add force bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),i=n.createBindGroupLayout({label:"Advect bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),t=n.createBindGroupLayout({label:"Advect scalar bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=n.createBindGroupLayout({label:"Split velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),l=n.createBindGroupLayout({label:"Project FFT bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),o=n.createBindGroupLayout({label:"Merge velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),r=n.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),s=n.createBindGroupLayout({label:"Compute vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),c=n.createBindGroupLayout({label:"Apply vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),u=n.createBindGroupLayout({label:"Enforce boundary bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),d=n.createBindGroupLayout({label:"Apply buoyancy bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),_=n.createPipelineLayout({label:"Add force pipeline layout",bindGroupLayouts:[e]}),T=n.createPipelineLayout({label:"Advect pipeline layout",bindGroupLayouts:[i]}),G=n.createPipelineLayout({label:"Advect scalar pipeline layout",bindGroupLayouts:[t]}),M=n.createPipelineLayout({label:"Split velocity pipeline layout",bindGroupLayouts:[a]}),L=n.createPipelineLayout({label:"Project FFT pipeline layout",bindGroupLayouts:[l]}),U=n.createPipelineLayout({label:"Merge velocity pipeline layout",bindGroupLayouts:[o]}),X=n.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[r]}),Y=n.createPipelineLayout({label:"Compute vorticity pipeline layout",bindGroupLayouts:[s]}),V=n.createPipelineLayout({label:"Apply vorticity pipeline layout",bindGroupLayouts:[c]}),A=n.createPipelineLayout({label:"Enforce boundary pipeline layout",bindGroupLayouts:[u]}),F=n.createPipelineLayout({label:"Apply buoyancy pipeline layout",bindGroupLayouts:[d]}),B=n.createComputePipeline({label:"Add force pipeline",layout:_,compute:{module:m,entryPoint:"add_force"}}),z=n.createComputePipeline({label:"Advect velocity pipeline",layout:T,compute:{module:v,entryPoint:"advect_velocity"}}),O=n.createComputePipeline({label:"Advect scalar pipeline",layout:G,compute:{module:g,entryPoint:"advect_scalar"}}),E=n.createComputePipeline({label:"Split velocity pipeline",layout:M,compute:{module:b,entryPoint:"split_velocity"}}),j=n.createComputePipeline({label:"Project FFT pipeline",layout:L,compute:{module:x,entryPoint:"project_fft"}}),D=n.createComputePipeline({label:"Merge velocity pipeline",layout:U,compute:{module:w,entryPoint:"merge_velocity"}}),I=n.createComputePipeline({label:"Compute vorticity pipeline",layout:Y,compute:{module:S,entryPoint:"compute_vorticity"}}),W=n.createComputePipeline({label:"Apply vorticity pipeline",layout:V,compute:{module:P,entryPoint:"apply_vorticity"}}),H=n.createComputePipeline({label:"Enforce boundary pipeline",layout:A,compute:{module:k,entryPoint:"enforce_boundary"}}),R=n.createComputePipeline({label:"Apply buoyancy pipeline",layout:F,compute:{module:C,entryPoint:"apply_buoyancy"}}),q=n.createRenderPipeline({label:"Visualize pipeline",layout:X,vertex:{module:N,entryPoint:"fullscreen"},fragment:{module:h,entryPoint:"visualize",targets:[{format:f}]},primitive:{topology:"triangle-list"}});return{fft:y,addForce:B,advectVelocity:z,advectScalar:O,splitVelocity:E,projectFFT:j,mergeVelocity:D,computeVorticity:I,applyVorticity:W,enforceBoundary:H,applyBuoyancy:R,visualize:q,bindGroupLayouts:{addForce:e,advect:i,advectScalar:t,splitVelocity:a,projectFFT:l,mergeVelocity:o,computeVorticity:s,applyVorticity:c,enforceBoundary:u,applyBuoyancy:d,visualize:r}}}export{un as createFluidPipelines};
+`;async function cn(n,d,u){const y=q(n,u),m=n.createShaderModule({label:"Add force shader",code:Z}),v=n.createShaderModule({label:"Advect shader",code:J}),g=n.createShaderModule({label:"Advect scalar shader",code:Q}),b=n.createShaderModule({label:"Split velocity shader",code:$}),x=n.createShaderModule({label:"Project FFT shader",code:nn}),w=n.createShaderModule({label:"Merge velocity shader",code:en}),N=n.createShaderModule({label:"Fullscreen vertex shader",code:tn}),h=n.createShaderModule({label:"Visualize shader",code:ln}),S=n.createShaderModule({label:"Vorticity shader",code:an}),P=n.createShaderModule({label:"Apply vorticity shader",code:on}),k=n.createShaderModule({label:"Boundary shader",code:rn}),C=n.createShaderModule({label:"Buoyancy shader",code:fn}),e=n.createBindGroupLayout({label:"Add force bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),i=n.createBindGroupLayout({label:"Advect bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),t=n.createBindGroupLayout({label:"Advect scalar bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),l=n.createBindGroupLayout({label:"Split velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=n.createBindGroupLayout({label:"Project FFT bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),o=n.createBindGroupLayout({label:"Merge velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),r=n.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),f=n.createBindGroupLayout({label:"Compute vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),s=n.createBindGroupLayout({label:"Apply vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),c=n.createBindGroupLayout({label:"Enforce boundary bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),p=n.createBindGroupLayout({label:"Apply buoyancy bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),_=n.createPipelineLayout({label:"Add force pipeline layout",bindGroupLayouts:[e]}),X=n.createPipelineLayout({label:"Advect pipeline layout",bindGroupLayouts:[i]}),Y=n.createPipelineLayout({label:"Advect scalar pipeline layout",bindGroupLayouts:[t]}),T=n.createPipelineLayout({label:"Split velocity pipeline layout",bindGroupLayouts:[l]}),V=n.createPipelineLayout({label:"Project FFT pipeline layout",bindGroupLayouts:[a]}),G=n.createPipelineLayout({label:"Merge velocity pipeline layout",bindGroupLayouts:[o]}),L=n.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[r]}),M=n.createPipelineLayout({label:"Compute vorticity pipeline layout",bindGroupLayouts:[f]}),U=n.createPipelineLayout({label:"Apply vorticity pipeline layout",bindGroupLayouts:[s]}),A=n.createPipelineLayout({label:"Enforce boundary pipeline layout",bindGroupLayouts:[c]}),F=n.createPipelineLayout({label:"Apply buoyancy pipeline layout",bindGroupLayouts:[p]}),B=n.createComputePipeline({label:"Add force pipeline",layout:_,compute:{module:m,entryPoint:"add_force"}}),z=n.createComputePipeline({label:"Advect velocity pipeline",layout:X,compute:{module:v,entryPoint:"advect_velocity"}}),O=n.createComputePipeline({label:"Advect scalar pipeline",layout:Y,compute:{module:g,entryPoint:"advect_scalar"}}),E=n.createComputePipeline({label:"Split velocity pipeline",layout:T,compute:{module:b,entryPoint:"split_velocity"}}),j=n.createComputePipeline({label:"Project FFT pipeline",layout:V,compute:{module:x,entryPoint:"project_fft"}}),I=n.createComputePipeline({label:"Merge velocity pipeline",layout:G,compute:{module:w,entryPoint:"merge_velocity"}}),D=n.createComputePipeline({label:"Compute vorticity pipeline",layout:M,compute:{module:S,entryPoint:"compute_vorticity"}}),W=n.createComputePipeline({label:"Apply vorticity pipeline",layout:U,compute:{module:P,entryPoint:"apply_vorticity"}}),H=n.createComputePipeline({label:"Enforce boundary pipeline",layout:A,compute:{module:k,entryPoint:"enforce_boundary"}}),R=n.createComputePipeline({label:"Apply buoyancy pipeline",layout:F,compute:{module:C,entryPoint:"apply_buoyancy"}}),K=n.createRenderPipeline({label:"Visualize pipeline",layout:L,vertex:{module:N,entryPoint:"fullscreen"},fragment:{module:h,entryPoint:"visualize",targets:[{format:d}]},primitive:{topology:"triangle-list"}});return{fft:y,addForce:B,advectVelocity:z,advectScalar:O,splitVelocity:E,projectFFT:j,mergeVelocity:I,computeVorticity:D,applyVorticity:W,enforceBoundary:H,applyBuoyancy:R,visualize:K,bindGroupLayouts:{addForce:e,advect:i,advectScalar:t,splitVelocity:l,projectFFT:a,mergeVelocity:o,computeVorticity:f,applyVorticity:s,enforceBoundary:c,applyBuoyancy:p,visualize:r}}}export{cn as createFluidPipelines};
