@@ -9,7 +9,7 @@ struct SimParams {
   dyeDecay: f32,
   wallThicknessX: f32,
   wallThicknessY: f32,
-  padding: f32,
+  useLinearInterp: u32,  // 0 = monotonic cubic, 1 = linear
 }
 
 @group(0) @binding(0) var<storage, read> velocity: array<vec4<f32>>;
@@ -24,17 +24,16 @@ fn wrapIndex(i: i32, N: i32) -> u32 {
   return u32(idx);
 }
 
-// Clamp index to wall boundaries
-fn clampIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
-  let minIdx = i32(wallThickness);
-  let maxIdx = N - 1 - i32(wallThickness);
-  return u32(clamp(i, minIdx, maxIdx));
+// Clamp index to domain boundaries (allows sampling from wall regions)
+fn clampIndex(i: i32, N: i32) -> u32 {
+  return u32(clamp(i, 0, N - 1));
 }
 
 // Get index handling boundary conditions
 fn getIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
   if (wallThickness > 0.0) {
-    return clampIndex(i, N, wallThickness);
+    // With walls, clamp to domain bounds (not fluid bounds)
+    return clampIndex(i, N);
   } else {
     return wrapIndex(i, N);
   }
@@ -86,30 +85,74 @@ fn monotoneCubic1D_vec2(f0: vec2<f32>, f1: vec2<f32>, f2: vec2<f32>, f3: vec2<f3
   );
 }
 
-// Sample scalar field with monotone cubic interpolation (separable)
-// Handles separate X/Y wall boundaries
-fn sampleScalar(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec2<f32> {
+// Bilinear interpolation for vec2
+fn bilinear_vec2(f00: vec2<f32>, f10: vec2<f32>, f01: vec2<f32>, f11: vec2<f32>, fx: f32, fy: f32) -> vec2<f32> {
+  let top = mix(f00, f10, fx);
+  let bottom = mix(f01, f11, fx);
+  return mix(top, bottom, fy);
+}
+
+// Sample scalar field with bilinear interpolation
+fn sampleScalarLinear(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec2<f32> {
   let Nf = f32(N);
   let Ni = i32(N);
 
   // Convert physical position to grid coordinates
   var p = pos - vec2<f32>(0.5);
 
-  // Handle X boundary (clamp if walls, wrap if periodic)
+  // Handle X boundary
   if (wallX > 0.0) {
-    let minX = wallX + 0.5;
-    let maxX = Nf - wallX - 1.5;
-    p.x = clamp(p.x, minX, maxX);
+    p.x = clamp(p.x, 0.0, Nf - 1.0);
   } else {
     p.x = p.x - floor(p.x / Nf) * Nf;
   }
 
-  // Handle Y boundary (clamp if walls, wrap if periodic)
+  // Handle Y boundary
   if (wallY > 0.0) {
-    let minY = wallY + 0.5;
-    let maxY = Nf - wallY - 1.5;
-    p.y = clamp(p.y, minY, maxY);
+    p.y = clamp(p.y, 0.0, Nf - 1.0);
   } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  let f00 = sampleAt(x0, y0, Ni, wallX, wallY);
+  let f10 = sampleAt(x0 + 1, y0, Ni, wallX, wallY);
+  let f01 = sampleAt(x0, y0 + 1, Ni, wallX, wallY);
+  let f11 = sampleAt(x0 + 1, y0 + 1, Ni, wallX, wallY);
+
+  return bilinear_vec2(f00, f10, f01, f11, fx, fy);
+}
+
+// Sample scalar field with monotone cubic interpolation (separable)
+// Handles separate X/Y wall boundaries
+// With ghost cells, we allow sampling into wall regions (but not beyond domain)
+fn sampleScalarCubic(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec2<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  // Convert physical position to grid coordinates
+  var p = pos - vec2<f32>(0.5);
+
+  // Handle X boundary
+  if (wallX > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    // Leave 0.5 cell margin to ensure cubic stencil stays in bounds
+    p.x = clamp(p.x, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  // Handle Y boundary
+  if (wallY > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    p.y = clamp(p.y, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
     p.y = p.y - floor(p.y / Nf) * Nf;
   }
 
@@ -153,8 +196,13 @@ fn advect_scalar(@builtin(global_invocation_id) id: vec3<u32>) {
   // Backtrace
   let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
 
-  // Sample and apply decay
-  var result = sampleScalar(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  // Sample using selected interpolation method and apply decay
+  var result: vec2<f32>;
+  if (params.useLinearInterp == 1u) {
+    result = sampleScalarLinear(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  } else {
+    result = sampleScalarCubic(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  }
   result *= params.dyeDecay;
 
   output[idx] = result;

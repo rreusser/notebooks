@@ -1,9 +1,19 @@
 <!doctype html>
 <notebook theme="air">
-  <title>Stable Fluids</title>
+  <title>Fluid Instability with Stable Fluids</title>
+  <script id="23" type="text/markdown">
+    # Fluid Instability with Stable Fluids
+  </script>
   <script id="1" type="text/markdown">
-    # Stable Fluids
-
+    This page came about after an online discussion of what Claude Code was capable of, or perhaps not capable of. I feared it might actually do an alright job of implementing [Stable Fluids](https://www.dgp.toronto.edu/public_user/stam/reality/Research/pdf/ns.pdf), so I pretty blindly threw Claude Code at the task, giving it the `pdftotext`-extracted text of the Stable Fluids paper and access to the internet. I connected my [mcp-observable-notebookkit-debug](https://github.com/rreusser/mcp-observable-notebookkit-debug) tool so that it would be able to interact with the simulation and analyze the `<canvas>` content. After some finagling over parameter calibration to get things in the ballpark, I asked that it implement some initial conditions for fluid instabilities and sharpen things up a little with the monotonic cubic interpolation scheme from Fedkiw, Stam, and Jensen’s [Visual Simulation of Smoke](https://web.stanford.edu/class/cs237d/smoke.pdf). To instruct it about the method, I took a screenshot of the Appendix of the paper and dropped it into the terminal window.
+  </script>
+  <script id="24" type="text/markdown">
+    I want to hate AI, but I politely decline to be religious about it, either supporting it unconditionally or rejecting it out of hat. Honestly it seems to have done a decent job here. The FFT isn’t an appropriate fit given our application of walls. I think I’d have organized the shaders a little differently, maybe consolidating some force computation or something. I think the FFT could be reworked to perform better. But gosh overall it’s just not bad.
+  </script>
+  <script id="22" type="text/markdown">
+    ---
+  </script>
+  <script id="21" type="text/markdown">
     A WebGPU implementation of Jos Stam's classic [Stable Fluids](https://www.dgp.toronto.edu/public_user/stam/reality/Research/pdf/ns.pdf) algorithm (SIGGRAPH 1999). The method solves the incompressible Navier-Stokes equations using an unconditionally stable semi-Lagrangian advection scheme and FFT-based pressure projection.
 
     Click and drag to add velocity to the fluid, or select an initial condition to observe classic fluid instabilities:
@@ -29,14 +39,14 @@
     });
     const resolution = view(resolutionInput);
   </script>
-  <script id="3b" type="module">
+  <script id="4" type="module">
     const N = resolution;
     const vec2Size = N * N * 2 * 4; // Complex numbers (vec2<f32>)
     const vec4Size = N * N * 4 * 4; // Velocity pairs (vec4<f32>)
     const workgroups = Math.ceil(N / 16);
     const dx = 1.0 / N;
   </script>
-  <script id="4" type="module">
+  <script id="5" type="module">
     import { createFluidPipelines } from './pipeline.js';
     import { executeFFT2D } from './lib/webgpu-fft/fft.js';
 
@@ -55,7 +65,7 @@
       });
     }
   </script>
-  <script id="5" type="module">
+  <script id="6" type="module">
     // Velocity field: stored as vec4 = (u_re, u_im, v_re, v_im) for FFT compatibility
     // In spatial domain, imaginary parts are zero
     const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
@@ -85,7 +95,7 @@
     const vorticitySize = N * N * 4;  // f32 per cell
     const vorticityBuffer = device.createBuffer({ label: 'vorticity', size: vorticitySize, usage: bufferUsage });
   </script>
-  <script id="6" type="module">
+  <script id="7" type="module">
     // Uniform buffers
     const simParamsBuffer = device.createBuffer({
       label: 'simParams',
@@ -130,7 +140,7 @@
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
     });
   </script>
-  <script id="7" type="module">
+  <script id="8" type="module">
     // Controls
     const viscosityInput = Inputs.range([0.00001, 0.01], {
       step: 0.00001,
@@ -220,15 +230,27 @@
 
     const simulateInput = Inputs.toggle({ label: 'Simulate', value: true });
     const simulate = view(simulateInput);
+
+    const stopTimeInput = Inputs.range([0, 60], {
+      step: 0.1,
+      value: 0,
+      label: 'Stop at time (0 = never)'
+    });
+    const stopTime = view(stopTimeInput);
+
+    const interpolationInput = Inputs.select(
+      ['Monotonic cubic', 'Linear'],
+      { value: 'Monotonic cubic', label: 'Interpolation' }
+    );
+    const interpolation = view(interpolationInput);
   </script>
-  <script id="8" type="module">
+  <script id="9" type="module">
     display(html`<div id="fluid-controls">
       ${resolutionInput}
       ${initialConditionInput}
       ${perturbationPeriodsInput}
       ${perturbationAmplitudeInput}
-      ${restartInput}
-      ${simulateInput}
+      ${stopTimeInput}
       ${viscosityInput}
       ${dyeDecayInput}
       ${timestepInput}
@@ -238,9 +260,12 @@
       ${buoyancyInput}
       ${wallThicknessInput}
       ${wallsEnabledInput}
+      ${interpolationInput}
+      ${simulateInput}
+      ${restartInput}
     </div>`);
   </script>
-  <script id="9" type="module">
+  <script id="10" type="module">
     // Canvas setup
     const canvasSize = Math.min(width, 640);
     const canvas = html`<canvas
@@ -254,12 +279,13 @@
     gpuContext.configure({
       device,
       format: canvasFormat,
-      alphaMode: 'opaque'
+      alphaMode: 'opaque',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.COPY_SRC
     });
 
     display(canvas);
   </script>
-  <script id="10" type="module">
+  <script id="11" type="module">
     // Mouse interaction state
     const mouseState = {
       down: false,
@@ -318,7 +344,7 @@
     canvas.addEventListener('touchstart', (e) => e.preventDefault(), { passive: false });
     canvas.addEventListener('touchmove', (e) => e.preventDefault(), { passive: false });
   </script>
-  <script id="11" type="module">
+  <script id="12" type="module">
     // Simulation parameters
     const simParams = {
       viscosity: 0.00005,
@@ -329,12 +355,15 @@
       buoyancy: 5,
       wallThicknessX: 0,
       wallThicknessY: 0,
-      dt: 1.0 / 60.0
+      dt: 1.0 / 60.0,
+      useLinearInterp: 0,  // 0 = monotonic cubic, 1 = linear
+      time: 0,             // Current simulation time
+      stopTime: 0          // Stop at this time (0 = never)
     };
   </script>
-  <script id="12" type="module">
+  <script id="13" type="module">
     // Update simParams when controls change
-    viscosity; dyeDecay; forceRadius; forceDamping; vorticityConfinement; buoyancy; wallThickness; wallsEnabled; timestep;
+    viscosity; dyeDecay; forceRadius; forceDamping; vorticityConfinement; buoyancy; wallThickness; wallsEnabled; timestep; interpolation; stopTime;
     simParams.viscosity = viscosity;
     simParams.dyeDecay = dyeDecay;
     simParams.dt = timestep;
@@ -345,8 +374,10 @@
     // Compute wall thicknesses from checkbox state
     simParams.wallThicknessX = wallsEnabled.includes('Left/right') ? wallThickness : 0;
     simParams.wallThicknessY = wallsEnabled.includes('Top/bottom') ? wallThickness : 0;
+    simParams.useLinearInterp = interpolation === 'Linear' ? 1 : 0;
+    simParams.stopTime = stopTime;
   </script>
-  <script id="13a" type="module">
+  <script id="14" type="module">
     // Configure parameters when initial condition changes (not on restart)
     initialCondition;
 
@@ -373,11 +404,17 @@
       // No dye decay
       dyeDecayInput.value = 1.0;
       dyeDecayInput.dispatchEvent(new Event('input'));
+      // No buoyancy - K-H is driven by shear, not density differences
+      buoyancyInput.value = 0;
+      buoyancyInput.dispatchEvent(new Event('input'));
     }
   </script>
-  <script id="13b" type="module">
+  <script id="15" type="module">
     // Initialize/restart simulation data
     restart; initialCondition; perturbationPeriods; perturbationAmplitude;
+
+    // Reset simulation time
+    simParams.time = 0;
 
     // Create data arrays
     const velocityData = new Float32Array(N * N * 4);  // vec4: u_re, u_im, v_re, v_im
@@ -470,7 +507,7 @@
     device.queue.writeBuffer(dye, 0, dyeData);
     device.queue.writeBuffer(dyeTemp, 0, dyeData);
   </script>
-  <script id="14" type="module">
+  <script id="16" type="module">
     // Update uniform buffers
     function updateSimUniforms() {
       const data = new ArrayBuffer(32);
@@ -480,6 +517,7 @@
       new Float32Array(data, 16, 1).set([simParams.dyeDecay]);
       new Float32Array(data, 20, 1).set([simParams.wallThicknessX]);
       new Float32Array(data, 24, 1).set([simParams.wallThicknessY]);
+      new Uint32Array(data, 28, 1).set([simParams.useLinearInterp]);
       device.queue.writeBuffer(simParamsBuffer, 0, data);
     }
 
@@ -537,7 +575,7 @@
       device.queue.writeBuffer(buoyancyParamsBuffer, 0, data);
     }
   </script>
-  <script id="15" type="module">
+  <script id="17" type="module">
     // Helper to enforce boundary conditions
     function enforceBoundaries() {
       if (simParams.wallThicknessX > 0 || simParams.wallThicknessY > 0) {
@@ -823,9 +861,13 @@
       device.queue.submit([enc.finish()]);
     }
   </script>
-  <script id="16" type="module">
+  <script id="18" type="module">
     // Animation loop
     step; render; canvas; simulate;
+
+    // Time display element
+    const timeDisplay = html`<div id="time-display" style="font-family: monospace; margin-top: 0.5em;">t = 0.000</div>`;
+    display(timeDisplay);
 
     let animFrameId = null;
     let hasError = false;
@@ -834,10 +876,24 @@
       if (hasError) return;
 
       try {
-        if (simulate) {
+        // Check if we should stop
+        const shouldSimulate = simulate &&
+          (simParams.stopTime <= 0 || simParams.time < simParams.stopTime);
+
+        if (shouldSimulate) {
           await step();
+          simParams.time += simParams.dt;
+
+          // Auto-stop at target time
+          if (simParams.stopTime > 0 && simParams.time >= simParams.stopTime) {
+            simulateInput.value = false;
+            simulateInput.dispatchEvent(new Event('input'));
+          }
         }
         render();
+
+        // Update time display
+        timeDisplay.textContent = `t = ${simParams.time.toFixed(3)}`;
 
         // Reset mouse velocity after applying
         mouseState.dx = 0;
@@ -860,7 +916,88 @@
       }
     });
   </script>
-  <script id="17" type="text/markdown">
+  <script id="18b" type="module">
+    // Download button with WebGPU readback
+    render; canvas; gpuContext; device; canvasFormat; interpolation; simParams;
+
+    const downloadButton = Inputs.button('Download PNG');
+    display(downloadButton);
+
+    downloadButton.addEventListener('click', async () => {
+      const pixelWidth = canvas.width;
+      const pixelHeight = canvas.height;
+
+      // Bytes per row must be aligned to 256
+      const bytesPerPixel = 4;
+      const unalignedBytesPerRow = pixelWidth * bytesPerPixel;
+      const alignedBytesPerRow = Math.ceil(unalignedBytesPerRow / 256) * 256;
+
+      // Create staging buffer
+      const bufferSize = alignedBytesPerRow * pixelHeight;
+      const stagingBuffer = device.createBuffer({
+        size: bufferSize,
+        usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+      });
+
+      // Render one more frame to ensure we have the latest
+      render();
+
+      // Copy texture to buffer
+      const encoder = device.createCommandEncoder();
+      encoder.copyTextureToBuffer(
+        { texture: gpuContext.getCurrentTexture() },
+        { buffer: stagingBuffer, bytesPerRow: alignedBytesPerRow },
+        { width: pixelWidth, height: pixelHeight }
+      );
+      device.queue.submit([encoder.finish()]);
+
+      // Map and read
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const data = new Uint8Array(stagingBuffer.getMappedRange());
+
+      // Create ImageData (handle row alignment)
+      const imageData = new ImageData(pixelWidth, pixelHeight);
+      for (let y = 0; y < pixelHeight; y++) {
+        const srcOffset = y * alignedBytesPerRow;
+        const dstOffset = y * pixelWidth * 4;
+        for (let x = 0; x < pixelWidth; x++) {
+          const s = srcOffset + x * 4;
+          const d = dstOffset + x * 4;
+          // BGRA to RGBA conversion (WebGPU uses BGRA on some platforms)
+          if (canvasFormat === 'bgra8unorm') {
+            imageData.data[d + 0] = data[s + 2]; // R <- B
+            imageData.data[d + 1] = data[s + 1]; // G
+            imageData.data[d + 2] = data[s + 0]; // B <- R
+            imageData.data[d + 3] = 255;
+          } else {
+            imageData.data[d + 0] = data[s + 0];
+            imageData.data[d + 1] = data[s + 1];
+            imageData.data[d + 2] = data[s + 2];
+            imageData.data[d + 3] = 255;
+          }
+        }
+      }
+
+      stagingBuffer.unmap();
+      stagingBuffer.destroy();
+
+      // Draw to offscreen canvas and download
+      const offscreen = new OffscreenCanvas(pixelWidth, pixelHeight);
+      const ctx = offscreen.getContext('2d');
+      ctx.putImageData(imageData, 0, 0);
+
+      const blob = await offscreen.convertToBlob({ type: 'image/png' });
+      const url = URL.createObjectURL(blob);
+
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `stable-fluids-${interpolation.toLowerCase().replace(' ', '-')}-t${simParams.time.toFixed(2)}.png`;
+      a.click();
+
+      URL.revokeObjectURL(url);
+    });
+  </script>
+  <script id="19" type="text/markdown">
     ## Algorithm
 
     The Stable Fluids algorithm solves the incompressible Navier-Stokes equations:
@@ -882,7 +1019,7 @@
 
     This makes the algorithm unconditionally stable regardless of timestep size.
   </script>
-  <script id="18" type="text/markdown">
+  <script id="20" type="text/markdown">
     ## Implementation Details
 
     ### Grid Layout

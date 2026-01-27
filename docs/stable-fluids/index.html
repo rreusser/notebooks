@@ -3,8 +3,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Stable Fluids">
-  <meta property="og:title" content="Stable Fluids">
+  <meta name="twitter:title" content="Fluid Instability with Stable Fluids">
+  <meta property="og:title" content="Fluid Instability with Stable Fluids">
   <meta name="twitter:description" content="Interactive fluid flow with the Stable Fluids method of Jos Stam.">
   <meta name="subject" content="Interactive fluid flow with the Stable Fluids method of Jos Stam.">
   <meta name="description" content="Interactive fluid flow with the Stable Fluids method of Jos Stam.">
@@ -1548,7 +1548,7 @@ main h6 {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Stable Fluids</title>  <script type="module" crossorigin src="/notebooks/assets/index-BEyOs8PV.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Fluid Instability with Stable Fluids</title>  <script type="module" crossorigin src="/notebooks/assets/index-D5h598Sv.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1560,7 +1560,7 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Stable Fluids</h1>
+    <h1>Fluid Instability with Stable Fluids</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
       <time pubdate="" datetime="20260125">January 25, 2026</time>
@@ -1576,14 +1576,17 @@ main h6 {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>A WebGPU implementation of Jos Stam’s classic <a href="https://www.dgp.toronto.edu/public_user/stam/reality/Research/pdf/ns.pdf">Stable Fluids</a> algorithm (SIGGRAPH 1999). The method solves the incompressible Navier-Stokes equations using an unconditionally stable semi-Lagrangian advection scheme and FFT-based pressure projection.</p>
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This page came about after an online discussion of what Claude Code was capable of, or perhaps not capable of. I feared it might actually do an alright job of implementing <a href="https://www.dgp.toronto.edu/public_user/stam/reality/Research/pdf/ns.pdf">Stable Fluids</a>, so I pretty blindly threw Claude Code at the task, giving it the <code>pdftotext</code>-extracted text of the Stable Fluids paper and access to the internet. I connected my <a href="https://github.com/rreusser/mcp-observable-notebookkit-debug">mcp-observable-notebookkit-debug</a> tool so that it would be able to interact with the simulation and analyze the <code>&lt;canvas&gt;</code> content. After some finagling over parameter calibration to get things in the ballpark, I asked that it implement some initial conditions for fluid instabilities and sharpen things up a little with the monotonic cubic interpolation scheme from Fedkiw, Stam, and Jensen’s <a href="https://web.stanford.edu/class/cs237d/smoke.pdf">Visual Simulation of Smoke</a>. To instruct it about the method, I took a screenshot of the Appendix of the paper and dropped it into the terminal window.</p>
+</div></div><div id="cell-24" class="observablehq observablehq--cell"><div><p>I want to hate AI, but I politely decline to be religious about it, either supporting it unconditionally or rejecting it out of hat. Honestly it seems to have done a decent job here. The FFT isn’t an appropriate fit given our application of walls. I think I’d have organized the shaders a little differently, maybe consolidating some force computation or something. I think the FFT could be reworked to perform better. But gosh overall it’s just not bad.</p>
+</div></div><div id="cell-22" class="observablehq observablehq--cell"><div><hr>
+</div></div><div id="cell-21" class="observablehq observablehq--cell"><div><p>A WebGPU implementation of Jos Stam’s classic <a href="https://www.dgp.toronto.edu/public_user/stam/reality/Research/pdf/ns.pdf">Stable Fluids</a> algorithm (SIGGRAPH 1999). The method solves the incompressible Navier-Stokes equations using an unconditionally stable semi-Lagrangian advection scheme and FFT-based pressure projection.</p>
 <p>Click and drag to add velocity to the fluid, or select an initial condition to observe classic fluid instabilities:</p>
 <ul>
 <li><strong>Interactive</strong>: Start with a blank canvas and add velocity/dye with mouse interaction</li>
 <li><strong>Rayleigh-Taylor</strong>: Dense fluid (dye) on top falls into lighter fluid below, forming characteristic mushroom patterns</li>
 <li><strong>Kelvin-Helmholtz</strong>: Two layers moving in opposite directions create shear at the interface, forming rolling wave patterns</li>
 </ul>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"><div><h2 id="algorithm" tabindex="-1"><a href="#algorithm">Algorithm</a></h2>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-25" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"><div><h2 id="algorithm" tabindex="-1"><a href="#algorithm">Algorithm</a></h2>
 <p>The Stable Fluids algorithm solves the incompressible Navier-Stokes equations:</p>
 <p>subject to the incompressibility constraint .</p>
 <p>Each timestep consists of four stages:</p>

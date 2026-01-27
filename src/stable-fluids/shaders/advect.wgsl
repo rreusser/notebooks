@@ -9,7 +9,7 @@ struct SimParams {
   dyeDecay: f32,
   wallThicknessX: f32,
   wallThicknessY: f32,
-  padding: f32,
+  useLinearInterp: u32,  // 0 = monotonic cubic, 1 = linear
 }
 
 @group(0) @binding(0) var<storage, read> velocityField: array<vec4<f32>>;
@@ -24,17 +24,16 @@ fn wrapIndex(i: i32, N: i32) -> u32 {
   return u32(idx);
 }
 
-// Clamp index to wall boundaries
-fn clampIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
-  let minIdx = i32(wallThickness);
-  let maxIdx = N - 1 - i32(wallThickness);
-  return u32(clamp(i, minIdx, maxIdx));
+// Clamp index to domain boundaries (allows sampling ghost cells in wall regions)
+fn clampIndex(i: i32, N: i32) -> u32 {
+  return u32(clamp(i, 0, N - 1));
 }
 
 // Get index handling boundary conditions
 fn getIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
   if (wallThickness > 0.0) {
-    return clampIndex(i, N, wallThickness);
+    // With ghost cells, clamp to domain bounds (not fluid bounds)
+    return clampIndex(i, N);
   } else {
     return wrapIndex(i, N);
   }
@@ -88,30 +87,74 @@ fn monotoneCubic1D_vec4(f0: vec4<f32>, f1: vec4<f32>, f2: vec4<f32>, f3: vec4<f3
   );
 }
 
-// Sample input field with monotone cubic interpolation (separable)
-// Handles separate X/Y wall boundaries
-fn sampleInput(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+// Bilinear interpolation for vec4
+fn bilinear_vec4(f00: vec4<f32>, f10: vec4<f32>, f01: vec4<f32>, f11: vec4<f32>, fx: f32, fy: f32) -> vec4<f32> {
+  let top = mix(f00, f10, fx);
+  let bottom = mix(f01, f11, fx);
+  return mix(top, bottom, fy);
+}
+
+// Sample input field with bilinear interpolation
+fn sampleInputLinear(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
   let Nf = f32(N);
   let Ni = i32(N);
 
   // Convert physical position to grid coordinates
   var p = pos - vec2<f32>(0.5);
 
-  // Handle X boundary (clamp if walls, wrap if periodic)
+  // Handle X boundary
   if (wallX > 0.0) {
-    let minX = wallX + 0.5;
-    let maxX = Nf - wallX - 1.5;
-    p.x = clamp(p.x, minX, maxX);
+    p.x = clamp(p.x, 0.0, Nf - 1.0);
   } else {
     p.x = p.x - floor(p.x / Nf) * Nf;
   }
 
-  // Handle Y boundary (clamp if walls, wrap if periodic)
+  // Handle Y boundary
   if (wallY > 0.0) {
-    let minY = wallY + 0.5;
-    let maxY = Nf - wallY - 1.5;
-    p.y = clamp(p.y, minY, maxY);
+    p.y = clamp(p.y, 0.0, Nf - 1.0);
   } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  let f00 = sampleAt(x0, y0, Ni, wallX, wallY);
+  let f10 = sampleAt(x0 + 1, y0, Ni, wallX, wallY);
+  let f01 = sampleAt(x0, y0 + 1, Ni, wallX, wallY);
+  let f11 = sampleAt(x0 + 1, y0 + 1, Ni, wallX, wallY);
+
+  return bilinear_vec4(f00, f10, f01, f11, fx, fy);
+}
+
+// Sample input field with monotone cubic interpolation (separable)
+// Handles separate X/Y wall boundaries
+// With ghost cell mirroring, we allow sampling into wall regions (but not beyond domain)
+fn sampleInputCubic(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  // Convert physical position to grid coordinates
+  var p = pos - vec2<f32>(0.5);
+
+  // Handle X boundary
+  if (wallX > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    // Leave 0.5 cell margin to ensure cubic stencil stays in bounds
+    p.x = clamp(p.x, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  // Handle Y boundary
+  if (wallY > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    p.y = clamp(p.y, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
     p.y = p.y - floor(p.y / Nf) * Nf;
   }
 
@@ -156,6 +199,10 @@ fn advect_velocity(@builtin(global_invocation_id) id: vec3<u32>) {
   // Backtrace: find where the particle came from
   let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
 
-  // Sample input at backtraced position
-  output[idx] = sampleInput(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  // Sample input at backtraced position using selected interpolation method
+  if (params.useLinearInterp == 1u) {
+    output[idx] = sampleInputLinear(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  } else {
+    output[idx] = sampleInputCubic(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  }
 }

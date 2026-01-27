@@ -67,7 +67,7 @@ struct SimParams {
   dyeDecay: f32,
   wallThicknessX: f32,
   wallThicknessY: f32,
-  padding: f32,
+  useLinearInterp: u32,  // 0 = monotonic cubic, 1 = linear
 }
 
 @group(0) @binding(0) var<storage, read> velocityField: array<vec4<f32>>;
@@ -82,17 +82,16 @@ fn wrapIndex(i: i32, N: i32) -> u32 {
   return u32(idx);
 }
 
-// Clamp index to wall boundaries
-fn clampIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
-  let minIdx = i32(wallThickness);
-  let maxIdx = N - 1 - i32(wallThickness);
-  return u32(clamp(i, minIdx, maxIdx));
+// Clamp index to domain boundaries (allows sampling ghost cells in wall regions)
+fn clampIndex(i: i32, N: i32) -> u32 {
+  return u32(clamp(i, 0, N - 1));
 }
 
 // Get index handling boundary conditions
 fn getIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
   if (wallThickness > 0.0) {
-    return clampIndex(i, N, wallThickness);
+    // With ghost cells, clamp to domain bounds (not fluid bounds)
+    return clampIndex(i, N);
   } else {
     return wrapIndex(i, N);
   }
@@ -146,30 +145,74 @@ fn monotoneCubic1D_vec4(f0: vec4<f32>, f1: vec4<f32>, f2: vec4<f32>, f3: vec4<f3
   );
 }
 
-// Sample input field with monotone cubic interpolation (separable)
-// Handles separate X/Y wall boundaries
-fn sampleInput(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+// Bilinear interpolation for vec4
+fn bilinear_vec4(f00: vec4<f32>, f10: vec4<f32>, f01: vec4<f32>, f11: vec4<f32>, fx: f32, fy: f32) -> vec4<f32> {
+  let top = mix(f00, f10, fx);
+  let bottom = mix(f01, f11, fx);
+  return mix(top, bottom, fy);
+}
+
+// Sample input field with bilinear interpolation
+fn sampleInputLinear(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
   let Nf = f32(N);
   let Ni = i32(N);
 
   // Convert physical position to grid coordinates
   var p = pos - vec2<f32>(0.5);
 
-  // Handle X boundary (clamp if walls, wrap if periodic)
+  // Handle X boundary
   if (wallX > 0.0) {
-    let minX = wallX + 0.5;
-    let maxX = Nf - wallX - 1.5;
-    p.x = clamp(p.x, minX, maxX);
+    p.x = clamp(p.x, 0.0, Nf - 1.0);
   } else {
     p.x = p.x - floor(p.x / Nf) * Nf;
   }
 
-  // Handle Y boundary (clamp if walls, wrap if periodic)
+  // Handle Y boundary
   if (wallY > 0.0) {
-    let minY = wallY + 0.5;
-    let maxY = Nf - wallY - 1.5;
-    p.y = clamp(p.y, minY, maxY);
+    p.y = clamp(p.y, 0.0, Nf - 1.0);
   } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  let f00 = sampleAt(x0, y0, Ni, wallX, wallY);
+  let f10 = sampleAt(x0 + 1, y0, Ni, wallX, wallY);
+  let f01 = sampleAt(x0, y0 + 1, Ni, wallX, wallY);
+  let f11 = sampleAt(x0 + 1, y0 + 1, Ni, wallX, wallY);
+
+  return bilinear_vec4(f00, f10, f01, f11, fx, fy);
+}
+
+// Sample input field with monotone cubic interpolation (separable)
+// Handles separate X/Y wall boundaries
+// With ghost cell mirroring, we allow sampling into wall regions (but not beyond domain)
+fn sampleInputCubic(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec4<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  // Convert physical position to grid coordinates
+  var p = pos - vec2<f32>(0.5);
+
+  // Handle X boundary
+  if (wallX > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    // Leave 0.5 cell margin to ensure cubic stencil stays in bounds
+    p.x = clamp(p.x, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  // Handle Y boundary
+  if (wallY > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    p.y = clamp(p.y, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
     p.y = p.y - floor(p.y / Nf) * Nf;
   }
 
@@ -214,8 +257,12 @@ fn advect_velocity(@builtin(global_invocation_id) id: vec3<u32>) {
   // Backtrace: find where the particle came from
   let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
 
-  // Sample input at backtraced position
-  output[idx] = sampleInput(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  // Sample input at backtraced position using selected interpolation method
+  if (params.useLinearInterp == 1u) {
+    output[idx] = sampleInputLinear(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  } else {
+    output[idx] = sampleInputCubic(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  }
 }
 `,Q=`// Advect Scalar Shader
 // Advects a scalar field (dye) using the velocity field
@@ -228,7 +275,7 @@ struct SimParams {
   dyeDecay: f32,
   wallThicknessX: f32,
   wallThicknessY: f32,
-  padding: f32,
+  useLinearInterp: u32,  // 0 = monotonic cubic, 1 = linear
 }
 
 @group(0) @binding(0) var<storage, read> velocity: array<vec4<f32>>;
@@ -243,17 +290,16 @@ fn wrapIndex(i: i32, N: i32) -> u32 {
   return u32(idx);
 }
 
-// Clamp index to wall boundaries
-fn clampIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
-  let minIdx = i32(wallThickness);
-  let maxIdx = N - 1 - i32(wallThickness);
-  return u32(clamp(i, minIdx, maxIdx));
+// Clamp index to domain boundaries (allows sampling from wall regions)
+fn clampIndex(i: i32, N: i32) -> u32 {
+  return u32(clamp(i, 0, N - 1));
 }
 
 // Get index handling boundary conditions
 fn getIndex(i: i32, N: i32, wallThickness: f32) -> u32 {
   if (wallThickness > 0.0) {
-    return clampIndex(i, N, wallThickness);
+    // With walls, clamp to domain bounds (not fluid bounds)
+    return clampIndex(i, N);
   } else {
     return wrapIndex(i, N);
   }
@@ -305,30 +351,74 @@ fn monotoneCubic1D_vec2(f0: vec2<f32>, f1: vec2<f32>, f2: vec2<f32>, f3: vec2<f3
   );
 }
 
-// Sample scalar field with monotone cubic interpolation (separable)
-// Handles separate X/Y wall boundaries
-fn sampleScalar(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec2<f32> {
+// Bilinear interpolation for vec2
+fn bilinear_vec2(f00: vec2<f32>, f10: vec2<f32>, f01: vec2<f32>, f11: vec2<f32>, fx: f32, fy: f32) -> vec2<f32> {
+  let top = mix(f00, f10, fx);
+  let bottom = mix(f01, f11, fx);
+  return mix(top, bottom, fy);
+}
+
+// Sample scalar field with bilinear interpolation
+fn sampleScalarLinear(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec2<f32> {
   let Nf = f32(N);
   let Ni = i32(N);
 
   // Convert physical position to grid coordinates
   var p = pos - vec2<f32>(0.5);
 
-  // Handle X boundary (clamp if walls, wrap if periodic)
+  // Handle X boundary
   if (wallX > 0.0) {
-    let minX = wallX + 0.5;
-    let maxX = Nf - wallX - 1.5;
-    p.x = clamp(p.x, minX, maxX);
+    p.x = clamp(p.x, 0.0, Nf - 1.0);
   } else {
     p.x = p.x - floor(p.x / Nf) * Nf;
   }
 
-  // Handle Y boundary (clamp if walls, wrap if periodic)
+  // Handle Y boundary
   if (wallY > 0.0) {
-    let minY = wallY + 0.5;
-    let maxY = Nf - wallY - 1.5;
-    p.y = clamp(p.y, minY, maxY);
+    p.y = clamp(p.y, 0.0, Nf - 1.0);
   } else {
+    p.y = p.y - floor(p.y / Nf) * Nf;
+  }
+
+  let x0 = i32(floor(p.x));
+  let y0 = i32(floor(p.y));
+  let fx = fract(p.x);
+  let fy = fract(p.y);
+
+  let f00 = sampleAt(x0, y0, Ni, wallX, wallY);
+  let f10 = sampleAt(x0 + 1, y0, Ni, wallX, wallY);
+  let f01 = sampleAt(x0, y0 + 1, Ni, wallX, wallY);
+  let f11 = sampleAt(x0 + 1, y0 + 1, Ni, wallX, wallY);
+
+  return bilinear_vec2(f00, f10, f01, f11, fx, fy);
+}
+
+// Sample scalar field with monotone cubic interpolation (separable)
+// Handles separate X/Y wall boundaries
+// With ghost cells, we allow sampling into wall regions (but not beyond domain)
+fn sampleScalarCubic(pos: vec2<f32>, N: u32, wallX: f32, wallY: f32) -> vec2<f32> {
+  let Nf = f32(N);
+  let Ni = i32(N);
+
+  // Convert physical position to grid coordinates
+  var p = pos - vec2<f32>(0.5);
+
+  // Handle X boundary
+  if (wallX > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    // Leave 0.5 cell margin to ensure cubic stencil stays in bounds
+    p.x = clamp(p.x, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
+    p.x = p.x - floor(p.x / Nf) * Nf;
+  }
+
+  // Handle Y boundary
+  if (wallY > 0.0) {
+    // With ghost cells, allow sampling into wall but clamp to domain bounds
+    p.y = clamp(p.y, 0.5, Nf - 1.5);
+  } else {
+    // Periodic wrap
     p.y = p.y - floor(p.y / Nf) * Nf;
   }
 
@@ -372,8 +462,13 @@ fn advect_scalar(@builtin(global_invocation_id) id: vec3<u32>) {
   // Backtrace
   let backPos = pos - vec2<f32>(vel.x, vel.z) * Nf * params.dt;
 
-  // Sample and apply decay
-  var result = sampleScalar(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  // Sample using selected interpolation method and apply decay
+  var result: vec2<f32>;
+  if (params.useLinearInterp == 1u) {
+    result = sampleScalarLinear(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  } else {
+    result = sampleScalarCubic(backPos, N, params.wallThicknessX, params.wallThicknessY);
+  }
   result *= params.dyeDecay;
 
   output[idx] = result;
@@ -620,7 +715,7 @@ fn visualize(input: VertexOutput) -> @location(0) vec4<f32> {
 
   return vec4<f32>(color, 1.0);
 }
-`,on=`// Vorticity Confinement Shader
+`,ln=`// Vorticity Confinement Shader
 // Computes vorticity (curl) and applies confinement force to preserve swirling motion
 
 struct SimParams {
@@ -674,7 +769,7 @@ fn compute_vorticity(@builtin(global_invocation_id) id: vec3<u32>) {
 
   vorticity[idx] = omega;
 }
-`,rn=`// Apply Vorticity Confinement Force
+`,on=`// Apply Vorticity Confinement Force
 // Adds force in direction perpendicular to vorticity gradient to amplify vortices
 
 struct VorticityParams {
@@ -732,8 +827,10 @@ fn apply_vorticity(@builtin(global_invocation_id) id: vec3<u32>) {
   vel.z += fy * params.dt;
   velocity[idx] = vel;
 }
-`,ln=`// Boundary Enforcement Shader
-// Enforces no-slip boundary condition (zero velocity) at solid boundaries
+`,rn=`// Boundary Enforcement Shader
+// Enforces no-slip boundary condition using ghost cell mirroring.
+// Ghost cells have negated velocity of their mirrored fluid cells,
+// so interpolation naturally gives zero velocity at the wall surface.
 
 struct BoundaryParams {
   resolution: vec2<u32>,
@@ -750,42 +847,63 @@ struct BoundaryParams {
 @compute @workgroup_size(16, 16)
 fn enforce_boundary(@builtin(global_invocation_id) id: vec3<u32>) {
   let N = params.resolution.x;
+  let Ni = i32(N);
   if (id.x >= N || id.y >= N) { return; }
 
+  let ix = i32(id.x);
+  let iy = i32(id.y);
   let idx = id.y * N + id.x;
 
-  // Normalized coordinates (y=0 at top, y=1 at bottom)
-  let x = f32(id.x) / f32(N);
-  let y = f32(id.y) / f32(N);
+  let wallX = i32(params.wallThicknessX);
+  let wallY = i32(params.wallThicknessY);
 
-  // Wall thickness in normalized coords
-  let wallSizeX = params.wallThicknessX / f32(N);
-  let wallSizeY = params.wallThicknessY / f32(N);
+  // Determine which wall regions this cell is in
+  let inLeftWall = wallX > 0 && ix < wallX;
+  let inRightWall = wallX > 0 && ix >= Ni - wallX;
+  let inTopWall = wallY > 0 && iy < wallY;
+  let inBottomWall = wallY > 0 && iy >= Ni - wallY;
 
-  var inBoundary = false;
-
-  // Check left/right walls
-  if (params.wallThicknessX > 0.0) {
-    if (x < wallSizeX || x > 1.0 - wallSizeX) {
-      inBoundary = true;
-    }
+  // If not in any wall, nothing to do
+  if (!inLeftWall && !inRightWall && !inTopWall && !inBottomWall) {
+    return;
   }
 
-  // Check top/bottom walls
-  if (params.wallThicknessY > 0.0) {
-    if (y < wallSizeY || y > 1.0 - wallSizeY) {
-      inBoundary = true;
-    }
+  // Compute mirrored position for ghost cell
+  var mirrorX = ix;
+  var mirrorY = iy;
+
+  // Mirror across X walls
+  // Wall surface is at x = wallX (left) or x = N - wallX (right)
+  // Ghost cell at ix mirrors fluid cell across the wall surface
+  if (inLeftWall) {
+    mirrorX = 2 * wallX - 1 - ix;
+  } else if (inRightWall) {
+    mirrorX = 2 * (Ni - wallX) - 1 - ix;
   }
 
-  if (inBoundary) {
-    // Zero velocity (no-slip condition)
-    // Don't zero dye - it creates sampling artifacts near walls
-    // The visualization shader draws walls as solid color anyway
-    velocity[idx] = vec4<f32>(0.0);
+  // Mirror across Y walls
+  if (inTopWall) {
+    mirrorY = 2 * wallY - 1 - iy;
+  } else if (inBottomWall) {
+    mirrorY = 2 * (Ni - wallY) - 1 - iy;
   }
+
+  // Clamp mirror position to fluid region (handles thick walls and corners)
+  let fluidMinX = select(0, wallX, wallX > 0);
+  let fluidMaxX = select(Ni - 1, Ni - wallX - 1, wallX > 0);
+  let fluidMinY = select(0, wallY, wallY > 0);
+  let fluidMaxY = select(Ni - 1, Ni - wallY - 1, wallY > 0);
+
+  mirrorX = clamp(mirrorX, fluidMinX, fluidMaxX);
+  mirrorY = clamp(mirrorY, fluidMinY, fluidMaxY);
+
+  let mirrorIdx = u32(mirrorY) * N + u32(mirrorX);
+
+  // No-slip: ghost cell velocity = negative of mirrored fluid cell
+  // This ensures interpolation gives zero velocity at the wall surface
+  velocity[idx] = -velocity[mirrorIdx];
 }
-`,dn=`// Buoyancy Shader
+`,sn=`// Buoyancy Shader
 // Applies upward force proportional to dye concentration (simulating hot air rising)
 
 struct BuoyancyParams {
@@ -814,4 +932,4 @@ fn apply_buoyancy(@builtin(global_invocation_id) id: vec3<u32>) {
   vel.z += params.strength * dyeVal * params.dt;
   velocity[idx] = vel;
 }
-`;async function sn(n,y,p){const f=Z(n,p),v=n.createShaderModule({label:"Add force shader",code:J}),m=n.createShaderModule({label:"Advect shader",code:K}),g=n.createShaderModule({label:"Advect scalar shader",code:Q}),b=n.createShaderModule({label:"Split velocity shader",code:$}),x=n.createShaderModule({label:"Project FFT shader",code:nn}),w=n.createShaderModule({label:"Merge velocity shader",code:en}),h=n.createShaderModule({label:"Fullscreen vertex shader",code:tn}),N=n.createShaderModule({label:"Visualize shader",code:an}),S=n.createShaderModule({label:"Vorticity shader",code:on}),P=n.createShaderModule({label:"Apply vorticity shader",code:rn}),k=n.createShaderModule({label:"Boundary shader",code:ln}),C=n.createShaderModule({label:"Buoyancy shader",code:dn}),e=n.createBindGroupLayout({label:"Add force bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),i=n.createBindGroupLayout({label:"Advect bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),t=n.createBindGroupLayout({label:"Advect scalar bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=n.createBindGroupLayout({label:"Split velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),o=n.createBindGroupLayout({label:"Project FFT bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),r=n.createBindGroupLayout({label:"Merge velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),l=n.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),d=n.createBindGroupLayout({label:"Compute vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),u=n.createBindGroupLayout({label:"Apply vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),s=n.createBindGroupLayout({label:"Enforce boundary bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),c=n.createBindGroupLayout({label:"Apply buoyancy bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),T=n.createPipelineLayout({label:"Add force pipeline layout",bindGroupLayouts:[e]}),_=n.createPipelineLayout({label:"Advect pipeline layout",bindGroupLayouts:[i]}),G=n.createPipelineLayout({label:"Advect scalar pipeline layout",bindGroupLayouts:[t]}),U=n.createPipelineLayout({label:"Split velocity pipeline layout",bindGroupLayouts:[a]}),M=n.createPipelineLayout({label:"Project FFT pipeline layout",bindGroupLayouts:[o]}),L=n.createPipelineLayout({label:"Merge velocity pipeline layout",bindGroupLayouts:[r]}),V=n.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[l]}),z=n.createPipelineLayout({label:"Compute vorticity pipeline layout",bindGroupLayouts:[d]}),F=n.createPipelineLayout({label:"Apply vorticity pipeline layout",bindGroupLayouts:[u]}),B=n.createPipelineLayout({label:"Enforce boundary pipeline layout",bindGroupLayouts:[s]}),Y=n.createPipelineLayout({label:"Apply buoyancy pipeline layout",bindGroupLayouts:[c]}),X=n.createComputePipeline({label:"Add force pipeline",layout:T,compute:{module:v,entryPoint:"add_force"}}),A=n.createComputePipeline({label:"Advect velocity pipeline",layout:_,compute:{module:m,entryPoint:"advect_velocity"}}),O=n.createComputePipeline({label:"Advect scalar pipeline",layout:G,compute:{module:g,entryPoint:"advect_scalar"}}),E=n.createComputePipeline({label:"Split velocity pipeline",layout:U,compute:{module:b,entryPoint:"split_velocity"}}),j=n.createComputePipeline({label:"Project FFT pipeline",layout:M,compute:{module:x,entryPoint:"project_fft"}}),D=n.createComputePipeline({label:"Merge velocity pipeline",layout:L,compute:{module:w,entryPoint:"merge_velocity"}}),I=n.createComputePipeline({label:"Compute vorticity pipeline",layout:z,compute:{module:S,entryPoint:"compute_vorticity"}}),H=n.createComputePipeline({label:"Apply vorticity pipeline",layout:F,compute:{module:P,entryPoint:"apply_vorticity"}}),R=n.createComputePipeline({label:"Enforce boundary pipeline",layout:B,compute:{module:k,entryPoint:"enforce_boundary"}}),W=n.createComputePipeline({label:"Apply buoyancy pipeline",layout:Y,compute:{module:C,entryPoint:"apply_buoyancy"}}),q=n.createRenderPipeline({label:"Visualize pipeline",layout:V,vertex:{module:h,entryPoint:"fullscreen"},fragment:{module:N,entryPoint:"visualize",targets:[{format:y}]},primitive:{topology:"triangle-list"}});return{fft:f,addForce:X,advectVelocity:A,advectScalar:O,splitVelocity:E,projectFFT:j,mergeVelocity:D,computeVorticity:I,applyVorticity:H,enforceBoundary:R,applyBuoyancy:W,visualize:q,bindGroupLayouts:{addForce:e,advect:i,advectScalar:t,splitVelocity:a,projectFFT:o,mergeVelocity:r,computeVorticity:d,applyVorticity:u,enforceBoundary:s,applyBuoyancy:c,visualize:l}}}export{sn as createFluidPipelines};
+`;async function un(n,f,p){const y=Z(n,p),m=n.createShaderModule({label:"Add force shader",code:J}),v=n.createShaderModule({label:"Advect shader",code:K}),g=n.createShaderModule({label:"Advect scalar shader",code:Q}),b=n.createShaderModule({label:"Split velocity shader",code:$}),x=n.createShaderModule({label:"Project FFT shader",code:nn}),w=n.createShaderModule({label:"Merge velocity shader",code:en}),N=n.createShaderModule({label:"Fullscreen vertex shader",code:tn}),h=n.createShaderModule({label:"Visualize shader",code:an}),S=n.createShaderModule({label:"Vorticity shader",code:ln}),P=n.createShaderModule({label:"Apply vorticity shader",code:on}),k=n.createShaderModule({label:"Boundary shader",code:rn}),C=n.createShaderModule({label:"Buoyancy shader",code:sn}),e=n.createBindGroupLayout({label:"Add force bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),i=n.createBindGroupLayout({label:"Advect bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),t=n.createBindGroupLayout({label:"Advect scalar bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),a=n.createBindGroupLayout({label:"Split velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),l=n.createBindGroupLayout({label:"Project FFT bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),o=n.createBindGroupLayout({label:"Merge velocity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),r=n.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),s=n.createBindGroupLayout({label:"Compute vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),c=n.createBindGroupLayout({label:"Apply vorticity bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),u=n.createBindGroupLayout({label:"Enforce boundary bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),d=n.createBindGroupLayout({label:"Apply buoyancy bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),_=n.createPipelineLayout({label:"Add force pipeline layout",bindGroupLayouts:[e]}),T=n.createPipelineLayout({label:"Advect pipeline layout",bindGroupLayouts:[i]}),G=n.createPipelineLayout({label:"Advect scalar pipeline layout",bindGroupLayouts:[t]}),M=n.createPipelineLayout({label:"Split velocity pipeline layout",bindGroupLayouts:[a]}),L=n.createPipelineLayout({label:"Project FFT pipeline layout",bindGroupLayouts:[l]}),U=n.createPipelineLayout({label:"Merge velocity pipeline layout",bindGroupLayouts:[o]}),X=n.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[r]}),Y=n.createPipelineLayout({label:"Compute vorticity pipeline layout",bindGroupLayouts:[s]}),V=n.createPipelineLayout({label:"Apply vorticity pipeline layout",bindGroupLayouts:[c]}),A=n.createPipelineLayout({label:"Enforce boundary pipeline layout",bindGroupLayouts:[u]}),F=n.createPipelineLayout({label:"Apply buoyancy pipeline layout",bindGroupLayouts:[d]}),B=n.createComputePipeline({label:"Add force pipeline",layout:_,compute:{module:m,entryPoint:"add_force"}}),z=n.createComputePipeline({label:"Advect velocity pipeline",layout:T,compute:{module:v,entryPoint:"advect_velocity"}}),O=n.createComputePipeline({label:"Advect scalar pipeline",layout:G,compute:{module:g,entryPoint:"advect_scalar"}}),E=n.createComputePipeline({label:"Split velocity pipeline",layout:M,compute:{module:b,entryPoint:"split_velocity"}}),j=n.createComputePipeline({label:"Project FFT pipeline",layout:L,compute:{module:x,entryPoint:"project_fft"}}),D=n.createComputePipeline({label:"Merge velocity pipeline",layout:U,compute:{module:w,entryPoint:"merge_velocity"}}),I=n.createComputePipeline({label:"Compute vorticity pipeline",layout:Y,compute:{module:S,entryPoint:"compute_vorticity"}}),W=n.createComputePipeline({label:"Apply vorticity pipeline",layout:V,compute:{module:P,entryPoint:"apply_vorticity"}}),H=n.createComputePipeline({label:"Enforce boundary pipeline",layout:A,compute:{module:k,entryPoint:"enforce_boundary"}}),R=n.createComputePipeline({label:"Apply buoyancy pipeline",layout:F,compute:{module:C,entryPoint:"apply_buoyancy"}}),q=n.createRenderPipeline({label:"Visualize pipeline",layout:X,vertex:{module:N,entryPoint:"fullscreen"},fragment:{module:h,entryPoint:"visualize",targets:[{format:f}]},primitive:{topology:"triangle-list"}});return{fft:y,addForce:B,advectVelocity:z,advectScalar:O,splitVelocity:E,projectFFT:j,mergeVelocity:D,computeVorticity:I,applyVorticity:W,enforceBoundary:H,applyBuoyancy:R,visualize:q,bindGroupLayouts:{addForce:e,advect:i,advectScalar:t,splitVelocity:a,projectFFT:l,mergeVelocity:o,computeVorticity:s,applyVorticity:c,enforceBoundary:u,applyBuoyancy:d,visualize:r}}}export{un as createFluidPipelines};
