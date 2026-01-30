@@ -1,0 +1,715 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Particle-Mesh Gravity (WebGPU)</title>
+  <script id="1" type="text/markdown">
+    # Particle-Mesh Gravity (WebGPU)
+
+    A 2D gravity simulation using the [Particle Mesh](https://en.wikipedia.org/wiki/Particle_mesh) method, implemented in WebGPU. Particles interact gravitationally through a density field computed on a regular grid, with the Poisson equation solved in Fourier space using FFT.
+
+    **How it works:**
+    1. Deposit particle masses onto grid using bilinear interpolation
+    2. Forward FFT to transform density to frequency domain
+    3. Solve Poisson equation: φ̂ = -4π ρ̂ / |k|²
+    4. Compute gradient of potential in frequency domain
+    5. Inverse FFT to get force field in real space
+    6. Integrate particle trajectories using midpoint method
+
+    The simulation uses periodic boundary conditions.
+  </script>
+  <script id="2" type="module">
+    // WebGPU initialization
+    if (!navigator.gpu) {
+      throw new Error('WebGPU is not supported in this browser');
+    }
+
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) {
+      throw new Error('Failed to get WebGPU adapter');
+    }
+
+    // Request shader-f16 feature if available
+    const requiredFeatures = [];
+    const hasF16 = adapter.features.has('shader-f16');
+    if (hasF16) {
+      requiredFeatures.push('shader-f16');
+    }
+
+    const device = await adapter.requestDevice({ requiredFeatures });
+    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    invalidation.then(() => device.destroy());
+  </script>
+  <script id="3" type="module">
+    // Grid resolution control
+    const gridResInput = Inputs.select([64, 128, 256, 512, 1024, 2048], {
+      value: 256,
+      label: 'Grid resolution',
+      format: x => `${x}×${x}`
+    });
+    const N_grid = view(gridResInput);
+  </script>
+  <script id="4" type="module">
+    // Particle count control
+    const particleCountInput = Inputs.select(
+      [16384, 32768, 65536, 131072, 262144, 524288, 1048576, 2097152, 4194304],
+      {
+        value: 262144,
+        label: 'Particles',
+        format: x => x.toLocaleString()
+      }
+    );
+    const numParticlesSelected = view(particleCountInput);
+  </script>
+  <script id="5" type="module">
+    // Timestep control
+    const dtInput = Inputs.range([0.0001, 0.01], {
+      step: 0.0001,
+      value: 0.001,
+      transform: Math.log,
+      label: 'Timestep (dt)'
+    });
+    const dt = view(dtInput);
+  </script>
+  <script id="7" type="module">
+    // Brightness control
+    const brightnessInput = Inputs.range([0.001, 0.05], {
+      step: 0.001,
+      value: 0,
+      transform: Math.log,
+      label: 'Brightness'
+    });
+    const brightness = view(brightnessInput);
+  </script>
+  <script id="7b" type="module">
+    // Initial velocity dispersion control
+    const v0Input = Inputs.range([0, 0.1], {
+      step: 0.001,
+      value: 0.02,
+      label: 'Initial velocity (v₀)'
+    });
+    const v0 = view(v0Input);
+  </script>
+  <script id="7c" type="module">
+    // Precision control (f16 only available if device supports it)
+    const precisionOptions = hasF16 ? ['f32', 'f16'] : ['f32'];
+    const precisionInput = Inputs.select(precisionOptions, {
+      value: 'f32',
+      label: 'Precision'
+    });
+    const fftPrecision = view(precisionInput);
+  </script>
+  <script id="8" type="module">
+    // Simulation toggle
+    const simulateInput = Inputs.toggle({ label: 'Simulate', value: true });
+    const simulate = view(simulateInput);
+  </script>
+  <script id="8b" type="module">
+    // Gradient intensity slider (0 = off)
+    const gradientIntensityInput = Inputs.range([0, 1], {
+      step: 0.01,
+      value: 1,
+      label: 'Gradient intensity'
+    });
+    const gradientIntensity = view(gradientIntensityInput);
+  </script>
+  <script id="9" type="module">
+    // Reset button
+    const resetInput = Inputs.button('Reset');
+    const reset = view(resetInput);
+  </script>
+  <script id="10" type="module">
+    // Display controls
+    display(html`<div id="gravity-controls">
+      ${gridResInput}
+      ${particleCountInput}
+      ${dtInput}
+      ${v0Input}
+      ${precisionInput}
+      ${brightnessInput}
+      ${simulateInput}
+      ${gradientIntensityInput}
+      ${resetInput}
+    </div>`);
+  </script>
+  <script id="11" type="module">
+    // Derived values
+    const N = N_grid;
+    const numParticles = numParticlesSelected;
+    const workgroupsGrid = Math.ceil(N / 16);
+    const workgroupsParticles = Math.ceil(numParticles / 256);
+
+    // Bytes per float based on precision
+    const floatSize = fftPrecision === 'f16' ? 2 : 4;
+
+    // Buffer sizes
+    // Note: density stays f32 to avoid underflow (mean density ~1/N² is too small for f16)
+    const particleBufferSize = numParticles * 4 * 4;        // vec4<f32> per particle (always f32)
+    const atomicBufferSize = N * N * 4;                     // i32 per cell
+    const densityBufferSize = N * N * 2 * 4;                // vec2<f32> per cell (always f32)
+    const gradientBufferSize = N * N * 4 * floatSize;       // vec4 per cell (f16 or f32)
+  </script>
+  <script id="12" type="module">
+    // Create pipelines
+    import { createGravityPipelines } from './pipeline.js';
+    import { executeFFT2D, executeVec4FFT2D } from './lib/webgpu-fft/fft.js';
+
+    const pipelines = await createGravityPipelines(device, canvasFormat, N, fftPrecision);
+
+    function runFFT2D(input, output, tempBuffers, forward) {
+      executeFFT2D({
+        device,
+        pipelines: pipelines.fft,
+        input,
+        output,
+        temp: tempBuffers,
+        N,
+        forward,
+        splitNormalization: true
+      });
+    }
+
+    function runVec4FFT2D(input, output, tempBuffers, forward) {
+      executeVec4FFT2D({
+        device,
+        pipelines: pipelines.fftVec4,
+        input,
+        output,
+        temp: tempBuffers,
+        N,
+        forward,
+        splitNormalization: true
+      });
+    }
+  </script>
+  <script id="13" type="module">
+    // Create GPU buffers
+    reset; numParticles; N; fftPrecision;
+
+    const bufferUsage = GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC | GPUBufferUsage.COPY_DST;
+
+    // Particle positions and velocities: vec4(x, y, vx, vy)
+    const particles = device.createBuffer({
+      label: 'particles',
+      size: particleBufferSize,
+      usage: bufferUsage
+    });
+
+    // Atomic density accumulator (i32)
+    const densityAtomic = device.createBuffer({
+      label: 'densityAtomic',
+      size: atomicBufferSize,
+      usage: bufferUsage
+    });
+
+    // Density field for FFT (vec2: real, imag)
+    const density = device.createBuffer({
+      label: 'density',
+      size: densityBufferSize,
+      usage: bufferUsage
+    });
+
+    // Density in frequency domain
+    const densityHat = device.createBuffer({
+      label: 'densityHat',
+      size: densityBufferSize,
+      usage: bufferUsage
+    });
+
+    // Gradient in frequency domain (vec4: dphi/dx_re, dphi/dx_im, dphi/dy_re, dphi/dy_im)
+    const gradientHat = device.createBuffer({
+      label: 'gradientHat',
+      size: gradientBufferSize,
+      usage: bufferUsage
+    });
+
+    // Gradient in real space
+    const gradient = device.createBuffer({
+      label: 'gradient',
+      size: gradientBufferSize,
+      usage: bufferUsage
+    });
+
+    // Potential field (vec2 for FFT, only .x used after inverse FFT)
+    const potentialHat = device.createBuffer({
+      label: 'potentialHat',
+      size: densityBufferSize,
+      usage: bufferUsage
+    });
+
+    const potential = device.createBuffer({
+      label: 'potential',
+      size: densityBufferSize,
+      usage: bufferUsage
+    });
+
+    // FFT temp buffers (vec4 size, shared for both vec2 and vec4 FFTs)
+    const fftTemp = [0, 1].map(i => device.createBuffer({
+      label: `fftTemp[${i}]`,
+      size: gradientBufferSize,  // Use larger vec4 size for both
+      usage: bufferUsage
+    }));
+
+    // Cleanup on invalidation
+    invalidation.then(() => {
+      particles.destroy();
+      densityAtomic.destroy();
+      density.destroy();
+      densityHat.destroy();
+      gradientHat.destroy();
+      gradient.destroy();
+      potentialHat.destroy();
+      potential.destroy();
+      fftTemp.forEach(b => b.destroy());
+    });
+  </script>
+  <script id="14" type="module">
+    // Uniform buffers
+    const clearParamsBuffer = device.createBuffer({
+      label: 'clearParams',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const accumulateParamsBuffer = device.createBuffer({
+      label: 'accumulateParams',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const convertParamsBuffer = device.createBuffer({
+      label: 'convertParams',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const poissonParamsBuffer = device.createBuffer({
+      label: 'poissonParams',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    const integrateParamsBuffer = device.createBuffer({
+      label: 'integrateParams',
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    invalidation.then(() => {
+      clearParamsBuffer.destroy();
+      accumulateParamsBuffer.destroy();
+      convertParamsBuffer.destroy();
+      poissonParamsBuffer.destroy();
+      integrateParamsBuffer.destroy();
+    });
+  </script>
+  <script id="15" type="module">
+    // Initialize particles with random positions and Gaussian velocities
+    reset; numParticles; particles; v0;
+
+    // Box-Muller transform for Gaussian random numbers
+    function randn() {
+      const u1 = Math.random();
+      const u2 = Math.random();
+      return Math.sqrt(-2 * Math.log(u1)) * Math.cos(2 * Math.PI * u2);
+    }
+
+    const particleData = new Float32Array(numParticles * 4);
+
+    for (let i = 0; i < numParticles; i++) {
+      const idx = i * 4;
+      // Random position in [0, 1]^2
+      particleData[idx + 0] = Math.random();
+      particleData[idx + 1] = Math.random();
+      // Gaussian velocity distribution with standard deviation v0
+      particleData[idx + 2] = v0 * randn();
+      particleData[idx + 3] = v0 * randn();
+    }
+
+    device.queue.writeBuffer(particles, 0, particleData);
+  </script>
+  <script id="16" type="module">
+    // Canvas setup
+    const canvasSize = Math.min(width, 640);
+    const pixelRatio = window.devicePixelRatio || 1;
+    const canvas = html`<canvas
+      id="gravity-canvas"
+      width="${canvasSize * pixelRatio}"
+      height="${canvasSize * pixelRatio}"
+      style="width: ${canvasSize}px; height: ${canvasSize}px; background: black;">
+    </canvas>`;
+
+    const gpuContext = canvas.getContext('webgpu');
+    gpuContext.configure({
+      device,
+      format: canvasFormat,
+      alphaMode: 'opaque'
+    });
+
+    display(canvas);
+  </script>
+  <script id="16b" type="module">
+    // Jeans length calculation
+    // λ_J ~ v / √(Gρ), with G=1 and mean ρ=1, gives λ_J ~ v₀
+    const jeansLength = v0;
+    const jeansPercent = (jeansLength * 100).toFixed(1);
+    display(tex.block`\lambda_J \sim \frac{v_0}{\sqrt{G\rho}} \approx ${jeansPercent}\%\ \text{of domain}`);
+  </script>
+  <script id="16c" type="module">
+    // Shot noise distribution plot
+    // For N particles in M = gridSize² cells, particle count per cell follows Poisson(λ)
+    // where λ = N/M = mean particles per cell
+    const lambda = numParticles / (N * N);
+
+    // Generate Poisson PMF data (normalized density on x-axis, probability on y-axis)
+    // Density is normalized so mean = 1, actual count = k, so density = k/λ
+    function poissonPMF(k, lambda) {
+      // log(P) = k*log(λ) - λ - log(k!)
+      let logP = k * Math.log(lambda) - lambda;
+      for (let i = 2; i <= k; i++) logP -= Math.log(i);
+      return Math.exp(logP);
+    }
+
+    // Range of k values to plot (mean ± 4 std devs)
+    const std = Math.sqrt(lambda);
+    const kMin = Math.max(0, Math.floor(lambda - 4 * std));
+    const kMax = Math.ceil(lambda + 4 * std);
+
+    const data = [];
+    for (let k = kMin; k <= kMax; k++) {
+      const prob = poissonPMF(k, lambda);
+      if (prob > 1e-6) {
+        data.push({
+          density: k / lambda,  // Normalized so mean = 1
+          probability: prob * lambda  // Scale to density PDF
+        });
+      }
+    }
+
+    display(Plot.plot({
+      width: 400,
+      height: 200,
+      marginLeft: 50,
+      x: { label: "Relative density (ρ/ρ̄)", domain: [Math.max(0, 1 - 4/Math.sqrt(lambda)), 1 + 4/Math.sqrt(lambda)] },
+      y: { label: "Probability density" },
+      marks: [
+        Plot.ruleY([0]),
+        Plot.ruleX([1], { stroke: "#999", strokeDasharray: "4,4" }),
+        Plot.line(data, { x: "density", y: "probability", stroke: "steelblue", strokeWidth: 2 }),
+        Plot.dot(data, { x: "density", y: "probability", fill: "steelblue", r: 3 })
+      ],
+      title: `Shot noise: ${lambda.toFixed(1)} particles/cell`
+    }));
+  </script>
+  <script id="16d" type="module">
+    // Memory usage display
+    const bytesPerFloat = fftPrecision === 'f16' ? 2 : 4;
+
+    const memoryUsage = {
+      particles: numParticles * 4 * 4,                    // vec4<f32> per particle
+      densityAtomic: N * N * 4,                           // i32 per cell
+      density: N * N * 2 * 4,                             // vec2<f32> per cell (always f32)
+      densityHat: N * N * 2 * 4,                          // vec2<f32> per cell (always f32)
+      gradientHat: N * N * 4 * bytesPerFloat,             // vec4 per cell (f16 or f32)
+      gradient: N * N * 4 * bytesPerFloat,                // vec4 per cell (f16 or f32)
+      fftTemp: 2 * N * N * 4 * bytesPerFloat,             // 2 shared temp buffers, vec4 size
+    };
+
+    const totalBytes = Object.values(memoryUsage).reduce((a, b) => a + b, 0);
+
+    function formatBytes(bytes) {
+      if (bytes >= 1024 * 1024 * 1024) return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+      if (bytes >= 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+      if (bytes >= 1024) return (bytes / 1024).toFixed(1) + ' KB';
+      return bytes + ' B';
+    }
+
+    display(html`<details>
+      <summary style="cursor: pointer; font-weight: bold;">Memory usage: ${formatBytes(totalBytes)}</summary>
+      <table style="margin-top: 8px; font-size: 0.9em;">
+        <tr><td>Particles</td><td style="text-align: right; padding-left: 16px;">${formatBytes(memoryUsage.particles)}</td></tr>
+        <tr><td>Density (atomic)</td><td style="text-align: right; padding-left: 16px;">${formatBytes(memoryUsage.densityAtomic)}</td></tr>
+        <tr><td>Density (complex)</td><td style="text-align: right; padding-left: 16px;">${formatBytes(memoryUsage.density)}</td></tr>
+        <tr><td>Density (freq domain)</td><td style="text-align: right; padding-left: 16px;">${formatBytes(memoryUsage.densityHat)}</td></tr>
+        <tr><td>Gradient (freq domain)</td><td style="text-align: right; padding-left: 16px;">${formatBytes(memoryUsage.gradientHat)}</td></tr>
+        <tr><td>Gradient (spatial)</td><td style="text-align: right; padding-left: 16px;">${formatBytes(memoryUsage.gradient)}</td></tr>
+        <tr><td>FFT temp (shared)</td><td style="text-align: right; padding-left: 16px;">${formatBytes(memoryUsage.fftTemp)}</td></tr>
+        <tr style="font-weight: bold; border-top: 1px solid #ccc;"><td>Total</td><td style="text-align: right; padding-left: 16px;">${formatBytes(totalBytes)}</td></tr>
+      </table>
+    </details>`);
+  </script>
+  <script id="17" type="module">
+    // Fixed-point scale for atomic accumulation
+    const FIXED_POINT_SCALE = 1073741824.0;  // 2^30 - higher precision for large particle counts
+
+    // Update uniform buffers
+    function updateUniforms() {
+      // Clear params
+      device.queue.writeBuffer(clearParamsBuffer, 0, new Uint32Array([N]));
+
+      // Accumulate params: gridSize, numParticles, fixedPointScale, massPerParticle
+      const accData = new ArrayBuffer(16);
+      new Uint32Array(accData, 0, 2).set([N, numParticles]);
+      new Float32Array(accData, 8, 2).set([FIXED_POINT_SCALE, 1.0 / numParticles]);
+      device.queue.writeBuffer(accumulateParamsBuffer, 0, accData);
+
+      // Convert params: gridSize, fixedPointScale
+      const convData = new ArrayBuffer(16);
+      new Uint32Array(convData, 0, 1).set([N]);
+      new Float32Array(convData, 4, 1).set([FIXED_POINT_SCALE]);
+      device.queue.writeBuffer(convertParamsBuffer, 0, convData);
+
+      // Poisson params: gridSize
+      device.queue.writeBuffer(poissonParamsBuffer, 0, new Uint32Array([N]));
+
+      // Integrate params: gridSize, numParticles, dt, (padding)
+      const intData = new ArrayBuffer(16);
+      new Uint32Array(intData, 0, 2).set([N, numParticles]);
+      new Float32Array(intData, 8, 2).set([dt, 0.0]);  // Second float unused
+      device.queue.writeBuffer(integrateParamsBuffer, 0, intData);
+    }
+  </script>
+  <script id="18" type="module">
+    // Simulation step
+    async function step() {
+      updateUniforms();
+
+      // 1. Clear density grid
+      {
+        const bindGroup = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.clearGrid,
+          entries: [
+            { binding: 0, resource: { buffer: densityAtomic } },
+            { binding: 1, resource: { buffer: clearParamsBuffer } }
+          ]
+        });
+
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(pipelines.clearGrid);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(workgroupsGrid, workgroupsGrid);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+      }
+
+      // 2. Accumulate mass from particles
+      {
+        const bindGroup = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.accumulate,
+          entries: [
+            { binding: 0, resource: { buffer: particles } },
+            { binding: 1, resource: { buffer: densityAtomic } },
+            { binding: 2, resource: { buffer: accumulateParamsBuffer } }
+          ]
+        });
+
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(pipelines.accumulate);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(workgroupsParticles);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+      }
+
+      // 3. Convert atomic i32 to vec2<f32>
+      {
+        const bindGroup = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.convertDensity,
+          entries: [
+            { binding: 0, resource: { buffer: densityAtomic } },
+            { binding: 1, resource: { buffer: density } },
+            { binding: 2, resource: { buffer: convertParamsBuffer } }
+          ]
+        });
+
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(pipelines.convertDensity);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(workgroupsGrid, workgroupsGrid);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+      }
+
+      // 4. Forward FFT: density -> densityHat
+      runFFT2D(density, densityHat, fftTemp, true);
+
+      // 5. Poisson solve: compute gradient and potential in frequency domain
+      {
+        const bindGroup = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.poissonSolve,
+          entries: [
+            { binding: 0, resource: { buffer: densityHat } },
+            { binding: 1, resource: { buffer: gradientHat } },
+            { binding: 2, resource: { buffer: potentialHat } },
+            { binding: 3, resource: { buffer: poissonParamsBuffer } }
+          ]
+        });
+
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(pipelines.poissonSolve);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(workgroupsGrid, workgroupsGrid);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+      }
+
+      // 6. Inverse FFT: potentialHat -> potential
+      runFFT2D(potentialHat, potential, fftTemp, false);
+
+      // 7. Inverse vec4 FFT: gradientHat -> gradient
+      runVec4FFT2D(gradientHat, gradient, fftTemp, false);
+
+      // 8. Integrate particles
+      {
+        const bindGroup = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.integrate,
+          entries: [
+            { binding: 0, resource: { buffer: particles } },
+            { binding: 1, resource: { buffer: gradient } },
+            { binding: 2, resource: { buffer: integrateParamsBuffer } }
+          ]
+        });
+
+        const enc = device.createCommandEncoder();
+        const pass = enc.beginComputePass();
+        pass.setPipeline(pipelines.integrate);
+        pass.setBindGroup(0, bindGroup);
+        pass.dispatchWorkgroups(workgroupsParticles);
+        pass.end();
+        device.queue.submit([enc.finish()]);
+      }
+    }
+
+    // Render visualization
+    function render() {
+      updateUniforms();
+
+      const showGradient = gradientIntensity > 0;
+
+      const enc = device.createCommandEncoder();
+      const textureView = gpuContext.getCurrentTexture().createView();
+
+      if (showGradient) {
+        // Create gradient params buffer with gradient intensity
+        const gradientParamsBuffer = device.createBuffer({
+          label: 'gradientParams',
+          size: 16,
+          usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+        });
+        const gradientData = new ArrayBuffer(16);
+        new Uint32Array(gradientData, 0, 1).set([N]);
+        new Float32Array(gradientData, 4, 3).set([gradientIntensity, canvasSize, pixelRatio]);
+        device.queue.writeBuffer(gradientParamsBuffer, 0, gradientData);
+
+        // First pass: render gradient field
+        const gradientBindGroup = device.createBindGroup({
+          layout: pipelines.bindGroupLayouts.visualizeGradient,
+          entries: [
+            { binding: 0, resource: { buffer: gradient } },
+            { binding: 1, resource: { buffer: potential } },
+            { binding: 2, resource: { buffer: gradientParamsBuffer } }
+          ]
+        });
+
+        const gradientPass = enc.beginRenderPass({
+          colorAttachments: [{
+            view: textureView,
+            loadOp: 'clear',
+            storeOp: 'store',
+            clearValue: { r: 0, g: 0, b: 0, a: 1 }
+          }]
+        });
+        gradientPass.setPipeline(pipelines.visualizeGradient);
+        gradientPass.setBindGroup(0, gradientBindGroup);
+        gradientPass.draw(3);
+        gradientPass.end();
+      }
+
+      // Create density params buffer
+      const densityParamsBuffer = device.createBuffer({
+        label: 'densityParams',
+        size: 16,
+        usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+      });
+      const densityData = new ArrayBuffer(16);
+      new Uint32Array(densityData, 0, 1).set([N]);
+      new Float32Array(densityData, 4, 1).set([brightness]);
+      device.queue.writeBuffer(densityParamsBuffer, 0, densityData);
+
+      // Render density (clear if no gradient, additive blend if gradient was drawn)
+      const densityBindGroup = device.createBindGroup({
+        layout: pipelines.bindGroupLayouts.visualizeDensity,
+        entries: [
+          { binding: 0, resource: { buffer: density } },
+          { binding: 1, resource: { buffer: densityParamsBuffer } }
+        ]
+      });
+
+      const densityPass = enc.beginRenderPass({
+        colorAttachments: [{
+          view: textureView,
+          loadOp: showGradient ? 'load' : 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+      densityPass.setPipeline(showGradient ? pipelines.visualizeDensityAdditive : pipelines.visualizeDensity);
+      densityPass.setBindGroup(0, densityBindGroup);
+      densityPass.draw(3);
+      densityPass.end();
+
+      device.queue.submit([enc.finish()]);
+    }
+  </script>
+  <script id="19" type="module">
+    // Animation loop
+    // Note: brightness and gradientIntensity are read fresh each frame in render()
+    step; render; canvas; simulate;
+
+    let animFrameId = null;
+    let hasError = false;
+
+    async function animationLoop() {
+      if (hasError) return;
+
+      try {
+        if (simulate) {
+          await step();
+        }
+        render();
+        animFrameId = requestAnimationFrame(animationLoop);
+      } catch (e) {
+        hasError = true;
+        console.error('Animation loop error:', e);
+      }
+    }
+
+    // Render immediately, then start the loop
+    render();
+    animFrameId = requestAnimationFrame(animationLoop);
+
+    invalidation.then(() => {
+      hasError = true;
+      if (animFrameId !== null) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+    });
+  </script>
+  <script id="20" type="text/markdown">
+    ## Physics
+
+    The simulation solves the 2D gravitational N-body problem using the Particle-Mesh (PM) method:
+
+    1. **Mass deposition**: Each particle's mass is distributed to the 4 nearest grid cells using bilinear interpolation weights
+    2. **Poisson equation**: The gravitational potential φ satisfies ∇²φ = 4πρ
+    3. **Fourier solution**: In frequency domain, φ̂(k) = -4π ρ̂(k) / |k|²
+    4. **Force computation**: The gravitational force is F = -∇φ, computed as the gradient of the potential
+    5. **Integration**: Particles are updated using a second-order midpoint integrator
+
+    The FFT-based solver naturally handles periodic boundary conditions and has O(N² log N) complexity for the grid operations, making it efficient for large particle counts.
+  </script>
+</notebook>

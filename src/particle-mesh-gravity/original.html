@@ -1,0 +1,1446 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Particle-Mesh Gravity</title>
+  <script id="3720" type="text/markdown">
+    # Particle-Mesh Gravity
+
+    A 2D gravity simulation using the [Particle Mesh](https://en.wikipedia.org/wiki/Particle_mesh) method. You can find explanation as well as a more visually appealing version in [2D N-body Gravity with Poisson's Equation](https://observablehq.com/@rreusser/2d-n-body-gravity-with-poissons-equation). This version is more careful to apply linear filtering when aggregating masses, improves on scaling with the various parameters, and implements the Green's function for 3D gravity confined to a plane, but at the end of the day it's not actually much better. Sigh.
+  </script>
+  <script id="6" type="application/vnd.observable.javascript">
+    viewof regl = reglCanvas(this, {
+      width: 512,
+      height: 512,
+      pixelRatio: 4,
+      attributes: {
+        antialias: false,
+        depthStencil: false,
+        preserveDrawingBuffer: true
+      },
+      extensions: [
+        "OES_standard_derivatives",
+        "OES_texture_float",
+        "OES_texture_float_linear",
+        "ANGLE_instanced_arrays",
+        "OES_texture_half_float",
+        "OES_texture_half_float_linear"
+      ],
+      style: { position: "relative", cursor: "crosshair" }
+    })
+  </script>
+  <script id="2112" type="application/vnd.observable.javascript">
+    viewof opts = Inputs.checkbox(
+      ["simulate", "grid", "potential", "vectors", "aggregation", "particles"],
+      {
+        label: "View options",
+        value: ["simulate", "particles"]
+      }
+    )
+  </script>
+  <script id="2799" type="application/vnd.observable.javascript">
+    viewof method = Inputs.radio(["2D potential", "3D potential"], {
+      label: "Method",
+      value: "2D potential",
+      disabled: true
+    })
+  </script>
+  <script id="2312" type="application/vnd.observable.javascript">
+    viewof reset = Inputs.button("Reset")
+  </script>
+  <script id="2105" type="application/vnd.observable.javascript">
+    viewof particleTexResPOT = Inputs.range([2, 12], {
+      label: "Particle tex resolution (power of two)",
+      step: 1,
+      value: 10
+    })
+  </script>
+  <script id="2083" type="application/vnd.observable.javascript">
+    viewof gridResPOT = Inputs.range([2, 11], {
+      label: "Grid resolution (power of two)",
+      step: 1,
+      value: 8
+    })
+  </script>
+  <script id="2579" type="application/vnd.observable.javascript">
+    viewof vectorScale = Inputs.range([0, 10000], {
+      label: "Vector scale",
+      value: 200,
+      step: 0.1,
+      transform: Math.log
+    })
+  </script>
+  <script id="2319" type="application/vnd.observable.javascript">
+    viewof dt = Inputs.range([0.0001, 0.1], {
+      label: "∆t",
+      transform: Math.log,
+      value: 0.001
+    })
+  </script>
+  <script id="3216" type="application/vnd.observable.javascript">
+    viewof shadeRange = interval([-10, 10], {
+      label: "Shade range",
+      value: [-5, 2]
+    })
+  </script>
+  <script id="4041" type="application/vnd.observable.javascript">
+    viewof viscosity = Inputs.range([0, 1], {
+      label: "Viscosity",
+      value: 0.1,
+      step: 0.01
+    })
+  </script>
+  <script id="701" type="application/vnd.observable.javascript">
+    particleTexRes = [2 ** particleTexResPOT, 2 ** particleTexResPOT]
+  </script>
+  <script id="78" type="application/vnd.observable.javascript">
+    gridRes = [2 ** gridResPOT, 2 ** gridResPOT]
+  </script>
+  <script id="752" type="application/vnd.observable.javascript">
+    initialPositions = {
+      throw new Error("Disabled in favor of frag shader based initialization");
+      const n = particleTexRes[0] * particleTexRes[1];
+      return new Float32Array(
+        [...Array(n).keys()]
+          .map((_, i) => {
+            if (true) {
+              const v0 = 0.004;
+              return [Math.random(), Math.random(), v0 * randn(), v0 * randn()];
+            } else {
+              const x0 = 0.5;
+              const r0 = 0.05;
+              const x = randn();
+              const y = randn();
+              const r = Math.sqrt(x * x + y * y);
+              const v = (1.1 / r) * (r - 0.2 * r ** 2) * 0.5;
+
+              return [0.5 + r0 * x, 0.5 + r0 * y, v * y, -v * x];
+            }
+          })
+          .flat()
+      );
+    }
+  </script>
+  <script id="905" type="application/vnd.observable.javascript">
+    gravitationalGreensFunction = {
+      throw new Error("Deactivated since it's slow to compute");
+      const n = gridRes[0] * gridRes[1];
+      const k = new Float32Array(n * 4);
+      if (method !== "3D potential") return k;
+
+      // Reference pixel coords
+      const x0 = 0.5 / gridRes[0];
+      const y0 = 0.5 / gridRes[1];
+      const nbhd = kernelNeighborhood;
+
+      let count = 0;
+      for (let ii = -nbhd; ii <= nbhd; ii++) {
+        for (let jj = -nbhd; jj <= nbhd; jj++) {
+          if (ii * ii + jj * jj > nbhd * nbhd) continue;
+          count++;
+        }
+      }
+
+      // Iterate over all other pixels
+      for (let j = 0; j < gridRes[1]; j++) {
+        const yp = (j + 0.5) / gridRes[1];
+        for (let i = 0; i < gridRes[0]; i++) {
+          const xp = (i + 0.5) / gridRes[0];
+          const idx = j * gridRes[0] + i;
+
+          // For each pix
+          for (let ii = -nbhd; ii <= nbhd; ii++) {
+            for (let jj = -nbhd; jj <= nbhd; jj++) {
+              if (Math.hypot(ii + 0.5, jj + 0.5) > nbhd) continue;
+              const rx = xp - x0 + ii;
+              const ry = yp - y0 + jj;
+              const r = Math.sqrt(rx * rx + ry * ry);
+              if (r < 1e-8) continue;
+
+              // 3D potential:
+              k[4 * idx] += -1 / (4 * Math.PI * r);
+
+              // 2D potential:
+              //k[4 * idx] += Math.log(r) / (0.01 * 2 * Math.PI);
+            }
+          }
+        }
+      }
+
+      // This is the pixel directly underneath the current mass
+      // so its value is irrelevant. Selecting an arbitrary nice
+      // value just reduces ringing which otherwise results
+      k[0] = 1.1 * k[4];
+
+      let avg = 0;
+      for (let j = 0; j < gridRes[1]; j++) {
+        for (let i = 0; i < gridRes[0]; i++) {
+          avg += k[4 * (j * gridRes[0] + i)];
+        }
+      }
+      avg /= gridRes[0] * gridRes[1];
+      for (let j = 0; j < gridRes[1]; j++) {
+        for (let i = 0; i < gridRes[0]; i++) {
+          const idx = j * gridRes[0] + i;
+          k[4 * idx] -= avg;
+        }
+      }
+      return k;
+    }
+  </script>
+  <script id="2098" type="application/vnd.observable.javascript">
+    viewof kernelNeighborhood = Inputs.range([0, 20], {
+      label: "Kernel summation radius",
+      step: 1,
+      value: 7
+    })
+  </script>
+  <script id="3594" type="text/markdown">
+    ## Program flow
+  </script>
+  <script id="20" type="application/vnd.observable.javascript">
+    draw1 = {
+      //computeKernel;
+      //initializeState;
+      const canvas = regl._gl.canvas;
+
+      let dirty = true;
+      let loop = regl.frame(() => {
+        try {
+          if (!dirty && !~opts.indexOf("simulate")) return;
+
+          regl.poll();
+          configureUniforms({ gridRes, particleTexRes }, () => {
+            map(() => {
+              // Iterate
+              if (~opts.indexOf("simulate") || dirty) {
+                // Aggregate stateFBO[0], outputing to aggregationFBO
+                bufferedAggregationFBO.use(() => {
+                  regl.clear({ color: [0, 0, 0, 0] });
+                  //aggregatePoints({ xy, count: 1 });
+                  aggregateState({
+                    state: stateFBO[0],
+                    lookupTable: particleLookupTable,
+                    particleTexRes
+                  });
+                });
+                aggregationFBO.use(() => {
+                  unbufferAggregationFBO({ src: bufferedAggregationFBO });
+                });
+                // FFT: aggregationFBO --> phiFBO[0]
+                performFFT(forwardFFT);
+
+                // Compute the potential, phiFBO[0] --> phiFBO[1]
+                phiFBO[1].use(() => {
+                  computePotential({
+                    dx: 1.0 / gridRes[0],
+                    src: phiFBO[0],
+                    //kernel: greensKernelFFT,
+                    method
+                  });
+                });
+
+                // Invert the FFT, phiFBO[1] --> phiFBO[0]
+                performFFT(inverseFFT);
+              }
+
+              if (~opts.indexOf("simulate")) {
+                // Integrate state[0] --> state[1]
+                stateFBO[1].use(() => {
+                  integrate({
+                    src: stateFBO[0],
+                    phi: phiFBO[0],
+                    agg: aggregationFBO,
+                    dt,
+                    viscosity
+                  });
+                });
+
+                // stateFBO[1] <--> stateFBO[0]
+                swap(stateFBO, 0, 1);
+              }
+
+              // Draw
+              {
+                regl.clear({ color: [0, 0, 0, 1] });
+
+                if (~opts.indexOf("potential")) {
+                  renderPotentialToScreen({ src: phiFBO[0], alpha: 1 });
+                }
+
+                if (~opts.indexOf("aggregation")) {
+                  renderAggregationToScreen({
+                    src: aggregationFBO,
+                    shadeRange
+                  });
+                }
+                //renderAggregationToScreen({ src: greensKernelFFT, alpha: 1 });
+
+                if (~opts.indexOf("grid")) drawGrid({ color: [0, 0, 0, 0.2] });
+                if (~opts.indexOf("particles")) {
+                  drawFBO.use(() => {
+                    regl.clear({ color: [0, 0, 0, 0] });
+                    drawStateAsPoints({
+                      state: stateFBO[0],
+                      color: [0.3, 0.4, 1, 1],
+                      lookupTable: particleLookupTable,
+                      particleTexRes,
+                      agg: aggregationFBO,
+                      viscosity
+                    });
+                  });
+                  transferDrawToScreen({ src: drawFBO, shadeRange });
+                }
+                if (~opts.indexOf("vectors") && vectorScale) {
+                  drawVectors({
+                    src: phiFBO[0],
+                    lookupTable: gridLookupTable,
+                    scale: vectorScale
+                  });
+                }
+              }
+            });
+          });
+          dirty = false;
+        } catch (e) {
+          console.error(e);
+          if (loop) loop.cancel();
+          loop = null;
+        }
+      });
+
+      invalidation.then(() => {
+        if (loop) loop.cancel();
+        loop = null;
+      });
+
+      /*function onMove(event) {
+        xy.subdata([ event.offsetX / canvas.offsetWidth, 1 - event.offsetY / canvas.offsetHeight ]);
+        draw();
+      }
+      canvas.addEventListener("mousemove", onMove);
+      invalidation.then(() => canvas.removeEventListener("mousemove", onMove));
+      draw();*/
+    }
+  </script>
+  <script id="3737" type="application/vnd.observable.javascript" pinned="">
+    initializeState = {
+      regl.poll();
+      configureUniforms({ gridRes, particleTexRes }, () => {
+        map(() => {
+          stateFBO.forEach((fbo) => {
+            fbo.use(() => initialize());
+          });
+        });
+      });
+    }
+  </script>
+  <script id="1268" type="application/vnd.observable.javascript">
+    computeKernel = {
+      regl.poll();
+      map(() => performFFT(forwardFFTKernel));
+    }
+  </script>
+  <script id="1232" type="text/markdown">
+    ## State
+  </script>
+  <script id="705" type="application/vnd.observable.javascript">
+    stateFBO = {
+      reset;
+      const texs = [0, 1].map(() =>
+        regl.texture({
+          width: particleTexRes[0],
+          height: particleTexRes[1],
+          type: "float",
+          min: "nearest",
+          mag: "nearest"
+          //data: initialPositions
+        })
+      );
+      const fbos = texs.map((color) =>
+        regl.framebuffer({
+          color
+        })
+      );
+      invalidation.then(() => {
+        fbos.forEach((fbo) => fbo.destroy());
+        texs.forEach((tex) => tex.destroy());
+      });
+      return fbos;
+    }
+  </script>
+  <script id="1222" type="application/vnd.observable.javascript">
+    phiFBO = {
+      const texs = [0, 1, 2, 3].map((i) =>
+        regl.texture({
+          width: gridRes[0],
+          height: gridRes[1],
+          wrapS: "repeat",
+          wrapT: "repeat",
+          mag: i === 0 ? "linear" : "nearest",
+          min: i === 0 ? "linear" : "nearest",
+          type: "float"
+        })
+      );
+      const fbos = texs.map((color) => regl.framebuffer({ color }));
+      invalidation.then(() => {
+        fbos.forEach((fbo) => fbo.destroy());
+        texs.forEach((tex) => tex.destroy());
+      });
+      return fbos;
+    }
+  </script>
+  <script id="95" type="application/vnd.observable.javascript">
+    bufferedAggregationFBO = {
+      const tex = regl.texture({
+        width: gridRes[0] + 2,
+        height: gridRes[1] + 2,
+        min: "linear",
+        mag: "linear",
+        type: "float"
+      });
+
+      const fbo = regl.framebuffer({ color: tex });
+
+      invalidation.then(() => {
+        tex.destroy();
+        fbo.destroy();
+      });
+
+      return fbo;
+    }
+  </script>
+  <script id="193" type="application/vnd.observable.javascript">
+    aggregationFBO = {
+      const tex = regl.texture({
+        width: gridRes[0],
+        height: gridRes[1],
+        min: "linear",
+        mag: "linear",
+        type: "float"
+        //wrapS: "repeat",
+        //wrapT: "repeat"
+      });
+
+      const fbo = regl.framebuffer({ color: tex });
+
+      invalidation.then(() => {
+        tex.destroy();
+        fbo.destroy();
+      });
+      return fbo;
+    }
+  </script>
+  <script id="2820" type="application/vnd.observable.javascript">
+    drawFBO = {
+      const fbo = regl.framebuffer({
+        width: regl._gl.canvas.width,
+        height: regl._gl.canvas.height,
+        colorType: "half float"
+      });
+      invalidation.then(() => fbo.destroy());
+      return fbo;
+    }
+  </script>
+  <script id="2560" type="application/vnd.observable.javascript">
+    gridLookupTable = {
+      const pts = createLookupTable(gridRes);
+      const buf = regl.buffer(pts);
+      invalidation.then(() => buf.destroy());
+      return buf;
+    }
+  </script>
+  <script id="1260" type="application/vnd.observable.javascript">
+    greensKernelFFT = {
+      //throw new Error("Deactivated cell");
+      const color = regl.texture({
+        type: "float",
+        width: gridRes[0],
+        height: gridRes[1],
+        min: "nearest",
+        mag: "nearest",
+        wrapS: "repeat",
+        wrapT: "repeat"
+      });
+      const g = regl.framebuffer({ color });
+      invalidation.then(() => {
+        g.destroy();
+        color.destroy();
+      });
+      return g;
+    }
+  </script>
+  <script id="1015" type="application/vnd.observable.javascript">
+    greensKernel = {
+      //throw new Error("Deactivated cell");
+      const color = regl.texture({
+        data: gravitationalGreensFunction,
+        type: "float",
+        width: gridRes[0],
+        height: gridRes[1],
+        min: "nearest",
+        mag: "nearest",
+        wrapS: "repeat",
+        wrapT: "repeat"
+      });
+      const fbo = regl.framebuffer({ color });
+      invalidation.then(() => {
+        fbo.destroy();
+        color.destroy();
+      });
+      return fbo;
+    }
+  </script>
+  <script id="1258" type="application/vnd.observable.javascript">
+    forwardFFTKernel = planFFT({
+      width: gridRes[0],
+      height: gridRes[1],
+      input: greensKernel,
+      ping: phiFBO[2],
+      pong: phiFBO[3],
+      output: greensKernelFFT,
+      forward: true
+    })
+  </script>
+  <script id="720" type="application/vnd.observable.javascript">
+    particleLookupTable = {
+      const pts = createLookupTable(particleTexRes);
+      const buf = regl.buffer(pts);
+      invalidation.then(() => buf.destroy());
+      return buf;
+    }
+  </script>
+  <script id="1229" type="application/vnd.observable.javascript">
+    forwardFFT = planFFT({
+      width: gridRes[0],
+      height: gridRes[1],
+      input: aggregationFBO,
+      ping: phiFBO[2],
+      pong: phiFBO[3],
+      output: phiFBO[0],
+      forward: true
+    })
+  </script>
+  <script id="1245" type="application/vnd.observable.javascript">
+    inverseFFT = planFFT({
+      width: gridRes[0],
+      height: gridRes[1],
+      input: phiFBO[1],
+      ping: phiFBO[2],
+      pong: phiFBO[3],
+      output: phiFBO[0],
+      forward: false
+    })
+  </script>
+  <script id="348" type="application/vnd.observable.javascript">
+    xy = {
+      // A buffer for drawing the mouse as a point to the aggregation framebuffer
+      const xy = regl.buffer([0.5, 0.5]);
+      invalidation.then(() => xy.destroy());
+      return xy;
+    }
+  </script>
+  <script id="4222" type="text/markdown">
+    ## Draw commands
+  </script>
+  <script id="1271" type="application/vnd.observable.javascript">
+    // A generic command for handling the boilerplate used to map
+    // input to output via a fragment shader (so a "map" operation).
+    // It sorta takes the place of compute shaders for us.
+    map = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 aXY;
+        varying vec2 vUV;
+        void main () {
+          vUV = aXY * 0.5 + 0.5;
+          gl_Position = vec4(aXY, 0, 1);
+        }
+      `,
+      attributes: {
+        aXY: [-4, -4, 4, -4, 0, 4]
+      },
+      depth: { enable: false },
+      primitive: "triangle",
+      count: 3
+    })
+  </script>
+  <script id="70" type="application/vnd.observable.javascript">
+    // Common uniforms so that all calls inherit them
+    configureUniforms = regl({
+      context: {
+        gridRes: regl.prop("gridRes"),
+        bufGridRes: (_, { gridRes: [m, n] }) => [m + 2, n + 2],
+        particleTexRes: regl.prop("particleTexRes"),
+        viewRes: ({ viewportWidth, viewportHeight }) => [
+          viewportWidth,
+          viewportHeight
+        ],
+        fboRes: ({ framebufferWidth, framebufferHeight }) => [
+          framebufferWidth,
+          framebufferHeight
+        ]
+      },
+      uniforms: {
+        gridRes: regl.prop("gridRes"),
+        bufGridRes: (_, { gridRes: [m, n] }) => [m + 2, n + 2],
+        particleTexRes: regl.prop("particleTexRes"),
+        viewRes: ({ viewportWidth, viewportHeight }) => [
+          viewportWidth,
+          viewportHeight
+        ],
+        fboRes: ({ framebufferWidth, framebufferHeight }) => [
+          framebufferWidth,
+          framebufferHeight
+        ]
+      }
+    })
+  </script>
+  <script id="3729" type="application/vnd.observable.javascript">
+    // Initialize x, y, v_x, v_y to the four channels of the floating point state
+    // texture. We could do this on the CPU, but it seems it can't handle a
+    // 4096 x 4096 x 4 Float32Array, so that this allows us to initialize anyway.
+    // The trickiest spot here is that without a bunch of random numbers below,
+    // chosen by smashing my hand on the keyboard, the rand() function is too low
+    // precision and results in grids of points rather than a uniform random
+    // distribution.
+    initialize = regl({
+      frag: `
+        precision highp float;
+        varying vec2 vUV;
+        uniform vec2 particleTexRes;
+
+        // Unused
+        // From: https://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/
+        const float G = 1.32471795724474602596;
+        const vec2 a = vec2(1.0 / G, 1.0 / (G * G));
+        vec2 qrand2d(float n) {
+          return fract(0.5 + a * n);
+        }
+
+        float rand(vec2 co){
+          return fract(sin(dot(co, vec2(12.9898, 78.233))) * 43758.5453);
+        }
+        ${glslNoise2D}
+
+        void main () {
+          float theta = rand(vUV + 0.502040) * ${Math.PI * 2};
+          float r = sqrt(rand(vUV + 0.099114));
+
+          gl_FragColor = vec4(fract(vec2(
+              rand(vUV) + rand(vUV + 0.6438632) * 0.1892351029 + rand(vUV + 0.48626203) * 0.682936,
+              rand(vUV + 0.23950623) + rand(vUV + 0.438634) * 0.48643238201 + rand(vUV + 0.8603492) * 0.9213009
+            )),
+            r * vec2(cos(theta), sin(theta)) * 0.012
+          );
+          //gl_FragColor.xy = fract(gl_FragColor.xy +
+          //  vec2(
+          //    noise(gl_FragColor.xy * 10.0, vec2(10.0)),
+          //    noise(gl_FragColor.xy * 10.0 + 25.0, vec2(10.0))
+          //  ) * 0.005);
+        }`
+    })
+  </script>
+  <script id="46" type="application/vnd.observable.javascript">
+    drawGrid = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        varying vec2 uv;
+        void main () {
+          uv = 0.5 + 0.5 * xy;
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      frag: `
+        #extension GL_OES_standard_derivatives : enable
+        precision highp float;
+        uniform vec2 gridRes, viewRes;
+        uniform vec4 color;
+
+        float gridFactor (vec2 parameter, float width, float feather) {
+          float w1 = width - feather * 0.5;
+          vec2 d = fwidth(parameter);
+          vec2 looped = 0.5 - abs(mod(parameter, 1.0) - 0.5);
+          vec2 a2 = smoothstep(d * (w1 + feather), d * w1, looped);
+          return max(a2.x, a2.y);
+        }
+
+        varying vec2 uv;
+        void main () {
+          float grid = gridFactor((uv - 0.5 / viewRes) * gridRes, 0.5, 0.5);
+          gl_FragColor = mix(vec4(0), color, grid);
+        }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        color: regl.prop("color")
+      },
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: "src alpha",
+          srcAlpha: 1,
+          dstRGB: "one minus src alpha",
+          dstAlpha: 1
+        },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="788" type="application/vnd.observable.javascript">
+    // Draw the state as point primitives. The input is the lookup table which places
+    // a single point on each texel of the state texture. We look that up as the vertex
+    // position, then render a point primitive to the screen.
+    drawStateAsPoints = regl({
+      vert: `
+          precision highp float;
+          uniform vec2 viewRes;
+          uniform float viscosityAmount;
+          uniform sampler2D state, uAgg;
+          attribute vec2 lut;
+          varying vec2 center;
+          varying float viscosity;
+          void main () {
+            vec4 p = texture2D(state, lut);
+            center = p.xy * viewRes;
+
+            vec4 agg = texture2D(uAgg, p.xy);
+            vec2 localVelocity = agg.zw;
+            if (agg.x > 0.0) localVelocity /= agg.x;
+            viscosity = 0.2 * (1.0 - exp(-20.0 * dot(localVelocity - p.zw, localVelocity - p.zw))) * viscosityAmount;
+
+            vec2 ixy = floor(center + 0.5) / viewRes;
+            gl_Position = vec4(ixy * 2.0 - 1.0, 0, 1);
+            gl_PointSize = 2.0;
+          }`,
+      frag: `
+          precision highp float;
+          varying vec2 center;
+          uniform vec4 color;
+          varying float viscosity;
+          void main () {
+            const vec3 massColor = vec3(0.05, 0.1, 1.0);
+            const vec3 viscosityColor = vec3(1.0, 0.005, -0.07) * 100.0;
+
+            // The point is *centered* on a 2x2 block. Since WebGL doesn't support antialiasing
+            // when rendering to a texture, this is our computation which distributes one unit
+            // of color nicely antialiased across the 2x2 block.
+            vec2 coord = 1.0 - abs(gl_FragCoord.xy - center);
+            float opac = coord.x * coord.y;
+
+            gl_FragColor = vec4(massColor + viscosity * viscosityColor, 1) * opac;
+          }`,
+      attributes: { lut: regl.prop("lookupTable") },
+      uniforms: {
+        state: regl.prop("state"),
+        color: regl.prop("color"),
+        uAgg: regl.prop("agg"),
+        viscosityAmount: regl.prop("viscosity")
+      },
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: 1,
+          srcAlpha: 1,
+          dstRGB: 1,
+          dstAlpha: 1
+        },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      primitive: "points",
+      count: (_, { particleTexRes: [w, h] }) => w * h,
+      depth: { enable: false }
+    })
+  </script>
+  <script id="414" type="application/vnd.observable.javascript">
+    // This stupid command just crops off a one pixel border around the edge of the
+    // aggregation framebuffer, wrapping the pixels back around so that we correctly
+    // account for points which start to step off one edge. If we had compute shaders,
+    // we'd just be writing to a texture directly rather than rendering point primitives,
+    // and we wouldn't have to deal with this silliness.
+    unbufferAggregationFBO = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+
+        void main () {
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        uniform sampler2D src;
+        uniform vec2 bufGridRes, gridRes;
+
+        void main () {
+          vec2 ij = floor(gl_FragCoord.xy);
+          bool isW = gl_FragCoord.x < 1.0;
+          bool isS = gl_FragCoord.y < 1.0;
+          bool isE = gl_FragCoord.x > gridRes.x - 1.0;
+          bool isN = gl_FragCoord.y > gridRes.y - 1.0;
+
+          vec2 w = mod(gl_FragCoord.xy - vec2(1, 0), gridRes);
+          vec2 s = mod(gl_FragCoord.xy - vec2(0, 1), gridRes);
+          vec2 e = mod(gl_FragCoord.xy + vec2(1, 0), gridRes);
+          vec2 n = mod(gl_FragCoord.xy + vec2(0, 1), gridRes);
+          vec2 sw = mod(gl_FragCoord.xy + vec2(-1, -1), gridRes);
+          vec2 se = mod(gl_FragCoord.xy + vec2(1, -1), gridRes);
+          vec2 ne = mod(gl_FragCoord.xy + vec2(1, 1), gridRes);
+          vec2 nw = mod(gl_FragCoord.xy + vec2(-1, 1), gridRes);
+
+          gl_FragColor = texture2D(src, (gl_FragCoord.xy + 1.0) / bufGridRes);
+          if (isW) gl_FragColor += texture2D(src, (w + vec2(2, 1)) / bufGridRes);
+          if (isS) gl_FragColor += texture2D(src, (s + vec2(1, 2)) / bufGridRes);
+          if (isE) gl_FragColor += texture2D(src, (e + vec2(-2, 1)) / bufGridRes);
+          if (isN) gl_FragColor += texture2D(src, (n + vec2(1, -2)) / bufGridRes);
+          if (isS && isW) gl_FragColor += texture2D(src, (sw + vec2(2, 2)) / bufGridRes);
+          if (isS && isE) gl_FragColor += texture2D(src, (se + vec2(-2, 2)) / bufGridRes);
+          if (isN && isE) gl_FragColor += texture2D(src, (ne + vec2(-2, -2)) / bufGridRes);
+          if (isN && isW) gl_FragColor += texture2D(src, (nw + vec2(2, -2)) / bufGridRes);
+
+        }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        src: regl.prop("src")
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="11" type="application/vnd.observable.javascript">
+    // Aggregate a *buffer* of points. This is only used for drawing the single-point
+    // mouse point to the texture. We can't use this more generally since you can't
+    // *modify* data in a buffer (in WebGL 1, at least) without sending it back through
+    // the CPU.
+    aggregatePoints = regl({
+      vert: `
+          precision highp float;
+          uniform vec2 gridRes, bufGridRes;
+          attribute vec2 xy;
+          varying vec2 center;
+          void main () {
+            center = 1.0 + xy * gridRes;
+            vec2 ixy = floor(center + 0.5) / bufGridRes;
+            gl_Position = vec4(ixy * 2.0 - 1.0, 0, 1);
+            gl_PointSize = 2.0;
+          }`,
+      frag: `
+          precision highp float;
+          varying vec2 center;
+          void main () {
+            vec2 coord = 1.0 - abs(gl_FragCoord.xy - center);
+            gl_FragColor = vec2(0.005 * coord.x * coord.y, 0).xyxy;
+          }`,
+      attributes: { xy: regl.prop("xy") },
+      blend: {
+        enable: true,
+        func: { srcRGB: 1, srcAlpha: 1, dstRGB: 1, dstAlpha: 1 },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      primitive: "points",
+      count: regl.prop("count"),
+      depth: { enable: false }
+    })
+  </script>
+  <script id="716" type="application/vnd.observable.javascript">
+    // Aggregate the state to a texture. This is effectively identical to
+    // drawStateAsPoints, except it's designed to aggregate masses for numerical
+    // use. It aggregates mass to the red channel, zero to the second, and
+    // the x- and y-components of momentum to the blue/alpha. By later dividing
+    // the momentum by mass when using it, we can compute an average velocity
+    // in each cell, which we sorta use for viscosity or something, to pull
+    // particles toward the average cell velocity, though realistically it doesn't
+    // actually do much.
+    aggregateState = regl({
+      vert: `
+        precision highp float;
+        uniform vec2 gridRes, bufGridRes;
+        uniform sampler2D state;
+        attribute vec2 lut;
+        varying vec2 center, velocity;
+        void main () {
+          vec4 p = texture2D(state, lut);
+          velocity = p.zw;
+          center = 1.0 + p.xy * gridRes;
+          vec2 ixy = floor(center + 0.5) / bufGridRes;
+          gl_Position = vec4(ixy * 2.0 - 1.0, 0, 1);
+          gl_PointSize = 2.0;
+        }`,
+      frag: `
+        precision highp float;
+        varying vec2 center, velocity;
+        uniform float mass;
+        void main () {
+          vec2 coord = 1.0 - abs(gl_FragCoord.xy - center);
+          float alpha = coord.x * coord.y * mass;
+          gl_FragColor = vec4(1.0, 0, velocity) * mass;
+        }`,
+      attributes: { lut: regl.prop("lookupTable") },
+      uniforms: {
+        state: regl.prop("state"),
+        // Aim for total deposited mass 1.0
+        mass: (_, { particleTexRes: [sw, sh] }) => 1 / (sw * sh)
+      },
+      blend: {
+        enable: true,
+        func: { srcRGB: 1, srcAlpha: 1, dstRGB: 1, dstAlpha: 1 },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      primitive: "points",
+      count: (_, { particleTexRes: [w, h] }) => w * h,
+      depth: { enable: false }
+    })
+  </script>
+  <script id="1702" type="application/vnd.observable.javascript">
+    // Transfer the aggregation framebuffer directly to the screen, with some shading and whatnot.
+    renderAggregationToScreen = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        varying vec2 uv;
+        void main () {
+          uv = 0.5 + 0.5 * xy;
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      frag: `
+        precision lowp float;
+        uniform sampler2D src;
+        uniform float alpha;
+        uniform vec2 viewRes, shadeRange;
+        varying vec2 uv;
+        float linearstep(float a, float b, float x) { return (x - a) / (b - a); }
+
+        float contrast (float x) {
+          return 0.5 + atan((x - 0.5) * 1.0);
+        }
+        void main () {
+          vec4 state = texture2D(src, uv);
+          gl_FragColor = vec4(vec3(1), contrast(1.0 - linearstep(shadeRange.y, shadeRange.x, log(state.r * alpha))));
+        }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        src: regl.prop("src"),
+        shadeRange: regl.prop("shadeRange"),
+        alpha: ({ gridRes: [gw, gh] }, { alpha }) => gw * gh
+      },
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: "src alpha",
+          srcAlpha: 1,
+          dstRGB: "one minus src alpha",
+          dstAlpha: 1
+        },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="2171" type="application/vnd.observable.javascript">
+    // Render the potential to the screen, for debugging
+    renderPotentialToScreen = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        varying vec2 uv;
+        void main () {
+          uv = 0.5 + 0.5 * xy;
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+
+      frag: `
+        precision lowp float;
+        uniform sampler2D src;
+        uniform vec2 gridRes, viewRes;
+        uniform float alpha;
+        varying vec2 uv;
+
+        #define PI ${Math.PI}
+
+        ${glslLinearStep}
+
+        float contrast (float x) { return 0.5 + atan(x - 0.5) / PI; }
+        vec2 contrast (vec2 x) { return 0.5 + atan(x - 0.5) / PI; }
+        vec3 contrast (vec3 x) { return 0.5 + atan(x - 0.5) / PI; }
+
+        void main () {
+          vec4 state = texture2D(src, uv);
+          gl_FragColor = vec4(pow(
+            contrast(
+              //vec3(state.x * 2e5)
+              0.6 + vec3(4.0 * state.zw * gridRes.x * gridRes.y, 0.0)
+            ),
+            vec3(1.0 / 2.2)
+          ), 1.0);
+        }`,
+      attributes: { xy: [-4, -4, 4, -4, 0, 4] },
+      uniforms: {
+        src: regl.prop("src"),
+        alpha: ({ gridRes: [aw, ah] }) => Math.sqrt(aw * ah)
+      },
+      blend: {
+        enable: true,
+        func: { srcRGB: 1, srcAlpha: 1, dstRGB: 1, dstAlpha: 1 },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="1218" type="application/vnd.observable.javascript">
+    performFFT = createFFTPassCommand(regl)
+  </script>
+  <script id="1728" type="application/vnd.observable.javascript">
+    // This is the shader which solves the Poisson in the frequency domain, either by direct
+    // evaluation or by convolution with a tabualted (and pre-FFT'd) kernel.
+    computePotential = regl({
+      frag: `
+        precision highp float;
+        varying vec2 vUV;
+        uniform sampler2D uSrc;//, uKernel;
+        uniform vec2 gridRes, res, uResolution;
+        uniform bool is2D;
+        uniform float dx, uCoeff;
+
+        ${glslWavenumber}
+
+        vec2 cmul (vec2 a, vec2 b) {
+          return vec2(
+            a.x * b.x - a.y * b.y,
+            a.y * b.x + a.x * b.y
+          );
+        }
+
+        void main () {
+          vec2 yfft = texture2D(uSrc, vUV).xy;
+          vec2 k = wavenumber(1.0 / gridRes, vec2(1.0 / gridRes));
+          float kx2ky2 = dot(k, k);
+
+          // Make sure not to divide by zero. Zero-wavenumber is just a uniform constant offset,
+          // and since we only use the potential *gradient* and not the potential itself, the
+          // the offset can be anything we want—just as long as it's not NaN.
+          if (kx2ky2 < 1.0e-8) {
+            gl_FragColor = vec4(0);
+            return;
+          }
+
+          vec2 phifft;
+          if (is2D) {
+            // A direct solution of the Poisson equation in the frequency domain
+            phifft = ${-4 * Math.PI} / kx2ky2 * yfft;
+          } else {
+            if (false) {
+              // Use sort of a fake, reverse-engineered kernel.
+              phifft = -0.2 / sqrt(kx2ky2) * yfft;
+            } else {
+             // Convolve with the tabulated 3D kernel (no idea where 0.002 comes from)
+             //vec2 kernel = texture2D(uKernel, vUV).xy;
+             //phifft = cmul(yfft, kernel) * 0.002;
+            }
+          }
+
+          // Compute the x- and y-components of the gradient. Multiply the second by i and then sum,
+          // so that once we invert the FFT, the x- and y-components of the gradient separate cleanly
+          // into the blue/alpha channels of the texture.
+          vec2 dphidx = cmul(vec2(0, k.x), phifft);
+          vec2 dphidy = cmul(vec2(-k.y, 0), phifft);
+
+          gl_FragColor = vec4(phifft, dphidx + dphidy);
+        }`,
+      uniforms: {
+        is2D: (_, { method }) => method === "2D potential",
+        uResolution: forwardFFT[0].resolution,
+        dx: regl.prop("dx"),
+        uSrc: regl.prop("src"),
+        uKernel: regl.prop("kernel"),
+        uCoeff: -4.0 * Math.PI
+      }
+    })
+  </script>
+  <script id="2079" type="application/vnd.observable.javascript">
+    integrate = regl({
+      frag: `
+          precision highp float;
+
+          varying vec2 vUV;
+          uniform sampler2D uSrc, uPhi, uAgg;
+          uniform float dt, forceScale, viscosityFactor;
+
+          vec4 deriv (vec4 y) {
+            // State contains (mass, 0, mass * u, mass * v) so we divide the momentum
+            // by mass to get an average velocity and lightly pull particles toward it.
+            vec4 state = texture2D(uAgg, y.xy);
+            vec2 localVelocity = state.zw;
+            if (state.x > 0.0) localVelocity /= state.x;
+            vec2 viscosity = (localVelocity - y.zw) * 1.0;
+
+            vec2 phiGradient = texture2D(uPhi, y.xy).zw;
+            return vec4(y.zw, phiGradient * forceScale + viscosity * viscosityFactor);
+          }
+
+          void main () {
+            vec4 y = texture2D(uSrc, vUV);
+
+            // Midpoint integration
+            // Predict:
+            vec4 yHalf = y + deriv(y) * dt * 0.5;
+            yHalf.xy = mod(yHalf.xy, vec2(1, 1));
+
+            // Correct:
+            vec4 yNext = y + deriv(yHalf) * dt;
+            yNext.xy = mod(yNext.xy, vec2(1, 1));
+
+            gl_FragColor = yNext;
+          }`,
+      uniforms: {
+        uSrc: regl.prop("src"),
+        uPhi: regl.prop("phi"),
+        uAgg: regl.prop("agg"),
+        forceScale: ({ gridRes: [gw, gh] }) => gw * gh,
+        dt: (_, { dt }) => dt,
+        viscosityFactor: regl.prop("viscosity")
+      }
+    })
+  </script>
+  <script id="2492" type="application/vnd.observable.javascript">
+    drawVectors = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        attribute float lineCoord;
+        uniform sampler2D src;
+        uniform float scale;
+        uniform vec2 gridRes;
+        void main () {
+          vec4 phi = texture2D(src, uv);
+          vec2 v = phi.zw * scale;
+          float r = length(v);
+          v *= min(r, 4.0 / gridRes.x) / r;
+          gl_Position = vec4(uv * 2.0 - 1.0 + lineCoord * v, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        void main () {
+          gl_FragColor = vec4(0, 0, 0, 0.8);
+        }`,
+      attributes: {
+        uv: {
+          divisor: 1,
+          buffer: regl.prop("lookupTable")
+        },
+        lineCoord: {
+          divisor: 0,
+          buffer: [0, 1]
+        }
+      },
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: "src alpha",
+          srcAlpha: 1,
+          dstRGB: "one minus src alpha",
+          dstAlpha: 1
+        },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      uniforms: { src: regl.prop("src"), scale: regl.prop("scale") },
+      primitive: "lines",
+      instances: gridRes[0] * gridRes[1],
+      count: 2
+    })
+  </script>
+  <script id="2828" type="application/vnd.observable.javascript">
+    transferDrawToScreen = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        varying vec2 uv;
+        void main () {
+          uv = 0.5 + 0.5 * xy;
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        uniform sampler2D src;
+        uniform vec2 shadeRange;
+        uniform vec4 colorMask;
+        uniform float alpha;
+        varying vec2 uv;
+        float contrast (float x) { return 0.5 + atan((x - 0.5) * 1.0); }
+        vec3 contrast (vec3 x) { return 0.5 + atan((x - 0.5) * 1.0); }
+        float linearstep(float a, float b, float x) { return (x - a) / (b - a); }
+        vec3 linearstep(vec3 a, vec3 b, vec3 x) { return (x - a) / (b - a); }
+        void main () {
+          vec4 state = texture2D(src, uv);
+          float count = state.x;
+          float viscosity = state.y;
+          gl_FragColor = vec4(
+            linearstep(vec3(shadeRange.x), vec3(shadeRange.y), log(state.rgb * alpha))
+            , 1.0);
+        }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        src: regl.prop("src"),
+        alpha: ({ particleTexRes: [pw, ph], viewRes: [vw, vh] }, { alpha }) =>
+          (vw * vh) / (pw * ph),
+        shadeRange: regl.prop("shadeRange"),
+        colorMask: regl.prop("colorMask")
+      },
+      depth: { enable: false },
+      count: 3,
+      blend: {
+        enable: true,
+        func: {
+          srcRGB: "src alpha",
+          srcAlpha: 1,
+          dstRGB: "one minus src alpha",
+          dstAlpha: 1
+        },
+        equation: { rgb: "add", alpha: "add" }
+      }
+    })
+  </script>
+  <script id="99" type="application/vnd.observable.javascript">
+    // Render the wavenumber to a framebuffer, strictly for debugging
+    renderWavenumber = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 xy;
+        varying vec2 uv;
+        void main () {
+          uv = 0.5 + 0.5 * xy;
+          gl_Position = vec4(xy, 0, 1);
+        }`,
+      frag: `
+        precision lowp float;
+        uniform sampler2D src;
+        uniform float alpha;
+        uniform vec2 gridRes, viewRes;
+        varying vec2 uv;
+
+        #define TWOPI ${Math.PI * 2}
+
+        vec2 wavenumber (vec2 fragCoord, vec2 resolution, vec2 dxy) {
+          vec2 xy = (fragCoord - 0.5) / resolution;
+          return vec2(
+            (xy.x < 0.5) ? xy.x : xy.x - 1.0,
+            (xy.y < 0.5) ? xy.y : xy.y - 1.0
+          ) * TWOPI / dxy;
+        }
+
+        void main () {
+          vec2 fragCoord = floor(gl_FragCoord.xy / viewRes * gridRes) + 0.5;
+          vec2 kxy = wavenumber(fragCoord, gridRes, vec2(1));
+          float k2 = dot(kxy, kxy);
+          float k = sqrt(k2);
+
+          gl_FragColor = vec4(vec3(
+            texture2D(src, uv).r
+          ), 1);
+        }`,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        src: regl.prop("src"),
+        alpha: regl.prop("alpha")
+      },
+      blend: {
+        enable: true,
+        func: { srcRGB: 1, srcAlpha: 1, dstRGB: 1, dstAlpha: 1 },
+        equation: { rgb: "add", alpha: "add" }
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="4245" type="text/markdown">
+    ## Extras & Imports
+  </script>
+  <script id="1204" type="application/vnd.observable.javascript">
+    import {
+      planFFT,
+      createFFTPassCommand,
+      glslWavenumber
+    } from "@rreusser/glsl-fft"
+  </script>
+  <script id="1249" type="application/vnd.observable.javascript">
+    function swap(obj, key1, key2) {
+      key1 = key1 === undefined ? 0 : key1;
+      key2 = key2 === undefined ? 1 : key2;
+      var tmp = obj[key1];
+      obj[key1] = obj[key2];
+      obj[key2] = tmp;
+    }
+  </script>
+  <script id="1949" type="application/vnd.observable.javascript">
+    glslLinearStep = `
+    float linearstep(float a, float b, float x) {
+      return clamp((x - a) / (b - a), 0.0, 1.0);
+    }`
+  </script>
+  <script id="3" type="application/vnd.observable.javascript">
+    import { reglCanvas } from "@rreusser/regl-canvas"
+  </script>
+  <script id="2746" type="application/vnd.observable.javascript">
+    randn = (await import("https://cdn.skypack.dev/@stdlib/random-base-randn"))
+      .default
+  </script>
+  <script id="3211" type="application/vnd.observable.javascript">
+    import { interval } from "@mootari/range-slider"
+  </script>
+  <script id="718" type="application/vnd.observable.javascript">
+    createLookupTable = ([w, h]) =>
+      [...Array(w * h).keys()].map((d, i) => [
+        ((i % w) + 0.5) / w,
+        (Math.floor(i / w) + 0.5) / h
+      ])
+  </script>
+  <script id="3424" type="application/vnd.observable.javascript">
+    fftfreq = (i, n, dx = 1) =>
+      i < Math.floor((n + 1) / 2) ? i / (n * dx) : -(n - i) / (n * dx)
+  </script>
+  <script id="3882" type="application/vnd.observable.javascript">
+    glslNoise2D = `//
+    // GLSL textureless classic 2D noise "cnoise",
+    // with an RSL-style periodic variant "pnoise".
+    // Author:  Stefan Gustavson (stefan.gustavson@liu.se)
+    // Version: 2011-08-22
+    //
+    // Many thanks to Ian McEwan of Ashima Arts for the
+    // ideas for permutation and gradient selection.
+    //
+    // Copyright (c) 2011 Stefan Gustavson. All rights reserved.
+    // Distributed under the MIT license. See LICENSE file.
+    // https://github.com/ashima/webgl-noise
+    //
+
+    vec4 mod289(vec4 x)
+    {
+      return x - floor(x * (1.0 / 289.0)) * 289.0;
+    }
+
+    vec4 permute(vec4 x)
+    {
+      return mod289(((x*34.0)+1.0)*x);
+    }
+
+    vec4 taylorInvSqrt(vec4 r)
+    {
+      return 1.79284291400159 - 0.85373472095314 * r;
+    }
+
+    vec2 fade(vec2 t) {
+      return t*t*t*(t*(t*6.0-15.0)+10.0);
+    }
+
+    // Classic Perlin noise, periodic variant
+    float noise(vec2 P, vec2 rep)
+    {
+      vec4 Pi = floor(P.xyxy) + vec4(0.0, 0.0, 1.0, 1.0);
+      vec4 Pf = fract(P.xyxy) - vec4(0.0, 0.0, 1.0, 1.0);
+      Pi = mod(Pi, rep.xyxy); // To create noise with explicit period
+      Pi = mod289(Pi);        // To avoid truncation effects in permutation
+      vec4 ix = Pi.xzxz;
+      vec4 iy = Pi.yyww;
+      vec4 fx = Pf.xzxz;
+      vec4 fy = Pf.yyww;
+
+      vec4 i = permute(permute(ix) + iy);
+
+      vec4 gx = fract(i * (1.0 / 41.0)) * 2.0 - 1.0 ;
+      vec4 gy = abs(gx) - 0.5 ;
+      vec4 tx = floor(gx + 0.5);
+      gx = gx - tx;
+
+      vec2 g00 = vec2(gx.x,gy.x);
+      vec2 g10 = vec2(gx.y,gy.y);
+      vec2 g01 = vec2(gx.z,gy.z);
+      vec2 g11 = vec2(gx.w,gy.w);
+
+      vec4 norm = taylorInvSqrt(vec4(dot(g00, g00), dot(g01, g01), dot(g10, g10), dot(g11, g11)));
+      g00 *= norm.x;
+      g01 *= norm.y;
+      g10 *= norm.z;
+      g11 *= norm.w;
+
+      float n00 = dot(g00, vec2(fx.x, fy.x));
+      float n10 = dot(g10, vec2(fx.y, fy.y));
+      float n01 = dot(g01, vec2(fx.z, fy.z));
+      float n11 = dot(g11, vec2(fx.w, fy.w));
+
+      vec2 fade_xy = fade(Pf.xy);
+      vec2 n_x = mix(vec2(n00, n01), vec2(n10, n11), fade_xy.x);
+      float n_xy = mix(n_x.x, n_x.y, fade_xy.y);
+      return 2.3 * n_xy;
+    }
+    `
+  </script>
+  <script id="2982" type="text/markdown">
+    ## Double-check the mass
+
+    The grid aggregates one total unit of mass, but we try to pretty carefully distribute the mass of each particle over the four pixels it touches, so we check the aggregation framebuffer to ensure precisely one unit of mass has actually been aggregated.
+  </script>
+  <script id="2986" type="application/vnd.observable.javascript">
+    totalAggregatedMass = {
+      let data;
+      regl.poll();
+      aggregationFBO.use(() => {
+        data = regl.read();
+      });
+      let mass = 0;
+      for (let i = 0; i < data.length; i += 4) {
+        mass += data[i];
+      }
+      return mass;
+    }
+  </script>
+  <script id="3437" type="text/markdown">
+    ## Analyze kernel
+  </script>
+  <script id="3443" type="application/vnd.observable.javascript">
+    kernel = {
+      throw new Error("Deactivated cell");
+      let data;
+      computeKernel;
+      greensKernelFFT.use(() => (data = regl.read()));
+      let out = [];
+      for (let i = 0; i < data.length; i += 4) out.push(data[i]);
+      return out;
+    }
+  </script>
+  <script id="3454" type="application/vnd.observable.javascript">
+    kerneldata = {
+      const out = [];
+      for (let j = 0; j < gridRes[1]; j++) {
+        const ky = fftfreq(j, gridRes[1], 1 / gridRes[1]);
+        for (let i = 0; i < gridRes[0]; i++) {
+          const idx = j * gridRes[1] + i;
+          const f = kernel[idx];
+          const kx = fftfreq(i, gridRes[0], 1 / gridRes[0]);
+          const k = Math.sqrt(kx * kx + ky * ky);
+          const g1 = k / 5 - 10;
+          const g2 = f * k;
+          out.push({ kx, ky, k, f, g1, g2 });
+        }
+      }
+      return out;
+    }
+  </script>
+  <script id="3470" type="application/vnd.observable.javascript">
+    Plot.plot({
+      grid: true,
+      marks: [
+        Plot.dot(kerneldata, { x: "k", y: "g1" }),
+        Plot.dot(kerneldata, { x: "k", y: "g2" })
+      ]
+    })
+  </script>
+</notebook>
