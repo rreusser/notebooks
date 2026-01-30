@@ -37,10 +37,11 @@ fn visualize_density(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   // Bilinear interpolation
   let rho = mix(mix(d00, d10, fx), mix(d01, d11, fx), fy);
 
-  // Base color and exponential tone mapping: 1 - exp(-baseColor * density * brightness)
+  // Log scaling for dynamic range, then per-component 1-exp(-x) tone mapping
   let baseColor = vec3<f32>(0.2, 0.4, 1.0);
   let scaledDensity = rho * params.scale * 50.0 * Nf * Nf;
-  let color = vec3<f32>(1.0) - exp(-baseColor * scaledDensity);
+  let logDensity = log(1.0 + scaledDensity);
+  let color = vec3<f32>(1.0) - exp(-baseColor * logDensity * 2.0);
 
   return vec4<f32>(color, 1.0);
 }

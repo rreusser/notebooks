@@ -4,17 +4,17 @@
   <script id="1" type="text/markdown">
     # Particle-Mesh Gravity (WebGPU)
 
-    A 2D gravity simulation using the [Particle Mesh](https://en.wikipedia.org/wiki/Particle_mesh) method, implemented in WebGPU. Particles interact gravitationally through a density field computed on a regular grid, with the Poisson equation solved in Fourier space using FFT.
+    This is a 2D gravitational N-body simulation using the [Particle-Mesh](https://en.wikipedia.org/wiki/Particle_mesh) (PM) method, implemented entirely in WebGPU compute shaders. The PM method approximates gravitational interactions by depositing particle masses onto a regular grid, solving for the gravitational potential on that grid, then interpolating the resulting forces back to the particles.
 
-    **How it works:**
-    1. Deposit particle masses onto grid using bilinear interpolation
-    2. Forward FFT to transform density to frequency domain
-    3. Solve Poisson equation: φ̂ = -4π ρ̂ / |k|²
-    4. Compute gradient of potential in frequency domain
-    5. Inverse FFT to get force field in real space
-    6. Integrate particle trajectories using midpoint method
+    The gravitational potential ${tex`\phi`} is related to the mass density ${tex`\rho`} through the Poisson equation,
 
-    The simulation uses periodic boundary conditions.
+    ${tex.block`\nabla^2 \phi = 4\pi G\rho`}
+
+    which in Fourier space becomes a simple algebraic relation, ${tex.block`\hat\phi(\mathbf{k}) = -4\pi G\, \hat\rho(\mathbf{k}) / |\mathbf{k}|^2.`} This allows the potential to be computed efficiently via FFT. The gravitational acceleration is then ${tex`\mathbf{a} = -\nabla\phi`}, which can also be computed in Fourier space by multiplying by ${tex`i\mathbf{k}`}.
+
+    The PM method is considered somewhat obsolete because it cannot accurately model close interactions between particles. The grid resolution sets a minimum length scale below which gravitational forces are artificially softened. Modern cosmological simulations typically use the Particle-Particle Particle-Mesh (P${tex`^3`}M) method, which augments the PM calculation with direct particle-particle summation for nearby pairs, or tree-based methods that adaptively refine force calculations.
+
+    Nonetheless, PM lends itself well to GPU architecture and remains a useful pedagogical tool and performs well for problems where small-scale structure is unimportant or where the softening is acceptable.
   </script>
   <script id="2" type="module">
     // WebGPU initialization
@@ -42,7 +42,7 @@
   <script id="3" type="module">
     // Grid resolution control
     const gridResInput = Inputs.select([64, 128, 256, 512, 1024, 2048], {
-      value: 256,
+      value: 1024,
       label: 'Grid resolution',
       format: x => `${x}×${x}`
     });
@@ -72,11 +72,11 @@
   </script>
   <script id="7" type="module">
     // Brightness control
-    const brightnessInput = Inputs.range([0.001, 0.05], {
-      step: 0.001,
-      value: 0,
-      transform: Math.log,
-      label: 'Brightness'
+    const brightnessInput = Inputs.range([0.00001, 0.1], {
+      step: 0.00001,
+      value: 0.01,
+      label: 'Density opacity',
+      transform: Math.log
     });
     const brightness = view(brightnessInput);
   </script>
@@ -84,7 +84,7 @@
     // Initial velocity dispersion control
     const v0Input = Inputs.range([0, 0.1], {
       step: 0.001,
-      value: 0.02,
+      value: 0.005,
       label: 'Initial velocity (v₀)'
     });
     const v0 = view(v0Input);
@@ -107,8 +107,8 @@
     // Gradient intensity slider (0 = off)
     const gradientIntensityInput = Inputs.range([0, 1], {
       step: 0.01,
-      value: 1,
-      label: 'Gradient intensity'
+      value: 0,
+      label: 'Gradient opacity'
     });
     const gradientIntensity = view(gradientIntensityInput);
   </script>
@@ -119,15 +119,15 @@
   </script>
   <script id="10" type="module">
     // Display controls
+    //${precisionInput}
     display(html`<div id="gravity-controls">
       ${gridResInput}
       ${particleCountInput}
       ${dtInput}
       ${v0Input}
-      ${precisionInput}
       ${brightnessInput}
-      ${simulateInput}
       ${gradientIntensityInput}
+      ${simulateInput}
       ${resetInput}
     </div>`);
   </script>
@@ -347,14 +347,24 @@
 
     display(canvas);
   </script>
-  <script id="16b" type="module">
+  <script id="16b" type="text/markdown">
+    ## Initial conditions
+
+    The simulation begins with particles distributed uniformly at random, each with a small random velocity drawn from a Gaussian distribution. Two physical scales govern how the system evolves.
+
+    The first is the [Jeans length](https://en.wikipedia.org/wiki/Jeans_instability) ${tex`\lambda_J`}, which sets the scale above which gravitational collapse overcomes thermal pressure (here represented by the initial velocity dispersion). Density perturbations larger than ${tex`\lambda_J`} will grow and collapse, while smaller perturbations oscillate as acoustic waves. With ${tex`G = 1`} and mean density ${tex`\bar\rho = 1`}, the Jeans length is approximately ${tex`\lambda_J \sim v_0 / \sqrt{G\bar\rho} \approx v_0`}.
+  </script>
+  <script id="16c" type="module">
     // Jeans length calculation
     // λ_J ~ v / √(Gρ), with G=1 and mean ρ=1, gives λ_J ~ v₀
     const jeansLength = v0;
     const jeansPercent = (jeansLength * 100).toFixed(1);
-    display(tex.block`\lambda_J \sim \frac{v_0}{\sqrt{G\rho}} \approx ${jeansPercent}\%\ \text{of domain}`);
+    display(tex.block`\lambda_J \sim \frac{v_0}{\sqrt{G\bar\rho}} \approx ${jeansPercent}\%\ \text{of domain}`);
   </script>
-  <script id="16c" type="module">
+  <script id="16d" type="text/markdown">
+    The second consideration is shot noise from the finite number of particles. The initial density field is not perfectly uniform but has Poisson fluctuations from the random particle positions. With ${tex`N`} particles distributed over ${tex`M`} grid cells, each cell contains on average ${tex`\lambda = N/M`} particles, and the relative density fluctuation is ${tex`\sigma_\rho / \bar\rho \sim 1/\sqrt\lambda`}. These fluctuations seed the initial perturbations that gravity amplifies.
+  </script>
+  <script id="16e" type="module">
     // Shot noise distribution plot
     // For N particles in M = gridSize² cells, particle count per cell follows Poisson(λ)
     // where λ = N/M = mean particles per cell
@@ -385,7 +395,7 @@
       }
     }
 
-    display(Plot.plot({
+    const plot = Plot.plot({
       width: 400,
       height: 200,
       marginLeft: 50,
@@ -396,11 +406,16 @@
         Plot.ruleX([1], { stroke: "#999", strokeDasharray: "4,4" }),
         Plot.line(data, { x: "density", y: "probability", stroke: "steelblue", strokeWidth: 2 }),
         Plot.dot(data, { x: "density", y: "probability", fill: "steelblue", r: 3 })
-      ],
-      title: `Shot noise: ${lambda.toFixed(1)} particles/cell`
-    }));
+      ]
+    });
+
+    const fluctuation = (100 / Math.sqrt(lambda)).toFixed(1);
+    display(html`<figure id="shot-noise-figure">
+      ${plot}
+      <figcaption>With ${lambda.toFixed(1)} particles per cell, the initial density fluctuations are ±${fluctuation}% (1σ).</figcaption>
+    </figure>`);
   </script>
-  <script id="16d" type="module">
+  <script id="16f" type="module">
     // Memory usage display
     const bytesPerFloat = fftPrecision === 'f16' ? 2 : 4;
 
@@ -700,16 +715,14 @@
     });
   </script>
   <script id="20" type="text/markdown">
-    ## Physics
+    ## Implementation Details
 
-    The simulation solves the 2D gravitational N-body problem using the Particle-Mesh (PM) method:
+    The simulation begins each timestep by depositing particle masses onto the grid. Each particle contributes to the four nearest grid cells using bilinear interpolation weights, which ensures smooth density fields and conserves total mass. This "cloud-in-cell" scheme is standard in PM codes.
 
-    1. **Mass deposition**: Each particle's mass is distributed to the 4 nearest grid cells using bilinear interpolation weights
-    2. **Poisson equation**: The gravitational potential φ satisfies ∇²φ = 4πρ
-    3. **Fourier solution**: In frequency domain, φ̂(k) = -4π ρ̂(k) / |k|²
-    4. **Force computation**: The gravitational force is F = -∇φ, computed as the gradient of the potential
-    5. **Integration**: Particles are updated using a second-order midpoint integrator
+    With the density field ${tex`\rho`} assembled, we transform it to Fourier space via a 2D FFT. The Poisson equation ${tex`\nabla^2\phi = 4\pi G\rho`} becomes ${tex`\hat\phi(\mathbf{k}) = -4\pi G\,\hat\rho(\mathbf{k})/|\mathbf{k}|^2`}, which we solve by simple division (setting the ${tex`\mathbf{k}=0`} mode to zero to remove the arbitrary constant in the potential). The gradient ${tex`\nabla\phi`} is computed simultaneously in Fourier space by multiplying by ${tex`i\mathbf{k}`}, yielding both components of the force field.
 
-    The FFT-based solver naturally handles periodic boundary conditions and has O(N² log N) complexity for the grid operations, making it efficient for large particle counts.
+    After inverse FFTs return the force field to real space, particles sample their accelerations using the same bilinear interpolation used for mass deposition. This symmetry is important for momentum conservation. The particles are then advanced using a second-order midpoint (leapfrog) integrator.
+
+    The FFT naturally imposes periodic boundary conditions, so particles that exit one edge of the domain reappear on the opposite side. The overall complexity is ${tex`O(N_g^2 \log N_g)`} for the grid operations (where ${tex`N_g`} is the grid resolution) plus ${tex`O(N_p)`} for the particle operations, making the method efficient even for millions of particles.
   </script>
 </notebook>

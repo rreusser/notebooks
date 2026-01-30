@@ -66,8 +66,12 @@ async function readMetadata(filename) {
 }
 
 async function computeIndex() {
+  const currentPaths = glob.sync(join(NOTEBOOKS_DIR, "**", "*.html"), {
+    nodir: true,
+    absolute: true,
+  });
   const notebooks = [];
-  for (const path of notebookPaths) {
+  for (const path of currentPaths) {
     const relpath = relative(NOTEBOOKS_DIR, path);
     const notebook = deserialize(await readFile(path, "utf8"), { parser });
     if (relpath === "index.html") continue;

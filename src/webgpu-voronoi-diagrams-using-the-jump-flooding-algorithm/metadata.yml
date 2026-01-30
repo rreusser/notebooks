@@ -1,0 +1,4 @@
+publishedAt: "July 9, 2020"
+description: "Screen-space Voronoi diagrams computed on the GPU with the Jump Flooding Algorithm."
+maxWidth: 640px
+observableUrl: 'https://observablehq.com/@rreusser/gpu-voronoi-diagrams-using-the-jump-flooding-algorithm'

@@ -3,8 +3,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="WebGPU Voronoi Diagrams using the Jump Flooding Algorithm">
+  <meta property="og:title" content="WebGPU Voronoi Diagrams using the Jump Flooding Algorithm">
+  <meta name="twitter:description" content="Screen-space Voronoi diagrams computed on the GPU with the Jump Flooding Algorithm.">
+  <meta name="subject" content="Screen-space Voronoi diagrams computed on the GPU with the Jump Flooding Algorithm.">
+  <meta name="description" content="Screen-space Voronoi diagrams computed on the GPU with the Jump Flooding Algorithm.">
+  <meta property="og:description" content="Screen-space Voronoi diagrams computed on the GPU with the Jump Flooding Algorithm.">
   <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
@@ -1540,8 +1544,9 @@ main h6 {
   }
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>WebGPU Voronoi Diagrams using the Jump Flooding Algorithm</title>  <script type="module" crossorigin src="/notebooks/assets/index-BR6Oj1eg.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1552,258 +1557,57 @@ main h6 {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>WebGPU Voronoi Diagrams using the Jump Flooding Algorithm</h1>
     <div class="byline">
-      
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20200709">July 9, 2020</time>
     </div>
     <div class="resource-links">
+        <a href="https://observablehq.com/@rreusser/gpu-voronoi-diagrams-using-the-jump-flooding-algorithm" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="white"></circle>
+            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
+          </svg>
+          Live notebook
+        </a>
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm/index.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <ul class="index">
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="stable-fluids/">Fluid Instability with Stable Fluids</a></h2>
-            <span class="publishedAt">January 25, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hess-smith-panel-solver/">Hess-Smith Panel Method</a></h2>
-            <span class="publishedAt">January 25, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="multiscale-turing-patterns/">Multi-Scale Turing Patterns in WebGPU</a></h2>
-            <span class="publishedAt">January 20, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="strange-attractors-in-webgpu/">Strange Attractors in WebGPU</a></h2>
-            <span class="publishedAt">January 17, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="webgpu-lines/">WebGPU Instanced Lines</a></h2>
-            <span class="publishedAt">January 16, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="plot-with-zoom/">Zoomable Multi-Layer Plots in Notebook Kit</a></h2>
-            <span class="publishedAt">January 13, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/">Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU</a></h2>
-            <span class="publishedAt">January 10, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="wilcoxon-signed-rank-test/">Wilcoxon Signed-Rank Test for Performance Testing</a></h2>
-            <span class="publishedAt">January 6, 2026</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="perfectly-matched-layers-for-the-wave-equation/">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <span class="publishedAt">December 31, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="reflecting-on-two-years-of-yoga/">Reflecting on Two Years of Yoga</a></h2>
-            <span class="publishedAt">December 27, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="of-noise-and-neighbors/">Of Noise and Neighbors</a></h2>
-            <span class="publishedAt">September 29, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="regl-canvas/">REGL in Observable Notebooks 2.0</a></h2>
-            <span class="publishedAt">August 12, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="hello-observable-notebooks-2/">Hello, Observable Notebooks 2.0!</a></h2>
-            <span class="publishedAt">August 3, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="clifford-and-de-jong-attractors/">Clifford and de Jong Attractors</a></h2>
-            <span class="publishedAt">May 16, 2025</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="chaotic-magnetic-pendulum/">Chaotic Magnetic Pendulum</a></h2>
-            <span class="publishedAt">August 7, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="spring-training/">Spring Training on the Treadmill</a></h2>
-            <span class="publishedAt">June 8, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="speed-climbing-world-record-progression/">Speed Climbing World Record Progression</a></h2>
-            <span class="publishedAt">May 3, 2024</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="shanks-transformation/">Series Acceleration with Shanks Transformation</a></h2>
-            <span class="publishedAt">September 23, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="cubic-basis-vs-hermite-interpolation/">Cubic basis vs. Hermite interpolation</a></h2>
-            <span class="publishedAt">May 13, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="bicubic-texture-interpolation-using-linear-filtering/">Bicubic Texture Interpolation using Linear Filtering</a></h2>
-            <span class="publishedAt">January 6, 2023</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="knocking-down-the-gates-with-jacobi/">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <span class="publishedAt">November 16, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="fast-generalized-winding-numbers-in-2d/">Fast Generalized Winding Numbers in 2D</a></h2>
-            <span class="publishedAt">September 7, 2022</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <span class="publishedAt">May 24, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="double-pendulum-map/">The Double Pendulum Map</a></h2>
-            <span class="publishedAt">May 14, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="malkus-waterwheel/">Malkus Waterwheel</a></h2>
-            <span class="publishedAt">February 13, 2021</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="point-cloud-point-opacity/">Selecting the Right Opacity for 2D Point Clouds</a></h2>
-            <span class="publishedAt">December 8, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="adaptive-contouring-in-fragment-shaders/">Adaptive Contouring in Fragment Shaders</a></h2>
-            <span class="publishedAt">November 21, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm/">WebGPU Voronoi Diagrams using the Jump Flooding Algorithm</a></h2>
-            <span class="publishedAt">July 9, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="charmin-nanotubes-and-toiletpaperfullerenes/">Toiletpaperfullerenes and Charmin Nanotubes</a></h2>
-            <span class="publishedAt">May 1, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="integers-in-single-precision-floating-point/">Visualizing Integers in Floating-Point</a></h2>
-            <span class="publishedAt">February 9, 2020</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="particle-mesh-gravity/">Particle-Mesh Gravity (WebGPU)</a></h2>
-            <span class="publishedAt">November 3, 2019</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="periodic-planar-three-body-orbits/">Periodic Planar Three-Body Orbits</a></h2>
-            <span class="publishedAt">September 1, 2019</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="aligning-3d-scans/">Aligning 3D Scans</a></h2>
-            <span class="publishedAt">July 28, 2018</span>
-          </div>
-          
-        </li>
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="things-i-learned-the-hard-way-using-react-native/">Things I Learned the Hard Way Using React Native</a></h2>
-            <span class="publishedAt">May 5, 2016</span>
-          </div>
-          
-        </li>
-      </ul></div>
 
-    <main></main>
-  
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>This notebook demonstrates the Jump Flooding Algorithm (JFA) of Rong and Tan applied to 3D rendered geometry. Two interlocking (2,3) torus knots are rendered with an orbiting camera, and object IDs are written to a texture. The JFA computes a distance field from object boundaries, enabling effects like outlines and hover detection.</p>
+<p>The algorithm is useful because its speed depends on the number of pixels in the output image rather than the amount or complexity of geometry.</p>
+<p>References:</p>
+<ul>
+<li>G. Rong, T.-S. Tan, <em><a href="https://www.comp.nus.edu.sg/~tants/jfa/i3d06.pdf">Jump Flooding in GPU with Applications to Voronoi Diagram and Distance Transform</a></em></li>
+<li>Alan Wolfe, <em><a href="https://blog.demofox.org/2016/02/29/fast-voronoi-diagrams-and-distance-dield-textures-on-the-gpu-with-the-jump-flooding-algorithm/">Fast Voronoi Diagrams and Distance Field Textures on the GPU With the Jump Flooding Algorithm</a></em></li>
+<li>Ryan Kaplan, <em><a href="http://rykap.com/graphics/skew/2016/02/25/voronoi-diagrams/">Voronoi Diagrams on the GPU</a></em></li>
+<li>Claudio Esparança, <em><a href="https://observablehq.com/@esperanc/jump-flooding">Jump Flooding</a></em></li>
+</ul>
+</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"><div><h2 id="implementation-details" tabindex="-1"><a href="#implementation-details">Implementation Details</a></h2>
+<h3 id="data-flow-and-render-passes" tabindex="-1"><a href="#data-flow-and-render-passes">Data Flow and Render Passes</a></h3>
+<p>The rendering pipeline consists of four stages executed each frame.</p>
+<ol>
+<li>
+<p><strong>Geometry pass.</strong> The two torus knots are rendered into two render targets simultaneously using multiple render target (MRT) output. The fragment shader writes shaded color to an RGBA8 texture and object ID data to an RGBA32UI texture. The object ID texture stores screen-space coordinates in the red and green channels (offset by one to distinguish from empty pixels) and the object identifier in the blue channel.</p>
+</li>
+<li>
+<p><strong>Texture copy.</strong> The object ID texture is copied to the first of two ping-pong textures. This initializes the JFA with seed pixels wherever geometry was rendered, while background pixels remain zero.</p>
+</li>
+<li>
+<p><strong>Jump flooding passes.</strong> A series of compute shader passes propagate seed information outward. Each pass reads from one ping-pong texture and writes to the other. The first pass samples neighbors at a large step size (half the maximum outline width), and each subsequent pass halves the step size until reaching one pixel. Each pixel examines its eight neighbors at the current step distance plus itself, keeping whichever seed is nearest. After log2(N) passes, every pixel knows its nearest seed location and which object that seed belongs to.</p>
+</li>
+<li>
+<p><strong>Composite pass.</strong> A full-screen shader combines the color texture, JFA result, and object ID texture into the final image. For each pixel it computes distance to the nearest seed and determines whether the pixel lies within the outline region. Background pixels inside the outline receive the outline color modulated by a distance-based sawtooth ramp. Object pixels near boundaries between different objects are darkened. Hover detection samples the JFA texture at the mouse position to identify which object the cursor is near, then applies a highlight tint to that object and its outline.</p>
+</li>
+</ol>
+</div></div></main>
+  </div>
   <footer>
     <div class="footer__attrib">© 2026 Ricky Reusser</div>
     <a href="/notebooks/feed.xml" class="footer__rss">

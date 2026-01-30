@@ -1,14 +1,19 @@
 <!doctype html>
 <notebook theme="air">
-  <title>GPU Voronoi Diagrams using the Jump Flooding Algorithm</title>
+  <title>WebGPU Voronoi Diagrams using the Jump Flooding Algorithm</title>
   <script id="intro" type="text/markdown">
 # GPU Voronoi Diagrams using the Jump Flooding Algorithm
 
-This notebook demonstrates the Jump Flooding Algorithm (JFA) applied to 3D rendered geometry. Two interlocking (2,3) torus knots are rendered with an orbiting camera, and object IDs are written to a texture. The JFA computes a distance field from object boundaries, enabling effects like outlines and hover detection.
+This notebook demonstrates the Jump Flooding Algorithm (JFA) of Rong and Tan applied to 3D rendered geometry. Two interlocking (2,3) torus knots are rendered with an orbiting camera, and object IDs are written to a texture. The JFA computes a distance field from object boundaries, enabling effects like outlines and hover detection.
+
+The algorithm is useful because its speed depends on the number of pixels in the output image rather than the amount or complexity of geometry.
 
 References:
 
 - G. Rong, T.-S. Tan, *[Jump Flooding in GPU with Applications to Voronoi Diagram and Distance Transform](https://www.comp.nus.edu.sg/~tants/jfa/i3d06.pdf)*
+- Alan Wolfe, *[Fast Voronoi Diagrams and Distance Field Textures on the GPU With the Jump Flooding Algorithm](https://blog.demofox.org/2016/02/29/fast-voronoi-diagrams-and-distance-dield-textures-on-the-gpu-with-the-jump-flooding-algorithm/)*
+- Ryan Kaplan, *[Voronoi Diagrams on the GPU](http://rykap.com/graphics/skew/2016/02/25/voronoi-diagrams/)*
+- Claudio Esparança, *[Jump Flooding](https://observablehq.com/@esperanc/jump-flooding)*
   </script>
   <script id="webgpu-setup" type="module">
 if (!navigator.gpu) {
@@ -61,7 +66,7 @@ canvas.addEventListener('mouseleave', () => {
   </script>
   <script id="jfa-passes-control" type="module">
 const jfaPassesInput = Inputs.range([1, 11], {
-  value: 6,
+  value: 8,
   label: 'JFA passes',
   step: 1
 });
@@ -677,9 +682,9 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   }
 
   // Sawtooth ramp based on distance (creates repeating bands)
-  let bandWidth = 40.0; // pixels per band
+  let bandWidth = 32.0; // pixels per band
   let ramp = fract(dist / bandWidth);
-  let bandShade = 0.85 + 0.15 * ramp; // gentle variation from 0.85 to 1.0
+  let bandShade = 0.9 + 0.1 * ramp; // gentle variation from 0.85 to 1.0
 
   // Apply outline with hard cutoff
   var finalColor = color.rgb;
@@ -749,7 +754,6 @@ const camera = {
 
 function getProjectionMatrix(aspect) {
   const f = 1.0 / Math.tan(camera.fov / 2);
-  // WebGPU uses [0, 1] depth range, not [-1, 1] like OpenGL
   const rangeInv = 1 / (camera.near - camera.far);
   return new Float32Array([
     f / aspect, 0, 0, 0,
@@ -759,29 +763,40 @@ function getProjectionMatrix(aspect) {
   ]);
 }
 
+// Write projection matrix into existing buffer (no allocation)
+function getProjectionMatrixInto(out, aspect) {
+  const f = 1.0 / Math.tan(camera.fov / 2);
+  const rangeInv = 1 / (camera.near - camera.far);
+  out[0] = f / aspect; out[1] = 0; out[2] = 0; out[3] = 0;
+  out[4] = 0; out[5] = f; out[6] = 0; out[7] = 0;
+  out[8] = 0; out[9] = 0; out[10] = camera.far * rangeInv; out[11] = -1;
+  out[12] = 0; out[13] = 0; out[14] = camera.near * camera.far * rangeInv; out[15] = 0;
+}
+
 function getViewMatrix(time) {
+  const out = new Float32Array(16);
+  getViewMatrixInto(out, time);
+  return out;
+}
+
+// Write view matrix into existing buffer (no allocation)
+function getViewMatrixInto(out, time) {
   // Orbiting camera - rotates around the scene
   const angle = time * 0.3;
-  const elevation = 0.0; // Slight tilt to see 3D structure
-  const eye = [
-    camera.distance * Math.cos(angle) * Math.cos(elevation),
-    camera.distance * Math.sin(elevation),
-    camera.distance * Math.sin(angle) * Math.cos(elevation)
-  ];
-  const target = [0, 0, 0];
-  const up = [0, 1, 0];
+  const elevation = 0.0;
+  const eyeX = camera.distance * Math.cos(angle) * Math.cos(elevation);
+  const eyeY = camera.distance * Math.sin(elevation);
+  const eyeZ = camera.distance * Math.sin(angle) * Math.cos(elevation);
 
-  // Forward = normalize(target - eye)
-  let fx = target[0] - eye[0];
-  let fy = target[1] - eye[1];
-  let fz = target[2] - eye[2];
+  // Forward = normalize(target - eye), target is origin
+  let fx = -eyeX, fy = -eyeY, fz = -eyeZ;
   let flen = Math.sqrt(fx*fx + fy*fy + fz*fz);
   fx /= flen; fy /= flen; fz /= flen;
 
-  // Right = normalize(forward × up)
-  let rx = fy * up[2] - fz * up[1];
-  let ry = fz * up[0] - fx * up[2];
-  let rz = fx * up[1] - fy * up[0];
+  // Right = normalize(forward × up), up is [0,1,0]
+  let rx = fy * 0 - fz * 1;
+  let ry = fz * 0 - fx * 0;
+  let rz = fx * 1 - fy * 0;
   let rlen = Math.sqrt(rx*rx + ry*ry + rz*rz);
   rx /= rlen; ry /= rlen; rz /= rlen;
 
@@ -791,29 +806,32 @@ function getViewMatrix(time) {
   const uz = rx * fy - ry * fx;
 
   // View matrix (column-major)
-  return new Float32Array([
-    rx, ux, -fx, 0,
-    ry, uy, -fy, 0,
-    rz, uz, -fz, 0,
-    -(rx*eye[0] + ry*eye[1] + rz*eye[2]),
-    -(ux*eye[0] + uy*eye[1] + uz*eye[2]),
-    -(-fx*eye[0] - fy*eye[1] - fz*eye[2]),
-    1
-  ]);
+  out[0] = rx; out[1] = ux; out[2] = -fx; out[3] = 0;
+  out[4] = ry; out[5] = uy; out[6] = -fy; out[7] = 0;
+  out[8] = rz; out[9] = uz; out[10] = -fz; out[11] = 0;
+  out[12] = -(rx*eyeX + ry*eyeY + rz*eyeZ);
+  out[13] = -(ux*eyeX + uy*eyeY + uz*eyeZ);
+  out[14] = -(-fx*eyeX - fy*eyeY - fz*eyeZ);
+  out[15] = 1;
 }
 
 function multiplyMatrices(a, b) {
   const result = new Float32Array(16);
+  multiplyMatricesInto(result, a, b);
+  return result;
+}
+
+// Write matrix multiplication result into existing buffer (no allocation)
+function multiplyMatricesInto(out, a, b) {
   for (let i = 0; i < 4; i++) {
     for (let j = 0; j < 4; j++) {
       let sum = 0;
       for (let k = 0; k < 4; k++) {
         sum += a[i + k*4] * b[k + j*4];
       }
-      result[i + j*4] = sum;
+      out[i + j*4] = sum;
     }
   }
-  return result;
 }
 
 // Rotation matrices (column-major)
@@ -872,27 +890,70 @@ const uniformU32 = new Uint32Array(uniformData);
 const jfaUniformData = new Float32Array(4);
 const compositeUniformData = new Float32Array(8);
 
+// Pre-allocate matrix buffers (avoid allocation in render loop)
+const projMatrix = new Float32Array(16);
+const viewMatrix = new Float32Array(16);
+const projViewMatrix = new Float32Array(16);
+const identityMat = new Float32Array([1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]);
+
+// Pre-create texture views (reused every frame)
+const colorTextureView = textures.colorTexture.createView();
+const objectIdTextureView = textures.objectIdTexture.createView();
+const depthTextureView = textures.depthTexture.createView();
+const jfaTextureViews = textures.jfaTextures.map(t => t.createView());
+
+// Pre-create JFA bind groups for all passes (both ping-pong directions)
+// We create bindings for passes 0..maxJfaPasses-1, for both src=0 and src=1
+const jfaBindGroupsPrebuilt = [];
+for (let srcIndex = 0; srcIndex < 2; srcIndex++) {
+  const groups = [];
+  for (let i = 0; i < maxJfaPasses; i++) {
+    groups.push(device.createBindGroup({
+      layout: jfaPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: jfaTextureViews[srcIndex] },
+        { binding: 1, resource: jfaTextureViews[1 - srcIndex] },
+        { binding: 2, resource: { buffer: jfaUniformBuffers[i] } }
+      ]
+    }));
+  }
+  jfaBindGroupsPrebuilt.push(groups);
+}
+
+// Pre-create composite bind groups (one for each possible JFA result texture)
+const compositeBindGroupsPrebuilt = [0, 1].map(jfaResultIndex =>
+  device.createBindGroup({
+    layout: compositePipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: colorTextureView },
+      { binding: 1, resource: jfaTextureViews[jfaResultIndex] },
+      { binding: 2, resource: objectIdTextureView },
+      { binding: 3, resource: { buffer: compositeUniformBuffer } }
+    ]
+  })
+);
+
+// Pre-compute JFA uniforms (only need to update when jfaPasses changes)
+let lastJfaPasses = -1;
+
 const loop = createFrameLoop((timestamp) => {
   const time = timestamp / 1000;
   const encoder = device.createCommandEncoder();
 
-  // Camera matrices
+  // Camera matrices (write into pre-allocated buffers)
   const aspect = canvas.width / canvas.height;
-  const proj = getProjectionMatrix(aspect);
-  const view = getViewMatrix(time);
-  const projView = multiplyMatrices(proj, view);
+  getProjectionMatrixInto(projMatrix, aspect);
+  getViewMatrixInto(viewMatrix, time);
+  multiplyMatricesInto(projViewMatrix, projMatrix, viewMatrix);
 
   // Light direction (fixed in world space)
   const lightDir = [0.5, 0.8, 0.3];
 
-  // Both knots use identity model matrix (static geometry, camera orbits)
-  const model = identityMatrix();
-
   // Update knot 1 uniforms (blue-ish)
   // Struct layout: projViewMatrix(64) + modelMatrix(64) + normalMatrix(64) + color(12) + objectId(4) + lightDir(12) + pad(4) = 224
-  uniformF32.set(projView, 0);      // projViewMatrix: offset 0
-  uniformF32.set(model, 16);        // modelMatrix: offset 64
-  uniformF32.set(model, 32);        // normalMatrix: offset 128
+  uniformF32.set(projViewMatrix, 0);  // projViewMatrix: offset 0
+  uniformF32.set(identityMat, 16);    // modelMatrix: offset 64
+  uniformF32.set(identityMat, 32);    // normalMatrix: offset 128
   uniformF32[48] = 0.3; uniformF32[49] = 0.5; uniformF32[50] = 0.9; // color: offset 192
   uniformU32[51] = 1; // objectId: offset 204
   uniformF32[52] = lightDir[0]; uniformF32[53] = lightDir[1]; uniformF32[54] = lightDir[2]; // lightDir: offset 208
@@ -907,20 +968,20 @@ const loop = createFrameLoop((timestamp) => {
   const geometryPass = encoder.beginRenderPass({
     colorAttachments: [
       {
-        view: textures.colorTexture.createView(),
+        view: colorTextureView,
         loadOp: 'clear',
         storeOp: 'store',
         clearValue: { r: 0.95, g: 0.95, b: 0.95, a: 1.0 }
       },
       {
-        view: textures.objectIdTexture.createView(),
+        view: objectIdTextureView,
         loadOp: 'clear',
         storeOp: 'store',
         clearValue: { r: 0, g: 0, b: 0, a: 0 }
       }
     ],
     depthStencilAttachment: {
-      view: textures.depthTexture.createView(),
+      view: depthTextureView,
       depthClearValue: 1.0,
       depthLoadOp: 'clear',
       depthStoreOp: 'store'
@@ -952,45 +1013,34 @@ const loop = createFrameLoop((timestamp) => {
     [canvas.width, canvas.height]
   );
 
-  // 3. JFA passes
-  jfaUniformData[0] = canvas.width;
-  jfaUniformData[1] = canvas.height;
-
-  const jfaBindGroups = [];
-  let srcIndex = 0;
-
-  for (let i = 0; i < jfaPasses; i++) {
-    const stepSize = Math.pow(2, jfaPasses - 1 - i);
-    jfaUniformData[2] = stepSize;
-    device.queue.writeBuffer(jfaUniformBuffers[i], 0, jfaUniformData);
-
-    const srcTexture = textures.jfaTextures[srcIndex];
-    const dstTexture = textures.jfaTextures[1 - srcIndex];
-
-    jfaBindGroups.push(device.createBindGroup({
-      layout: jfaPipeline.getBindGroupLayout(0),
-      entries: [
-        { binding: 0, resource: srcTexture.createView() },
-        { binding: 1, resource: dstTexture.createView() },
-        { binding: 2, resource: { buffer: jfaUniformBuffers[i] } }
-      ]
-    }));
-
-    srcIndex = 1 - srcIndex;
+  // 3. JFA passes - only update uniforms when jfaPasses changes
+  if (jfaPasses !== lastJfaPasses) {
+    jfaUniformData[0] = canvas.width;
+    jfaUniformData[1] = canvas.height;
+    for (let i = 0; i < jfaPasses; i++) {
+      const stepSize = Math.pow(2, jfaPasses - 1 - i);
+      jfaUniformData[2] = stepSize;
+      device.queue.writeBuffer(jfaUniformBuffers[i], 0, jfaUniformData);
+    }
+    lastJfaPasses = jfaPasses;
   }
 
-  for (let i = 0; i < jfaBindGroups.length; i++) {
+  // Use pre-built bind groups, alternating src texture each pass
+  let srcIndex = 0;
+  for (let i = 0; i < jfaPasses; i++) {
     const jfaPass = encoder.beginComputePass();
     jfaPass.setPipeline(jfaPipeline);
-    jfaPass.setBindGroup(0, jfaBindGroups[i]);
+    jfaPass.setBindGroup(0, jfaBindGroupsPrebuilt[srcIndex][i]);
     jfaPass.dispatchWorkgroups(
       Math.ceil(canvas.width / 8),
       Math.ceil(canvas.height / 8)
     );
     jfaPass.end();
+    srcIndex = 1 - srcIndex;
   }
 
-  const jfaResultTexture = textures.jfaTextures[srcIndex];
+  // Determine which texture has the final result
+  const jfaResultIndex = srcIndex;
 
   // 4. Composite pass
   compositeUniformData[0] = canvas.width;
@@ -1001,15 +1051,8 @@ const loop = createFrameLoop((timestamp) => {
   compositeUniformData[5] = mouseState.y;
   device.queue.writeBuffer(compositeUniformBuffer, 0, compositeUniformData);
 
-  const compositeBindGroup = device.createBindGroup({
-    layout: compositePipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: textures.colorTexture.createView() },
-      { binding: 1, resource: jfaResultTexture.createView() },
-      { binding: 2, resource: textures.objectIdTexture.createView() },
-      { binding: 3, resource: { buffer: compositeUniformBuffer } }
-    ]
-  });
+  // Use pre-built bind group based on which JFA texture has the result
+  const compositeBindGroup = compositeBindGroupsPrebuilt[jfaResultIndex];
 
   const compositePass = encoder.beginRenderPass({
     colorAttachments: [{
@@ -1029,5 +1072,21 @@ const loop = createFrameLoop((timestamp) => {
 });
 
 invalidation.then(() => loop.cancel());
+  </script>
+  <script type="text/markdown">
+## Implementation Details
+
+### Data Flow and Render Passes
+
+The rendering pipeline consists of four stages executed each frame.
+
+1. **Geometry pass.** The two torus knots are rendered into two render targets simultaneously using multiple render target (MRT) output. The fragment shader writes shaded color to an RGBA8 texture and object ID data to an RGBA32UI texture. The object ID texture stores screen-space coordinates in the red and green channels (offset by one to distinguish from empty pixels) and the object identifier in the blue channel.
+
+2. **Texture copy.** The object ID texture is copied to the first of two ping-pong textures. This initializes the JFA with seed pixels wherever geometry was rendered, while background pixels remain zero.
+
+3. **Jump flooding passes.** A series of compute shader passes propagate seed information outward. Each pass reads from one ping-pong texture and writes to the other. The first pass samples neighbors at a large step size (half the maximum outline width), and each subsequent pass halves the step size until reaching one pixel. Each pixel examines its eight neighbors at the current step distance plus itself, keeping whichever seed is nearest. After log2(N) passes, every pixel knows its nearest seed location and which object that seed belongs to.
+
+4. **Composite pass.** A full-screen shader combines the color texture, JFA result, and object ID texture into the final image. For each pixel it computes distance to the nearest seed and determines whether the pixel lies within the outline region. Background pixels inside the outline receive the outline color modulated by a distance-based sawtooth ramp. Object pixels near boundaries between different objects are darkened. Hover detection samples the JFA texture at the mouse position to identify which object the cursor is near, then applies a highlight tint to that object and its outline.
+
   </script>
 </notebook>
