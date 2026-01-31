@@ -13,10 +13,13 @@
     const activeTag = urlParams.get('tag');
   </script>
   <script id="3" type="module">
-    const notebooksWithImages = notebooks.map((nb) => ({
-      ...nb,
-      imageUrl: nb.imageExt ? `./${nb.path}meta.${nb.imageExt}` : null
-    }));
+    const notebooksWithImages = notebooks.map((nb) => {
+      const slug = nb.path.replace(/\/$/, ''); // Remove trailing slash
+      return {
+        ...nb,
+        imageUrl: nb.imageExt ? `./meta/${slug}.${nb.imageExt}` : null
+      };
+    });
 
     // Filter notebooks by active tag if one is selected
     const filteredNotebooks = activeTag
