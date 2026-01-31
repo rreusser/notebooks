@@ -117,6 +117,19 @@ export default defineConfig({
 
           // Add notebook links
           data.index = await computeIndex();
+          // Slim version for JSON embedding (exclude cells, etc.)
+          const indexSlim = data.index.map(({ path, title, publishedAt, tags, image }) => ({
+            path,
+            title,
+            publishedAt,
+            tags,
+            // Extract just the extension from the full URL
+            imageExt: image ? (image.endsWith('.jpg') ? 'jpg' : 'png') : null
+          }));
+          // Escape for safe embedding in <script> tag
+          data.indexJson = JSON.stringify(indexSlim)
+            .replace(/</g, '\\u003c')
+            .replace(/>/g, '\\u003e');
         }
 
         return Handlebars.compile(template)(data);

@@ -1,0 +1,856 @@
+<!doctype html>
+<notebook theme="air">
+  <title>3D Reaction-Diffusion</title>
+  <script id="641" type="application/vnd.observable.javascript">
+    md`# 3D Reaction-Diffusion`
+  </script>
+  <script id="1474" type="application/vnd.observable.javascript">
+    md`This notebook implements a three-dimensional version of the Gray-Scott reaction diffusion simulation [as described by Karl Sims](https://www.karlsims.com/rd.html),
+
+    ${tex`
+    \begin{aligned}
+    \partial_t A &= D_A \nabla^2 A - AB^2 + f (1 - A) \\
+    \partial_t B &= D_B \nabla^2 B - AB^2 - (k + f)B
+    \end{aligned}
+    `}
+
+    with initial conditions A = 1, B = 0, and a small region at the center with B = 1.
+
+    The computation is performed entirely on the GPU by ping-ponging back and forth between two *two-dimensional* textures. The (slightly-grueling) index math to treat the two dimensional textures as if they are three-dimensional is performed on the GPU.
+
+    Rendering is accomplished by via two vertex attribute buffers: one stores a grid of triangles represening a two-dimensional slice, and the second stores a one-dimensional slice. Using instanced rendering, the two-dimensional slice slides through the three dimensional domain. The slice consists of a grid of triangles, one through every data point. A \`varying\` value peforms the interpolation. The slices are ordered back-to-front according to the view angle so that we can use the [painter's algorithm](https://en.wikipedia.org/wiki/Painter%27s_algorithm) to simplify transparency.`
+  </script>
+  <script id="5" type="application/vnd.observable.javascript">
+    canvas = {
+      var canvas = document.createElement('canvas');
+      var w = Math.min(width, 800);
+      var h = Math.floor(Math.min(w * 0.7, 700));
+      canvas.width = w;
+      canvas.height = w;
+      return canvas;
+    }
+  </script>
+  <script id="1051" type="application/vnd.observable.javascript">
+    viewof restart = button({ value: 'restart' })
+  </script>
+  <script id="1260" type="application/vnd.observable.javascript">
+    viewof run = checkbox({ options: ['render'], value: 'render' })
+  </script>
+  <script id="1350" type="application/vnd.observable.javascript">
+    viewof saveGIF = checkbox({ options: ['save GIF'] })
+  </script>
+  <script id="100" type="application/vnd.observable.javascript">
+    viewof k = Inputs.range([0, 0.1], {
+      step: 0.0001,
+      value: 0.063,
+      label: html`Kill ratio, ${tex`k`}`
+    })
+  </script>
+  <script id="96" type="application/vnd.observable.javascript">
+    viewof f = Inputs.range([0, 0.1], {
+      value: 0.024,
+      label: html`Feed rate, ${tex`f`}`
+    })
+  </script>
+  <script id="93" type="application/vnd.observable.javascript">
+    viewof DA = Inputs.range([0, 2], {
+      value: 1.0,
+      label: html`Diffusion rate, ${tex`D_A`}`
+    })
+  </script>
+  <script id="95" type="application/vnd.observable.javascript">
+    viewof DB = Inputs.range([0, 2], {
+      value: 0.5,
+      label: html`Diffusion rate, ${tex`D_B`}`
+    })
+  </script>
+  <script id="1176" type="application/vnd.observable.javascript">
+    viewof dt = Inputs.range([0.001, 0.2], {
+      step: 0.0001,
+      value: 0.15,
+      label: html`Time step, ${tex`\Delta t`}`
+    })
+  </script>
+  <script id="597" type="application/vnd.observable.javascript">
+    viewof alpha = Inputs.range([0.01, 1], {
+      value: 1,
+      label: "Alpha"
+    })
+  </script>
+  <script id="630" type="application/vnd.observable.javascript">
+    viewof alphaThreshold = Inputs.range([0.0001, 0.5], {
+      transform: Math.log,
+      value: 0.0001,
+      label: "Alpha rendering threshold"
+    })
+  </script>
+  <script id="1184" type="application/vnd.observable.javascript">
+    viewof exponent = Inputs.range([0.5, 4], {
+      step: 0.01,
+      value: 3.3,
+      label: "Alpha exponent"
+    })
+  </script>
+  <script id="1415" type="application/vnd.observable.javascript">
+    viewof stepsPerIteration = Inputs.range([1, 100], {
+      value: 5,
+      step: 1,
+      label: "Steps per iteration"
+    })
+  </script>
+  <script id="1538" type="application/vnd.observable.javascript">
+    viewof rotationRate = Inputs.range([0, 0.1], {
+      value: 0.01,
+      label: "Rotation rate"
+    })
+  </script>
+  <script id="1616" type="application/vnd.observable.javascript">
+    viewof dirichlet = checkbox({ options: ['dirichlet'], value: null })
+  </script>
+  <script id="61" type="application/vnd.observable.javascript">
+    viewof simulate = checkbox({ options: ['simulate'], value: 'simulate' })
+  </script>
+  <script id="1516" type="application/vnd.observable.javascript">
+    md`Sizes up to about ${tex`200 \times 200 \times 200`} cells are valid before something goes wrong with the integer indexing. (Although rectangular domains currently get rendered as square.)`
+  </script>
+  <script id="25" type="application/vnd.observable.javascript">
+    shape = [150, 150, 150]
+  </script>
+  <script id="1425" type="application/vnd.observable.javascript">
+    viewof resetCamera = button({ value: 'reset camera' })
+  </script>
+  <script id="1356" type="application/vnd.observable.javascript">
+    md`The GIF takes a while to encode. You may open up the inspector to get some indication of progress. GIFs may be encoded to mp4 via:
+    \`\`\`
+    ffmpeg -i input.gif -movflags faststart -pix_fmt yuv420p -vf "scale=trunc(iw/2)*2:trunc(ih/2)*2" output.mp4
+    \`\`\`
+    `
+  </script>
+  <script id="1352" type="application/vnd.observable.javascript">
+    viewof gifFrames = slider({
+      min: 1,
+      max: 2000,
+      value: 500,
+      step: 1,
+      description: 'Number of frames in gif'
+    })
+  </script>
+  <script id="1362" type="application/vnd.observable.javascript">
+    viewof gifSkip = slider({
+      min: 1,
+      max: 20,
+      value: 5,
+      step: 1,
+      description: 'GIF frame skip'
+    })
+  </script>
+  <script id="0" type="application/vnd.observable.javascript">
+    regl = createREGL({
+      canvas,
+      extensions: [
+        'oes_texture_float',
+        'oes_texture_half_float',
+        'angle_instanced_arrays'
+      ],
+      pixelRatio: Math.min(devicePixelRatio, 1),
+      attributes: { antialias: false, preserveDrawingBuffer: true }
+    })
+  </script>
+  <script id="124" type="application/vnd.observable.javascript">
+    dx = shape.map(n => 1 / n)
+  </script>
+  <script id="27" type="application/vnd.observable.javascript">
+    n = shape.reduce((a, b) => a * b, 1)
+  </script>
+  <script id="33" type="application/vnd.observable.javascript">
+    nTex = Math.ceil(Math.sqrt(n))
+  </script>
+  <script id="72" type="application/vnd.observable.javascript">
+    textureLookup = createTextureLookupTable(nTex, nTex, 2)
+  </script>
+  <script id="75" type="application/vnd.observable.javascript">
+    textureLookupBuffer = regl.buffer(textureLookup)
+  </script>
+  <script id="1532" type="application/vnd.observable.javascript">
+    doRotate = ({ rotationRate: 0 })
+  </script>
+  <script id="1536" type="application/vnd.observable.javascript">
+    rotateWithoutRestart = {
+      doRotate.rotationRate = rotationRate;
+    }
+  </script>
+  <script id="1054" type="application/vnd.observable.javascript">
+    restartSimulation = {
+      saveGIF;
+      //f, k, DA, DB;
+      restart;
+      regl.poll();
+      fbos[0].use(initialize);
+    }
+  </script>
+  <script id="16" type="application/vnd.observable.javascript">
+    simulationLoop = {
+      if (!run) return;
+
+      let gif;
+      if (saveGIF) {
+        gif = new GIF({
+          width: regl._gl.canvas.width,
+          height: regl._gl.canvas.height
+        });
+      }
+      var gifTick = 0;
+      var gifFrame = 0;
+      var gifDone = false;
+
+      var loop = regl.frame(({ tick }) => {
+        try {
+          offscreenFbo.resize(regl._gl.canvas.width, regl._gl.canvas.height);
+          camera({ dTheta: doRotate.rotationRate / 60 }, state => {
+            if (!simulate && !camera.state.dirty) return;
+            var direction = getDirection(camera.state.eye);
+
+            // This is the main iteration loop:
+            if (simulate) {
+              for (var i = 0; i < stepsPerIteration; i++) {
+                fbos[1].use(() => iterate({ src: fbos[0] }));
+                fbos[0].use(() => iterate({ src: fbos[1] }));
+              }
+            }
+
+            // Draw the visualization off-screen:
+            offscreenFbo.use(() => {
+              regl.clear({ color: [0, 0, 0, 1] });
+              drawSlice({
+                slice: slices[direction.imax],
+                direction,
+                alpha,
+                alphaThreshold,
+                src: fbos[0]
+              });
+            });
+
+            // Invert, gamma-correct, and draw to the screen:
+            copy({ src: offscreenFbo });
+          });
+          /*if (simulate && gifTick % (gifSkip / 2) === 0) {
+            fbos[1].use(() => shift({ src: fbos[0] }));
+            swap(fbos);
+          }*/
+          if (gifTick++ % gifSkip === 0) {
+            if (saveGIF) {
+              //swap(fbos);
+
+              regl.poll();
+              gif.addFrame(regl._gl.canvas, { copy: true, delay: 16 });
+              console.log('GIF frame', gifFrame, '/', gifFrames);
+              if (gifFrame++ === gifFrames) {
+                console.log('GIF capture complete. Beginning conversion…');
+                gif.render();
+                loop.cancel();
+                loop = null;
+              }
+            }
+          }
+        } catch (e) {
+          loop.cancel();
+          loop = null;
+        }
+      });
+      invalidation.then(() => {
+        loop && loop.cancel();
+        if (saveGIF) {
+          console.log('Abort GIF capture');
+          gif.abort();
+        }
+      });
+
+      if (saveGIF) {
+        gif.on("finished", blob => {
+          console.log('GIF conversion complete');
+          saveFile(blob, 'rd.gif');
+        });
+      }
+    }
+  </script>
+  <script id="266" type="application/vnd.observable.javascript">
+    fbos = [0, 1].map(() =>
+      regl.framebuffer({
+        colorType: 'float',
+        width: nTex,
+        height: nTex
+      })
+    )
+  </script>
+  <script id="282" type="application/vnd.observable.javascript">
+    offscreenFbo = regl.framebuffer({
+      colorType: 'half float',
+      depthStencil: false
+    })
+  </script>
+  <script id="352" type="application/vnd.observable.javascript">
+    slices = {
+      function createFaces(axis1, axis2, axis3) {
+        var positions = createTextureLookupTable(shape[axis2], shape[axis1]);
+        var depths = new Float32Array(shape[axis3]);
+        var count = (shape[axis1] - 1) * (shape[axis2] - 1);
+        var elements = new Uint16Array(count * 6);
+        var c = 0;
+        for (var i = 0; i < shape[axis1] - 1; i++) {
+          for (var j = 0; j < shape[axis2] - 1; j++) {
+            var idx00 = i * shape[axis2] + j;
+            var idx01 = i * shape[axis2] + (j + 1);
+            var idx10 = (i + 1) * shape[axis2] + j;
+            var idx11 = (i + 1) * shape[axis2] + (j + 1);
+            elements[c + 0] = idx00;
+            elements[c + 1] = idx10;
+            elements[c + 2] = idx11;
+
+            elements[c + 3] = idx00;
+            elements[c + 4] = idx11;
+            elements[c + 5] = idx01;
+            c += 6;
+          }
+        }
+        for (var i = 0; i < shape[axis3]; i++) {
+          depths[i] = (i + 0.5) / shape[axis3];
+        }
+        var positionsBuffer = regl.buffer(positions);
+        var elementsBuffer = regl.elements(elements);
+        var depthsBuffer = regl.buffer(depths);
+        invalidation.then(() => {
+          positionsBuffer.destroy();
+          elementsBuffer.destroy();
+        });
+        return {
+          count,
+          positions,
+          elements,
+          positionsBuffer,
+          elementsBuffer,
+          depths,
+          depthsBuffer
+        };
+      }
+      return [createFaces(1, 2, 0), createFaces(2, 0, 1), createFaces(0, 1, 2)];
+    }
+  </script>
+  <script id="327" type="application/vnd.observable.javascript">
+    slicePoints = createTextureLookupTable(shape[0], shape[1])
+  </script>
+  <script id="686" type="application/vnd.observable.javascript">
+    initialize = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        varying vec2 vUV;
+        void main () {
+          gl_Position = vec4(uv, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        uniform vec3 shape, stride;
+        uniform vec2 texStride;
+        uniform float texSize;
+
+        ${coordinateConversionFunctions}
+
+        void main () {
+          vec3 position = fragCoordToPosition(gl_FragCoord.xy);
+          vec2 texCoord = positionToTexCoord(position);
+
+          float r = length(position - 0.5);
+          float a = 1.0;
+          float ball = smoothstep(0.25, 0.2, r);
+          float f = 12.0;
+          float b = max(0.0, min(1.0, 0.5 + 4.0 * cos(position.x * f - 1.0) * cos(position.y * f - 2.0) * cos(position.z * f - 3.0)));
+
+          gl_FragColor = vec4(a, b * ball, 0, 1);
+        }`,
+      attributes: {
+        uv: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        stride: () => [1, shape[0], shape[0] * shape[1]],
+        texStride: () => [1, nTex],
+        shape,
+        dx,
+        texSize: nTex
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="220" type="application/vnd.observable.javascript">
+    iterate = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        varying vec2 vUV;
+        void main () {
+          gl_Position = vec4(uv, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        uniform vec3 shape, stride, dx;
+        uniform vec2 texStride, D;
+        uniform float texSize, dt, k, f;
+        uniform sampler2D src;
+
+        ${coordinateConversionFunctions}
+
+        void main () {
+          vec3 ijk = fragCoordToIJK(gl_FragCoord.xy);
+
+          vec3 ijkIP = mod(ijk + vec3(1, 0, 0) + 0.5, shape) - 0.5;
+          vec3 ijkIM = mod(ijk + vec3(-1, 0, 0) + 0.5, shape) - 0.5;
+          vec3 ijkJP = mod(ijk + vec3(0, 1, 0) + 0.5, shape) - 0.5;
+          vec3 ijkJM = mod(ijk + vec3(0, -1, 0) + 0.5, shape) - 0.5;
+          vec3 ijkKP = mod(ijk + vec3(0, 0, 1) + 0.5, shape) - 0.5;
+          vec3 ijkKM = mod(ijk + vec3(0, 0, -1) + 0.5, shape) - 0.5;
+
+          vec2 y = texture2D(src, ijkToTexCoord(ijk)).xy;
+          vec2 yIP = texture2D(src, ijkToTexCoord(ijkIP)).xy;
+          vec2 yIM = texture2D(src, ijkToTexCoord(ijkIM)).xy;
+          vec2 yJP = texture2D(src, ijkToTexCoord(ijkJP)).xy;
+          vec2 yJM = texture2D(src, ijkToTexCoord(ijkJM)).xy;
+          vec2 yKP = texture2D(src, ijkToTexCoord(ijkKP)).xy;
+          vec2 yKM = texture2D(src, ijkToTexCoord(ijkKM)).xy;
+
+          ${
+            dirichlet
+              ? `
+          vec3 center = 0.5 * shape - 0.5;
+          float r2 = shape.x * shape.x * 0.25;
+    #if 0
+          if (ijkIM.x < 0.01) yIM = vec2(0);
+          if (ijkIP.x > shape.x - 1.01) yIP = vec2(0);
+          if (ijkJM.y < 0.01) yJM = vec2(0);
+          if (ijkJP.y > shape.y - 1.01) yJP = vec2(0);
+          if (ijkKM.z < 0.01) yKM = vec2(0);
+          if (ijkKP.z > shape.y - 1.01) yKP = vec2(0);
+    #else
+          if (dot(ijkIM - center, ijkIM - center) > r2) yIM = vec2(0.0, 0);
+          if (dot(ijkIP - center, ijkIP - center) > r2) yIP = vec2(0.0, 0);
+          if (dot(ijkJM - center, ijkJM - center) > r2) yJM = vec2(0.0, 0);
+          if (dot(ijkJP - center, ijkJP - center) > r2) yJP = vec2(0.0, 0);
+          if (dot(ijkKM - center, ijkKM - center) > r2) yKM = vec2(0.0, 0);
+          if (dot(ijkKP - center, ijkKP - center) > r2) yKP = vec2(0.0, 0);
+    #endif
+          `
+              : ""
+          }
+
+          /*
+          vec3 dx2 = 1.0 / (dx * dx);
+          vec2 laplacian = 
+            (yIP + yIM - 2.0 * y) * dx2.x + 
+            (yJP + yJM - 2.0 * y) * dx2.y +
+            (yKP + yKM - 2.0 * y) * dx2.z;*/
+
+          vec2 laplacian = yIP + yIM + yJP + yJM + yKP + yKM - 6.0 * y;
+
+          float a = y.x;
+          float b = y.y;
+          float ab2 = a * b * b;
+
+          vec2 dydt = D * laplacian + vec2(
+            -ab2 + f * (1.0 - a),
+            ab2 - (k + f) * b
+          );
+
+          gl_FragColor = vec4(max(vec2(0.0), min(vec2(1.0), y + dydt * dt)), 0, 1);
+        }`,
+      attributes: {
+        uv: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        stride: () => [1, shape[0], shape[0] * shape[1]],
+        texStride: () => [1, nTex],
+        shape,
+        dx: [1, 1, 1],
+        texSize: nTex,
+        dt,
+        src: regl.prop("src"),
+        D: () => [DA, DB],
+        k,
+        f
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="1864" type="application/vnd.observable.javascript">
+    shift = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        varying vec2 vUV;
+        void main () {
+          gl_Position = vec4(uv, 0, 1);
+        }`,
+      frag: `
+        precision highp float;
+        uniform vec3 shape, stride, dx;
+        uniform vec2 texStride, D;
+        uniform float texSize, dt, k, f;
+        uniform sampler2D src;
+
+        ${coordinateConversionFunctions}
+
+        void main () {
+          vec3 ijk = fragCoordToIJK(gl_FragCoord.xy);
+          vec3 ijkKP = mod(ijk + vec3(0, 1, 0) + 0.5, shape) - 0.5;
+          vec2 yKP = texture2D(src, ijkToTexCoord(ijkKP)).xy;
+          gl_FragColor = vec4(yKP, 0, 1);
+        }`,
+      attributes: {
+        uv: [-4, -4, 4, -4, 0, 4]
+      },
+      uniforms: {
+        stride: () => [1, shape[0], shape[0] * shape[1]],
+        texStride: () => [1, nTex],
+        shape,
+        texSize: nTex,
+        src: regl.prop('src')
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="335" type="application/vnd.observable.javascript">
+    drawSlice = regl({
+      vert: `
+        precision highp float;
+        attribute vec2 uv;
+        attribute float w;
+        uniform mat4 uProjectionView;
+        uniform vec3 e1, e2, e3, uEye;
+        uniform float uAlpha, t, order, frequency;
+        varying vec4 vColor;
+        varying float a;
+
+        uniform vec3 shape, stride;
+        uniform vec2 texStride;
+        uniform float texSize, exponent;
+        uniform sampler2D src;
+
+        ${coordinateConversionFunctions}
+
+        void main () {
+
+          float ww = order < 0.0 ? 1.0 - w : w;
+          vec3 p = uv.x * e1 + uv.y * e2 + ww * e3;
+
+          vec2 value = texture2D(src, positionToTexCoord(p)).xy;
+
+          // This small correction factor corrects for the angle of incidence at which
+          // we view a slice. Divide by the cosine of the angle of incidence so that
+          // slices viewing at a glancing angle have a stronger contribution
+          float vNdotE = abs(dot(e3, normalize(uEye - p)));
+
+          a = pow(value.y, exponent) * uAlpha;
+          vec3 c = vec3(-1.9, -1.0, 1.5);
+          vec3 c2 = vec3(1.4, -1.2, -2.4);
+          vColor = vec4(
+            vec3(0.05 + 
+            value.x * (1.0 - c) +
+            value.y * (c - c2)),
+            min(1.0, a / vNdotE)
+          );
+
+          gl_Position = uProjectionView * vec4(p, 1);
+        }`,
+      frag: `
+        precision highp float;
+        varying vec4 vColor;
+        uniform float uAlphaThreshold;
+        varying float a;
+        void main () {
+          if (a < uAlphaThreshold) discard;
+          gl_FragColor = vColor;
+        }`,
+      attributes: {
+        uv: (ctx, props) => ({
+          buffer: props.slice.positionsBuffer,
+          divisor: 0
+        }),
+        w: (ctx, props) => ({
+          buffer: props.slice.depthsBuffer,
+          divisor: 1
+        })
+      },
+      elements: (ctx, props) => props.slice.elementsBuffer,
+      primitive: "triangles",
+      uniforms: {},
+      instances: (ctx, props) => props.slice.depths.length,
+      uniforms: {
+        e1: (ctx, props) => props.direction.e1,
+        e2: (ctx, props) => props.direction.e2,
+        e3: (ctx, props) => props.direction.e3,
+        order: (ctx, props) => props.direction.sign,
+        uEye: () => camera.state.eye,
+        uAlpha: (ctx, props) => (props.alpha / props.slice.depths.length) * 1000,
+        uAlphaThreshold: (ctx, props) => Math.pow(props.alphaThreshold, exponent),
+        t: regl.context("time"),
+        frequency: regl.prop("frequency"),
+        exponent,
+        stride: () => [1, shape[0], shape[0] * shape[1]],
+        texStride: () => [1, nTex],
+        shape,
+        dx,
+        texSize: nTex,
+        src: regl.prop("src")
+      },
+      depth: { enable: false },
+      blend: {
+        enable: true,
+        equation: { rgb: "add", alpha: "add" },
+        func: {
+          srcRGB: "src alpha",
+          dstRGB: "one minus src alpha",
+          srcAlpha: 1,
+          dstAlpha: 1
+        }
+      }
+    })
+  </script>
+  <script id="287" type="application/vnd.observable.javascript">
+    blit = regl({
+      vert: `
+        precision highp float;
+        varying vec2 uv;
+        attribute vec2 xy;
+        void main () {
+          uv = 0.5 + 0.5 * xy;
+          gl_Position = vec4(xy, 0, 1);
+        }
+      `,
+      attributes: {
+        xy: [-4, -4, 4, -4, 0, 4]
+      },
+      depth: { enable: false },
+      count: 3
+    })
+  </script>
+  <script id="290" type="application/vnd.observable.javascript">
+    copy = {
+      let copy = regl({
+        frag: `
+          precision highp float;
+          varying vec2 uv;
+          uniform sampler2D src;
+          uniform float gamma;
+          void main () {
+            vec3 color = min(max(1.0 - texture2D(src, uv).rgb, 0.0), 1.0);
+            gl_FragColor = vec4(
+              pow(color.r, gamma),
+              pow(color.g, gamma),
+              pow(color.b, gamma),
+              1.0);
+          }`,
+        uniforms: {
+          src: regl.prop('src'),
+          gamma: (ctx, props) => 1 / 2.2
+        }
+      });
+      return props => blit(() => copy(props));
+    }
+  </script>
+  <script id="388" type="application/vnd.observable.javascript">
+    getDirection = {
+      var e1 = [[0, 1, 0], [0, 0, 1], [1, 0, 0]];
+      var e2 = [[0, 0, 1], [1, 0, 0], [0, 1, 0]];
+      var e3 = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+      return function getDirection(eye) {
+        var dx = vec3sub(vec3create(), eye, vec3fromValues(0.5, 0.5, 0.5));
+        vec3normalize(dx, dx);
+        var a0 = Math.abs(dx[0]);
+        var a1 = Math.abs(dx[1]);
+        var a2 = Math.abs(dx[2]);
+        var imax = a1 > a0 ? (a2 > a1 ? 2 : 1) : a2 > a0 ? 2 : 0;
+        var sign = Math.sign(dx[imax]);
+        return { imax, sign, e1: e1[imax], e2: e2[imax], e3: e3[imax] };
+      };
+    }
+  </script>
+  <script id="830" type="application/vnd.observable.javascript">
+    coordinateConversionFunctions = `
+    // vec2(1.5, 0.5) --> 1
+    int fragCoordToTexIndex (vec2 fragCoord) {
+      return int(dot(fragCoord - 0.5, vec2(1, texSize)) + 0.5);
+    }
+
+    // 1 --> vec3(1, 0, 0)
+    vec3 texIndexToIJK (int texIndex) {
+      return floor(mod((float(texIndex) + 0.5) / stride, shape));
+    }
+
+    // vec3(1, 0, 0) --> (0.3, 0.1, 0.1)
+    vec3 ijkToPosition (vec3 ijk) {
+      return (ijk + 0.5) / shape;
+    }
+
+    // vec3(0.3, 0.1, 0.1) -> vec3(1, 0, 0)
+    vec3 positionToIJK (vec3 position) {
+      return floor(position * shape);
+    }
+
+    // vec3(1, 0, 0) -> 1
+    int ijkToTexIndex (vec3 ijk) {
+      return int(dot(ijk, stride) + 0.5);
+    }
+
+    // 1 --> vec2(1.5, 0.5)
+    vec2 texIndexToFragCoord (int texIndex) {
+      return floor(mod((float(texIndex) + 0.5) / texStride, texSize)) + 0.5;
+    }
+
+    vec2 fragCoordToTexCoord (vec2 fragCoord) {
+      return fragCoord / texSize;
+    }
+
+    vec2 texCoordToFragCoord (vec2 texCoord) {
+      return texCoord * texSize;
+    }
+
+    vec2 ijkToFragCoord (vec3 ijk) {
+      return texIndexToFragCoord(ijkToTexIndex(ijk));
+    }
+
+    vec2 ijkToTexCoord (vec3 ijk) {
+      return fragCoordToTexCoord(ijkToFragCoord(ijk));
+    }
+
+    vec3 fragCoordToIJK (vec2 fragCoord) {
+      return texIndexToIJK(fragCoordToTexIndex(fragCoord));
+    }
+
+    vec3 fragCoordToPosition(vec2 fragCoord) {
+      return ijkToPosition(fragCoordToIJK(fragCoord));
+    }
+
+    vec2 positionToFragCoord(vec3 position) {
+      return ijkToFragCoord(positionToIJK(position));
+    }
+
+    vec2 positionToTexCoord (vec3 position) {
+      return fragCoordToTexCoord(positionToFragCoord(position));
+    }
+    `
+  </script>
+  <script id="703" type="application/vnd.observable.javascript">
+    function pluck(x, n, offset) {
+      offset = offset | 0;
+      var entries = [];
+      for (var i = 0; i < x.length; i += n) {
+        entries.push(x[i + offset]);
+      }
+      return entries;
+    }
+  </script>
+  <script id="82" type="application/vnd.observable.javascript">
+    camera = {
+      saveGIF;
+      resetCamera;
+      var camera = createReglCamera(regl, {
+        phi: 0.4,
+        distance: 1.25,
+        center: [0.5, 0.5, 0.5],
+        near: 0.001,
+        far: 10
+      });
+      createInteractions(camera);
+      return camera;
+    }
+  </script>
+  <script id="35" type="application/vnd.observable.javascript">
+    'junk' /*coordinateLookup = {
+      var data = new Float32Array(nTex * nTex * 4);
+      var c = 0;
+      for (var i = 0; i < shape[0]; i++) {
+        for (var j = 0; j < shape[1]; j++) {
+          for (var k = 0; k < shape[2]; k++) {
+            var index = c++;
+            data[index * 4] = i;
+            data[index * 4 + 1] = j;
+            data[index * 4 + 2] = k;
+          }
+        }
+      }
+      return data;
+    }*/
+    /*coordinateLookupTexture = regl.texture({
+      data: coordinateLookup,
+      height: nTex,
+      width: nTex
+    })*/
+  </script>
+  <script id="1014" type="application/vnd.observable.javascript">
+    function swap(array, i, j) {
+      i = i === undefined ? 0 : 1;
+      j = j === undefined ? 1 : 0;
+      var tmp = array[i];
+      array[i] = array[j];
+      array[j] = tmp;
+      return array;
+    }
+  </script>
+  <script id="3" type="application/vnd.observable.javascript">
+    createREGL = require('regl')
+  </script>
+  <script id="49" type="application/vnd.observable.javascript">
+    import {
+      createTextureLookupTable,
+      canWriteToFBOOfType
+    } from '@rreusser/regl-tools'
+  </script>
+  <script id="57" type="application/vnd.observable.javascript">
+    import { checkbox, slider, button } from '@jashkenas/inputs'
+  </script>
+  <script id="390" type="application/vnd.observable.javascript">
+    import {
+      vec3normalize,
+      vec3create,
+      vec3fromValues,
+      vec3sub,
+      vec3length
+    } from '@rreusser/gl-vec3'
+  </script>
+  <script id="80" type="application/vnd.observable.javascript">
+    import { createReglCamera, createInteractions } from '@rreusser/regl-tools'
+  </script>
+  <script id="1342" type="application/vnd.observable.javascript">
+    GIF = {
+      const gif = await require("gif.js@0.2");
+      const workerScript = await fetch(
+        "https://unpkg.com/gif.js@0.2/dist/gif.worker.js"
+      )
+        .then(response => response.blob())
+        .then(blob => URL.createObjectURL(blob, { type: "text/javascript" }));
+      function GIF(options) {
+        gif.call(this, { workerScript, ...options });
+      }
+      GIF.prototype = Object.create(gif.prototype);
+      return GIF;
+    }
+  </script>
+  <script id="1344" type="application/vnd.observable.javascript">
+    function saveFile(blob, filename) {
+      if (window.navigator.msSaveOrOpenBlob) {
+        window.navigator.msSaveOrOpenBlob(blob, filename);
+      } else {
+        const a = document.createElement('a');
+        document.body.appendChild(a);
+        const url = window.URL.createObjectURL(blob);
+        a.href = url;
+        a.download = filename;
+        a.click();
+        setTimeout(() => {
+          window.URL.revokeObjectURL(url);
+          document.body.removeChild(a);
+        }, 0);
+      }
+    }
+  </script>
+</notebook>

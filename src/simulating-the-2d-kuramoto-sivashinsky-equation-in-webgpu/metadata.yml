@@ -3,3 +3,6 @@ description: "WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solv
 maxWidth: "640px"
 observableUrl: https://observablehq.com/@rreusser/kuramoto-sivashinsky-equation-in-2d
 mastodonPostId: '115880796645265443'
+tags:
+  - WebGPU
+  - PDE

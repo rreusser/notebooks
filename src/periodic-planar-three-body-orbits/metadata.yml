@@ -2,3 +2,6 @@ publishedAt: "September 1, 2019"
 description: "An interactive walkthrough of 2700 planar periodic three body orbits, and means of classifying them"
 maxWidth: 640px
 observableUrl: 'https://observablehq.com/@rreusser/periodic-planar-three-body-orbits'
+tags:
+  - Physics
+  - Chaos

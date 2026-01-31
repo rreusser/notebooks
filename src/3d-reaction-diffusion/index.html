@@ -1,0 +1,861 @@
+<!doctype html>
+<notebook theme="air">
+  <title>3D Reaction-Diffusion</title>
+  <script id="intro" type="text/markdown">
+    # 3D Reaction-Diffusion
+
+    This notebook implements a three-dimensional version of the Gray-Scott reaction diffusion simulation [as described by Karl Sims](https://www.karlsims.com/rd.html),
+
+    ${tex.block`
+    \begin{aligned}
+    \partial_t A &= D_A \nabla^2 A - AB^2 + f (1 - A) \\
+    \partial_t B &= D_B \nabla^2 B + AB^2 - (k + f)B
+    \end{aligned}
+    `}
+
+    with initial conditions ${tex`A = 1`}, ${tex`B = 0`}, and a small region at the center with ${tex`B = 1`}.
+
+    The computation is performed entirely on the GPU using WebGPU compute shaders. Unlike the [original WebGL implementation](https://observablehq.com/@rreusser/3d-reaction-diffusion), which stored 3D data in 2D textures with complex coordinate conversion math, this version takes advantage of WebGPU's native 3D texture support.
+
+    Rendering uses instanced slices ordered back-to-front according to the view angle, using the [painter's algorithm](https://en.wikipedia.org/wiki/Painter%27s_algorithm) for transparency.
+  </script>
+  <script id="webgpu-init" type="module">
+    import { createWebGPUContext } from './lib/webgpu-canvas.js';
+
+    const { device, canvasFormat } = await createWebGPUContext();
+
+    // Track WebGPU errors to stop simulation
+    const gpuErrorState = { hasError: false, errorMessage: null };
+
+    device.addEventListener('uncapturederror', (event) => {
+      gpuErrorState.hasError = true;
+      gpuErrorState.errorMessage = event.error?.message || String(event.error);
+      console.error('WebGPU error:', gpuErrorState.errorMessage);
+    });
+
+    invalidation.then(() => device.destroy());
+  </script>
+  <script id="config" type="module">
+    const gridSizeInput = Inputs.select([64, 96, 128, 160, 192, 224, 256], {
+      value: 128,
+      label: "Grid size"
+    });
+    const gridSize = view(gridSizeInput);
+  </script>
+  <script id="shape" type="module">
+    // Domain size
+    const shape = [gridSize, gridSize, gridSize];
+    const n = shape[0] * shape[1] * shape[2];
+  </script>
+  <script id="params-inputs" type="module">
+    const kInput = Inputs.range([0, 0.1], {
+      step: 0.0001,
+      value: 0.059,
+      label: html`Kill rate, ${tex`k`}`
+    });
+    const k = view(kInput);
+
+    const fInput = Inputs.range([0, 0.1], {
+      step: 0.0001,
+      value: 0.035,
+      label: html`Feed rate, ${tex`f`}`
+    });
+    const f = view(fInput);
+
+    const DAInput = Inputs.range([0, 2], {
+      step: 0.01,
+      value: 1.0,
+      label: html`Diffusion rate, ${tex`D_A`}`
+    });
+    const DA = view(DAInput);
+
+    const DBInput = Inputs.range([0, 2], {
+      step: 0.01,
+      value: 0.5,
+      label: html`Diffusion rate, ${tex`D_B`}`
+    });
+    const DB = view(DBInput);
+
+    const dtInput = Inputs.range([0.01, 0.5], {
+      step: 0.01,
+      value: 0.15,
+      label: html`Time step, ${tex`\Delta t`}`
+    });
+    const dt = view(dtInput);
+  </script>
+  <script id="render-inputs" type="module">
+    const alphaInput = Inputs.range([0.01, 1], {
+      step: 0.01,
+      value: 1.0,
+      label: "Alpha"
+    });
+    const alpha = view(alphaInput);
+
+    const exponentInput = Inputs.range([0.5, 4], {
+      step: 0.01,
+      value: 2.0,
+      label: "Alpha exponent"
+    });
+    const exponent = view(exponentInput);
+
+    const stepsPerFrameInput = Inputs.range([1, 100], {
+      step: 1,
+      value: 10,
+      label: "Steps per frame"
+    });
+    const stepsPerFrame = view(stepsPerFrameInput);
+
+    const rotationRateInput = Inputs.range([0, 0.1], {
+      step: 0.001,
+      value: 0.0,
+      label: "Rotation rate"
+    });
+    const rotationRate = view(rotationRateInput);
+  </script>
+  <script id="control-inputs" type="module">
+    const simulateInput = Inputs.toggle({ label: "Simulate", value: true });
+    const simulate = view(simulateInput);
+
+    const restartInput = Inputs.button("Restart");
+    const restart = view(restartInput);
+  </script>
+  <script id="display-controls" type="module">
+    display(html`<div id="rd-params">
+      ${kInput}
+      ${fInput}
+      ${DAInput}
+      ${DBInput}
+      ${dtInput}
+    </div>`);
+
+    display(html`<div id="rd-render">
+      ${alphaInput}
+      ${exponentInput}
+      ${stepsPerFrameInput}
+      ${rotationRateInput}
+    </div>`);
+
+    display(html`<div id="rd-controls">
+      ${gridSizeInput}
+      ${simulateInput}
+      ${restartInput}
+    </div>`);
+  </script>
+  <script id="canvas-setup" type="module">
+    const canvasWidth = Math.min(width, 800);
+    const canvasHeight = canvasWidth;
+    const dpr = Math.min(devicePixelRatio, 2);
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'rd-canvas';
+    canvas.width = canvasWidth * dpr;
+    canvas.height = canvasHeight * dpr;
+    canvas.style.width = `${canvasWidth}px`;
+    canvas.style.height = `${canvasHeight}px`;
+
+    const gpuContext = canvas.getContext('webgpu');
+    gpuContext.configure({
+      device,
+      format: canvasFormat,
+      alphaMode: 'opaque'
+    });
+
+    display(canvas);
+  </script>
+  <script id="textures" type="module">
+    // Create 3D textures for simulation state (A, B values)
+    // Using rgba16float which supports filtering (rgba32float is unfilterable)
+    const textureFormat = 'rgba16float';
+    const textureDesc = {
+      size: shape,
+      format: textureFormat,
+      dimension: '3d',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING | GPUTextureUsage.COPY_DST | GPUTextureUsage.COPY_SRC
+    };
+
+    const textures = [
+      device.createTexture({ ...textureDesc, label: 'state0' }),
+      device.createTexture({ ...textureDesc, label: 'state1' })
+    ];
+
+    // Depth texture for rendering
+    const depthTexture = device.createTexture({
+      size: [canvas.width, canvas.height],
+      format: 'depth24plus',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+  </script>
+  <script id="texture-readback" type="module">
+    // Staging buffer for reading back a single slice of the 3D texture
+    // rgba16float = 8 bytes per pixel
+    const bytesPerPixel = 8;
+    const sliceSize = shape[0] * shape[1] * bytesPerPixel;
+    const bytesPerRow = shape[0] * bytesPerPixel;
+
+    const stagingBuffer = device.createBuffer({
+      label: 'staging',
+      size: sliceSize,
+      usage: GPUBufferUsage.COPY_DST | GPUBufferUsage.MAP_READ
+    });
+
+    // Convert float16 bits to float32
+    function float16ToFloat32(h) {
+      const sign = (h >> 15) & 0x1;
+      const exp = (h >> 10) & 0x1f;
+      const mant = h & 0x3ff;
+      if (exp === 0) {
+        if (mant === 0) return sign ? -0 : 0;
+        // Subnormal
+        let e = -14;
+        let m = mant / 1024;
+        while (m < 1) { m *= 2; e--; }
+        return (sign ? -1 : 1) * m * Math.pow(2, e);
+      }
+      if (exp === 31) return mant ? NaN : (sign ? -Infinity : Infinity);
+      return (sign ? -1 : 1) * Math.pow(2, exp - 15) * (1 + mant / 1024);
+    }
+
+    // Read a Z-slice from a texture and return stats about A and B values
+    async function readSliceStats(textureIndex, z) {
+      const texture = textures[textureIndex];
+      const encoder = device.createCommandEncoder();
+      encoder.copyTextureToBuffer(
+        { texture, origin: [0, 0, z] },
+        { buffer: stagingBuffer, bytesPerRow },
+        [shape[0], shape[1], 1]
+      );
+      device.queue.submit([encoder.finish()]);
+
+      await stagingBuffer.mapAsync(GPUMapMode.READ);
+      const data = new Uint16Array(stagingBuffer.getMappedRange());
+
+      let minA = Infinity, maxA = -Infinity, sumA = 0;
+      let minB = Infinity, maxB = -Infinity, sumB = 0;
+      let nonZeroB = 0;
+      const n = shape[0] * shape[1];
+
+      for (let i = 0; i < n; i++) {
+        const a = float16ToFloat32(data[i * 4]);
+        const b = float16ToFloat32(data[i * 4 + 1]);
+        minA = Math.min(minA, a);
+        maxA = Math.max(maxA, a);
+        sumA += a;
+        minB = Math.min(minB, b);
+        maxB = Math.max(maxB, b);
+        sumB += b;
+        if (b > 0.001) nonZeroB++;
+      }
+
+      stagingBuffer.unmap();
+
+      return {
+        z,
+        A: { min: minA, max: maxA, avg: sumA / n },
+        B: { min: minB, max: maxB, avg: sumB / n, nonZeroCount: nonZeroB }
+      };
+    }
+  </script>
+  <script id="samplers" type="module">
+    // Linear sampler for texture reads
+    const linearSampler = device.createSampler({
+      magFilter: 'linear',
+      minFilter: 'linear',
+      addressModeU: 'repeat',
+      addressModeV: 'repeat',
+      addressModeW: 'repeat'
+    });
+  </script>
+  <script id="uniform-buffers" type="module">
+    // Simulation parameters uniform buffer
+    const simParamsBuffer = device.createBuffer({
+      label: 'simParams',
+      size: 32, // k, f, DA, DB, dt, padding
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+
+    // Render parameters uniform buffer
+    const renderParamsBuffer = device.createBuffer({
+      label: 'renderParams',
+      size: 128, // view matrix (64) + alpha, exponent, sliceDir, sliceSign, shape (remaining)
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+  </script>
+  <script id="shaders" type="module">
+    // Initialize compute shader
+    const initShaderCode = /* wgsl */ `
+      @group(0) @binding(0) var outputTex: texture_storage_3d<rgba16float, write>;
+
+      struct Params {
+        shape: vec3u,
+        _pad: u32,
+      }
+      @group(0) @binding(1) var<uniform> params: Params;
+
+      @compute @workgroup_size(4, 4, 4)
+      fn main(@builtin(global_invocation_id) id: vec3u) {
+        if (any(id >= params.shape)) { return; }
+
+        let pos = vec3f(id) / vec3f(params.shape);
+        let center = vec3f(0.5);
+        let r = length(pos - center);
+
+        let a = 1.0;
+        let freq = 12.0;
+        let ball = smoothstep(0.25, 0.2, r);
+        let pattern = 0.5 + 4.0 * cos(pos.x * freq - 1.0) * cos(pos.y * freq - 2.0) * cos(pos.z * freq - 3.0);
+        let b = max(0.0, min(1.0, pattern)) * ball;
+
+        textureStore(outputTex, id, vec4f(a, b, 0.0, 1.0));
+      }
+    `;
+
+    // Simulation compute shader (Gray-Scott reaction-diffusion)
+    const simShaderCode = /* wgsl */ `
+      @group(0) @binding(0) var inputTex: texture_3d<f32>;
+      @group(0) @binding(1) var outputTex: texture_storage_3d<rgba16float, write>;
+      @group(0) @binding(2) var texSampler: sampler;
+
+      struct SimParams {
+        k: f32,
+        f: f32,
+        DA: f32,
+        DB: f32,
+        dt: f32,
+        _pad0: f32,
+        _pad1: f32,
+        _pad2: f32,
+      }
+      @group(0) @binding(3) var<uniform> params: SimParams;
+
+      @compute @workgroup_size(4, 4, 4)
+      fn main(@builtin(global_invocation_id) id: vec3u) {
+        let dims = textureDimensions(inputTex);
+        if (any(id >= dims)) { return; }
+
+        // Use normalized coordinates for sampling (sampler handles repeat)
+        let invDims = 1.0 / vec3f(dims);
+        let uv = (vec3f(id) + 0.5) * invDims;
+
+        // Sample center and neighbors using textureSampleLevel
+        // The repeat sampler handles periodic boundaries automatically
+        let c  = textureSampleLevel(inputTex, texSampler, uv, 0.0).xy;
+        let xp = textureSampleLevel(inputTex, texSampler, uv + vec3f(invDims.x, 0.0, 0.0), 0.0).xy;
+        let xm = textureSampleLevel(inputTex, texSampler, uv - vec3f(invDims.x, 0.0, 0.0), 0.0).xy;
+        let yp = textureSampleLevel(inputTex, texSampler, uv + vec3f(0.0, invDims.y, 0.0), 0.0).xy;
+        let ym = textureSampleLevel(inputTex, texSampler, uv - vec3f(0.0, invDims.y, 0.0), 0.0).xy;
+        let zp = textureSampleLevel(inputTex, texSampler, uv + vec3f(0.0, 0.0, invDims.z), 0.0).xy;
+        let zm = textureSampleLevel(inputTex, texSampler, uv - vec3f(0.0, 0.0, invDims.z), 0.0).xy;
+
+        // Discrete Laplacian (7-point stencil, grid spacing = 1)
+        let laplacian = xp + xm + yp + ym + zp + zm - 6.0 * c;
+
+        let a = c.x;
+        let b = c.y;
+        let ab2 = a * b * b;
+
+        // Gray-Scott equations:
+        // dA/dt = DA*∇²A - AB² + f(1-A)
+        // dB/dt = DB*∇²B + AB² - (k+f)B
+        let dadt = params.DA * laplacian.x - ab2 + params.f * (1.0 - a);
+        let dbdt = params.DB * laplacian.y + ab2 - (params.k + params.f) * b;
+
+        let newA = clamp(a + dadt * params.dt, 0.0, 1.0);
+        let newB = clamp(b + dbdt * params.dt, 0.0, 1.0);
+
+        textureStore(outputTex, id, vec4f(newA, newB, 0.0, 1.0));
+      }
+    `;
+
+    // Render shader for volume slices
+    const renderShaderCode = /* wgsl */ `
+      struct RenderParams {
+        viewProjection: mat4x4f,
+        eye: vec3f,
+        alpha: f32,
+        exponent: f32,
+        sliceAxis: u32,  // 0=x, 1=y, 2=z
+        sliceSign: f32,  // -1 or 1
+        numSlices: u32,
+      }
+      @group(0) @binding(0) var<uniform> params: RenderParams;
+      @group(0) @binding(1) var stateTex: texture_3d<f32>;
+      @group(0) @binding(2) var texSampler: sampler;
+
+      struct VertexOutput {
+        @builtin(position) position: vec4f,
+        @location(0) texCoord: vec3f,  // 3D texture coordinate
+        @location(1) sliceNormal: vec3f,
+      }
+
+      @vertex
+      fn vertexMain(
+        @builtin(vertex_index) vertexIndex: u32,
+        @builtin(instance_index) instanceIndex: u32
+      ) -> VertexOutput {
+        // Generate a quad for each slice
+        // 6 vertices per quad (2 triangles)
+        let quadIndex = vertexIndex % 6u;
+        let quadUV = array<vec2f, 6>(
+          vec2f(0.0, 0.0), vec2f(1.0, 0.0), vec2f(1.0, 1.0),
+          vec2f(0.0, 0.0), vec2f(1.0, 1.0), vec2f(0.0, 1.0)
+        );
+
+        let uv = quadUV[quadIndex];
+
+        // Slice depth (0 to 1) based on instance, ordered by sliceSign
+        var sliceT: f32;
+        if (params.sliceSign < 0.0) {
+          sliceT = f32(params.numSlices - 1u - instanceIndex) / f32(params.numSlices);
+        } else {
+          sliceT = f32(instanceIndex) / f32(params.numSlices);
+        }
+
+        // Build 3D position based on slice axis
+        var pos3d: vec3f;
+        var normal: vec3f;
+        if (params.sliceAxis == 0u) {
+          pos3d = vec3f(sliceT, uv.x, uv.y);
+          normal = vec3f(1.0, 0.0, 0.0);
+        } else if (params.sliceAxis == 1u) {
+          pos3d = vec3f(uv.x, sliceT, uv.y);
+          normal = vec3f(0.0, 1.0, 0.0);
+        } else {
+          pos3d = vec3f(uv.x, uv.y, sliceT);
+          normal = vec3f(0.0, 0.0, 1.0);
+        }
+
+        var output: VertexOutput;
+        output.position = params.viewProjection * vec4f(pos3d, 1.0);
+        output.texCoord = pos3d;
+        output.sliceNormal = normal;
+        return output;
+      }
+
+      @fragment
+      fn fragmentMain(
+        @location(0) texCoord: vec3f,
+        @location(1) sliceNormal: vec3f
+      ) -> @location(0) vec4f {
+        let value = textureSample(stateTex, texSampler, texCoord).xy;
+        let alphaBase = pow(value.y, params.exponent) * params.alpha;
+
+        // Angle of incidence correction (divide by cosine so glancing slices contribute more)
+        let viewDir = normalize(params.eye - texCoord);
+        let vNdotE = abs(dot(sliceNormal, viewDir));
+
+        // Original coloring scheme
+        let c = vec3f(-1.9, -1.0, 1.5);
+        let c2 = vec3f(1.4, -1.2, -2.4);
+        let color = vec3f(0.05) + value.x * (1.0 - c) + value.y * (c - c2);
+
+        return vec4f(color, min(1.0, alphaBase / vNdotE));
+      }
+    `;
+
+    // Post-process shader (invert and gamma correct)
+    const postShaderCode = /* wgsl */ `
+      @group(0) @binding(0) var inputTex: texture_2d<f32>;
+      @group(0) @binding(1) var texSampler: sampler;
+
+      struct VertexOutput {
+        @builtin(position) position: vec4f,
+        @location(0) uv: vec2f,
+      }
+
+      @vertex
+      fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+        let positions = array<vec2f, 3>(
+          vec2f(-1.0, -1.0),
+          vec2f(3.0, -1.0),
+          vec2f(-1.0, 3.0)
+        );
+        let pos = positions[vertexIndex];
+        var output: VertexOutput;
+        output.position = vec4f(pos, 0.0, 1.0);
+        output.uv = pos * 0.5 + 0.5;
+        return output;
+      }
+
+      @fragment
+      fn fragmentMain(@location(0) uv: vec2f) -> @location(0) vec4f {
+        let color = textureSample(inputTex, texSampler, uv).rgb;
+        let inverted = clamp(1.0 - color, vec3f(0.0), vec3f(1.0));
+        let gamma = 1.0 / 2.2;
+        return vec4f(pow(inverted, vec3f(gamma)), 1.0);
+      }
+    `;
+  </script>
+  <script id="pipelines" type="module">
+    // Initialize pipeline
+    const initShaderModule = device.createShaderModule({ code: initShaderCode });
+    const initPipeline = device.createComputePipeline({
+      label: 'init',
+      layout: 'auto',
+      compute: { module: initShaderModule, entryPoint: 'main' }
+    });
+
+    // Simulation pipeline
+    const simShaderModule = device.createShaderModule({ code: simShaderCode });
+    const simPipeline = device.createComputePipeline({
+      label: 'simulate',
+      layout: 'auto',
+      compute: { module: simShaderModule, entryPoint: 'main' }
+    });
+
+    // Render pipeline for volume slices
+    const renderShaderModule = device.createShaderModule({ code: renderShaderCode });
+    const renderPipeline = device.createRenderPipeline({
+      label: 'render',
+      layout: 'auto',
+      vertex: { module: renderShaderModule, entryPoint: 'vertexMain' },
+      fragment: {
+        module: renderShaderModule,
+        entryPoint: 'fragmentMain',
+        targets: [{
+          format: 'rgba16float',
+          blend: {
+            color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+            alpha: { srcFactor: 'one', dstFactor: 'one', operation: 'add' }
+          }
+        }]
+      },
+      primitive: { topology: 'triangle-list' },
+      depthStencil: undefined // No depth test for transparency
+    });
+
+    // Post-process pipeline
+    const postShaderModule = device.createShaderModule({ code: postShaderCode });
+    const postPipeline = device.createRenderPipeline({
+      label: 'post',
+      layout: 'auto',
+      vertex: { module: postShaderModule, entryPoint: 'vertexMain' },
+      fragment: {
+        module: postShaderModule,
+        entryPoint: 'fragmentMain',
+        targets: [{ format: canvasFormat }]
+      },
+      primitive: { topology: 'triangle-list' }
+    });
+  </script>
+  <script id="offscreen-texture" type="module">
+    // Offscreen render target for HDR accumulation
+    const offscreenTexture = device.createTexture({
+      size: [canvas.width, canvas.height],
+      format: 'rgba16float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+    });
+  </script>
+  <script id="bind-groups" type="module">
+    // Initialize bind group params buffer
+    const initParamsBuffer = device.createBuffer({
+      size: 16,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+    });
+    device.queue.writeBuffer(initParamsBuffer, 0, new Uint32Array([...shape, 0]));
+
+    // Init bind group
+    const initBindGroup = device.createBindGroup({
+      layout: initPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: textures[0].createView() },
+        { binding: 1, resource: { buffer: initParamsBuffer } }
+      ]
+    });
+
+    // Simulation bind groups (ping-pong)
+    const simBindGroups = [
+      device.createBindGroup({
+        layout: simPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: textures[0].createView() },
+          { binding: 1, resource: textures[1].createView() },
+          { binding: 2, resource: linearSampler },
+          { binding: 3, resource: { buffer: simParamsBuffer } }
+        ]
+      }),
+      device.createBindGroup({
+        layout: simPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: textures[1].createView() },
+          { binding: 1, resource: textures[0].createView() },
+          { binding: 2, resource: linearSampler },
+          { binding: 3, resource: { buffer: simParamsBuffer } }
+        ]
+      })
+    ];
+
+    // Render bind groups for each texture
+    const renderBindGroups = [
+      device.createBindGroup({
+        layout: renderPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: renderParamsBuffer } },
+          { binding: 1, resource: textures[0].createView() },
+          { binding: 2, resource: linearSampler }
+        ]
+      }),
+      device.createBindGroup({
+        layout: renderPipeline.getBindGroupLayout(0),
+        entries: [
+          { binding: 0, resource: { buffer: renderParamsBuffer } },
+          { binding: 1, resource: textures[1].createView() },
+          { binding: 2, resource: linearSampler }
+        ]
+      })
+    ];
+
+    // Post-process bind group
+    const postBindGroup = device.createBindGroup({
+      layout: postPipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: offscreenTexture.createView() },
+        { binding: 1, resource: linearSampler }
+      ]
+    });
+  </script>
+  <script id="camera" type="module">
+    import { mat4, vec3 } from 'npm:gl-matrix@3.4.3';
+
+    // Simple orbit camera state
+    const cameraState = {
+      phi: 0.4,
+      theta: 0,
+      distance: 1.25,
+      center: [0.5, 0.5, 0.5],
+      dirty: true
+    };
+
+    // Mouse interaction for camera
+    let isDragging = false;
+    let lastMouse = [0, 0];
+
+    canvas.addEventListener('mousedown', (e) => {
+      isDragging = true;
+      lastMouse = [e.clientX, e.clientY];
+    });
+
+    window.addEventListener('mouseup', () => { isDragging = false; });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!isDragging) return;
+      const dx = e.clientX - lastMouse[0];
+      const dy = e.clientY - lastMouse[1];
+      lastMouse = [e.clientX, e.clientY];
+
+      cameraState.theta -= dx * 0.01;
+      cameraState.phi -= dy * 0.01;  // Negated for intuitive controls
+      cameraState.phi = Math.max(-Math.PI / 2 + 0.1, Math.min(Math.PI / 2 - 0.1, cameraState.phi));
+      cameraState.dirty = true;
+    });
+
+    canvas.addEventListener('wheel', (e) => {
+      e.preventDefault();
+      cameraState.distance *= Math.exp(e.deltaY * 0.001);
+      cameraState.distance = Math.max(0.5, Math.min(5, cameraState.distance));
+      cameraState.dirty = true;
+    });
+
+    function getCameraEye() {
+      const d = cameraState.distance;
+      const phi = cameraState.phi;
+      const theta = cameraState.theta;
+      return [
+        cameraState.center[0] + d * Math.cos(phi) * Math.sin(theta),
+        cameraState.center[1] + d * Math.sin(phi),
+        cameraState.center[2] + d * Math.cos(phi) * Math.cos(theta)
+      ];
+    }
+
+    function getViewProjectionMatrix(aspectRatio) {
+      const eye = getCameraEye();
+      const view = mat4.create();
+      const projection = mat4.create();
+      const viewProjection = mat4.create();
+
+      mat4.lookAt(view, eye, cameraState.center, [0, 1, 0]);
+      mat4.perspective(projection, Math.PI / 4, aspectRatio, 0.001, 10);
+      mat4.multiply(viewProjection, projection, view);
+
+      return { viewProjection, eye };
+    }
+
+    // Determine best slice axis based on view direction
+    function getSliceAxis(eye) {
+      const center = cameraState.center;
+      const dx = Math.abs(eye[0] - center[0]);
+      const dy = Math.abs(eye[1] - center[1]);
+      const dz = Math.abs(eye[2] - center[2]);
+
+      if (dx > dy && dx > dz) {
+        return { axis: 0, sign: Math.sign(eye[0] - center[0]) };
+      } else if (dy > dz) {
+        return { axis: 1, sign: Math.sign(eye[1] - center[1]) };
+      } else {
+        return { axis: 2, sign: Math.sign(eye[2] - center[2]) };
+      }
+    }
+  </script>
+  <script id="simulation-state" type="module">
+    // Mutable state for simulation
+    const simState = {
+      currentBuffer: 0,
+      initialized: false,
+      dirty: true
+    };
+  </script>
+  <script id="initialize-sim" type="module">
+    // Initialize or restart simulation
+    restart;
+
+    async function initializeSimulation() {
+      const encoder = device.createCommandEncoder();
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(initPipeline);
+      pass.setBindGroup(0, initBindGroup);
+      const wg = Math.ceil(shape[0] / 4);
+      pass.dispatchWorkgroups(wg, wg, wg);
+      pass.end();
+      device.queue.submit([encoder.finish()]);
+      await device.queue.onSubmittedWorkDone();
+      simState.currentBuffer = 0;
+      simState.initialized = true;
+      simState.dirty = true;
+    }
+
+    await initializeSimulation();
+  </script>
+  <script id="render-loop" type="module">
+    // Dependencies for re-running when params change
+    initializeSimulation; simulate; stepsPerFrame; alpha; exponent; rotationRate;
+    k; f; DA; DB; dt;
+
+    let animFrameId = null;
+    let hasError = false;
+
+    function updateSimParams() {
+      const data = new Float32Array([k, f, DA, DB, dt, 0, 0, 0]);
+      device.queue.writeBuffer(simParamsBuffer, 0, data);
+    }
+
+    function step() {
+      updateSimParams();
+
+      const encoder = device.createCommandEncoder();
+      const pass = encoder.beginComputePass();
+      pass.setPipeline(simPipeline);
+      pass.setBindGroup(0, simBindGroups[simState.currentBuffer]);
+      const wg = Math.ceil(shape[0] / 4);
+      pass.dispatchWorkgroups(wg, wg, wg);
+      pass.end();
+      device.queue.submit([encoder.finish()]);
+
+      simState.currentBuffer = 1 - simState.currentBuffer;
+    }
+
+    function render() {
+      const aspectRatio = canvas.width / canvas.height;
+      const { viewProjection, eye } = getViewProjectionMatrix(aspectRatio);
+      const { axis, sign } = getSliceAxis(eye);
+
+      // Update render params
+      const numSlices = shape[axis];
+      const paramsData = new ArrayBuffer(128);
+      const floatView = new Float32Array(paramsData);
+      const uintView = new Uint32Array(paramsData);
+
+      // View projection matrix (16 floats = 64 bytes)
+      floatView.set(viewProjection, 0);
+      // Eye position (3 floats at offset 16)
+      floatView[16] = eye[0];
+      floatView[17] = eye[1];
+      floatView[18] = eye[2];
+      // Alpha (float at offset 19)
+      floatView[19] = alpha;
+      // Exponent (float at offset 20)
+      floatView[20] = exponent;
+      // Slice axis (uint at offset 21)
+      uintView[21] = axis;
+      // Slice sign (float at offset 22)
+      floatView[22] = sign;
+      // Num slices (uint at offset 23)
+      uintView[23] = numSlices;
+
+      device.queue.writeBuffer(renderParamsBuffer, 0, paramsData);
+
+      const encoder = device.createCommandEncoder();
+
+      // Render volume slices to offscreen texture
+      const volumePass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: offscreenTexture.createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+      volumePass.setPipeline(renderPipeline);
+      volumePass.setBindGroup(0, renderBindGroups[simState.currentBuffer]);
+      volumePass.draw(6, numSlices);
+      volumePass.end();
+
+      // Post-process to screen
+      const screenPass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: gpuContext.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+        }]
+      });
+      screenPass.setPipeline(postPipeline);
+      screenPass.setBindGroup(0, postBindGroup);
+      screenPass.draw(3);
+      screenPass.end();
+
+      device.queue.submit([encoder.finish()]);
+    }
+
+    async function animationLoop() {
+      if (hasError || gpuErrorState.hasError) {
+        if (gpuErrorState.hasError && !hasError) {
+          console.error('Stopping simulation due to WebGPU error:', gpuErrorState.errorMessage);
+          hasError = true;
+        }
+        return;
+      }
+
+      try {
+        // Auto-rotate
+        if (rotationRate > 0) {
+          cameraState.theta += rotationRate;
+          cameraState.dirty = true;
+        }
+
+        if (simulate) {
+          for (let i = 0; i < stepsPerFrame; i++) {
+            step();
+          }
+          render();
+        } else if (cameraState.dirty) {
+          render();
+          cameraState.dirty = false;
+        }
+
+        animFrameId = requestAnimationFrame(animationLoop);
+      } catch (e) {
+        hasError = true;
+        console.error('Animation loop error:', e);
+      }
+    }
+
+    animFrameId = requestAnimationFrame(animationLoop);
+
+    invalidation.then(() => {
+      hasError = true;
+      if (animFrameId !== null) {
+        cancelAnimationFrame(animFrameId);
+        animFrameId = null;
+      }
+    });
+  </script>
+</notebook>

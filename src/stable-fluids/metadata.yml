@@ -1,3 +1,6 @@
 publishedAt: January 25, 2026
 description: Interactive fluid flow with the Stable Fluids method of Jos Stam.
 maxWidth: 640px
+tags:
+  - WebGPU
+  - PDE

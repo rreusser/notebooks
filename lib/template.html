@@ -84,17 +84,7 @@
   </header>
   <div class="container">
     {{#if index}}
-      <ul class="index">
-      {{#each index}}
-        <li>
-          <div class="meta">
-            <h2 class="title"><a href="{{path}}">{{title}}</a></h2>
-            <span class="publishedAt">{{publishedAt}}</span>
-          </div>
-          {{#if foo}}<p>{{description}}</p>{{/if}}
-        </li>
-      {{/each}}
-      </div>
+      <script id="notebooksIndexData" type="application/json">{{{indexJson}}}</script>
     {{/if}}
 
     <main></main>

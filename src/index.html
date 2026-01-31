@@ -4,4 +4,42 @@
   <script id="1" type="text/markdown">
     # Notebooks
   </script>
+  <script id="2" type="module">
+    const dataEl = document.getElementById('notebooksIndexData');
+    const notebooks = dataEl ? JSON.parse(dataEl.textContent) : [];
+  </script>
+  <script id="3" type="module">
+    const notebooksWithImages = notebooks.map((nb) => ({
+      ...nb,
+      imageUrl: nb.imageExt ? `./${nb.path}meta.${nb.imageExt}` : null
+    }));
+  </script>
+  <script id="4" type="module">
+    function renderCard(nb) {
+      const imageContent = nb.imageUrl
+        ? html`<img class="index__image" src="${nb.imageUrl}" alt="" loading="lazy" />`
+        : html`<div class="index__placeholder"></div>`;
+
+      const tagsContent = nb.tags?.length
+        ? html`<div class="index__tags">${nb.tags.map(tag => html`<span class="index__tag">${tag}</span>`)}</div>`
+        : '';
+
+      return html`<li class="index__item">
+        <a href="${nb.path}" class="index__link">
+          <div class="index__image-container">
+            ${imageContent}
+          </div>
+          <div class="index__content">
+            <h2 class="index__title">${nb.title}</h2>
+            <div class="index__meta">
+              ${nb.publishedAt ? html`<time class="index__date">${nb.publishedAt}</time>` : ''}
+              ${tagsContent}
+            </div>
+          </div>
+        </a>
+      </li>`;
+    }
+
+    display(html`<ul class="index">${notebooksWithImages.map(renderCard)}</ul>`);
+  </script>
 </notebook>

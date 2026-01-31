@@ -1,3 +1,6 @@
 publishedAt: January 25, 2026
 description: Interactive demonstration of using the Hess-Smith panel method to compute the aerodynamic flow around an airfoil
 maxWidth: 640px
+tags:
+  - Physics
+  - Numerics
