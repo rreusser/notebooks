@@ -226,11 +226,11 @@
 
   </script>
   <script id="20" type="module">
-    import { createWebGPUContext } from './webgpu-context.js';
+    import { createWebGPUContext } from './lib/webgpu-canvas.js';
 
-    const context = await createWebGPUContext();
-    const device = context.device;
-    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    const { device, canvasFormat } = await createWebGPUContext({
+      optionalFeatures: ['timestamp-query'],
+    });
 
     invalidation.then(() => device.destroy());
   </script>
