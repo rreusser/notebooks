@@ -40,4 +40,4 @@ This repository publishes Observable notebooks as a static website using Observa
 ## WebGPU techniques
 
 - Use src/lib/webgpu-canvas.js for WebGPU context creation. This ensures we automatically correctly capture shader compilation errors.
-- Use src/lib/frame-loop.js.
+- Use src/lib/frame-loop.js
