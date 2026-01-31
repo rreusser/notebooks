@@ -9,19 +9,9 @@
 This notebook walks through simulating a strange attractor on the GPU and then rendering particle tracks as lines. The essential feature of this notebook is that it accomplishes both particle updates and rendering to the screen without data ever touching the CPU.
   </script>
   <script id="webgpu-setup" type="module">
-// Check for WebGPU support
-if (!navigator.gpu) {
-  display(html`<p style="color: red;">WebGPU is not supported in this browser.</p>`);
-  throw new Error('WebGPU not supported');
-}
+import { createWebGPUContext } from './lib/webgpu-canvas.js';
 
-const adapter = await navigator.gpu.requestAdapter();
-if (!adapter) {
-  throw new Error('Failed to get WebGPU adapter');
-}
-
-const device = await adapter.requestDevice();
-const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+const { device, canvasFormat } = await createWebGPUContext();
 
 invalidation.then(() => device.destroy());
   </script>

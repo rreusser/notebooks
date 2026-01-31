@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Sat, 31 Jan 2026 18:50:10 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 31 Jan 2026 19:36:16 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Fluid Instability with Stable Fluids</title>
@@ -326,6 +326,13 @@
       <pubDate>Mon, 16 Mar 2015 07:00:00 GMT</pubDate>
       <description>Reflections on a decade of programming projects and the search for meaning in complexity</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/a-series-of-unfortunate-things-i-programmed-one-time.jpg" medium="image" />
+    </item>
+    <item>
+      <title>WebGPU Helpers</title>
+      <link>https://rreusser.github.io/notebooks/webgpu-helper/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/webgpu-helper/</guid>
+      <pubDate></pubDate>
+      <description></description>
     </item>
   </channel>
 </rss>

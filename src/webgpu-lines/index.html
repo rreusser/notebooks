@@ -14,19 +14,9 @@
     Explore the line rendering options with interactive demo below. Drag handles to edit vertices, drag the background to pan, and scroll to zoom. Enable **Debug view** to see the underlying triangle strip structure. Alternating colors indicate separate instances.
   </script>
   <script id="3" type="module">
-    // Initialize WebGPU for interactive demo
-    if (!navigator.gpu) {
-      display(html`<p style="color: red;">WebGPU is not supported in this browser.</p>`);
-      throw new Error('WebGPU not supported');
-    }
+    import { createWebGPUContext } from './lib/webgpu-canvas.js';
 
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
-      throw new Error('Failed to get WebGPU adapter');
-    }
-
-    const device = await adapter.requestDevice();
-    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    const { device, canvasFormat } = await createWebGPUContext();
 
     invalidation.then(() => device.destroy());
   </script>

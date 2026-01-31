@@ -23,11 +23,9 @@
     - **Kelvin-Helmholtz**: Two layers moving in opposite directions create shear at the interface, forming rolling wave patterns
   </script>
   <script id="2" type="module">
-    import { createWebGPUContext } from './webgpu-context.js';
+    import { createWebGPUContext } from './lib/webgpu-canvas.js';
 
-    const context = await createWebGPUContext();
-    const device = context.device;
-    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    const { device, canvasFormat } = await createWebGPUContext();
 
     invalidation.then(() => device.destroy());
   </script>
@@ -144,7 +142,7 @@
     // Controls
     const viscosityInput = Inputs.range([0.00001, 0.01], {
       step: 0.00001,
-      value: 0.00015,
+      value: 0.00005,
       transform: Math.log,
       label: 'Viscosity'
     });
@@ -173,7 +171,7 @@
 
     const vorticityInput = Inputs.range([0, 50], {
       step: 0.1,
-      value: 20,
+      value: 5,
       label: 'Vorticity confinement'
     });
     const vorticityConfinement = view(vorticityInput);
@@ -213,14 +211,14 @@
 
     const perturbationPeriodsInput = Inputs.range([1, 16], {
       step: 1,
-      value: 8,
+      value: 5,
       label: 'Perturbation periods'
     });
     const perturbationPeriods = view(perturbationPeriodsInput);
 
     const perturbationAmplitudeInput = Inputs.range([0.001, 0.05], {
       step: 0.001,
-      value: 0.005,
+      value: 0.001,
       label: 'Perturbation amplitude'
     });
     const perturbationAmplitude = view(perturbationAmplitudeInput);
@@ -862,59 +860,39 @@
     }
   </script>
   <script id="18" type="module">
-    // Animation loop
+    import { createFrameLoop } from './lib/frame-loop.js';
     step; render; canvas; simulate;
 
     // Time display element
     const timeDisplay = html`<div id="time-display" style="font-family: monospace; margin-top: 0.5em;">t = 0.000</div>`;
     display(timeDisplay);
 
-    let animFrameId = null;
-    let hasError = false;
+    const loop = createFrameLoop(() => {
+      // Check if we should stop
+      const shouldSimulate = simulate &&
+        (simParams.stopTime <= 0 || simParams.time < simParams.stopTime);
 
-    async function animationLoop() {
-      if (hasError) return;
+      if (shouldSimulate) {
+        step();
+        simParams.time += simParams.dt;
 
-      try {
-        // Check if we should stop
-        const shouldSimulate = simulate &&
-          (simParams.stopTime <= 0 || simParams.time < simParams.stopTime);
-
-        if (shouldSimulate) {
-          await step();
-          simParams.time += simParams.dt;
-
-          // Auto-stop at target time
-          if (simParams.stopTime > 0 && simParams.time >= simParams.stopTime) {
-            simulateInput.value = false;
-            simulateInput.dispatchEvent(new Event('input'));
-          }
+        // Auto-stop at target time
+        if (simParams.stopTime > 0 && simParams.time >= simParams.stopTime) {
+          simulateInput.value = false;
+          simulateInput.dispatchEvent(new Event('input'));
         }
-        render();
-
-        // Update time display
-        timeDisplay.textContent = `t = ${simParams.time.toFixed(3)}`;
-
-        // Reset mouse velocity after applying
-        mouseState.dx = 0;
-        mouseState.dy = 0;
-
-        animFrameId = requestAnimationFrame(animationLoop);
-      } catch (e) {
-        hasError = true;
-        console.error('Animation loop error:', e);
       }
-    }
+      render();
 
-    animFrameId = requestAnimationFrame(animationLoop);
+      // Update time display
+      timeDisplay.textContent = `t = ${simParams.time.toFixed(3)}`;
 
-    invalidation.then(() => {
-      hasError = true;
-      if (animFrameId !== null) {
-        cancelAnimationFrame(animFrameId);
-        animFrameId = null;
-      }
+      // Reset mouse velocity after applying
+      mouseState.dx = 0;
+      mouseState.dy = 0;
     });
+
+    invalidation.then(() => loop.cancel());
   </script>
   <script id="18b" type="module">
     // Download button with WebGPU readback

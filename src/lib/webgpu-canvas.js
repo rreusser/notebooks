@@ -6,10 +6,19 @@
  */
 
 /**
- * Create WebGPU context with adapter and device
- * @returns {Promise<{adapter: GPUAdapter, device: GPUDevice, canvasFormat: GPUTextureFormat}>}
+ * Create WebGPU context with adapter and device.
+ * Patches device.createShaderModule to log compilation errors via
+ * getCompilationInfo(), making them visible to debugging tools.
+ *
+ * @param {Object} [options]
+ * @param {string[]} [options.optionalFeatures] - Features to request if available (e.g., 'shader-f16', 'timestamp-query')
+ * @param {boolean} [options.maxBufferSizes] - Request maximum buffer sizes from adapter
+ * @returns {Promise<{adapter: GPUAdapter, device: GPUDevice, canvasFormat: GPUTextureFormat, features: Set<string>}>}
  */
-export async function createWebGPUContext() {
+export async function createWebGPUContext({
+  optionalFeatures = [],
+  maxBufferSizes = false,
+} = {}) {
   if (!navigator.gpu) {
     throw new Error('WebGPU is not supported in this browser');
   }
@@ -19,20 +28,55 @@ export async function createWebGPUContext() {
     throw new Error('Failed to get WebGPU adapter');
   }
 
-  const device = await adapter.requestDevice();
+  // Request optional features that are available
+  const requiredFeatures = optionalFeatures.filter(f => adapter.features.has(f));
+
+  // Build device descriptor
+  const deviceDescriptor = {};
+  if (requiredFeatures.length > 0) {
+    deviceDescriptor.requiredFeatures = requiredFeatures;
+  }
+  if (maxBufferSizes) {
+    deviceDescriptor.requiredLimits = {
+      maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize,
+      maxBufferSize: adapter.limits.maxBufferSize,
+    };
+  }
+
+  const device = await adapter.requestDevice(deviceDescriptor);
 
   // Set up error handling
   device.lost.then((info) => {
-    console.error('WebGPU device lost:', info.message, info.reason);
+    console.error('[WebGPU] Device lost:', info.message, info.reason);
   });
 
   device.addEventListener?.('uncapturederror', (event) => {
-    console.error('WebGPU uncaptured error:', event.error.message);
+    console.error('[WebGPU] Uncaptured error:', event.error.message);
   });
+
+  // Monkey-patch createShaderModule to log compilation errors
+  const originalCreateShaderModule = device.createShaderModule.bind(device);
+  device.createShaderModule = function(descriptor) {
+    const shaderModule = originalCreateShaderModule(descriptor);
+    const label = descriptor.label || 'unnamed shader';
+
+    shaderModule.getCompilationInfo().then(info => {
+      for (const message of info.messages) {
+        const location = message.lineNum ? ` at line ${message.lineNum}:${message.linePos}` : '';
+        const fullMessage = `[WebGPU Shader "${label}"${location}] ${message.type}: ${message.message}`;
+
+        if (message.type === 'error') console.error(fullMessage);
+        else if (message.type === 'warning') console.warn(fullMessage);
+        else console.info(fullMessage);
+      }
+    });
+
+    return shaderModule;
+  };
 
   const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 
-  return { adapter, device, canvasFormat };
+  return { adapter, device, canvasFormat, features: new Set(requiredFeatures) };
 }
 
 /**

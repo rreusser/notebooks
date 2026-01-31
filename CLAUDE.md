@@ -4,23 +4,23 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-This repository publishes Observable notebooks as a static website using Observable Notebook Kit. Notebooks are written as HTML files with reactive cells and built into static sites using Vite.
+This repository publishes Observable notebooks as a static website using Observable Notebook Kit. Notebooks are written as HTML files with reactive cells and built into static sites using Vite. HTML files in src/ are Observable notebooks, *not* regular HTML files. Use the editing-notebooks skill to understand their composition.
 
-## Development Commands
+## Style guide
 
-```bash
-npm start        # Start dev server with live reload
-npm run build    # Build static site to docs/
-```
+- DO NOT use phrases like "key insight" or excessive punctuation like colons and em-dashes.
+
+- Use bulleted or numbered lists only where it is a good fit, as in steps of an algorithm. Prefer narrative paragraphs in general.
+
+- DO use ${tex`...`} and ${tex.block`...`} for typesetting TeX equations.
+
+- Use the techniques in src/plot-with-zoom/index.html as a good reference for making plots.
 
 ## Debugging techniques
 
-- To make plots, use the techniques in src/plot-with-zoom/index.html as a good reference.
-
-- Always assign unique and useful IDs to HTML elements and plot elements to make them easier to find and query.
+- Assign unique and useful IDs to HTML elements and plot elements to make them easier to find and query.
 
 - Use the Notebook MCP server to aid debugging. If it reports that the notebook disconnects while working, the most likely reason is a recent syntax error which prevents vite from building. Stop immediately and locate the syntax error, then refresh.
-    - You will need to set `preserveDrawingBuffer: true` on WebGL contexts in order to read images via MCP.
 
 - DO NOT import from `../lib`. Instead, symlink src/lib into src/notebook-name/lib and import from `./lib`.
 
@@ -37,3 +37,7 @@ npm run build    # Build static site to docs/
   ```
   This pattern is required for render loops, dirty flags, animation state, etc.
 
+## WebGPU techniques
+
+- Use src/lib/webgpu-canvas.js for WebGPU context creation. This ensures we automatically correctly capture shader compilation errors.
+- Use src/lib/frame-loop.js.

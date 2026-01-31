@@ -20,7 +20,7 @@
   </script>
 
   <script id="imports" type="module">
-    import { createWebGPUContext, isWebGPUAvailable } from './webgpu-context.js';
+    import { createWebGPUContext, isWebGPUAvailable } from './lib/webgpu-canvas.js';
     import { createTuringPipelines } from './pipeline.js';
     import { createVec4FFTPipelines } from './lib/webgpu-fft/fft.js';
     import { createElementStack } from './lib/element-stack.js';
@@ -30,10 +30,11 @@
   </script>
 
   <script id="context" type="module">
-    const context = await createWebGPUContext();
-    const device = context.device;
-    const detectedPrecision = context.precision;
-    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    const { device, canvasFormat, features } = await createWebGPUContext({
+      optionalFeatures: ['shader-f16', 'timestamp-query'],
+      maxBufferSizes: true,
+    });
+    const detectedPrecision = features.has('shader-f16') ? 'f16' : 'f32';
 
     invalidation.then(() => device.destroy());
   </script>
@@ -1192,21 +1193,23 @@ Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
         <span style="width: 80px; text-align: right; color: #dc2626;">Inhibitor (2×)</span>
         <div id="inhibitor-bar-1d" style="height: 8px; background: #dc2626; border-radius: 2px;"></div>
         <svg id="drag-handle-1d" style="position: absolute; left: 88px; top: 50%; transform: translateY(-50%); overflow: visible; pointer-events: none;" width="10" height="10">
-          <circle id="drag-dot-1d" cx="0" cy="5" r="6" fill="#e63946" stroke="rgba(255,0,0,0.2)" stroke-width="25" style="cursor: grab; pointer-events: auto;" />
+          <circle id="drag-dot-1d" cx="0" cy="5" r="8" fill="#e63946" stroke="rgba(255,0,0,0.15)" stroke-width="36" style="cursor: grab; pointer-events: auto;" />
         </svg>
       </div>
     </div>`;
 
     const plotCanvas = document.createElement('canvas');
     plotCanvas.id = 'turing-1d-plot';
-    plotCanvas.width = 512;
-    plotCanvas.height = 120;
+    const plotDpr = window.devicePixelRatio || 1;
+    plotCanvas.width = 512 * plotDpr;
+    plotCanvas.height = 120 * plotDpr;
     plotCanvas.style.width = '512px';
     plotCanvas.style.maxWidth = '100%';
     plotCanvas.style.height = 'auto';
     plotCanvas.style.aspectRatio = '512 / 120';
     plotCanvas.style.display = 'block';
     const plotCtx = plotCanvas.getContext('2d');
+    plotCtx.scale(plotDpr, plotDpr);
 
     display(html`<figure>
       <div style="position: relative;">
@@ -1293,8 +1296,9 @@ Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
     document.addEventListener('touchend', () => { isDragging1D = false; });
 
     function updatePlot() {
-      const w = plotCanvas.width;
-      const h = plotCanvas.height;
+      // Use CSS pixel dimensions since context is scaled by plotDpr
+      const w = 512;
+      const h = 120;
       const scaleX = w / turing1dN;
       const scaleY = h / 2;  // Map [-1, 1] to [h, 0]
 
@@ -1365,17 +1369,12 @@ Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
   <script id="turing-2d-simulation" type="module">
     import { createTuring2D } from './turing-2d.js';
 
-    if (!navigator.gpu) {
+    if (!isWebGPUAvailable()) {
       display(html`<div style="color: #666; padding: 12px; border: 1px solid #ccc; background: #f9f9f9; border-radius: 4px; font-size: 13px;">WebGPU is not available.</div>`);
     } else {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) {
-        display(html`<div style="color: #666;">WebGPU adapter not found.</div>`);
-      } else {
-        const turing2dDevice = await adapter.requestDevice();
-        const turing2dCanvasFormat = navigator.gpu.getPreferredCanvasFormat();
+      const { device: turing2dDevice, canvasFormat: turing2dCanvasFormat } = await createWebGPUContext();
 
-        const turing2dN = 256;
+      const turing2dN = 256;
         const turing2dStepSize = 0.5;
         const turing2dToneMapRange = 1.0;
         const turing2dInhibitorRatio = 2;
@@ -1455,7 +1454,7 @@ Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
             <span style="width: 80px; text-align: right; color: #dc2626;">Inhibitor (2×)</span>
             <div id="inhibitor-bar-2d" style="height: 8px; background: #dc2626; border-radius: 2px;"></div>
             <svg id="drag-handle-2d" style="position: absolute; left: 88px; top: 50%; transform: translateY(-50%); overflow: visible; pointer-events: none;" width="10" height="10">
-              <circle id="drag-dot-2d" cx="0" cy="5" r="6" fill="#e63946" stroke="rgba(255,0,0,0.2)" stroke-width="16" style="cursor: grab; pointer-events: auto;" />
+              <circle id="drag-dot-2d" cx="0" cy="5" r="8" fill="#e63946" stroke="rgba(255,0,0,0.15)" stroke-width="36" style="cursor: grab; pointer-events: auto;" />
             </svg>
           </div>
         </div>`;
@@ -1566,14 +1565,13 @@ Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
         }
         animate();
 
-        invalidation.then(() => {
-          cancelAnimationFrame(turing2dAnimationId);
-          turing2dVisibilityObserver.disconnect();
-          turing2dResizeObserver.disconnect();
-          turing2dSim.destroy();
-          turing2dDevice.destroy();
-        });
-      }
+      invalidation.then(() => {
+        cancelAnimationFrame(turing2dAnimationId);
+        turing2dVisibilityObserver.disconnect();
+        turing2dResizeObserver.disconnect();
+        turing2dSim.destroy();
+        turing2dDevice.destroy();
+      });
     }
   </script>
 
@@ -1600,17 +1598,12 @@ Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
   <script id="two-scale-simulation" type="module">
     import { createTuring2Scale } from './turing-2scale.js';
 
-    if (!navigator.gpu) {
+    if (!isWebGPUAvailable()) {
       display(html`<div style="color: #666; padding: 12px; border: 1px solid #ccc; background: #f9f9f9; border-radius: 4px; font-size: 13px;">WebGPU is not available.</div>`);
     } else {
-      const adapter = await navigator.gpu.requestAdapter();
-      if (!adapter) {
-        display(html`<div style="color: #666;">WebGPU adapter not found.</div>`);
-      } else {
-        const twoScaleDevice = await adapter.requestDevice();
-        const twoScaleCanvasFormat = navigator.gpu.getPreferredCanvasFormat();
+      const { device: twoScaleDevice, canvasFormat: twoScaleCanvasFormat } = await createWebGPUContext();
 
-        const twoScaleN = 256;
+      const twoScaleN = 256;
 
         const twoScaleSim = createTuring2Scale(twoScaleDevice, {
           width: twoScaleN,
@@ -1720,13 +1713,12 @@ Finally, ${tex`f = uk/(1-u)`} gives the Hopf curve parametrized by ${tex`k`}.
         }
         animate();
 
-        invalidation.then(() => {
-          cancelAnimationFrame(twoScaleAnimationId);
-          twoScaleVisibilityObserver.disconnect();
-          twoScaleSim.destroy();
-          twoScaleDevice.destroy();
-        });
-      }
+      invalidation.then(() => {
+        cancelAnimationFrame(twoScaleAnimationId);
+        twoScaleVisibilityObserver.disconnect();
+        twoScaleSim.destroy();
+        twoScaleDevice.destroy();
+      });
     }
   </script>
 

@@ -1,0 +1,32 @@
+<!doctype html>
+<notebook theme="air">
+  <title>WebGPU Helpers</title>
+
+  <script id="intro" type="text/markdown">
+    # WebGPU Helpers
+
+    WebGPU shader compilation errors are not logged to console by default, making them invisible to debugging tools. The `createWebGPUContext` helper below patches `device.createShaderModule` to automatically log compilation errors via `getCompilationInfo()`.
+  </script>
+
+  <script id="context-helper" type="module" pinned="">
+    import { createWebGPUContext } from './lib/webgpu-canvas.js';
+  </script>
+
+  <script id="demo" type="module" pinned="">
+    const { device, canvasFormat } = await createWebGPUContext();
+    invalidation.then(() => device.destroy());
+
+    // This shader has an intentional error to demonstrate error capture
+    const brokenShader = device.createShaderModule({
+      label: "broken-shader",
+      code: `
+        @vertex fn vertexMain(@builtin(vertex_index) i: u32) -> @builtin(position) vec4f {
+          return positions[i]; // ERROR: 'positions' is not defined
+        }
+        @fragment fn fragmentMain() -> @location(0) vec4f {
+          return vec4f(1.0, 0.0, 0.0, 1.0);
+        }
+      `,
+    });
+  </script>
+</notebook>
