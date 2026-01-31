@@ -124,7 +124,8 @@ The ratio of inhibitor to activator width determines the characteristic spacing 
     <span style="width: 80px; text-align: right; color: #dc2626;">Inhibitor (2×)</span>
     <div id="inhibitor-bar-1d" style="height: 8px; background: #dc2626; border-radius: 2px;"></div>
     <svg id="drag-handle-1d" style="position: absolute; left: 88px; top: 50%; transform: translateY(-50%); overflow: visible; pointer-events: none;" width="10" height="10">
-      <circle id="drag-dot-1d" cx="0" cy="5" r="8" fill="#e63946" stroke="transparent" stroke-width="44" style="cursor: grab; pointer-events: stroke;" />
+      <circle cx="0" cy="5" r="6" fill="#e63946" stroke="rgba(255,0,0,0.15)" stroke-width="24" style="pointer-events: none;" />
+          <circle id="drag-dot-1d" cx="0" cy="5" r="22" fill="transparent" style="cursor: grab; pointer-events: auto;" />
     </svg>
   </div>
 </div>`,h=document.createElement("canvas");h.id="turing-1d-plot";const L=window.devicePixelRatio||1;h.width=512*L,h.height=120*L,h.style.width="512px",h.style.maxWidth="100%",h.style.height="auto",h.style.aspectRatio="512 / 120",h.style.display="block";const S=h.getContext("2d");S.scale(L,L),i(e`<figure>
@@ -144,7 +145,8 @@ The ratio of inhibitor to activator width determines the characteristic spacing 
         <span style="width: 80px; text-align: right; color: #dc2626;">Inhibitor (2×)</span>
         <div id="inhibitor-bar-2d" style="height: 8px; background: #dc2626; border-radius: 2px;"></div>
         <svg id="drag-handle-2d" style="position: absolute; left: 88px; top: 50%; transform: translateY(-50%); overflow: visible; pointer-events: none;" width="10" height="10">
-          <circle id="drag-dot-2d" cx="0" cy="5" r="8" fill="#e63946" stroke="transparent" stroke-width="44" style="cursor: grab; pointer-events: stroke;" />
+          <circle cx="0" cy="5" r="6" fill="#e63946" stroke="rgba(255,0,0,0.15)" stroke-width="24" style="pointer-events: none;" />
+          <circle id="drag-dot-2d" cx="0" cy="5" r="22" fill="transparent" style="cursor: grab; pointer-events: auto;" />
         </svg>
       </div>
     </div>`;e(i`<figure id="turing-2d-figure">
