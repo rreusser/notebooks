@@ -17,25 +17,9 @@
     Nonetheless, PM lends itself well to GPU architecture and remains a useful pedagogical tool and performs well for problems where small-scale structure is unimportant or where the softening is acceptable.
   </script>
   <script id="2" type="module">
-    // WebGPU initialization
-    if (!navigator.gpu) {
-      throw new Error('WebGPU is not supported in this browser');
-    }
+    import { createWebGPUContext } from './lib/webgpu-canvas.js';
 
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) {
-      throw new Error('Failed to get WebGPU adapter');
-    }
-
-    // Request shader-f16 feature if available
-    const requiredFeatures = [];
-    const hasF16 = adapter.features.has('shader-f16');
-    if (hasF16) {
-      requiredFeatures.push('shader-f16');
-    }
-
-    const device = await adapter.requestDevice({ requiredFeatures });
-    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+    const { device, canvasFormat } = await createWebGPUContext();
 
     invalidation.then(() => device.destroy());
   </script>
@@ -90,13 +74,7 @@
     const v0 = view(v0Input);
   </script>
   <script id="7c" type="module">
-    // Precision control (f16 only available if device supports it)
-    const precisionOptions = hasF16 ? ['f32', 'f16'] : ['f32'];
-    const precisionInput = Inputs.select(precisionOptions, {
-      value: 'f32',
-      label: 'Precision'
-    });
-    const fftPrecision = view(precisionInput);
+    const fftPrecision = 'f32';
   </script>
   <script id="8" type="module">
     // Simulation toggle
