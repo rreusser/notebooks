@@ -338,21 +338,22 @@ footer {
 
 .index__item {
   margin: 0;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8f8f8;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+}
+
+.index__item:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .index__link {
   display: block;
   text-decoration: none;
   color: inherit;
-  border-radius: 8px;
-  overflow: hidden;
-  background: #f8f8f8;
-  transition: transform 0.15s ease, box-shadow 0.15s ease;
-}
-
-.index__link:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 }
 
 .index__image-container {
@@ -401,16 +402,14 @@ footer {
   color: #333;
 }
 
-.index__link:hover .index__title {
-  color: var(--rrtheme-color);
-  text-decoration: underline;
+.index__title-link {
+  color: inherit;
+  text-decoration: none;
 }
 
-a.index__link[href],
-a.index__link[href]:hover,
-a.index__link[href]:focus,
-a.index__link[href]:visited {
-  text-decoration: none;
+.index__item:hover .index__title-link {
+  color: var(--rrtheme-color);
+  text-decoration: underline;
 }
 
 .index__meta {

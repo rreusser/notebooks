@@ -84,7 +84,73 @@
   </header>
   <div class="container">
     {{#if index}}
-      <script id="notebooksIndexData" type="application/json">{{{indexJson}}}</script>
+      <div id="index-filter-container"></div>
+      <ul class="index" id="index-list">
+        {{#each index}}
+        <li class="index__item"{{#if tags}} data-tags="{{#each tags}}{{this}}{{#unless @last}},{{/unless}}{{/each}}"{{/if}} data-path="{{path}}">
+          <div class="index__image-container">
+            {{#if imageUrl}}
+            <img class="index__image" src="{{imageUrl}}" alt="" loading="lazy" />
+            {{else}}
+            <div class="index__placeholder"></div>
+            {{/if}}
+          </div>
+          <div class="index__content">
+            <h2 class="index__title"><a href="{{path}}" class="index__title-link">{{title}}</a></h2>
+            <div class="index__meta">
+              {{#if publishedAt}}<time class="index__date">{{publishedAt}}</time>{{/if}}
+              {{#if tags}}
+              <div class="index__tags">
+                {{#each tags}}
+                <a href="?tag={{encodeURIComponent this}}" class="index__tag">{{this}}</a>
+                {{/each}}
+              </div>
+              {{/if}}
+            </div>
+          </div>
+        </li>
+        {{/each}}
+      </ul>
+      <script>
+        (function() {
+          const urlParams = new URLSearchParams(window.location.search);
+          const activeTag = urlParams.get('tag');
+
+          // Add click handlers to cards
+          const items = document.querySelectorAll('.index__item');
+          items.forEach(item => {
+            item.addEventListener('click', function(e) {
+              // Don't navigate if clicking a tag link
+              if (e.target.closest('.index__tag')) return;
+              const path = item.dataset.path;
+              if (path) window.location.href = path;
+            });
+          });
+
+          if (activeTag) {
+            // Show filter indicator
+            const filterContainer = document.getElementById('index-filter-container');
+            filterContainer.innerHTML = `
+              <div class="index__active-filter">
+                <span class="index__filter-label">Filtered by:</span>
+                <span class="index__filter-tag">
+                  ${activeTag}
+                  <a href="./" class="index__filter-remove" aria-label="Remove filter">×</a>
+                </span>
+              </div>
+            `;
+
+            // Filter items (case-insensitive)
+            const activeTagLower = activeTag.toLowerCase();
+            items.forEach(item => {
+              const tags = (item.dataset.tags || '').split(',').filter(Boolean);
+              if (!tags.some(t => t.toLowerCase() === activeTagLower)) {
+                item.style.display = 'none';
+              }
+            });
+          }
+        })();
+      </script>
     {{/if}}
 
     <main></main>

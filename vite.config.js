@@ -22,6 +22,12 @@ const TEMPLATE_PATH = join(__dirname, "lib/template.html");
 const GITHUB_BASE_URL = "https://github.com/rreusser/notebooks/tree/main/src";
 const META_IMAGE_BASE_URL = "https://rreusser.github.io/notebooks/meta";
 const NOTEBOOKS_DIR = join(__dirname, "src");
+
+// Register Handlebars helpers for index page rendering
+Handlebars.registerHelper('encodeURIComponent', (str) => encodeURIComponent(str));
+Handlebars.registerHelper('ifEquals', function(arg1, arg2, options) {
+  return (arg1 === arg2) ? options.fn(this) : options.inverse(this);
+});
 const notebookPaths = glob.sync(join(NOTEBOOKS_DIR, "**", "*.html"), {
   nodir: true,
   absolute: true,
@@ -90,7 +96,10 @@ async function computeIndex() {
   return notebooks;
 }
 
-export default defineConfig({
+export default defineConfig(({ command }) => {
+  const isDev = command === 'serve';
+
+  return {
   ...config(),
   plugins: [
     useHttps && basicSsl(),
@@ -117,19 +126,20 @@ export default defineConfig({
 
           // Add notebook links
           data.index = await computeIndex();
-          // Slim version for JSON embedding (exclude cells, etc.)
-          const indexSlim = data.index.map(({ path, title, publishedAt, tags, image }) => ({
-            path,
-            title,
-            publishedAt,
-            tags,
-            // Extract just the extension from the full URL
-            imageExt: image ? (image.endsWith('.jpg') ? 'jpg' : 'png') : null
-          }));
-          // Escape for safe embedding in <script> tag
-          data.indexJson = JSON.stringify(indexSlim)
-            .replace(/</g, '\\u003c')
-            .replace(/>/g, '\\u003e');
+          // Add image URLs for template rendering
+          // In dev: ./slug/meta.ext, in build: ./meta/slug.ext
+          data.index = data.index.map((nb) => {
+            const slug = nb.path.replace(/\/$/, '');
+            const imageExt = nb.image ? (nb.image.endsWith('.jpg') ? 'jpg' : 'png') : null;
+            let imageUrl = null;
+            if (imageExt) {
+              imageUrl = isDev ? `./${slug}/meta.${imageExt}` : `./meta/${slug}.${imageExt}`;
+            }
+            return {
+              ...nb,
+              imageUrl
+            };
+          });
         }
 
         return Handlebars.compile(template)(data);
@@ -163,4 +173,5 @@ export default defineConfig({
       host: undefined,
     },
   },
+};
 });

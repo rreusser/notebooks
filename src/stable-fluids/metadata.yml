@@ -3,4 +3,5 @@ description: Interactive fluid flow with the Stable Fluids method of Jos Stam.
 maxWidth: 640px
 tags:
   - WebGPU
+  - Aerodynamics
   - PDE

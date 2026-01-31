@@ -2,7 +2,6 @@ publishedAt: "June 29, 2020"
 description: "An interactive visualization of the Bednorz and Bednorz analytic sphere eversion using scroll-driven animation"
 maxWidth: 640px
 tags:
-  - topology
+  - math
   - visualization
   - webgl
-  - scrollytelling
