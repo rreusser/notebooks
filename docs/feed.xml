@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Sat, 31 Jan 2026 19:50:17 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 31 Jan 2026 20:15:45 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Fluid Instability with Stable Fluids</title>
@@ -60,7 +60,7 @@
       <link>https://rreusser.github.io/notebooks/simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/</guid>
       <pubDate>Sat, 10 Jan 2026 08:00:00 GMT</pubDate>
-      <description>WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Stockham FFT algorithm for 3-5x performance improvement over WebGL.</description>
+      <description>WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Cooley-Tukey FFT for 3-5x performance improvement over WebGL.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu.jpg" medium="image" />
     </item>
     <item>

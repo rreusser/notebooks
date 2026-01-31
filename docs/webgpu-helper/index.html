@@ -1489,6 +1489,7 @@ main h6 {
   border-radius: 8px;
   overflow: hidden;
   background: #f8f8f8;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
 }
@@ -1593,9 +1594,9 @@ a.index__tag:active {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 20px;
   padding: 10px 14px;
   background: #f5f5f5;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 6px;
 }
     .index__filter-label {
@@ -1649,10 +1650,95 @@ a.index__tag:active {
   top: 2px;
   width: 15px;
 }
+    /* Index controls (filter + view toggle) */
+    .index-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+    .index-view-toggle {
+  display: flex;
+  gap: 4px;
+}
+    .index-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  color: #999;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+    .index-view-btn svg {
+  display: block;
+}
+    .index-view-btn:hover {
+  border-color: #ccc;
+  color: #666;
+}
+    .index-view-btn.active {
+  background: #f0f0f0;
+  border-color: #ccc;
+  color: #333;
+}
+    /* Description (hidden in grid, shown in list) */
+    .index__description {
+  display: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #666;
+  margin: 8px 0 0 0;
+}
+    /* List view */
+    .index--list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 800px;
+}
+    .index--list .index__item {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+    .index--list .index__image-container {
+  flex-shrink: 0;
+  width: 180px;
+  border-radius: 6px 0 0 6px;
+}
+    .index--list .index__image {
+  border-radius: 6px 0 0 6px;
+}
+    .index--list .index__content {
+  flex: 1;
+  padding: 12px 16px;
+}
+    .index--list .index__title {
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+    .index--list .index__description {
+  display: block;
+}
     @media(max-width: 640px) {
   .index {
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+  .index--list .index__item {
+    flex-direction: column;
+  }
+  .index--list .index__image-container {
+    width: 100%;
   }
   .resource-links {
     justify-content: flex-start;

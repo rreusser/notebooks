@@ -1489,6 +1489,7 @@ main h6 {
   border-radius: 8px;
   overflow: hidden;
   background: #f8f8f8;
+  border: 1px solid rgba(0, 0, 0, 0.06);
   transition: transform 0.15s ease, box-shadow 0.15s ease;
   cursor: pointer;
 }
@@ -1593,9 +1594,9 @@ a.index__tag:active {
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 20px;
   padding: 10px 14px;
   background: #f5f5f5;
+  border: 1px solid rgba(0, 0, 0, 0.08);
   border-radius: 6px;
 }
     .index__filter-label {
@@ -1649,10 +1650,95 @@ a.index__tag:active {
   top: 2px;
   width: 15px;
 }
+    /* Index controls (filter + view toggle) */
+    .index-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+}
+    .index-view-toggle {
+  display: flex;
+  gap: 4px;
+}
+    .index-view-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 6px 8px;
+  border: 1px solid #ddd;
+  background: #fff;
+  cursor: pointer;
+  color: #999;
+  border-radius: 4px;
+  transition: all 0.15s ease;
+}
+    .index-view-btn svg {
+  display: block;
+}
+    .index-view-btn:hover {
+  border-color: #ccc;
+  color: #666;
+}
+    .index-view-btn.active {
+  background: #f0f0f0;
+  border-color: #ccc;
+  color: #333;
+}
+    /* Description (hidden in grid, shown in list) */
+    .index__description {
+  display: none;
+  font-size: 14px;
+  line-height: 1.5;
+  color: #666;
+  margin: 8px 0 0 0;
+}
+    /* List view */
+    .index--list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 800px;
+}
+    .index--list .index__item {
+  display: flex;
+  flex-direction: row;
+  align-items: stretch;
+  border-radius: 6px;
+  border: 1px solid rgba(0, 0, 0, 0.05);
+}
+    .index--list .index__image-container {
+  flex-shrink: 0;
+  width: 180px;
+  border-radius: 6px 0 0 6px;
+}
+    .index--list .index__image {
+  border-radius: 6px 0 0 6px;
+}
+    .index--list .index__content {
+  flex: 1;
+  padding: 12px 16px;
+}
+    .index--list .index__title {
+  font-size: 17px;
+  margin-bottom: 4px;
+}
+    .index--list .index__description {
+  display: block;
+}
     @media(max-width: 640px) {
   .index {
     grid-template-columns: 1fr;
     gap: 16px;
+  }
+  .index--list .index__item {
+    flex-direction: column;
+  }
+  .index--list .index__image-container {
+    width: 100%;
   }
   .resource-links {
     justify-content: flex-start;
@@ -1680,7 +1766,29 @@ a.index__tag:active {
     </div>
   </header>
   <div class="container">
-      <div id="index-filter-container"></div>
+      <div class="index-controls">
+        <div id="index-filter-container"></div>
+        <div class="index-view-toggle" role="group" aria-label="View options">
+          <button class="index-view-btn index-view-btn--grid active" data-view="grid" title="Grid view" aria-label="Grid view" aria-pressed="true">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <rect x="1" y="1" width="6" height="6" rx="1"></rect>
+              <rect x="9" y="1" width="6" height="6" rx="1"></rect>
+              <rect x="1" y="9" width="6" height="6" rx="1"></rect>
+              <rect x="9" y="9" width="6" height="6" rx="1"></rect>
+            </svg>
+          </button>
+          <button class="index-view-btn index-view-btn--list" data-view="list" title="List view" aria-label="List view" aria-pressed="false">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
+              <rect x="1" y="2" width="3" height="3" rx="0.5"></rect>
+              <rect x="6" y="2.5" width="9" height="2" rx="0.5"></rect>
+              <rect x="1" y="6.5" width="3" height="3" rx="0.5"></rect>
+              <rect x="6" y="7" width="9" height="2" rx="0.5"></rect>
+              <rect x="1" y="11" width="3" height="3" rx="0.5"></rect>
+              <rect x="6" y="11.5" width="9" height="2" rx="0.5"></rect>
+            </svg>
+          </button>
+        </div>
+      </div>
       <ul class="index" id="index-list">
         <li class="index__item" data-tags="WebGPU,Aerodynamics,PDE" data-path="stable-fluids/">
           <div class="index__image-container">
@@ -1696,6 +1804,7 @@ a.index__tag:active {
                 <a href="?tag=PDE" class="index__tag">PDE</a>
               </div>
             </div>
+            <p class="index__description">Interactive fluid flow with the Stable Fluids method of Jos Stam.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Physics,Aerodynamics" data-path="hess-smith-panel-solver/">
@@ -1711,6 +1820,7 @@ a.index__tag:active {
                 <a href="?tag=Aerodynamics" class="index__tag">Aerodynamics</a>
               </div>
             </div>
+            <p class="index__description">Interactive demonstration of using the Hess-Smith panel method to compute the aerodynamic flow around an airfoil</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGPU,PDE" data-path="multiscale-turing-patterns/">
@@ -1726,6 +1836,7 @@ a.index__tag:active {
                 <a href="?tag=PDE" class="index__tag">PDE</a>
               </div>
             </div>
+            <p class="index__description">Interactive multi-scale Turing patterns computed in WebGPU</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGPU,Chaos" data-path="strange-attractors-in-webgpu/">
@@ -1741,6 +1852,7 @@ a.index__tag:active {
                 <a href="?tag=Chaos" class="index__tag">Chaos</a>
               </div>
             </div>
+            <p class="index__description">Integrating strange attractors in WebGPU</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGPU,Graphics" data-path="webgpu-lines/">
@@ -1756,6 +1868,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">GPU-accelerated line rendering for WebGPU with instanced triangle strips</p>
           </div>
         </li>
         <li class="index__item" data-tags="Tutorial,Programming" data-path="plot-with-zoom/">
@@ -1771,6 +1884,7 @@ a.index__tag:active {
                 <a href="?tag=Programming" class="index__tag">Programming</a>
               </div>
             </div>
+            <p class="index__description">Interactive mathematical plotting in Observable Notebook Kit</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGPU,PDE" data-path="simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/">
@@ -1786,6 +1900,7 @@ a.index__tag:active {
                 <a href="?tag=PDE" class="index__tag">PDE</a>
               </div>
             </div>
+            <p class="index__description">WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Cooley-Tukey FFT for 3-5x performance improvement over WebGL.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Statistics" data-path="wilcoxon-signed-rank-test/">
@@ -1800,6 +1915,7 @@ a.index__tag:active {
                 <a href="?tag=Statistics" class="index__tag">Statistics</a>
               </div>
             </div>
+            <p class="index__description">An interactive explainer of the Wilcoxon signed-rank test for comparing paired performance measurements.</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGL,PDE" data-path="perfectly-matched-layers-for-the-wave-equation/">
@@ -1815,6 +1931,7 @@ a.index__tag:active {
                 <a href="?tag=PDE" class="index__tag">PDE</a>
               </div>
             </div>
+            <p class="index__description">An explanation and WebGL implementation of Perfectly Matched Layers for absorbing boundary conditions in the scalar wave equation.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Personal" data-path="reflecting-on-two-years-of-yoga/">
@@ -1829,6 +1946,7 @@ a.index__tag:active {
                 <a href="?tag=Personal" class="index__tag">Personal</a>
               </div>
             </div>
+            <p class="index__description">A personal reflection on consistent yoga practice with attendance visualizations over two years.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Personal,essay" data-path="of-noise-and-neighbors/">
@@ -1844,6 +1962,7 @@ a.index__tag:active {
                 <a href="?tag=essay" class="index__tag">essay</a>
               </div>
             </div>
+            <p class="index__description">A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Tutorial,WebGL" data-path="regl-canvas/">
@@ -1859,6 +1978,7 @@ a.index__tag:active {
                 <a href="?tag=WebGL" class="index__tag">WebGL</a>
               </div>
             </div>
+            <p class="index__description">Tips and tricks for instantiating and managing a REGL WebGL Canvas in Observable Notebooks 2.0.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Tutorial" data-path="hello-observable-notebooks-2/">
@@ -1873,6 +1993,7 @@ a.index__tag:active {
                 <a href="?tag=Tutorial" class="index__tag">Tutorial</a>
               </div>
             </div>
+            <p class="index__description">Kicking the tires of Observable's new notebook tooling!</p>
           </div>
         </li>
         <li class="index__item" data-tags="Chaos,Graphics" data-path="clifford-and-de-jong-attractors/">
@@ -1888,6 +2009,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">High-resolution visualization of Clifford and de Jong strange attractors with interactive zooming and trajectory-based coloring.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Chaos,Physics,WebGL" data-path="chaotic-magnetic-pendulum/">
@@ -1904,6 +2026,7 @@ a.index__tag:active {
                 <a href="?tag=WebGL" class="index__tag">WebGL</a>
               </div>
             </div>
+            <p class="index__description">Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Personal,Statistics" data-path="spring-training/">
@@ -1919,6 +2042,7 @@ a.index__tag:active {
                 <a href="?tag=Statistics" class="index__tag">Statistics</a>
               </div>
             </div>
+            <p class="index__description">Quantifying treadmill efforts (to the point of injury).</p>
           </div>
         </li>
         <li class="index__item" data-tags="Statistics" data-path="speed-climbing-world-record-progression/">
@@ -1933,6 +2057,7 @@ a.index__tag:active {
                 <a href="?tag=Statistics" class="index__tag">Statistics</a>
               </div>
             </div>
+            <p class="index__description">Plotting and extrapolating trends in competitive speed climbing</p>
           </div>
         </li>
         <li class="index__item" data-tags="Math,Numerics" data-path="shanks-transformation/">
@@ -1948,6 +2073,7 @@ a.index__tag:active {
                 <a href="?tag=Numerics" class="index__tag">Numerics</a>
               </div>
             </div>
+            <p class="index__description">The Shanks transformation for accelerating slowly-converging series, demonstrated on the arctangent formula for π.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Math,Graphics" data-path="cubic-basis-vs-hermite-interpolation/">
@@ -1963,6 +2089,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">Visually compare cubic interpolation using different basis functions.</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGL,Graphics" data-path="bicubic-texture-interpolation-using-linear-filtering/">
@@ -1978,6 +2105,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">Implementing smooth bicubic texture filtering using only 4 hardware-filtered samples instead of 16.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Math,Physics" data-path="knocking-down-the-gates-with-jacobi/">
@@ -1993,6 +2121,7 @@ a.index__tag:active {
                 <a href="?tag=Physics" class="index__tag">Physics</a>
               </div>
             </div>
+            <p class="index__description">Using Jacobi elliptic functions to solve an optimization problem about falling poles and large-amplitude pendulum dynamics.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Maps,Graphics" data-path="night-and-day/">
@@ -2008,6 +2137,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">Visualizing Earth's solar terminator on a Mapbox map using NASA Black Marble imagery and WebGL shaders.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Graphics,WebGL" data-path="fast-generalized-winding-numbers-in-2d/">
@@ -2023,6 +2153,7 @@ a.index__tag:active {
                 <a href="?tag=WebGL" class="index__tag">WebGL</a>
               </div>
             </div>
+            <p class="index__description">Computing generalized winding numbers in 2D using hierarchical Barnes-Hut approximation for fast inside-outside queries.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Math,Numerics" data-path="computing-pi-with-the-bailey-borwein-plouffe-formula/">
@@ -2038,6 +2169,7 @@ a.index__tag:active {
                 <a href="?tag=Numerics" class="index__tag">Numerics</a>
               </div>
             </div>
+            <p class="index__description">Computing hexadecimal digits of π at arbitrary positions using the Bailey-Borwein-Plouffe formula.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Chaos,Physics,WebGL" data-path="double-pendulum-map/">
@@ -2054,6 +2186,7 @@ a.index__tag:active {
                 <a href="?tag=WebGL" class="index__tag">WebGL</a>
               </div>
             </div>
+            <p class="index__description">Visualizing the phase space of simple and compound double pendulums, showing how chaos emerges from coupled nonlinear oscillations.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Chaos,Physics" data-path="malkus-waterwheel/">
@@ -2069,6 +2202,7 @@ a.index__tag:active {
                 <a href="?tag=Physics" class="index__tag">Physics</a>
               </div>
             </div>
+            <p class="index__description">Interactive simulation of a chaotic mechanical system whose dynamics map to the Lorenz attractor.</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGL,Graphics" data-path="point-cloud-point-opacity/">
@@ -2084,6 +2218,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">Deriving the formula for point opacity in large point cloud visualizations to maintain consistent visual density.</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGL,Graphics" data-path="adaptive-contouring-in-fragment-shaders/">
@@ -2099,6 +2234,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">GPU techniques for rendering adaptive contours using screen-space derivatives, with multi-octave blending and antialiasing.</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGPU,Graphics" data-path="webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm/">
@@ -2114,6 +2250,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">Computing Voronoi diagrams and distance fields on the GPU using the Jump Flooding Algorithm.</p>
           </div>
         </li>
         <li class="index__item" data-tags="math,visualization,webgl" data-path="sphere-eversion/">
@@ -2130,6 +2267,7 @@ a.index__tag:active {
                 <a href="?tag=webgl" class="index__tag">webgl</a>
               </div>
             </div>
+            <p class="index__description">An interactive visualization of the Bednorz and Bednorz analytic sphere eversion using scroll-driven animation</p>
           </div>
         </li>
         <li class="index__item" data-tags="Math" data-path="charmin-nanotubes-and-toiletpaperfullerenes/">
@@ -2144,6 +2282,7 @@ a.index__tag:active {
                 <a href="?tag=Math" class="index__tag">Math</a>
               </div>
             </div>
+            <p class="index__description">Interactive 3D simulation of nanotube and fullerene structures that can be physically constructed from toilet paper tubes.</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGPU,PDE" data-path="3d-reaction-diffusion/">
@@ -2159,6 +2298,7 @@ a.index__tag:active {
                 <a href="?tag=PDE" class="index__tag">PDE</a>
               </div>
             </div>
+            <p class="index__description">Gray-Scott reaction-diffusion in 3D using WebGPU compute shaders with volumetric rendering via instanced depth-sorted slices.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Math,Numerics" data-path="integers-in-single-precision-floating-point/">
@@ -2174,6 +2314,7 @@ a.index__tag:active {
                 <a href="?tag=Numerics" class="index__tag">Numerics</a>
               </div>
             </div>
+            <p class="index__description">Interactive bit-level visualization of how IEEE-754 single-precision floats represent integers.</p>
           </div>
         </li>
         <li class="index__item" data-tags="WebGPU,Physics,PDE" data-path="particle-mesh-gravity/">
@@ -2190,6 +2331,7 @@ a.index__tag:active {
                 <a href="?tag=PDE" class="index__tag">PDE</a>
               </div>
             </div>
+            <p class="index__description">Simulating 2D gravitational N-body dynamics using FFT-based Poisson solving on the GPU.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Chaos,Physics,WebGL" data-path="periodic-planar-three-body-orbits/">
@@ -2206,6 +2348,7 @@ a.index__tag:active {
                 <a href="?tag=WebGL" class="index__tag">WebGL</a>
               </div>
             </div>
+            <p class="index__description">Interactive catalog of periodic three-body orbits with topological classification via free group words.</p>
           </div>
         </li>
         <li class="index__item" data-tags="generative,gallery" data-path="multi-scale-turing-pattern-gallery-2/">
@@ -2221,6 +2364,7 @@ a.index__tag:active {
                 <a href="?tag=gallery" class="index__tag">gallery</a>
               </div>
             </div>
+            <p class="index__description">Another gallery of multi-scale Turing patterns</p>
           </div>
         </li>
         <li class="index__item" data-tags="generative,gallery" data-path="multi-scale-turing-pattern-gallery-1/">
@@ -2236,6 +2380,7 @@ a.index__tag:active {
                 <a href="?tag=gallery" class="index__tag">gallery</a>
               </div>
             </div>
+            <p class="index__description">A gallery of multi-scale Turing patterns</p>
           </div>
         </li>
         <li class="index__item" data-tags="Math,Graphics" data-path="aligning-3d-scans/">
@@ -2251,6 +2396,7 @@ a.index__tag:active {
                 <a href="?tag=Graphics" class="index__tag">Graphics</a>
               </div>
             </div>
+            <p class="index__description">Automatically orienting 3D scans by computing principal axes from surface normals using eigenvalue decomposition.</p>
           </div>
         </li>
         <li class="index__item" data-tags="Programming" data-path="things-i-learned-the-hard-way-using-react-native/">
@@ -2265,6 +2411,7 @@ a.index__tag:active {
                 <a href="?tag=Programming" class="index__tag">Programming</a>
               </div>
             </div>
+            <p class="index__description">A collection of lessons learned from eight months of React Native development - environment setup, Redux patterns, performance optimization, and cross-platform gotchas.</p>
           </div>
         </li>
         <li class="index__item" data-tags="essay,programming" data-path="a-series-of-unfortunate-things-i-programmed-one-time/">
@@ -2280,6 +2427,7 @@ a.index__tag:active {
                 <a href="?tag=programming" class="index__tag">programming</a>
               </div>
             </div>
+            <p class="index__description">Reflections on a decade of programming projects and the search for meaning in complexity</p>
           </div>
         </li>
       </ul>
@@ -2287,6 +2435,32 @@ a.index__tag:active {
         (function() {
           const urlParams = new URLSearchParams(window.location.search);
           const activeTag = urlParams.get('tag');
+          const indexList = document.getElementById('index-list');
+          const viewBtns = document.querySelectorAll('.index-view-btn');
+
+          // View toggle
+          const savedView = localStorage.getItem('indexView') || 'grid';
+          if (savedView === 'list') {
+            indexList.classList.add('index--list');
+            viewBtns.forEach(btn => {
+              const isActive = btn.dataset.view === 'list';
+              btn.classList.toggle('active', isActive);
+              btn.setAttribute('aria-pressed', isActive);
+            });
+          }
+
+          viewBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+              const view = btn.dataset.view;
+              indexList.classList.toggle('index--list', view === 'list');
+              viewBtns.forEach(b => {
+                const isActive = b.dataset.view === view;
+                b.classList.toggle('active', isActive);
+                b.setAttribute('aria-pressed', isActive);
+              });
+              localStorage.setItem('indexView', view);
+            });
+          });
 
           // Add click handlers to cards
           const items = document.querySelectorAll('.index__item');
