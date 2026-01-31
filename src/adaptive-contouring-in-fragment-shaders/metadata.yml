@@ -1,4 +1,7 @@
 publishedAt: "November 21, 2020"
-description: "Techniques for drawing uniform-width contour lines using screen-space derivatives in WebGL fragment shaders."
+description: "GPU techniques for rendering adaptive contours using screen-space derivatives, with multi-octave blending and antialiasing."
 maxWidth: 640px
 observableUrl: https://observablehq.com/@rreusser/locally-scaled-domain-coloring-part-1-contour-plots
+tags:
+  - WebGL
+  - Graphics

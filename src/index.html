@@ -7,21 +7,34 @@
   <script id="2" type="module">
     const dataEl = document.getElementById('notebooksIndexData');
     const notebooks = dataEl ? JSON.parse(dataEl.textContent) : [];
+
+    // Get active tag from URL query parameter
+    const urlParams = new URLSearchParams(window.location.search);
+    const activeTag = urlParams.get('tag');
   </script>
   <script id="3" type="module">
     const notebooksWithImages = notebooks.map((nb) => ({
       ...nb,
       imageUrl: nb.imageExt ? `./${nb.path}meta.${nb.imageExt}` : null
     }));
+
+    // Filter notebooks by active tag if one is selected
+    const filteredNotebooks = activeTag
+      ? notebooksWithImages.filter(nb => nb.tags?.includes(activeTag))
+      : notebooksWithImages;
   </script>
   <script id="4" type="module">
+    function renderTag(tag) {
+      return html`<a href="?tag=${encodeURIComponent(tag)}" class="index__tag" onclick="event.stopPropagation()">${tag}</a>`;
+    }
+
     function renderCard(nb) {
       const imageContent = nb.imageUrl
         ? html`<img class="index__image" src="${nb.imageUrl}" alt="" loading="lazy" />`
         : html`<div class="index__placeholder"></div>`;
 
       const tagsContent = nb.tags?.length
-        ? html`<div class="index__tags">${nb.tags.map(tag => html`<span class="index__tag">${tag}</span>`)}</div>`
+        ? html`<div class="index__tags">${nb.tags.map(tag => renderTag(tag))}</div>`
         : '';
 
       return html`<li class="index__item">
@@ -40,6 +53,20 @@
       </li>`;
     }
 
-    display(html`<ul class="index">${notebooksWithImages.map(renderCard)}</ul>`);
+    // Render active tag filter if present
+    const activeFilterHtml = activeTag
+      ? html`<div class="index__active-filter">
+          <span class="index__filter-label">Filtered by:</span>
+          <span class="index__filter-tag">
+            ${activeTag}
+            <a href="./" class="index__filter-remove" aria-label="Remove filter">×</a>
+          </span>
+        </div>`
+      : '';
+
+    display(html`
+      ${activeFilterHtml}
+      <ul class="index">${filteredNotebooks.map(renderCard)}</ul>
+    `);
   </script>
 </notebook>

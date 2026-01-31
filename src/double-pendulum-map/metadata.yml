@@ -1,5 +1,7 @@
-description: Visualizing every double pendulum configuration at the same time.
 publishedAt: May 14, 2021
+description: Visualizing the phase space of simple and compound double pendulums, showing how chaos emerges from coupled nonlinear oscillations.
 observableUrl: https://observablehq.com/@rreusser/the-double-pendulum-fractal
 maxWidth: 640px
-
+tags:
+  - Chaos
+  - Physics

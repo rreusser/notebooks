@@ -601,6 +601,84 @@ function createCamera (regl, props_) {
       }
     });
 
+    // Touch support for mobile
+    var touchId = null;
+    var touchStartDistance = null;
+    var initialDistance = null;
+
+    source.addEventListener('touchstart', function (ev) {
+      if (ev.touches.length === 1) {
+        // Single touch - rotation
+        touchId = ev.touches[0].identifier;
+        prevX = ev.touches[0].clientX;
+        prevY = ev.touches[0].clientY;
+        ev.preventDefault();
+      } else if (ev.touches.length === 2 && !cameraState.noZoom) {
+        // Two finger pinch - zoom
+        touchId = null;
+        var dx = ev.touches[0].clientX - ev.touches[1].clientX;
+        var dy = ev.touches[0].clientY - ev.touches[1].clientY;
+        touchStartDistance = Math.sqrt(dx * dx + dy * dy);
+        initialDistance = cameraState.distance;
+        ev.preventDefault();
+      }
+    }, { passive: false });
+
+    source.addEventListener('touchmove', function (ev) {
+      if (ev.touches.length === 1 && touchId !== null) {
+        // Single touch - rotation
+        var touch = null;
+        for (var i = 0; i < ev.touches.length; i++) {
+          if (ev.touches[i].identifier === touchId) {
+            touch = ev.touches[i];
+            break;
+          }
+        }
+        if (touch) {
+          var dx = (touch.clientX - prevX) / getWidth();
+          var dy = (touch.clientY - prevY) / getHeight();
+
+          cameraState.dtheta += cameraState.rotationSpeed * 4.0 * dx;
+          cameraState.dphi += cameraState.rotationSpeed * 4.0 * dy;
+          cameraState.dirty = true;
+
+          prevX = touch.clientX;
+          prevY = touch.clientY;
+        }
+        ev.preventDefault();
+      } else if (ev.touches.length === 2 && touchStartDistance !== null && !cameraState.noZoom) {
+        // Two finger pinch - zoom
+        var dx = ev.touches[0].clientX - ev.touches[1].clientX;
+        var dy = ev.touches[0].clientY - ev.touches[1].clientY;
+        var currentDistance = Math.sqrt(dx * dx + dy * dy);
+        var scale = touchStartDistance / currentDistance;
+        cameraState.distance = initialDistance + Math.log(scale) * cameraState.zoomSpeed;
+        cameraState.dirty = true;
+        ev.preventDefault();
+      }
+    }, { passive: false });
+
+    source.addEventListener('touchend', function (ev) {
+      if (ev.touches.length === 0) {
+        touchId = null;
+        touchStartDistance = null;
+        initialDistance = null;
+      } else if (ev.touches.length === 1) {
+        // Went from 2 fingers to 1 - reset to rotation mode
+        touchStartDistance = null;
+        initialDistance = null;
+        touchId = ev.touches[0].identifier;
+        prevX = ev.touches[0].clientX;
+        prevY = ev.touches[0].clientY;
+      }
+    });
+
+    source.addEventListener('touchcancel', function (ev) {
+      touchId = null;
+      touchStartDistance = null;
+      initialDistance = null;
+    });
+
     // Keep wheel on source element to avoid hijacking page scroll
     // Only attach if zoom is enabled
     if (!cameraState.noZoom) {

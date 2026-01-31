@@ -24,7 +24,7 @@ At [Standard Cyborg](https://www.standardcyborg.com), we use 3D scans from a num
   </script>
 
   <script id="figure1-container" type="text/x-typescript">
-    const figure1Container = html`<figure id="figure1">
+    const figure1Container = html`<figure id="figure1" style="width: 100%; max-width: none;">
       <div id="figure1-canvas" style="position: relative; overflow: hidden; width: 100%; max-width: 500px; height: 300px; margin: 0 auto;"></div>
       <figcaption>Not an actual scan of a knee, but the below the knee (BK) scans users process tend to look very similar and tend to enter the system in no particular orientation.</figcaption>
     </figure>`;
@@ -42,7 +42,7 @@ Most of the scans for which people use our software (and limbs in general, reall
   </script>
 
   <script id="figure2-container" type="text/x-typescript">
-    const figure2Container = html`<figure id="figure2">
+    const figure2Container = html`<figure id="figure2" style="width: 100%; max-width: none;">
       <div id="figure2-canvas" style="position: relative; overflow: hidden; width: 100%; max-width: 500px; height: 400px; margin: 0 auto;"></div>
       <figcaption>Orienting a scan by the longest axis isn't entirely without merit, but it's not very robust.</figcaption>
     </figure>`;
@@ -55,10 +55,10 @@ This orientation seems friendlier than what we started with, but it doesn't take
 
   <script id="figure3-container" type="text/x-typescript">
     const figure3Container = html`<figure id="figure3" style="text-align: center;">
-      <div style="display: inline-block; vertical-align: middle;">
-        <div id="figure3-canvas" style="position: relative; overflow: hidden; width: 350px; height: 350px;"></div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1rem;">
+        <div id="figure3-canvas" style="position: relative; overflow: hidden; width: 100%; max-width: 350px; height: 350px;"></div>
+        <div id="figure3-controls" style="text-align: left; width: 100%; max-width: 280px;"></div>
       </div>
-      <div id="figure3-controls" style="text-align: left; margin-left: auto; margin-right: auto; display: inline-block; min-width: 280px; vertical-align: middle;"></div>
       <figcaption>We'd like it if our algorithm always picked the axis of the cylinder, but the longest axis doesn't accomplish that.</figcaption>
     </figure>`;
     display(figure3Container);
@@ -69,7 +69,7 @@ Failure of this basic sanity check suggests the overall orientation of these sca
   </script>
 
   <script id="figure6-container" type="text/x-typescript">
-    const figure6Container = html`<figure id="figure6">
+    const figure6Container = html`<figure id="figure6" style="width: 100%; max-width: none;">
       <div id="figure6-canvas" style="position: relative; overflow: hidden; width: 100%; max-width: 500px; height: 400px; margin: 0 auto;"></div>
       <figcaption>As an educated guess, we instead aim to find an <span style="color:#cc334b">alignment axis</span> as perpendicular as possible to the <span style="color:#384e73">surface normal vectors</span>.</figcaption>
     </figure>`;
@@ -95,7 +95,7 @@ We might have a reasonable objective function here, but to see why it feels like
   </script>
 
   <script id="figure4-container" type="text/x-typescript">
-    const figure4Container = html`<figure id="figure4">
+    const figure4Container = html`<figure id="figure4" style="width: 100%; max-width: none;">
       <div id="figure4-canvas" style="position: relative; overflow: hidden; width: 100%; max-width: 500px; height: 350px; margin: 0 auto;"></div>
       <figcaption>The surface normal vectors of a cylinder are everywhere perpendicular to its axis so that ${tex`f(\vec{\xi}) = 0`}. A cylinder passes the test!</figcaption>
     </figure>`;
@@ -181,10 +181,10 @@ You can see the final result below. Note that the two remaining axes also align 
 
   <script id="figure5-container" type="text/x-typescript">
     const figure5Container = html`<figure id="figure5" style="text-align: center;">
-      <div style="display: inline-block; vertical-align: middle;">
-        <div id="figure5-canvas" style="position: relative; overflow: hidden; width: 400px; height: 500px;"></div>
+      <div style="display: flex; flex-wrap: wrap; justify-content: center; align-items: center; gap: 1rem;">
+        <div id="figure5-canvas" style="position: relative; overflow: hidden; width: 100%; max-width: 400px; height: 500px;"></div>
+        <div id="figure5-controls" style="text-align: left; width: 100%; max-width: 300px;"></div>
       </div>
-      <div id="figure5-controls" style="text-align: left; margin-left: auto; margin-right: auto; display: inline-block; min-width: 300px; vertical-align: middle;"></div>
       <figcaption>Adjust the sliders and observe the effect it has upon the computed alignment.</figcaption>
     </figure>`;
     display(figure5Container);

@@ -1,0 +1,571 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Sphere Eversion</title>
+
+  <script id="styles" type="text/html">
+    <style>
+      .scrollyteller {
+        position: relative;
+        width: 100vw;
+        margin-left: calc(-50vw + 50%);
+      }
+
+      .scrollyteller__background {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100vh;
+        z-index: 0;
+        pointer-events: none;
+      }
+
+      .scrollyteller__background.is-fixed {
+        position: fixed;
+      }
+
+      .scrollyteller__background.is-bottom {
+        position: absolute;
+        top: auto;
+        bottom: 0;
+      }
+
+      .scrollyteller__background .scrollyteller__fixed-content {
+        pointer-events: auto;
+      }
+
+      .scrollyteller__fixed-content {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+      }
+
+      .scrollyteller__foreground {
+        position: relative;
+        z-index: 1;
+        pointer-events: none;
+      }
+
+      .scrollyteller__frame {
+        height: 100vh;
+        position: relative;
+      }
+
+      .scrollyteller__caption {
+        position: absolute;
+        background: rgba(255, 255, 255, 0.85);
+        padding: 12px 16px;
+        font-size: 1.1em;
+        line-height: 1.5;
+        max-width: 300px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        border-radius: 4px;
+        pointer-events: auto;
+      }
+
+      figure {
+        margin: 2em 0;
+      }
+
+      figcaption {
+        max-width: 400px;
+        margin: 1em auto 0;
+        font-style: italic;
+        text-align: center;
+      }
+
+      .surface-figure {
+        position: relative;
+      }
+    </style>
+  </script>
+
+  <script id="intro" type="text/markdown">
+Topology is the study of the properties of geometric objects which aren't changed by continuous deformation. A standard low-grade math joke is that topologists consider a coffee mug and a doughnut equivalent because they're both torii---(pauses for laughter)---one can be continuously deformed into the other, called a *homeomorphism*, without cutting or creasing the surface.
+  </script>
+
+  <script id="mug-figure" type="text/html">
+    <figure>
+      <img src="https://upload.wikimedia.org/wikipedia/commons/2/26/Mug_and_Torus_morph.gif" alt="Homeomorphism between a doughnut and a mug" style="max-width: 100%;" />
+      <figcaption>
+        Homeomorphism between a doughnut and a mug. Source: <a href="https://commons.wikimedia.org/wiki/File:Mug_and_Torus_morph.gif">Wikipedia</a>
+      </figcaption>
+    </figure>
+  </script>
+
+  <script id="intro-2" type="text/markdown">
+In this post, we play a topological game called *eversion*. Our objective is simple: turn a sphere inside out without cutting or creasing it. We consider a sphere, though a torus is also an [interesting challenge](https://www.youtube.com/watch?v=kQcy5DvpvlM).
+
+That a sphere (specifically the two-sphere ${tex`S^2`} embedded in three dimensional space ${tex`\mathbb{R}^3`}) can be turned inside out was proved by Stephen Smale in 1957. However the proof is a proof of existence, offering no particular guidance for those hoping to perform the feat.
+  </script>
+
+  <script id="2d-figure" type="text/html">
+    <figure>
+      <img src="https://raw.githubusercontent.com/rreusser/explorations/master/posts/sphere-eversion/static/images/2d.jpg" alt="Circle eversion in two dimensions is impossible" style="max-width: 450px; width: 100%;" />
+      <figcaption>
+        Circle eversion in two dimensions is impossible. We always get stuck!
+      </figcaption>
+    </figure>
+  </script>
+
+  <script id="intro-3" type="text/markdown">
+We should take a moment to appreciate that the analogous problem of everting a circle in two dimensions is impossible. The figure above illustrates that there's really nothing to do but introduce loops which we can't then get rid of. Don't take my word for it though! The classic video [Outside In](https://www.youtube.com/watch?v=wO61D9x6lNY) has a much more involved discussion of what happens when we try.
+
+Since the original proof, a number of realizations of sphere eversion have been discovered, ranging in generality and complexity. This post follows the method of Bednorz and Bednorz from [Analytic sphere eversion using ruled surfaces](https://arxiv.org/abs/1711.10466).
+
+Before stepping through the eversion, we lay out our ground rules, of which there are just two: We may not cut the surface, and the surface must always remain smooth. Note that unlike physical objects, self-intersection *is* permitted.
+
+## Bednorz' Sphere Eversion
+
+We start with a full presentation of the sphere eversion of Bednorz and Bednorz in [Analytic sphere eversion using ruled surfaces](https://arxiv.org/abs/1711.10466). It goes by quickly, so we'll then break it down and try to understand it a bit better. Along the way, you can drag the slider at the top to examine cross-sections.
+  </script>
+
+  <script id="regl-import" type="module">
+    import createREGL from 'npm:regl@2.1.1';
+    window.createREGL = createREGL;
+  </script>
+
+  <script id="scrollyteller-1" type="module">
+    await new Promise(r => setTimeout(r, 100));
+
+    {
+      const { createCamera } = await import('./lib/camera.js');
+      const { createDrawSphere } = await import('./lib/draw-sphere.js');
+      const { createSequencer, linear } = await import('./lib/sequencer.js');
+      const Q = 2/3;
+      const t0 = 1.0;
+
+      const sequencer = createSequencer({
+        section: [{ t: 0, value: 10 }],
+        shittyEversion: [{ t: 0, value: 0 }],
+        color: [{ t: t0 + 0, value: 0.0 }, { t: t0 + 6, value: 1.0, ease: linear }],
+        strips: [{ t: 0, value: 0 }],
+        n: [{ t: t0 + 0, value: 2 }],
+        posClip: [{ t: t0 + 0, value: 1 }],
+        negClip: [{ t: t0 + 0, value: 1 }],
+        stereo: [{ t: t0 + 0.5, value: 1 }],
+        fatEdge: [{ t: t0, value: 0 }],
+        rotation: [{ t: t0 - 3, value: 0 }, { t: t0 + 0, value: 0 }, { t: t0 + 5.5, value: 0 }, { t: t0 + 9, value: 0 }],
+        translation: [{ t: t0 + 0, value: 0.5 }, { t: t0 + 0.7, value: 1.4 }, { t: t0 + 2, value: 1 }, { t: t0 + 4, value: 1 }, { t: t0 + 5.3, value: 1.4 }, { t: t0 + 6, value: 0.5 }],
+        scale: [{ t: t0 + 0, value: 1.5 / Math.pow(Q, 0.5) }, { t: t0 + 1, value: 0.6 }, { t: t0 + 1.5, value: 0.7 }, { t: t0 + 4.5, value: 0.7 }, { t: t0 + 5, value: 0.6 }, { t: t0 + 6, value: 1.5 / Math.pow(Q, 0.5) }],
+        limit: [{ t: 0, value: 0 }],
+        t: [{ t: t0 + 0, value: 1 / Q }, { t: t0 + 2, value: 1 / Q }, { t: t0 + 4, value: -1 / Q }, { t: t0 + 6, value: -1 / Q }],
+        alpha: [{ t: t0 + 0, value: 1e-5 }, { t: t0 + 1, value: 1 }, { t: t0 + 5, value: 1 }, { t: t0 + 6, value: 1e-5 }],
+        beta: [{ t: t0 + 0, value: 1 }, { t: t0 + 1, value: 1 / 20 }, { t: t0 + 5, value: 1 / 20 }, { t: t0 + 6, value: 1 }],
+        q: [{ t: t0 + 0, value: Q }],
+        eta: [{ t: t0 + 0, value: 1 }],
+        xi: [{ t: t0 + 0, value: 0 }, { t: t0 + 2, value: 1 }, { t: t0 + 4, value: 1 }, { t: t0 + 5, value: 0 }, { t: t0 + 6, value: 0 }],
+        lambda: [{ t: t0 + 0, value: 0 }, { t: t0 + 2, value: 1 }, { t: t0 + 4, value: 1 }, { t: t0 + 6, value: 0 }],
+        omega: [{ t: t0 + 0, value: 2 }],
+        Qinv: [{ t: t0 + 0, value: 1 / Q }],
+      });
+
+      const frameCount = 8;
+      const captions = [
+        { text: "We start with a sphere.", left: "10%", bottom: "10%" },
+        { text: "We push on one pole to form an indentation.", right: "10%", bottom: "10%" },
+        { text: "And add a bit of twist.", left: "10%", bottom: "30%" },
+        { text: "Here's where the magic happens. We swap the inner and outer shells, being very careful not to introduce any creases.", right: "5%", bottom: "10%" },
+        { text: "Don't worry! We'll look at this step more carefully below.", right: "5%", bottom: "10%" },
+        { text: "Upon removing the indentation, we find the inside of the sphere has become the outside!", left: "10%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+      ];
+
+      const container = html`<div class="scrollyteller" id="scrollyteller-1"></div>`;
+      const background = html`<div class="scrollyteller__background"></div>`;
+      const canvasContainer = html`<div class="scrollyteller__fixed-content" id="eversion-canvas-1"></div>`;
+
+      const foreground = html`<div class="scrollyteller__foreground"></div>`;
+
+      for (let i = 0; i < frameCount; i++) {
+        const caption = captions[i];
+        const frame = html`<div class="scrollyteller__frame">
+          ${caption.text ? Object.assign(html`<div class="scrollyteller__caption" style="
+            ${caption.left ? `left: ${caption.left};` : ''}
+            ${caption.right ? `right: ${caption.right};` : ''}
+            ${caption.top ? `top: ${caption.top};` : ''}
+            ${caption.bottom ? `bottom: ${caption.bottom};` : ''}
+          "></div>`, {innerHTML: caption.text}) : ''}
+        </div>`;
+        foreground.appendChild(frame);
+      }
+
+      background.appendChild(canvasContainer);
+      container.appendChild(background);
+      container.appendChild(foreground);
+
+      display(container);
+
+      await new Promise(r => setTimeout(r, 100));
+
+      const canvas = document.createElement('canvas');
+      canvas.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; cursor: grab;';
+      canvasContainer.appendChild(canvas);
+
+      const quality = 'medium';
+      let preferredDPI = quality === 'low' ? 1 : quality === 'high' ? 2.0 : 1.5;
+      let preferredRes = quality === 'low' ? 75 : quality === 'high' ? 255 : 150;
+
+      const dpi = Math.min(preferredDPI, window.devicePixelRatio);
+      canvas.width = Math.floor(canvasContainer.offsetWidth * dpi);
+      canvas.height = Math.floor(canvasContainer.offsetHeight * dpi);
+
+      const regl = createREGL({ canvas, pixelRatio: dpi, extensions: ['OES_standard_derivatives'], attributes: { preserveDrawingBuffer: true } });
+      const camera = createCamera(regl, { distance: 6, damping: 0, near: 0.1, far: 10.0, theta: 0.1, phi: 0.7, noScroll: true, wheel: false });
+      const drawSphere = createDrawSphere(regl, preferredRes);
+
+      let dirty = true;
+      let smoothedPosition = 0;
+
+      function getScrollProgress() {
+        const rect = container.getBoundingClientRect();
+        const scrollHeight = container.offsetHeight - window.innerHeight;
+        if (scrollHeight <= 0) return 0;
+        return Math.max(0, Math.min(1, -rect.top / scrollHeight));
+      }
+
+      function updateBackgroundPosition() {
+        const rect = container.getBoundingClientRect();
+        const topAboveViewport = rect.top <= 0;
+        const bottomBelowViewport = rect.bottom >= window.innerHeight;
+
+        if (topAboveViewport && bottomBelowViewport) {
+          // Fixed: scrollyteller spans the viewport
+          background.classList.add('is-fixed');
+          background.classList.remove('is-bottom');
+        } else if (topAboveViewport && !bottomBelowViewport) {
+          // Bottom: scrollyteller bottom is above viewport bottom
+          background.classList.remove('is-fixed');
+          background.classList.add('is-bottom');
+        } else {
+          // Top: scrollyteller top is below viewport top (scrolling in)
+          background.classList.remove('is-fixed');
+          background.classList.remove('is-bottom');
+        }
+
+        return rect.top < window.innerHeight && rect.bottom > 0;
+      }
+
+      const frame = regl.frame(() => {
+        // Update position state and check if in view
+        const inView = updateBackgroundPosition();
+        if (!inView) return;
+
+        const targetPosition = getScrollProgress();
+        const scrolling = Math.abs(targetPosition - smoothedPosition) > 0.0001;
+        smoothedPosition += (targetPosition - smoothedPosition) * 0.1;
+        sequencer.setPosition(smoothedPosition * frameCount);
+        const state = sequencer.getState();
+        const ar = canvas.offsetWidth / canvas.offsetHeight;
+        const scale = ar > 1.0 ? 1.0 : ar;
+        camera((cameraState) => {
+          if (!dirty && !cameraState.dirty && !scrolling) return;
+          regl.clear({ color: [1, 1, 1, 1], depth: 1 });
+          const props = { ...state, scale: state.scale * scale };
+          drawSphere({ wire: false, ...props });
+          drawSphere({ wire: true, ...props });
+          dirty = false;
+        });
+      });
+
+      function onResize() {
+        canvas.width = Math.floor(canvasContainer.offsetWidth * dpi);
+        canvas.height = Math.floor(canvasContainer.offsetHeight * dpi);
+        camera.taint();
+        dirty = true;
+      }
+      window.addEventListener('resize', onResize);
+
+      invalidation.then(() => { frame.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); regl.destroy(); });
+    }
+  </script>
+
+  <script id="after-scrolly-1" type="text/markdown">
+Success! But that all happened very quickly. What happens at the top is clearly the key. In some sense, we do simply push one end of the sphere right through the other, but we need some clever tricks to keep the hole at the top smooth.
+
+Bednorz and Bednorz break down the method as follows. As long as nothing topologically interesting happens at the poles of the sphere, we can simply remove them from the equation and focus on a cylindrical band around the equator. All that's left then is to manipulate the cylindrical band carefully and replace the poles at the end of the process.
+
+The key element of their method is a family of *[ruled surfaces](https://mathworld.wolfram.com/RuledSurface.html)*, or surfaces swept out by a straight line moving through space, which accomplish this task. They propose a family parameterized by time ${tex`t`}. They're careful to prove the surface remains smooth during the process, but we'll remain content to get to our destination and visually check the smoothness along the way.
+
+They propose the family of ruled surfaces given by the equations
+
+${tex.block`
+\begin{aligned}
+x &= t \cos \phi + p \sin (n - 1) \phi - h \sin \phi \\
+y &= t \sin \phi + p \cos (n - 1) \phi + h \cos \phi \\
+z &= h \sin n \phi - (t / n) \cos n \phi - qth.
+\end{aligned}
+`}
+
+The variable ${tex`\phi`} parameterizes the polar angle of the cylinder from ${tex`-\pi`} to ${tex`\pi`} while ${tex`h`} parameterizes the vertical dimension of the cylinder. They suggest ${tex`q = 2/3`} and ${tex`p = 1 - |qt|`}.
+  </script>
+
+  <script id="surface-controls" type="module">
+    const tSlider = Inputs.range([-1.5, 1.5], { value: 1.5, step: 0.01, label: "t" });
+    const nSlider = Inputs.range([2, 4], { value: 2, step: 1, label: "n" });
+    display(html`<div>${tSlider}${nSlider}</div>`);
+  </script>
+
+  <script id="surface-figure" type="module">
+    await new Promise(r => setTimeout(r, 100));
+
+    {
+      const { createCamera } = await import('./lib/camera.js');
+      const { createDrawSphere } = await import('./lib/draw-sphere.js');
+      const Q = 2/3;
+      const container = html`<figure class="surface-figure" style="width: 100%; height: min(90vw, 700px); position: relative;">
+        <div id="surface-canvas-container" style="position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 40px);"></div>
+        <figcaption style="position: absolute; bottom: 10px; left: 0; right: 0;">The proposed cylindrical ruled surface.</figcaption>
+      </figure>`;
+      display(container);
+
+      await new Promise(r => setTimeout(r, 100));
+
+      const canvasContainer = container.querySelector('#surface-canvas-container');
+      const canvas = document.createElement('canvas');
+      canvas.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; cursor: grab;';
+      canvasContainer.appendChild(canvas);
+
+      const quality = 'medium';
+      let preferredDPI = quality === 'low' ? 1 : quality === 'high' ? 2.0 : 1.5;
+      let preferredRes = quality === 'low' ? 75 : quality === 'high' ? 255 : 150;
+
+      const dpi = Math.min(preferredDPI, window.devicePixelRatio);
+      // Ensure we have valid dimensions
+      const containerWidth = canvasContainer.offsetWidth || 600;
+      const containerHeight = canvasContainer.offsetHeight || 500;
+      canvas.width = Math.floor(containerWidth * dpi);
+      canvas.height = Math.floor(containerHeight * dpi);
+
+      const regl = createREGL({ canvas, pixelRatio: dpi, extensions: ['OES_standard_derivatives'], attributes: { preserveDrawingBuffer: true } });
+      const camera = createCamera(regl, { distance: 6, damping: 0, near: 0.1, far: 100.0, theta: 0.1, phi: 0.4, noScroll: true, wheel: true });
+      const drawSphere = createDrawSphere(regl, preferredRes);
+
+      let dirty = true;
+      const state = {
+        section: 10, shittyEversion: 0, color: 0, strips: 0, n: 2,
+        posClip: 0.5, negClip: 0.5, stereo: 0, fatEdge: 0, rotation: 0,
+        translation: 0, scale: 0.45, t: 1 / Q - 1e-4, alpha: 1, beta: 1 / 20,
+        q: Q, eta: 1, xi: 0, lambda: 1, omega: 2, Qinv: 1 / Q,
+      };
+
+      tSlider.addEventListener('input', () => { state.t = tSlider.value; dirty = true; });
+      nSlider.addEventListener('input', () => {
+        state.n = nSlider.value;
+        if (state.n === 2) { state.scale = 0.45; state.posClip = 0.5; state.negClip = 0.5; }
+        else if (state.n === 3) { state.scale = 0.6; state.posClip = 0.4; state.negClip = 0.4; }
+        else { state.scale = 0.75; state.posClip = 0.3; state.negClip = 0.3; }
+        dirty = true;
+      });
+
+      const frame = regl.frame(() => {
+        const ar = canvas.offsetWidth / canvas.offsetHeight;
+        const scale = ar > 1.0 ? 1.0 : ar;
+        camera((cameraState) => {
+          if (!dirty && !cameraState.dirty) return;
+          regl.clear({ color: [1, 1, 1, 1], depth: 1 });
+          const props = { ...state, scale: state.scale * scale };
+          drawSphere({ wire: false, ...props });
+          drawSphere({ wire: true, ...props });
+          dirty = false;
+        });
+      });
+
+      function onResize() {
+        canvas.width = Math.floor(canvasContainer.offsetWidth * dpi);
+        canvas.height = Math.floor(canvasContainer.offsetHeight * dpi);
+        camera.taint();
+        dirty = true;
+      }
+      window.addEventListener('resize', onResize);
+
+      invalidation.then(() => { frame.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); regl.destroy(); });
+    }
+  </script>
+
+  <script id="surface-explanation" type="text/markdown">
+Adjust the time parameter ${tex`t`} and observe the shape of the surface. There are two particular things to note. First, the surface always remains smooth, despite self-intersections, and second, the top and bottom of the edges of the cylinder swap places (with a bit of rotation which doesn't trouble us) as we move from ${tex`t = -1.5`} to ${tex`t = 1.5`}.
+
+Note also that although we'll visualize eversion with ${tex`n = 2`}, the eversion also works for values greater than two.
+
+Of course we want to evert a full sphere and not just a cylindrical band, so the remainder of their paper focuses on using stereographic projections to smoothly close the caps of the cylindrical band and maintain the topology of the sphere during the entire process. The full eversion is illustrated above, but let's now step back through it, taking a bit more care to focus on the region of interest.
+  </script>
+
+  <script id="scrollyteller-2" type="module">
+    await new Promise(r => setTimeout(r, 100));
+
+    {
+      const { createCamera } = await import('./lib/camera.js');
+      const { createDrawSphere } = await import('./lib/draw-sphere.js');
+      const { createSequencer, linear } = await import('./lib/sequencer.js');
+      const Q = 2/3;
+      const t0 = 1.0, t1 = t0 + 2.0, t1p = t1 + 1.0, t2 = t1 + 7.0, t3 = t2 + 2.0, t4 = t3 + 2.0, t5 = t4 + 2.0;
+
+      const sequencer = createSequencer({
+        color: [{ t: t0 + 0, value: 0.0 }, { t: t0 + 6, value: 1.0, ease: linear }],
+        n: [{ t: t0 + 0, value: 2 }],
+        strips: [{ t: 0, value: 0 }],
+        rotation: [{ t: t0 - 3, value: 0 }, { t: t0 + 0, value: 0 }, { t: t1 + 6, value: 0 }, { t: t1 + 9, value: 0 }],
+        section: [{ t: 0, value: 10 }],
+        translation: [{ t: t0 + 0.5, value: 1 }, { t: t1, value: 0 }, { t: t4, value: 0 }, { t: t5 - 0.5, value: 1 }],
+        scale: [{ t: t0 + 1, value: 0.5 }, { t: t1, value: 0.4 }, { t: t4, value: 0.4 }, { t: t5 - 1, value: 0.5 }],
+        stereo: [{ t: t0 + 0.75, value: 1 }, { t: t1, value: 0 }, { t: t4, value: 0 }, { t: t5 - 0.75, value: 1 }],
+        posClip: [{ t: t0 + 0.25, value: 1 }, { t: t0 + 1.25, value: 0.5 }, { t: t5 - 1.0, value: 0.5 }, { t: t5 + 0.5, value: 1 }],
+        negClip: [{ t: t0 + 0.0, value: 1 }, { t: t0 + 1.0, value: 0.5 }, { t: t5 - 1.5, value: 0.5 }, { t: t5 + 0.0, value: 1 }],
+        fatEdge: [{ t: t1 + 0.25, value: 0 }, { t: t1 + 0.5, value: 1 }, { t: t4 - 0.5, value: 1 }, { t: t4 + 0.25, value: 0 }],
+        shittyEversion: [{ t: t1p, value: 0 }, { t: t1p + 1.0, value: 1 }, { t: t1p + 2.0, value: 1 }, { t: t1p + 3.0, value: 0 }],
+        t: [{ t: t2, value: 1 / Q }, { t: t3, value: -1 / Q }, { t: t4, value: -1 / Q }],
+        alpha: [{ t: t0, value: 1 }],
+        beta: [{ t: t0, value: 1 / 20 }],
+        q: [{ t: t0 + 0, value: Q }],
+        eta: [{ t: t0 + 0, value: 1 }],
+        xi: [{ t: t2 + 0, value: 1 }, { t: t2 + 1, value: 0 }, { t: t3 + 1, value: 0 }, { t: t4 + 0, value: 0 }],
+        lambda: [{ t: t1p + 4, value: 0 }, { t: t2 - 1, value: 1 }, { t: t3, value: 1 }, { t: t4, value: 0 }],
+        omega: [{ t: t0 + 0, value: 2 }],
+        Qinv: [{ t: t0 + 0, value: 1 / Q }],
+      });
+
+      const frameCount = 17;
+      const captions = [
+        { text: "We start again, this time with our perturbed sphere.", left: "10%", bottom: "10%" },
+        { text: "We restrict our attention to the cylindrical band separating the inner and outer shells.", right: "10%", bottom: "40%" },
+        { text: "As long as we keep the surface smooth and don't twist the edges since we still have the rest of the sphere attached, we can distort the surface however we'd like.", left: "10%", bottom: "30%" },
+        { text: 'To perform the eversion, we must swap the <span style="color:blue">upper</span> and <span style="color:red">lower</span> edges of this cylinder.', right: "5%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+        { text: 'Recall that we can\'t just translate one end past the other without getting stuck with a <span style="color:red">cusp</span> which violates our smoothness rule.', left: "5%", top: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+        { text: "Let's try again.", left: "5%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+        { text: "To avoid the cusp, we distort the cylinder into the above ruled surface with which we can smoothly swap the upper and lower edges.", left: "10%", bottom: "50%" },
+        { text: "We carefully slide one end past the other.", left: "10%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+        { text: "And remove the twist.", left: "10%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+        { text: "Restoring the poles which have been unaffected by the process, we confirm we've successfully turned our sphere inside out!", left: "10%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+        { text: "", left: "10%", bottom: "10%" },
+      ];
+
+      const container = html`<div class="scrollyteller" id="scrollyteller-2"></div>`;
+      const background = html`<div class="scrollyteller__background"></div>`;
+      const canvasContainer = html`<div class="scrollyteller__fixed-content" id="eversion-canvas-2"></div>`;
+      const foreground = html`<div class="scrollyteller__foreground"></div>`;
+
+      for (let i = 0; i < frameCount; i++) {
+        const caption = captions[i];
+        const frame = html`<div class="scrollyteller__frame">
+          ${caption.text ? Object.assign(html`<div class="scrollyteller__caption" style="${caption.left ? `left: ${caption.left};` : ''}${caption.right ? `right: ${caption.right};` : ''}${caption.top ? `top: ${caption.top};` : ''}${caption.bottom ? `bottom: ${caption.bottom};` : ''}"></div>`, {innerHTML: caption.text}) : ''}
+        </div>`;
+        foreground.appendChild(frame);
+      }
+
+      background.appendChild(canvasContainer);
+      container.appendChild(background);
+      container.appendChild(foreground);
+
+      display(container);
+
+      await new Promise(r => setTimeout(r, 100));
+
+      const canvas = document.createElement('canvas');
+      canvas.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; cursor: grab;';
+      canvasContainer.appendChild(canvas);
+
+      const quality = 'medium';
+      let preferredDPI = quality === 'low' ? 1 : quality === 'high' ? 2.0 : 1.5;
+      let preferredRes = quality === 'low' ? 75 : quality === 'high' ? 255 : 150;
+
+      const dpi = Math.min(preferredDPI, window.devicePixelRatio);
+      canvas.width = Math.floor(canvasContainer.offsetWidth * dpi);
+      canvas.height = Math.floor(canvasContainer.offsetHeight * dpi);
+
+      const regl = createREGL({ canvas, pixelRatio: dpi, extensions: ['OES_standard_derivatives'], attributes: { preserveDrawingBuffer: true } });
+      const camera = createCamera(regl, { distance: 6, damping: 0, near: 0.1, far: 10.0, theta: 0.1, phi: 0.4, noScroll: true, wheel: false });
+      const drawSphere = createDrawSphere(regl, preferredRes);
+
+      let dirty = true;
+      let smoothedPosition = 0;
+
+      function getScrollProgress() {
+        const rect = container.getBoundingClientRect();
+        const scrollHeight = container.offsetHeight - window.innerHeight;
+        if (scrollHeight <= 0) return 0;
+        return Math.max(0, Math.min(1, -rect.top / scrollHeight));
+      }
+
+      function updateBackgroundPosition() {
+        const rect = container.getBoundingClientRect();
+        const topAboveViewport = rect.top <= 0;
+        const bottomBelowViewport = rect.bottom >= window.innerHeight;
+
+        if (topAboveViewport && bottomBelowViewport) {
+          // Fixed: scrollyteller spans the viewport
+          background.classList.add('is-fixed');
+          background.classList.remove('is-bottom');
+        } else if (topAboveViewport && !bottomBelowViewport) {
+          // Bottom: scrollyteller bottom is above viewport bottom
+          background.classList.remove('is-fixed');
+          background.classList.add('is-bottom');
+        } else {
+          // Top: scrollyteller top is below viewport top (scrolling in)
+          background.classList.remove('is-fixed');
+          background.classList.remove('is-bottom');
+        }
+
+        return rect.top < window.innerHeight && rect.bottom > 0;
+      }
+
+      const frame = regl.frame(() => {
+        // Update position state and check if in view
+        const inView = updateBackgroundPosition();
+        if (!inView) return;
+
+        const targetPosition = getScrollProgress();
+        const scrolling = Math.abs(targetPosition - smoothedPosition) > 0.0001;
+        smoothedPosition += (targetPosition - smoothedPosition) * 0.1;
+        sequencer.setPosition(smoothedPosition * frameCount);
+        const state = sequencer.getState();
+        const ar = canvas.offsetWidth / canvas.offsetHeight;
+        const scale = ar > 1.0 ? 1.0 : ar;
+        camera((cameraState) => {
+          if (!dirty && !cameraState.dirty && !scrolling) return;
+          regl.clear({ color: [1, 1, 1, 1], depth: 1 });
+          const props = { ...state, scale: state.scale * scale };
+          drawSphere({ wire: false, ...props });
+          drawSphere({ wire: true, ...props });
+          dirty = false;
+        });
+      });
+
+      function onResize() {
+        canvas.width = Math.floor(canvasContainer.offsetWidth * dpi);
+        canvas.height = Math.floor(canvasContainer.offsetHeight * dpi);
+        camera.taint();
+        dirty = true;
+      }
+      window.addEventListener('resize', onResize);
+
+      invalidation.then(() => { frame.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); regl.destroy(); });
+    }
+  </script>
+
+  <script id="conclusion" type="text/markdown">
+And that's that! I regret that I have nothing novel or nuanced to say about the eversion itself, but my goal here was to explore the visual presentation since videos and images always left me wishing it were a bit more tangible.
+
+There's no shortage of really great visualizations and resources regarding sphere eversion, among other topics. Below are a few links relevant to both this eversion and the topic in general.
+
+- [Analytic sphere eversion using ruled surfaces](https://arxiv.org/abs/1711.10466)
+- [Adam Bednorz Sphere Eversion](https://www.fuw.edu.pl/~abednorz/eversion/index.html): a webpage with videos and DIY instructions using paper!
+- [Visualization by Marcel Padilla](https://www3.math.tu-berlin.de/geometrie/wp_padilla/sphere-eversion-with-transparency-video/)
+- [Everting a Sphere by Chris Hills](https://chrishills.org.uk/ChrisHills/sphereeversion/): an excellent collection of links and resources
+- [Sphere Eversion on Wikipedia](https://en.wikipedia.org/wiki/Sphere_eversion)
+
+This post is created using [Notebook Kit](https://github.com/nickslevine/nb-kit) and [regl](https://github.com/regl-project/regl). You can find the full article [source here](https://github.com/rreusser/notebooks/tree/main/src/sphere-eversion).
+
+Comments? Questions? Corrections? [Let me know!](https://mathstodon.xyz/@rreusser)
+  </script>
+
+</notebook>

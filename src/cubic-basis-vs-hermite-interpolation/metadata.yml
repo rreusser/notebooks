@@ -2,3 +2,6 @@ publishedAt: "May 13, 2023"
 description: "Visually compare cubic interpolation using different basis functions."
 maxWidth: 640px
 observableUrl: https://observablehq.com/@rreusser/cubic-basis-vs-hermite-interpolation
+tags:
+  - Math
+  - Graphics

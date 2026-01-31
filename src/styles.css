@@ -443,6 +443,72 @@ a.index__link[href]:visited {
   border-radius: 3px;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.index__tag:hover {
+  background: #d0d0d0;
+  color: #444;
+}
+
+a.index__tag,
+a.index__tag:visited,
+a.index__tag:active {
+  color: #666;
+}
+
+.index__active-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+
+.index__filter-label {
+  font-family: "Open Sans", sans-serif;
+  font-size: 13px;
+  color: #666;
+}
+
+.index__filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "Open Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #555;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.index__filter-remove,
+.index__filter-remove:visited,
+.index__filter-remove:active {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+  color: #fff;
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+
+.index__filter-remove:hover {
+  color: #fff;
+  opacity: 1;
 }
 
 .resource-links {

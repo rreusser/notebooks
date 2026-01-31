@@ -1,4 +1,7 @@
 publishedAt: "December 8, 2020"
-description: "Logic and GLSL shaders to select point cloud opacity for consistent visual appearance"
+description: "Deriving the formula for point opacity in large point cloud visualizations to maintain consistent visual density."
 maxWidth: 640px
 observableUrl: https://observablehq.com/@rreusser/selecting-the-right-opacity-for-2d-point-clouds
+tags:
+  - WebGL
+  - Graphics

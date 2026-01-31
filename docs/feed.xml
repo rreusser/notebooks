@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Fri, 30 Jan 2026 06:50:46 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 31 Jan 2026 06:41:57 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Fluid Instability with Stable Fluids</title>
@@ -93,6 +93,7 @@
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/of-noise-and-neighbors/</guid>
       <pubDate>Mon, 29 Sep 2025 07:00:00 GMT</pubDate>
       <description>A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/of-noise-and-neighbors.jpg" medium="image" />
     </item>
     <item>
       <title>REGL in Observable Notebooks 2.0</title>
@@ -108,13 +109,14 @@
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/hello-observable-notebooks-2/</guid>
       <pubDate>Sun, 03 Aug 2025 07:00:00 GMT</pubDate>
       <description>Kicking the tires of Observable&apos;s new notebook tooling!</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/hello-observable-notebooks-2.jpg" medium="image" />
     </item>
     <item>
       <title>Clifford and de Jong Attractors</title>
       <link>https://rreusser.github.io/notebooks/clifford-and-de-jong-attractors/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/clifford-and-de-jong-attractors/</guid>
       <pubDate>Fri, 16 May 2025 07:00:00 GMT</pubDate>
-      <description>Visualize the strange attractors of Clifford and de Jong.</description>
+      <description>High-resolution visualization of Clifford and de Jong strange attractors with interactive zooming and trajectory-based coloring.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/clifford-and-de-jong-attractors.jpg" medium="image" />
     </item>
     <item>
@@ -146,7 +148,7 @@
       <link>https://rreusser.github.io/notebooks/shanks-transformation/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/shanks-transformation/</guid>
       <pubDate>Sat, 23 Sep 2023 07:00:00 GMT</pubDate>
-      <description>Exploring a simple series acceleration method</description>
+      <description>The Shanks transformation for accelerating slowly-converging series, demonstrated on the arctangent formula for π.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/shanks-transformation.jpg" medium="image" />
     </item>
     <item>
@@ -155,42 +157,55 @@
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/cubic-basis-vs-hermite-interpolation/</guid>
       <pubDate>Sat, 13 May 2023 07:00:00 GMT</pubDate>
       <description>Visually compare cubic interpolation using different basis functions.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/cubic-basis-vs-hermite-interpolation.jpg" medium="image" />
     </item>
     <item>
       <title>Bicubic Texture Interpolation using Linear Filtering</title>
       <link>https://rreusser.github.io/notebooks/bicubic-texture-interpolation-using-linear-filtering/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/bicubic-texture-interpolation-using-linear-filtering/</guid>
       <pubDate>Fri, 06 Jan 2023 08:00:00 GMT</pubDate>
-      <description>Using linear texture sample to implement bicubic texture filtering</description>
+      <description>Implementing smooth bicubic texture filtering using only 4 hardware-filtered samples instead of 16.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/bicubic-texture-interpolation-using-linear-filtering.jpg" medium="image" />
     </item>
     <item>
       <title>Knocking Down the Gates with our Friend Jacobi</title>
       <link>https://rreusser.github.io/notebooks/knocking-down-the-gates-with-jacobi/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/knocking-down-the-gates-with-jacobi/</guid>
       <pubDate>Wed, 16 Nov 2022 08:00:00 GMT</pubDate>
-      <description>Using Jacobi elliptic functions to brute-force a pendulum problem</description>
+      <description>Using Jacobi elliptic functions to solve an optimization problem about falling poles and large-amplitude pendulum dynamics.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/knocking-down-the-gates-with-jacobi.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Night and Day</title>
+      <link>https://rreusser.github.io/notebooks/night-and-day/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/night-and-day/</guid>
+      <pubDate>Mon, 24 Oct 2022 07:00:00 GMT</pubDate>
+      <description>Visualizing Earth&apos;s solar terminator on a Mapbox map using NASA Black Marble imagery and WebGL shaders.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/night-and-day.jpg" medium="image" />
     </item>
     <item>
       <title>Fast Generalized Winding Numbers in 2D</title>
       <link>https://rreusser.github.io/notebooks/fast-generalized-winding-numbers-in-2d/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/fast-generalized-winding-numbers-in-2d/</guid>
       <pubDate>Wed, 07 Sep 2022 07:00:00 GMT</pubDate>
-      <description>Interactive demonstration of generalized winding numbers in 2D, accelerated using a bounding volume hierarchy (BVH) with dipole approximations for efficient inside-outside queries.</description>
+      <description>Computing generalized winding numbers in 2D using hierarchical Barnes-Hut approximation for fast inside-outside queries.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/fast-generalized-winding-numbers-in-2d.jpg" medium="image" />
     </item>
     <item>
       <title>Computing π with the Bailey-Borwein-Plouffe Formula</title>
       <link>https://rreusser.github.io/notebooks/computing-pi-with-the-bailey-borwein-plouffe-formula/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/computing-pi-with-the-bailey-borwein-plouffe-formula/</guid>
       <pubDate>Mon, 24 May 2021 07:00:00 GMT</pubDate>
-      <description>Using the Bailey-Borwein-Plouffe formula to compute hexadecimal digits of π, starting at an arbitrary digit.</description>
+      <description>Computing hexadecimal digits of π at arbitrary positions using the Bailey-Borwein-Plouffe formula.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/computing-pi-with-the-bailey-borwein-plouffe-formula.jpg" medium="image" />
     </item>
     <item>
       <title>The Double Pendulum Map</title>
       <link>https://rreusser.github.io/notebooks/double-pendulum-map/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/double-pendulum-map/</guid>
       <pubDate>Fri, 14 May 2021 07:00:00 GMT</pubDate>
-      <description>Visualizing every double pendulum configuration at the same time.</description>
+      <description>Visualizing the phase space of simple and compound double pendulums, showing how chaos emerges from coupled nonlinear oscillations.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/double-pendulum-map.jpg" medium="image" />
     </item>
     <item>
       <title>Malkus Waterwheel</title>
@@ -198,13 +213,14 @@
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/malkus-waterwheel/</guid>
       <pubDate>Sat, 13 Feb 2021 08:00:00 GMT</pubDate>
       <description>Interactive simulation of a chaotic mechanical system whose dynamics map to the Lorenz attractor.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/malkus-waterwheel.jpg" medium="image" />
     </item>
     <item>
       <title>Selecting the Right Opacity for 2D Point Clouds</title>
       <link>https://rreusser.github.io/notebooks/point-cloud-point-opacity/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/point-cloud-point-opacity/</guid>
       <pubDate>Tue, 08 Dec 2020 08:00:00 GMT</pubDate>
-      <description>Logic and GLSL shaders to select point cloud opacity for consistent visual appearance</description>
+      <description>Deriving the formula for point opacity in large point cloud visualizations to maintain consistent visual density.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/point-cloud-point-opacity.jpg" medium="image" />
     </item>
     <item>
@@ -212,7 +228,7 @@
       <link>https://rreusser.github.io/notebooks/adaptive-contouring-in-fragment-shaders/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/adaptive-contouring-in-fragment-shaders/</guid>
       <pubDate>Sat, 21 Nov 2020 08:00:00 GMT</pubDate>
-      <description>Techniques for drawing uniform-width contour lines using screen-space derivatives in WebGL fragment shaders.</description>
+      <description>GPU techniques for rendering adaptive contours using screen-space derivatives, with multi-octave blending and antialiasing.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/adaptive-contouring-in-fragment-shaders.jpg" medium="image" />
     </item>
     <item>
@@ -220,44 +236,79 @@
       <link>https://rreusser.github.io/notebooks/webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm/</guid>
       <pubDate>Thu, 09 Jul 2020 07:00:00 GMT</pubDate>
-      <description>Screen-space Voronoi diagrams computed on the GPU with the Jump Flooding Algorithm.</description>
+      <description>Computing Voronoi diagrams and distance fields on the GPU using the Jump Flooding Algorithm.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Sphere Eversion</title>
+      <link>https://rreusser.github.io/notebooks/sphere-eversion/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/sphere-eversion/</guid>
+      <pubDate>Mon, 29 Jun 2020 07:00:00 GMT</pubDate>
+      <description>An interactive visualization of the Bednorz and Bednorz analytic sphere eversion using scroll-driven animation</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/sphere-eversion.jpg" medium="image" />
     </item>
     <item>
       <title>Toiletpaperfullerenes and Charmin Nanotubes</title>
       <link>https://rreusser.github.io/notebooks/charmin-nanotubes-and-toiletpaperfullerenes/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/charmin-nanotubes-and-toiletpaperfullerenes/</guid>
       <pubDate>Fri, 01 May 2020 07:00:00 GMT</pubDate>
-      <description>Constructing fullerene models with toilet paper tubes</description>
+      <description>Interactive 3D simulation of nanotube and fullerene structures that can be physically constructed from toilet paper tubes.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/charmin-nanotubes-and-toiletpaperfullerenes.jpg" medium="image" />
+    </item>
+    <item>
+      <title>3D Reaction-Diffusion</title>
+      <link>https://rreusser.github.io/notebooks/3d-reaction-diffusion/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/3d-reaction-diffusion/</guid>
+      <pubDate>Tue, 17 Mar 2020 07:00:00 GMT</pubDate>
+      <description>Gray-Scott reaction-diffusion in 3D using WebGPU compute shaders with volumetric rendering via instanced depth-sorted slices.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/3d-reaction-diffusion.jpg" medium="image" />
     </item>
     <item>
       <title>Visualizing Integers in Floating-Point</title>
       <link>https://rreusser.github.io/notebooks/integers-in-single-precision-floating-point/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/integers-in-single-precision-floating-point/</guid>
       <pubDate>Sun, 09 Feb 2020 08:00:00 GMT</pubDate>
-      <description>Scroll through all the floating point integers!</description>
+      <description>Interactive bit-level visualization of how IEEE-754 single-precision floats represent integers.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/integers-in-single-precision-floating-point.jpg" medium="image" />
     </item>
     <item>
       <title>Particle-Mesh Gravity in WebGPU</title>
       <link>https://rreusser.github.io/notebooks/particle-mesh-gravity/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/particle-mesh-gravity/</guid>
       <pubDate>Sun, 03 Nov 2019 07:00:00 GMT</pubDate>
-      <description>Two-dimensional gravity in WebGPU by way of a gravitational Poisson equation</description>
+      <description>Simulating 2D gravitational N-body dynamics using FFT-based Poisson solving on the GPU.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/particle-mesh-gravity.jpg" medium="image" />
     </item>
     <item>
       <title>Periodic Planar Three-Body Orbits</title>
       <link>https://rreusser.github.io/notebooks/periodic-planar-three-body-orbits/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/periodic-planar-three-body-orbits/</guid>
       <pubDate>Sun, 01 Sep 2019 07:00:00 GMT</pubDate>
-      <description>An interactive walkthrough of 2700 planar periodic three body orbits, and means of classifying them</description>
+      <description>Interactive catalog of periodic three-body orbits with topological classification via free group words.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/periodic-planar-three-body-orbits.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Multi-Scale Turing Pattern Gallery 2</title>
+      <link>https://rreusser.github.io/notebooks/multi-scale-turing-pattern-gallery-2/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/multi-scale-turing-pattern-gallery-2/</guid>
+      <pubDate>Fri, 15 Mar 2019 07:00:00 GMT</pubDate>
+      <description>Another gallery of multi-scale Turing patterns</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/multi-scale-turing-pattern-gallery-2.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Multi-Scale Turing Pattern Gallery 1</title>
+      <link>https://rreusser.github.io/notebooks/multi-scale-turing-pattern-gallery-1/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/multi-scale-turing-pattern-gallery-1/</guid>
+      <pubDate>Fri, 19 Oct 2018 07:00:00 GMT</pubDate>
+      <description>A gallery of multi-scale Turing patterns</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/multi-scale-turing-pattern-gallery-1.jpg" medium="image" />
     </item>
     <item>
       <title>Aligning 3D Scans</title>
       <link>https://rreusser.github.io/notebooks/aligning-3d-scans/</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/aligning-3d-scans/</guid>
       <pubDate>Sat, 28 Jul 2018 07:00:00 GMT</pubDate>
-      <description>In which I rediscover principal component analysis</description>
+      <description>Automatically orienting 3D scans by computing principal axes from surface normals using eigenvalue decomposition.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/aligning-3d-scans.jpg" medium="image" />
     </item>
     <item>
@@ -266,6 +317,15 @@
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/things-i-learned-the-hard-way-using-react-native/</guid>
       <pubDate>Thu, 05 May 2016 07:00:00 GMT</pubDate>
       <description>A collection of lessons learned from eight months of React Native development - environment setup, Redux patterns, performance optimization, and cross-platform gotchas.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/things-i-learned-the-hard-way-using-react-native.jpg" medium="image" />
+    </item>
+    <item>
+      <title>A Series of Unfortunate Things I Programmed One Time</title>
+      <link>https://rreusser.github.io/notebooks/a-series-of-unfortunate-things-i-programmed-one-time/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/a-series-of-unfortunate-things-i-programmed-one-time/</guid>
+      <pubDate>Mon, 16 Mar 2015 07:00:00 GMT</pubDate>
+      <description>Reflections on a decade of programming projects and the search for meaning in complexity</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/a-series-of-unfortunate-things-i-programmed-one-time.jpg" medium="image" />
     </item>
   </channel>
 </rss>

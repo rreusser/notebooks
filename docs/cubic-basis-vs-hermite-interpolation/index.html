@@ -9,6 +9,9 @@
   <meta name="subject" content="Visually compare cubic interpolation using different basis functions.">
   <meta name="description" content="Visually compare cubic interpolation using different basis functions.">
   <meta property="og:description" content="Visually compare cubic interpolation using different basis functions.">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/cubic-basis-vs-hermite-interpolation.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/cubic-basis-vs-hermite-interpolation.jpg">
   <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
@@ -1482,36 +1485,164 @@ main h6 {
     .index {
   padding: 0;
   margin: 0 auto;
-  width: 640px;
-  max-width: 100%;;
+  max-width: 1200px;
   list-style-type: none;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
 }
-    .index .meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  flex-wrap: nowrap;
-  gap: 3px;
-}
-    .index p {
+    .index__item {
   margin: 0;
 }
-    .index li {
-  margin-bottom: 10px;
+    .index__link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  border-radius: 8px;
+  overflow: hidden;
+  background: #f8f8f8;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
 }
-    .index .title {
+    .index__link:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+    .index__image-container {
+  aspect-ratio: 1200 / 630;
+  overflow: hidden;
+  background: linear-gradient(135deg, #e8e8e8 0%, #d8d8d8 100%);
+}
+    .index__image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+    .index__placeholder {
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(135deg, #eee 0%, #ddd 50%, #ccc 100%);
+  position: relative;
+}
+    .index__placeholder::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: 48px;
+  height: 48px;
+  border: 3px solid #bbb;
+  border-radius: 50%;
+  opacity: 0.5;
+}
+    .index__content {
+  padding: 16px;
+}
+    .index__title {
   font-family: "Open Sans", sans-serif;
   font-weight: 400;
-  font-size: 16px;
-  flex: 1;
+  font-size: 15px;
   line-height: 1.4;
+  margin: 0 0 6px 0;
+  color: #333;
 }
-    .index .publishedAt {
+    .index__link:hover .index__title {
+  color: var(--rrtheme-color);
+  text-decoration: underline;
+}
+    a.index__link[href],
+a.index__link[href]:hover,
+a.index__link[href]:focus,
+a.index__link[href]:visited {
+  text-decoration: none;
+}
+    .index__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+    .index__date {
+  font-family: "Open Sans", sans-serif;
+  font-size: 12px;
   color: #888;
   text-transform: uppercase;
+}
+    .index__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+    .index__tag {
+  font-family: "Open Sans", sans-serif;
+  font-size: 10px;
+  font-weight: 600;
+  color: #666;
+  background: #e8e8e8;
+  padding: 2px 6px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+    .index__tag:hover {
+  background: #d0d0d0;
+  color: #444;
+}
+    a.index__tag,
+a.index__tag:visited,
+a.index__tag:active {
+  color: #666;
+}
+    .index__active-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  padding: 10px 14px;
+  background: #f5f5f5;
+  border-radius: 6px;
+}
+    .index__filter-label {
   font-family: "Open Sans", sans-serif;
   font-size: 13px;
-  order: 0;
+  color: #666;
+}
+    .index__filter-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: "Open Sans", sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #fff;
+  background: #555;
+  padding: 4px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+    .index__filter-remove,
+.index__filter-remove:visited,
+.index__filter-remove:active {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  font-size: 16px;
+  line-height: 1;
+  color: #fff;
+  text-decoration: none;
+  opacity: 0.7;
+  transition: opacity 0.15s ease;
+}
+    .index__filter-remove:hover {
+  color: #fff;
+  opacity: 1;
 }
     .resource-links {
   display: flex;
@@ -1527,17 +1658,9 @@ main h6 {
   width: 15px;
 }
     @media(max-width: 640px) {
-  .index .meta {
-    flex-wrap: wrap;
-  }
-  .index .publishedAt {
-    order:  -1;
-  }
-  .index .title {
-    flex: 1 1 100%;
-  }
-  .index li {
-    margin-bottom: 20px;
+  .index {
+    grid-template-columns: 1fr;
+    gap: 16px;
   }
   .resource-links {
     justify-content: flex-start;

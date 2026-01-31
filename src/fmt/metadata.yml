@@ -3,3 +3,5 @@ description: A helper function for nicely formatting cell values in Observable
 observableUrl: https://observablehq.com/@rreusser/fmt
 maxWidth: 640px
 hidden: true
+tags:
+  - Tutorial

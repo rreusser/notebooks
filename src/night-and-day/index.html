@@ -1,0 +1,640 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Night and Day</title>
+  <script id="description" type="text/markdown">
+# Night and Day
+
+This notebook renders Earth's [solar terminator](https://en.wikipedia.org/wiki/Terminator_(solar)) on a [Mapbox](https://www.mapbox.com/) map. It fetches [Black Marble tiles](https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/) and uses a WebGL shader to composite the terminator into the alpha channel of the tiles, outputting the result to a [custom raster source](https://github.com/mapbox/mapbox-gl-js/pull/12063).
+
+The astronomical calculations are based on Vladimir Agafonkin's [SunCalc](https://github.com/mourner/suncalc) library.
+  </script>
+
+  <script id="styles" type="text/html">
+    <link rel="stylesheet" href="https://unpkg.com/mapbox-gl@3.7.0/dist/mapbox-gl.css" />
+    <style>
+      .map-container {
+        width: 100%;
+        height: 100%;
+        position: relative;
+        background: black;
+      }
+      .map-wrapper {
+        width: 100%;
+        height: 100%;
+      }
+      .map-container canvas {
+        outline: none;
+      }
+      #date-display {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        font-size: 18px;
+        font-weight: bold;
+        font-family: sans-serif;
+        color: black;
+        text-shadow: 0 0 2px white, 0 0 4px white;
+        background: rgba(255, 255, 255, 0.5);
+        padding: 4px 8px;
+        border-radius: 4px;
+        z-index: 10;
+        pointer-events: none;
+      }
+      .controls-panel {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 10px 20px;
+        margin-bottom: 1em;
+      }
+      .controls-panel > div {
+        min-width: 200px;
+      }
+    </style>
+  </script>
+
+  <script id="imports" type="module">
+    import mapboxgl from 'npm:mapbox-gl@3.7.0';
+    import { LRUCache } from 'npm:lru-cache@11';
+    import SnapshotControl from './lib/download-control.js';
+    import { expandable } from './lib/expandable.js';
+  </script>
+
+  <script id="map-container" type="module">
+    const wrapper = html`<div class="map-wrapper" style="position: relative;">
+      <div class="map-container" id="map-container"></div>
+      <div id="date-display"></div>
+    </div>`;
+
+    const expandableState = { expanded: false, resizeMap: null };
+
+    const container = expandable(wrapper, {
+      width: Math.min(width, 900),
+      height: 600,
+      controls: '.controls-panel',
+      state: expandableState,
+      onResize(el, w, h) {
+        const mapEl = el.querySelector('#map-container');
+        if (mapEl) {
+          mapEl.style.width = `${w}px`;
+          mapEl.style.height = `${h}px`;
+        }
+        if (expandableState.resizeMap) {
+          expandableState.resizeMap();
+        }
+      }
+    });
+
+    display(container);
+  </script>
+
+  <script id="controls" type="module">
+    const controlsContainer = html`<div class="controls-panel"></div>`;
+
+    const inputElements = {};
+
+    function ctrl(input, id) {
+      const wrapper = html`<div></div>`;
+      wrapper.appendChild(input);
+      controlsContainer.appendChild(wrapper);
+      if (id) inputElements[id] = input;
+      return Generators.input(input);
+    }
+
+    const live = ctrl(Inputs.toggle({ label: "Live", value: true }));
+
+    const date = ctrl(Inputs.date({
+      label: "Date",
+      value: new Date().toISOString().slice(0, 10),
+      disabled: true
+    }), 'date');
+
+    const hourOfDay = ctrl(Inputs.range([0, 24], {
+      label: "Hour (UTC)",
+      value: new Date().getUTCHours() + new Date().getUTCMinutes() / 60,
+      step: 0.1,
+      disabled: true
+    }), 'hourOfDay');
+
+    const opacity = ctrl(Inputs.range([0, 1], {
+      label: "Opacity",
+      value: 0.93,
+      step: 0.01
+    }));
+
+    const dawnAltitude = ctrl(Inputs.range([0, 90], {
+      label: "Dawn altitude (°)",
+      value: 6,
+      step: 0.1
+    }));
+
+    const twilightAltitude = ctrl(Inputs.range([-90, 0], {
+      label: "Twilight altitude (°)",
+      value: -6,
+      step: 0.1
+    }));
+
+    const stepStrength = ctrl(Inputs.range([0, 1], {
+      label: "Step strength",
+      value: 0,
+      step: 0.01
+    }));
+
+    const projection = ctrl(Inputs.select(
+      ['globe', 'mercator', 'naturalEarth', 'winkelTripel'],
+      { label: "Projection", value: 'mercator' }
+    ));
+
+    display(controlsContainer);
+  </script>
+
+  <script id="toggle-date-inputs" type="module">
+    // Disable date/hour inputs when live mode is active
+    for (const input of inputElements.date.querySelectorAll('input')) {
+      input.disabled = live;
+    }
+    for (const input of inputElements.hourOfDay.querySelectorAll('input')) {
+      input.disabled = live;
+    }
+    inputElements.date.style.opacity = live ? 0.5 : 1;
+    inputElements.hourOfDay.style.opacity = live ? 0.5 : 1;
+  </script>
+
+  <script id="params" type="module">
+    const now = new Date();
+    const params = {
+      live: true,
+      date: now,
+      hourOfDay: now.getUTCHours() + now.getUTCMinutes() / 60,
+      opacity: 0.93,
+      dawnAltitude: 6,
+      twilightAltitude: -6,
+      stepStrength: 0,
+      projection: 'mercator'
+    };
+  </script>
+
+  <script id="update-params" type="module">
+    params.live = live;
+    params.date = date;
+    params.hourOfDay = hourOfDay;
+    params.opacity = opacity;
+    params.dawnAltitude = dawnAltitude;
+    params.twilightAltitude = twilightAltitude;
+    params.stepStrength = stepStrength;
+    params.projection = projection;
+    updateMap();
+  </script>
+
+  <script id="suncalc" type="module">
+    /*
+    Copyright (c) 2025, Vladimir Agafonkin
+    All rights reserved.
+
+    Redistribution and use in source and binary forms, with or without modification, are
+    permitted provided that the following conditions are met:
+
+       1. Redistributions of source code must retain the above copyright notice, this list of
+          conditions and the following disclaimer.
+
+       2. Redistributions in binary form must reproduce the above copyright notice, this list
+          of conditions and the following disclaimer in the documentation and/or other materials
+          provided with the distribution.
+
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND ANY
+    EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED WARRANTIES OF
+    MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+    COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+    EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+    SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+    HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR
+    TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+    SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+    */
+    const PI = Math.PI;
+    const sin = Math.sin;
+    const cos = Math.cos;
+    const atan = Math.atan2;
+    const rad = PI / 180;
+    const obliquity = rad * 23.4397;
+
+    function rightAscension(l) {
+      return atan(sin(l) * cos(obliquity), cos(l));
+    }
+
+    function sineDeclination(l) {
+      return sin(obliquity) * sin(l);
+    }
+
+    function solarMeanAnomaly(d) {
+      return rad * (357.5291 + 0.98560028 * d);
+    }
+
+    function eclipticLongitude(M) {
+      const C = rad * (1.9148 * sin(M) + 0.02 * sin(2 * M) + 0.0003 * sin(3 * M));
+      const P = rad * 102.9372;
+      return M + C + P + PI;
+    }
+
+    function sunCoords(d) {
+      const M = solarMeanAnomaly(d);
+      const L = eclipticLongitude(M);
+      const sinDec = sineDeclination(L);
+      return {
+        sinDec,
+        cosDec: Math.sqrt(Math.max(0, 1 - sinDec * sinDec)),
+        ra: rightAscension(L)
+      };
+    }
+
+    const dayMs = 1000 * 60 * 60 * 24;
+    const J1970 = 2440588;
+    const J2000 = 2451545;
+
+    function toJulian(date) {
+      return date.valueOf() / dayMs - 0.5 + J1970;
+    }
+
+    function toDays(date) {
+      return toJulian(date) - J2000;
+    }
+  </script>
+
+  <script id="gl-helpers" type="module">
+    function makeShader(gl, type, src) {
+      const shader = gl.createShader(type);
+      gl.shaderSource(shader, src);
+      gl.compileShader(shader);
+      if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+        throw new Error("Shader compile error: " + gl.getShaderInfoLog(shader));
+      }
+      return shader;
+    }
+
+    class Program {
+      constructor({ gl, vert, frag }) {
+        this.gl = gl;
+        const vertShader = makeShader(gl, gl.VERTEX_SHADER, vert);
+        const fragShader = makeShader(gl, gl.FRAGMENT_SHADER, frag);
+        this.program = gl.createProgram();
+        gl.attachShader(this.program, vertShader);
+        gl.attachShader(this.program, fragShader);
+        gl.linkProgram(this.program);
+        if (!gl.getProgramParameter(this.program, gl.LINK_STATUS)) {
+          throw new Error("Shader link error");
+        }
+      }
+      use() { this.gl.useProgram(this.program); }
+      getUniformLocations(list) {
+        const result = {};
+        for (const name of list) {
+          result[name] = this.gl.getUniformLocation(this.program, name);
+        }
+        return result;
+      }
+      getAttribLocations(list) {
+        const result = {};
+        for (const name of list) {
+          result[name] = this.gl.getAttribLocation(this.program, name);
+        }
+        return result;
+      }
+    }
+
+    class Texture {
+      constructor({ gl, width, height, data, format, type, min, mag }) {
+        this.gl = gl;
+        const isArray = ArrayBuffer.isView(data) || !data;
+        this.format = format ?? gl.RGBA;
+        this.type = type ?? gl.UNSIGNED_BYTE;
+        this.width = isArray ? width : data.width;
+        this.height = isArray ? height : data.height;
+        this.min = min ?? gl.NEAREST;
+        this.mag = mag ?? gl.NEAREST;
+        this.texture = gl.createTexture();
+        gl.bindTexture(gl.TEXTURE_2D, this.texture);
+        if (isArray) {
+          gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, this.width, this.height, 0, gl.RGBA, gl.UNSIGNED_BYTE, data || null);
+        } else {
+          gl.texImage2D(gl.TEXTURE_2D, 0, this.format, this.format, this.type, data);
+        }
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, this.min);
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, this.mag);
+        this.unbind();
+      }
+      bind() { this.gl.bindTexture(this.gl.TEXTURE_2D, this.texture); }
+      unbind() { this.gl.bindTexture(this.gl.TEXTURE_2D, null); }
+      subData({ data, xoffset = 0, yoffset = 0, format, type }) {
+        const gl = this.gl;
+        this.bind();
+        gl.texSubImage2D(gl.TEXTURE_2D, 0, xoffset, yoffset, format || this.format, type || this.type, data);
+        this.unbind();
+      }
+    }
+
+    class Buffer {
+      constructor({ gl, data }) {
+        this.gl = gl;
+        this.buffer = gl.createBuffer();
+        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffer);
+        gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+        gl.bindBuffer(gl.ARRAY_BUFFER, null);
+      }
+      bind() { this.gl.bindBuffer(this.gl.ARRAY_BUFFER, this.buffer); }
+    }
+  </script>
+
+  <script id="terminator-tiler" type="module">
+    function tileBounds3857(x, y, z) {
+      const res = Math.pow(2, z);
+      const MAXEXTENT = 20037508.342789244;
+      const xmin = MAXEXTENT * (-1 + (2 * x) / res);
+      const ymin = MAXEXTENT * (1 - (2 * (y + 1)) / res);
+      const xmax = MAXEXTENT * (-1 + (2 * (x + 1)) / res);
+      const ymax = MAXEXTENT * (1 - (2 * y) / res);
+      return [xmin, ymin, xmax, ymax];
+    }
+
+    class TerminatorTiler {
+      constructor(canvas) {
+        this.canvas = canvas;
+        const gl = canvas.getContext("webgl", {
+          willReadFrequently: true,
+          antialias: false,
+          depth: false,
+          stencil: false,
+          preserveDrawingBuffer: true
+        });
+        this.gl = gl;
+
+        this.tileTex = new Texture({ gl, width: canvas.width, height: canvas.height });
+        this.vertexBuffer = new Buffer({ gl, data: new Float32Array([-4, -4, 4, -4, 0, 4]) });
+
+        this.program = new Program({
+          gl,
+          vert: `precision lowp float;
+            attribute vec2 xy;
+            void main () { gl_Position = vec4(xy, 0, 1); }`,
+          frag: `precision highp float;
+            uniform vec2 resolution, fadeRange;
+            uniform vec3 sunCoords;
+            uniform vec4 aabb;
+            uniform float days, siderealTimeOffset, stepping;
+            uniform sampler2D texture;
+
+            vec2 toWgs84Rad(vec2 xy) {
+              return vec2(xy.x, ${Math.PI / 2} - 2.0 * atan(exp(-xy.y)));
+            }
+
+            float getSunAltitude(float days, vec2 lngLat, vec3 sunCoords, float siderealTimeOffset) {
+              float H = siderealTimeOffset + lngLat.x - sunCoords.z;
+              return asin(clamp(sin(lngLat.y) * sunCoords.x + cos(lngLat.y) * sunCoords.y * cos(H), -1.0, 1.0));
+            }
+
+            float linearstep(float edge0, float edge1, float value) {
+              return clamp((value - edge0) / (edge1 - edge0), 0.0, 1.0);
+            }
+
+            float smootherstep(float edge0, float edge1, float value) {
+              float x = clamp((value - edge0) / (edge1 - edge0), 0.0, 1.0);
+              return x * x * x * (x * (x * 6.0 - 15.0) + 10.0);
+            }
+
+            float steppedstep(float x, float d, float fraction) {
+              float xd = x / d;
+              float param = smootherstep(-1.0, 1.0, 2.0 * (xd - floor(xd - 0.5) - 1.0) / fraction);
+              return d * (param + 0.5 + floor(xd - 0.5));
+            }
+
+            void main() {
+              vec2 uv = gl_FragCoord.xy / resolution;
+              vec2 xy = aabb.xw + (aabb.zy - aabb.xw) * uv;
+              vec2 lngLatRad = toWgs84Rad(xy);
+              float altitude = getSunAltitude(days, lngLatRad, sunCoords, siderealTimeOffset);
+
+              const float step = 6.0;
+              float angle = altitude * (180.0 / ${Math.PI});
+              float withStep = linearstep(fadeRange.x + step * 0.5, fadeRange.y - step * 0.5, steppedstep(angle, step, 1.0 - stepping));
+              float smoothed = smootherstep(fadeRange.x * 2.0, fadeRange.y * 2.0, angle);
+
+              gl_FragColor = texture2D(texture, uv) * mix(smoothed, withStep, stepping);
+            }`
+        });
+
+        this.attribs = this.program.getAttribLocations(["xy"]);
+        this.vertexBuffer.bind();
+        gl.vertexAttribPointer(this.attribs.xy, 2, gl.FLOAT, false, 0, 0);
+        gl.viewport(0, 0, canvas.width, canvas.height);
+
+        this.uniforms = this.program.getUniformLocations([
+          "resolution", "aabb", "sunCoords", "days", "fadeRange", "stepping", "texture", "siderealTimeOffset"
+        ]);
+      }
+
+      render({ x = 0, y = 0, z = 0, date = Date.now(), fadeRange = [0, -18], texture = null, stepping = 0 } = {}) {
+        const gl = this.gl;
+        const { width, height } = this.canvas;
+        if (texture) this.tileTex.subData({ data: texture });
+
+        this.program.use();
+        gl.enableVertexAttribArray(this.attribs.xy);
+
+        const days = toDays(date === undefined ? Date.now() : date);
+        const coords = sunCoords(days);
+        const siderealTimeOffset = ((Math.PI / 180) * (280.16 + 360.9856235 * days)) % (2 * Math.PI);
+
+        const aabb = tileBounds3857(x, y, z).map(v => v / 6378137.0);
+        gl.uniform4fv(this.uniforms.aabb, aabb);
+        gl.uniform2f(this.uniforms.resolution, width, height);
+        gl.uniform3f(this.uniforms.sunCoords, coords.sinDec, coords.cosDec, coords.ra);
+        gl.uniform1f(this.uniforms.days, days);
+        gl.uniform1f(this.uniforms.siderealTimeOffset, siderealTimeOffset);
+        gl.uniform1f(this.uniforms.stepping, stepping);
+
+        const meanRange = 0.5 * (fadeRange[0] + fadeRange[1]);
+        const eps = 1e-15;
+        gl.uniform2f(this.uniforms.fadeRange, Math.max(meanRange + eps, fadeRange[0]), Math.min(meanRange - eps, fadeRange[1]));
+
+        gl.activeTexture(gl.TEXTURE0);
+        this.tileTex.bind();
+        gl.uniform1i(this.uniforms.texture, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 3);
+      }
+
+      async getImageBitmap() {
+        return await createImageBitmap(this.canvas, { imageOrientation: "flipY" });
+      }
+    }
+  </script>
+
+  <script id="terminator-source" type="module">
+    class TerminatorSource {
+      constructor({ tileSize = 256, fadeRange = [12, -12], is2x = devicePixelRatio > 1, fetchTileImageBitmap, date = null, stepping = 0 } = {}) {
+        this.type = "custom";
+        this.tileSize = tileSize;
+        const renderSize = is2x ? 512 : 256;
+
+        const canvas = document.createElement('canvas');
+        canvas.width = renderSize;
+        canvas.height = renderSize;
+        this.tiler = new TerminatorTiler(canvas);
+        this._fadeRange = fadeRange;
+        this._date = date ?? new Date();
+        this._stepping = stepping ?? 0.0;
+        this.tileBitmapCache = new LRUCache({ max: 50, fetchMethod: fetchTileImageBitmap });
+      }
+
+      clear() { this.update && this.update(); }
+      set fadeRange(value) { this._fadeRange = value; this.clear(); }
+      set stepping(value) { this._stepping = value; this.clear(); }
+      set date(value) { this._date = value; this.clear(); }
+
+      async loadTile({ x, y, z }) {
+        this.tiler.render({
+          x, y, z,
+          date: this._date,
+          fadeRange: this._fadeRange,
+          stepping: this._stepping,
+          texture: await this.tileBitmapCache.fetch(`${z}/${x}/${y}`)
+        });
+        return await this.tiler.getImageBitmap();
+      }
+    }
+  </script>
+
+  <script id="map" type="module">
+    mapboxgl.accessToken = 'pk.eyJ1IjoicnNyZXVzc2VyIiwiYSI6ImNtYnh6eGdoejFpZXMya3B1azNxcjM4a3gifQ.U3_1xdf6dopJTX3TAuWAiQ';
+
+    const mapContainer = wrapper.querySelector('#map-container');
+
+    const map = new mapboxgl.Map({
+      container: mapContainer,
+      zoom: 1,
+      center: [0, 10],
+      style: 'mapbox://styles/rreusser/cl9kvd6ip000c15mudn99xvi7?fresh=true',
+      projection: params.projection,
+      hash: false,
+      preserveDrawingBuffer: true
+    });
+
+    // Register resize handler for expandable
+    expandableState.resizeMap = () => map.resize();
+
+    const dateDisplay = wrapper.querySelector('#date-display');
+
+    const mapState = { terminatorRenderer: null, ready: false };
+
+    await map.once('load');
+
+    const is2x = window.devicePixelRatio > 1;
+    const tileSize = 256;
+
+    // Use map's transformRequest to get properly signed URLs
+    const terminatorRenderer = new TerminatorSource({
+      date: Date.now(),
+      tileSize,
+      is2x,
+      stepping: params.stepStrength,
+      fadeRange: [params.dawnAltitude, params.twilightAltitude],
+      fetchTileImageBitmap: async function(zxy) {
+        const [z, x, y] = zxy.split('/');
+        const suffix = is2x ? '@2x' : '';
+        const sku = map._requestManager._skuToken;
+        const url = `https://api.mapbox.com/v4/rsreusser.blackmarble/${z}/${x}/${y}${suffix}.webp?sku=${sku}&access_token=${mapboxgl.accessToken}`;
+        const response = await fetch(url);
+        if (!response.ok) throw new Error(`Tile fetch failed: ${response.status} ${response.statusText}`);
+        return await createImageBitmap(await response.blob());
+      },
+    });
+
+    map.addSource("solar-terminator", terminatorRenderer);
+    map.addLayer({
+      id: "solar-terminator",
+      source: "solar-terminator",
+      type: "raster",
+      paint: {
+        "raster-fade-duration": 0,
+        "raster-opacity": params.opacity
+      }
+    });
+
+    mapState.terminatorRenderer = terminatorRenderer;
+    mapState.ready = true;
+
+    map.addControl(new SnapshotControl(), 'bottom-left');
+
+    invalidation.then(() => map.remove());
+  </script>
+
+  <script id="updateMap" type="module">
+    function getDateFromParams() {
+      if (params.live) return new Date();
+      // Combine selected date with hour of day (UTC)
+      const d = params.date;
+      return new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0) + params.hourOfDay * 3600 * 1000);
+    }
+
+    function updateMap() {
+      if (!mapState.ready || !mapState.terminatorRenderer) return;
+
+      const renderer = mapState.terminatorRenderer;
+      renderer.fadeRange = [params.dawnAltitude, params.twilightAltitude];
+      renderer.stepping = params.stepStrength;
+      renderer.date = getDateFromParams();
+
+      map.setPaintProperty('solar-terminator', 'raster-opacity', params.opacity);
+      map.setProjection({ name: params.projection });
+
+      dateDisplay.textContent = getDateFromParams().toLocaleString();
+    }
+  </script>
+
+  <script id="live-interval" type="module">
+    updateMap();
+
+    let interval;
+    if (params.live) {
+      interval = setInterval(updateMap, 1000);
+    }
+
+    invalidation.then(() => clearInterval(interval));
+  </script>
+
+  <script id="info" type="text/markdown">
+## How it works
+
+### Custom raster source
+
+Mapbox GL JS supports [custom raster sources](https://github.com/mapbox/mapbox-gl-js/pull/12063) that allow you to programmatically generate tile imagery. By implementing a source with `type: "custom"` and an async `loadTile({ x, y, z })` method, you can intercept tile requests and return custom `ImageBitmap` data.
+
+This notebook uses a custom source to overlay NASA's [Black Marble](https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/) imagery on top of a standard base map. For each tile request:
+
+1. Fetch the corresponding Black Marble tile from the [rsreusser.blackmarble](https://console.mapbox.com/studio/tilesets/rsreusser.blackmarble) tileset
+2. Render the terminator mask for that tile's geographic extent using a WebGL shader
+3. Composite the night imagery with the terminator, fading pixels to transparent on the day side
+4. Return the result as an `ImageBitmap` to the map renderer
+
+An LRU cache stores fetched tile bitmaps to avoid re-downloading when only the terminator position changes.
+
+### CPU/GPU split for sun position
+
+The astronomical calculations are adapted from Vladimir Agafonkin's [SunCalc](https://github.com/mourner/suncalc) library. Numerical precision presents a challenge. Computing Julian dates and trigonometric values in 32-bit GPU floats introduces visible errors in terminator placement.
+
+This visualization splits SunCalc between the CPU and GPU, moving as much computation as possible to the GPU. By moving date-dependent calculations to the CPU, the shader only needs to evaluate the spatially-varying parts (coordinate transforms and the final altitude formula), minimizing precision loss.
+
+### Controls
+
+**Dawn altitude** controls where the bright-to-dark transition begins (above the horizon).
+**Twilight altitude** controls where it ends (below the horizon). The standard twilight phases are:
+- Civil twilight: 0° to -6°
+- Nautical twilight: -6° to -12°
+- Astronomical twilight: -12° to -18°
+
+**Step strength** blends between smooth shading and discrete 6° steps corresponding to these twilight phases.
+
+---
+
+*Data: [NASA Earth at Night (Black Marble)](https://science.nasa.gov/earth/earth-observatory/earth-at-night/maps/)*
+  </script>
+</notebook>

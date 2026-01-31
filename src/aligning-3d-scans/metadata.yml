@@ -1,3 +1,6 @@
 publishedAt: "July 28, 2018"
-description: "In which I rediscover principal component analysis"
+description: "Automatically orienting 3D scans by computing principal axes from surface normals using eigenvalue decomposition."
 maxWidth: 640px
+tags:
+  - Math
+  - Graphics

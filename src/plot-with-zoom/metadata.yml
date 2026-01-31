@@ -2,3 +2,5 @@ publishedAt: "January 13, 2026"
 description: "Interactive mathematical plotting in Observable Notebook Kit"
 maxWidth: 640px
 mastodonPostId: '115892519884431495'
+tags:
+  - Tutorial

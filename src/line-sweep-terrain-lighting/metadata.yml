@@ -1,5 +1,8 @@
 publishedAt: "January 1, 2026"
-description: "Shading terrain using a line-sweep algorithm"
+description: "Hierarchical terrain lighting using WebGPU compute shaders with line-sweep ambient occlusion and normal map generation."
 maxWidth: 640px
 observableUrl: https://observablehq.com/@rreusser/line-sweep-terrain-lighting
 hidden: true
+tags:
+  - WebGPU
+  - Graphics

@@ -1,0 +1,145 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Multi-Scale Turing Pattern Gallery 1</title>
+
+  <script id="intro" type="text/markdown">
+This page contains a gallery of multi-scale Turing patterns. The method is a single-variable simulation of a reaction-diffusion system which approximates diffusion through circular convolutions. The multi-scale extension switches between Turing patterns at different scales based on local properties.
+  </script>
+
+  <script id="intro-2" type="text/markdown">
+The images below implement [Jason Rampe's blog post](https://softologyblog.wordpress.com/2011/07/05/multi-scale-turing-patterns/) *Multi-Scale Turing Patterns* in which he describes with excellent clarity the algorithm previously described by Jonathan McCabe in his paper, [Cyclic Symmetric Multi-Scale Turing Patterns](http://www.jonathanmccabe.com/Cyclic_Symmetric_Multi-Scale_Turing_Patterns.pdf). (Both an indispensable read if you want to explore these patterns further!)
+  </script>
+
+  <script id="intro-3" type="text/markdown">
+You can view a [live implementation](https://rreusser.github.io/multiscale-turing-patterns/) with which the images on this page were computed, and you can find the [source of the implementation](https://github.com/rreusser/multiscale-turing-patterns). The simulation is computed in WebGL using the (outstanding!) [regl](https://github.com/regl-project/regl) library. The implementation is not currently configurable on the web—though I would love for it to be!
+  </script>
+
+  <script id="intro-4" type="text/markdown">
+Most of the images below are computed at 4096 × 4096 pixels, which is the limit of the size my poor laptop can manage before the system grinds to a halt. Each image takes thirty minutes or so to compute. Using periodicity, they're extended horizontally to 6144 pixels wide so that they fit on a horizontal screen. For the convolutions, it uses my own GLSL implementation of the Fast Fourier Transform, which is in turn a refactoring of [David Li's FFT implementation](https://github.com/dli/fluid). I found when trying out parameters that very slightly negative weights produce a wonderful effect in coloring detail (as seen in the first two images).
+  </script>
+
+  <script id="intro-5" type="text/markdown">
+Based on my approach to coloring, I'm thrilled that Jason has also tried it out and since added coloring to his method and blog post. I heartily second his encouragement to try things out, let people know when their work is helpful, and seek out collaboration!
+  </script>
+
+  <script id="gallery-data" type="module">
+    const basePath = "https://s3.amazonaws.com/images.rickyreusser.com/multiscale-turing-patterns/";
+
+    const images = [
+      {href: "turing01.jpg"},
+      {href: "turing02.jpg"},
+      {href: "turing03.jpg"},
+      {href: "turing04.jpg"},
+      {href: "turing05.jpg"},
+      {href: "turing06.jpg"},
+      {href: "turing07.jpg"},
+      {href: "turing08.jpg"},
+      {href: "turing09.jpg"},
+      {href: "turing10.jpg"},
+      {href: "turing11.jpg"},
+      {href: "turing12.jpg"},
+      {href: "turing13.jpg"},
+      {href: "turing14.jpg"},
+    ];
+  </script>
+
+  <script id="gallery-styles" type="text/html">
+    <style>
+      .turing-gallery {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 8px;
+        padding: 0;
+        margin: 2em 0;
+        list-style: none;
+        max-width: none !important;
+      }
+
+      .turing-gallery__item {
+        margin: 0;
+      }
+
+      .turing-gallery__link {
+        display: block;
+        overflow: hidden;
+      }
+
+      .turing-gallery__image {
+        width: 100%;
+        height: auto;
+        display: block;
+        aspect-ratio: 380 / 280;
+        object-fit: cover;
+      }
+
+      @media (max-width: 800px) {
+        .turing-gallery {
+          grid-template-columns: repeat(2, 1fr);
+        }
+      }
+
+      @media (max-width: 500px) {
+        .turing-gallery {
+          grid-template-columns: 1fr;
+        }
+      }
+    </style>
+  </script>
+
+  <script id="gallery" type="module">
+    function getThumbnailUrl(href) {
+      const name = href.replace('.jpg', '');
+      return `${basePath}${name}-thumbnail.jpg`;
+    }
+
+    function getFullUrl(href) {
+      return `${basePath}${href}`;
+    }
+
+    function renderGalleryItem(image) {
+      const thumbnailUrl = getThumbnailUrl(image.href);
+      const fullUrl = getFullUrl(image.href);
+
+      return html`<li class="turing-gallery__item">
+        <a href="${fullUrl}" class="turing-gallery__link" target="_blank" rel="noopener">
+          <img
+            class="turing-gallery__image"
+            src="${thumbnailUrl}"
+            alt="Multi-scale Turing pattern"
+            loading="lazy"
+          />
+        </a>
+      </li>`;
+    }
+
+    const galleryEl = display(html`<ul class="turing-gallery">${images.map(renderGalleryItem)}</ul>`);
+
+    function updateGalleryLayout() {
+      const viewportWidth = window.innerWidth;
+      const galleryWidth = Math.min(1160, viewportWidth - 40);
+      const parentWidth = galleryEl.parentElement?.offsetWidth || 640;
+      const marginLeft = (parentWidth - galleryWidth) / 2;
+
+      galleryEl.style.width = galleryWidth + 'px';
+      galleryEl.style.marginLeft = marginLeft + 'px';
+    }
+
+    updateGalleryLayout();
+    window.addEventListener('resize', updateGalleryLayout);
+    invalidation.then(() => window.removeEventListener('resize', updateGalleryLayout));
+  </script>
+
+  <script id="license" type="text/html">
+    <p>
+      <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">
+        <img alt="Creative Commons License" style="border-width: 0" src="https://i.creativecommons.org/l/by-nc/4.0/88x31.png" />
+      </a>
+      <br />
+      This work is licensed under a <a rel="license" href="http://creativecommons.org/licenses/by-nc/4.0/">Creative Commons Attribution-NonCommercial 4.0 International License</a>.
+    </p>
+  </script>
+
+  <script id="license-note" type="text/html">
+    <p><small>(Realistically, shoot me a message on <a href="https://mathstodon.xyz/@rreusser">Mastodon</a> or <a href="https://bsky.app/profile/rreusser.bsky.social">Bluesky</a> and I'd probably let you do just about anything with these images or my implementation which generates them, but I've made the code and high resolution originals (well, compressed to jpeg—let me know if you want a 30MB png) available out of good will and good intentions, and since I'm deeply indebted to the people whose work has enabled me to create these, I've licensed these explicitly only as a small step beyond simply asking politely that you not, like, find some way I don't even know exists and turn around and sell them for profit or something.)</small></p>
+  </script>
+</notebook>

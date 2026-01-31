@@ -62,19 +62,17 @@
     });
     const f = view(fInput);
 
-    const DAInput = Inputs.range([0, 2], {
+    const diffusionRatioInput = Inputs.range([1, 4], {
       step: 0.01,
-      value: 1.0,
-      label: html`Diffusion rate, ${tex`D_A`}`
+      value: 2.0,
+      label: html`Diffusion ratio, ${tex`D_A / D_B`}`
     });
-    const DA = view(DAInput);
-
-    const DBInput = Inputs.range([0, 2], {
-      step: 0.01,
-      value: 0.5,
-      label: html`Diffusion rate, ${tex`D_B`}`
-    });
-    const DB = view(DBInput);
+    const diffusionRatio = view(diffusionRatioInput);
+  </script>
+  <script id="diffusion-rates" type="module">
+    // Fix DA = 1, compute DB from ratio
+    const DA = 1.0;
+    const DB = DA / diffusionRatio;
 
     const dtInput = Inputs.range([0.01, 0.5], {
       step: 0.01,
@@ -104,13 +102,6 @@
       label: "Steps per frame"
     });
     const stepsPerFrame = view(stepsPerFrameInput);
-
-    const rotationRateInput = Inputs.range([0, 0.1], {
-      step: 0.001,
-      value: 0.0,
-      label: "Rotation rate"
-    });
-    const rotationRate = view(rotationRateInput);
   </script>
   <script id="control-inputs" type="module">
     const simulateInput = Inputs.toggle({ label: "Simulate", value: true });
@@ -123,8 +114,7 @@
     display(html`<div id="rd-params">
       ${kInput}
       ${fInput}
-      ${DAInput}
-      ${DBInput}
+      ${diffusionRatioInput}
       ${dtInput}
     </div>`);
 
@@ -132,7 +122,6 @@
       ${alphaInput}
       ${exponentInput}
       ${stepsPerFrameInput}
-      ${rotationRateInput}
     </div>`);
 
     display(html`<div id="rd-controls">
@@ -142,16 +131,18 @@
     </div>`);
   </script>
   <script id="canvas-setup" type="module">
-    const canvasWidth = Math.min(width, 800);
-    const canvasHeight = canvasWidth;
+    import { expandable } from './lib/expandable.js';
+
+    const defaultWidth = Math.min(width, 800);
+    const defaultHeight = defaultWidth;
     const dpr = Math.min(devicePixelRatio, 2);
 
     const canvas = document.createElement('canvas');
     canvas.id = 'rd-canvas';
-    canvas.width = canvasWidth * dpr;
-    canvas.height = canvasHeight * dpr;
-    canvas.style.width = `${canvasWidth}px`;
-    canvas.style.height = `${canvasHeight}px`;
+    canvas.width = defaultWidth * dpr;
+    canvas.height = defaultHeight * dpr;
+    canvas.style.width = `${defaultWidth}px`;
+    canvas.style.height = `${defaultHeight}px`;
 
     const gpuContext = canvas.getContext('webgpu');
     gpuContext.configure({
@@ -160,7 +151,67 @@
       alphaMode: 'opaque'
     });
 
-    display(canvas);
+    // Mutable state for screen-size-dependent resources
+    const screenResources = {
+      offscreenTexture: null,
+      depthTexture: null,
+      postBindGroup: null,
+      width: canvas.width,
+      height: canvas.height
+    };
+
+    // Expandable state persists across re-renders
+    const expandableState = { expanded: false };
+
+    function handleResize(content, w, h, isExpanded) {
+      const newWidth = Math.round(w * dpr);
+      const newHeight = Math.round(h * dpr);
+
+      if (newWidth === screenResources.width && newHeight === screenResources.height) return;
+
+      canvas.width = newWidth;
+      canvas.height = newHeight;
+      canvas.style.width = `${w}px`;
+      canvas.style.height = `${h}px`;
+
+      gpuContext.configure({
+        device,
+        format: canvasFormat,
+        alphaMode: 'opaque'
+      });
+
+      // Recreate screen-size-dependent textures
+      if (screenResources.offscreenTexture) screenResources.offscreenTexture.destroy();
+      if (screenResources.depthTexture) screenResources.depthTexture.destroy();
+
+      screenResources.offscreenTexture = device.createTexture({
+        size: [newWidth, newHeight],
+        format: 'rgba16float',
+        usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
+      });
+
+      screenResources.depthTexture = device.createTexture({
+        size: [newWidth, newHeight],
+        format: 'depth24plus',
+        usage: GPUTextureUsage.RENDER_ATTACHMENT
+      });
+
+      screenResources.width = newWidth;
+      screenResources.height = newHeight;
+
+      // Mark dirty flag for re-render (cameraState.dirty will be set in render-loop)
+      screenResources.dirty = true;
+    }
+
+    const container = expandable(canvas, {
+      width: defaultWidth,
+      height: defaultHeight,
+      onResize: handleResize,
+      controls: ['#rd-params', '#rd-render', '#rd-controls'],
+      state: expandableState
+    });
+
+    display(container);
   </script>
   <script id="textures" type="module">
     // Create 3D textures for simulation state (A, B values)
@@ -177,13 +228,6 @@
       device.createTexture({ ...textureDesc, label: 'state0' }),
       device.createTexture({ ...textureDesc, label: 'state1' })
     ];
-
-    // Depth texture for rendering
-    const depthTexture = device.createTexture({
-      size: [canvas.width, canvas.height],
-      format: 'depth24plus',
-      usage: GPUTextureUsage.RENDER_ATTACHMENT
-    });
   </script>
   <script id="texture-readback" type="module">
     // Staging buffer for reading back a single slice of the 3D texture
@@ -310,10 +354,10 @@
     `;
 
     // Simulation compute shader (Gray-Scott reaction-diffusion)
+    // Uses textureLoad with direct indices for efficiency (no interpolation needed)
     const simShaderCode = /* wgsl */ `
       @group(0) @binding(0) var inputTex: texture_3d<f32>;
       @group(0) @binding(1) var outputTex: texture_storage_3d<rgba16float, write>;
-      @group(0) @binding(2) var texSampler: sampler;
 
       struct SimParams {
         k: f32,
@@ -325,26 +369,22 @@
         _pad1: f32,
         _pad2: f32,
       }
-      @group(0) @binding(3) var<uniform> params: SimParams;
+      @group(0) @binding(2) var<uniform> params: SimParams;
 
       @compute @workgroup_size(4, 4, 4)
       fn main(@builtin(global_invocation_id) id: vec3u) {
         let dims = textureDimensions(inputTex);
         if (any(id >= dims)) { return; }
 
-        // Use normalized coordinates for sampling (sampler handles repeat)
-        let invDims = 1.0 / vec3f(dims);
-        let uv = (vec3f(id) + 0.5) * invDims;
-
-        // Sample center and neighbors using textureSampleLevel
-        // The repeat sampler handles periodic boundaries automatically
-        let c  = textureSampleLevel(inputTex, texSampler, uv, 0.0).xy;
-        let xp = textureSampleLevel(inputTex, texSampler, uv + vec3f(invDims.x, 0.0, 0.0), 0.0).xy;
-        let xm = textureSampleLevel(inputTex, texSampler, uv - vec3f(invDims.x, 0.0, 0.0), 0.0).xy;
-        let yp = textureSampleLevel(inputTex, texSampler, uv + vec3f(0.0, invDims.y, 0.0), 0.0).xy;
-        let ym = textureSampleLevel(inputTex, texSampler, uv - vec3f(0.0, invDims.y, 0.0), 0.0).xy;
-        let zp = textureSampleLevel(inputTex, texSampler, uv + vec3f(0.0, 0.0, invDims.z), 0.0).xy;
-        let zm = textureSampleLevel(inputTex, texSampler, uv - vec3f(0.0, 0.0, invDims.z), 0.0).xy;
+        // Load center and neighbors using direct indices
+        // Periodic boundary conditions via modulo wrapping
+        let c  = textureLoad(inputTex, id, 0).xy;
+        let xp = textureLoad(inputTex, vec3u((id.x + 1) % dims.x, id.y, id.z), 0).xy;
+        let xm = textureLoad(inputTex, vec3u((id.x + dims.x - 1) % dims.x, id.y, id.z), 0).xy;
+        let yp = textureLoad(inputTex, vec3u(id.x, (id.y + 1) % dims.y, id.z), 0).xy;
+        let ym = textureLoad(inputTex, vec3u(id.x, (id.y + dims.y - 1) % dims.y, id.z), 0).xy;
+        let zp = textureLoad(inputTex, vec3u(id.x, id.y, (id.z + 1) % dims.z), 0).xy;
+        let zm = textureLoad(inputTex, vec3u(id.x, id.y, (id.z + dims.z - 1) % dims.z), 0).xy;
 
         // Discrete Laplacian (7-point stencil, grid spacing = 1)
         let laplacian = xp + xm + yp + ym + zp + zm - 6.0 * c;
@@ -538,14 +578,26 @@
     });
   </script>
   <script id="offscreen-texture" type="module">
-    // Offscreen render target for HDR accumulation
-    const offscreenTexture = device.createTexture({
+    // Initialize screen-size-dependent resources
+    screenResources.offscreenTexture = device.createTexture({
       size: [canvas.width, canvas.height],
       format: 'rgba16float',
       usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.RENDER_ATTACHMENT
     });
+
+    screenResources.depthTexture = device.createTexture({
+      size: [canvas.width, canvas.height],
+      format: 'depth24plus',
+      usage: GPUTextureUsage.RENDER_ATTACHMENT
+    });
+
+    // Marker to signal that screen resources are ready
+    const screenResourcesReady = true;
   </script>
   <script id="bind-groups" type="module">
+    // Ensure screen resources are initialized before creating bind groups
+    screenResourcesReady;
+
     // Initialize bind group params buffer
     const initParamsBuffer = device.createBuffer({
       size: 16,
@@ -563,14 +615,14 @@
     });
 
     // Simulation bind groups (ping-pong)
+    // No sampler needed - using textureLoad with direct indices
     const simBindGroups = [
       device.createBindGroup({
         layout: simPipeline.getBindGroupLayout(0),
         entries: [
           { binding: 0, resource: textures[0].createView() },
           { binding: 1, resource: textures[1].createView() },
-          { binding: 2, resource: linearSampler },
-          { binding: 3, resource: { buffer: simParamsBuffer } }
+          { binding: 2, resource: { buffer: simParamsBuffer } }
         ]
       }),
       device.createBindGroup({
@@ -578,8 +630,7 @@
         entries: [
           { binding: 0, resource: textures[1].createView() },
           { binding: 1, resource: textures[0].createView() },
-          { binding: 2, resource: linearSampler },
-          { binding: 3, resource: { buffer: simParamsBuffer } }
+          { binding: 2, resource: { buffer: simParamsBuffer } }
         ]
       })
     ];
@@ -604,11 +655,11 @@
       })
     ];
 
-    // Post-process bind group
-    const postBindGroup = device.createBindGroup({
+    // Post-process bind group (stored in screenResources, recreated on resize)
+    screenResources.postBindGroup = device.createBindGroup({
       layout: postPipeline.getBindGroupLayout(0),
       entries: [
-        { binding: 0, resource: offscreenTexture.createView() },
+        { binding: 0, resource: screenResources.offscreenTexture.createView() },
         { binding: 1, resource: linearSampler }
       ]
     });
@@ -725,12 +776,14 @@
     await initializeSimulation();
   </script>
   <script id="render-loop" type="module">
-    // Dependencies for re-running when params change
-    initializeSimulation; simulate; stepsPerFrame; alpha; exponent; rotationRate;
-    k; f; DA; DB; dt;
+    import { createFrameLoop } from './lib/frame-loop.js';
 
-    let animFrameId = null;
-    let hasError = false;
+    // Dependencies for re-running when params change
+    initializeSimulation; simulate; stepsPerFrame; alpha; exponent;
+    k; f; diffusionRatio; dt;
+
+    let lastScreenWidth = screenResources.width;
+    let lastScreenHeight = screenResources.height;
 
     function updateSimParams() {
       const data = new Float32Array([k, f, DA, DB, dt, 0, 0, 0]);
@@ -782,12 +835,25 @@
 
       device.queue.writeBuffer(renderParamsBuffer, 0, paramsData);
 
+      // Check if we need to recreate bind group after resize
+      if (screenResources.width !== lastScreenWidth || screenResources.height !== lastScreenHeight) {
+        screenResources.postBindGroup = device.createBindGroup({
+          layout: postPipeline.getBindGroupLayout(0),
+          entries: [
+            { binding: 0, resource: screenResources.offscreenTexture.createView() },
+            { binding: 1, resource: linearSampler }
+          ]
+        });
+        lastScreenWidth = screenResources.width;
+        lastScreenHeight = screenResources.height;
+      }
+
       const encoder = device.createCommandEncoder();
 
       // Render volume slices to offscreen texture
       const volumePass = encoder.beginRenderPass({
         colorAttachments: [{
-          view: offscreenTexture.createView(),
+          view: screenResources.offscreenTexture.createView(),
           loadOp: 'clear',
           storeOp: 'store',
           clearValue: { r: 0, g: 0, b: 0, a: 1 }
@@ -808,54 +874,36 @@
         }]
       });
       screenPass.setPipeline(postPipeline);
-      screenPass.setBindGroup(0, postBindGroup);
+      screenPass.setBindGroup(0, screenResources.postBindGroup);
       screenPass.draw(3);
       screenPass.end();
 
       device.queue.submit([encoder.finish()]);
     }
 
-    async function animationLoop() {
-      if (hasError || gpuErrorState.hasError) {
-        if (gpuErrorState.hasError && !hasError) {
-          console.error('Stopping simulation due to WebGPU error:', gpuErrorState.errorMessage);
-          hasError = true;
-        }
+    const loop = createFrameLoop(() => {
+      if (gpuErrorState.hasError) {
+        console.error('Stopping due to WebGPU error:', gpuErrorState.errorMessage);
+        loop.cancel();
         return;
       }
 
-      try {
-        // Auto-rotate
-        if (rotationRate > 0) {
-          cameraState.theta += rotationRate;
-          cameraState.dirty = true;
-        }
-
-        if (simulate) {
-          for (let i = 0; i < stepsPerFrame; i++) {
-            step();
-          }
-          render();
-        } else if (cameraState.dirty) {
-          render();
-          cameraState.dirty = false;
-        }
-
-        animFrameId = requestAnimationFrame(animationLoop);
-      } catch (e) {
-        hasError = true;
-        console.error('Animation loop error:', e);
+      // Handle resize
+      if (screenResources.dirty) {
+        screenResources.dirty = false;
       }
-    }
 
-    animFrameId = requestAnimationFrame(animationLoop);
-
-    invalidation.then(() => {
-      hasError = true;
-      if (animFrameId !== null) {
-        cancelAnimationFrame(animFrameId);
-        animFrameId = null;
+      // Step simulation if running
+      if (simulate) {
+        for (let i = 0; i < stepsPerFrame; i++) {
+          step();
+        }
       }
+
+      // Always render (so param changes are visible even when paused)
+      render();
     });
+
+    invalidation.then(() => loop.cancel());
   </script>
 </notebook>
