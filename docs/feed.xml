@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Sat, 31 Jan 2026 18:02:08 GMT</lastBuildDate>
+    <lastBuildDate>Sat, 31 Jan 2026 18:50:10 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Fluid Instability with Stable Fluids</title>
@@ -85,7 +85,7 @@
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/reflecting-on-two-years-of-yoga/</guid>
       <pubDate>Sat, 27 Dec 2025 08:00:00 GMT</pubDate>
       <description>A personal reflection on consistent yoga practice with attendance visualizations over two years.</description>
-      <media:content url="https://rreusser.github.io/notebooks/meta/reflecting-on-two-years-of-yoga.png" medium="image" />
+      <media:content url="https://rreusser.github.io/notebooks/meta/reflecting-on-two-years-of-yoga.jpg" medium="image" />
     </item>
     <item>
       <title>Of Noise and Neighbors</title>
@@ -125,7 +125,7 @@
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/chaotic-magnetic-pendulum/</guid>
       <pubDate>Wed, 07 Aug 2024 07:00:00 GMT</pubDate>
       <description>Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.</description>
-      <media:content url="https://rreusser.github.io/notebooks/meta/chaotic-magnetic-pendulum.png" medium="image" />
+      <media:content url="https://rreusser.github.io/notebooks/meta/chaotic-magnetic-pendulum.jpg" medium="image" />
     </item>
     <item>
       <title>Spring Training on the Treadmill</title>
