@@ -56,6 +56,8 @@ export function createCameraController(element, opts = {}) {
 
   // Touch state
   let lastTouchDist = 0;
+  let lastTouchCenterX = 0;
+  let lastTouchCenterY = 0;
 
   function computeMatrices(aspectRatio) {
     const { phi, theta, distance, center, fov, near, far } = state;
@@ -212,6 +214,8 @@ export function createCameraController(element, opts = {}) {
       const dx = event.touches[1].clientX - event.touches[0].clientX;
       const dy = event.touches[1].clientY - event.touches[0].clientY;
       lastTouchDist = Math.sqrt(dx * dx + dy * dy);
+      lastTouchCenterX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+      lastTouchCenterY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
     }
   }
 
@@ -224,21 +228,36 @@ export function createCameraController(element, opts = {}) {
       lastX = event.touches[0].clientX;
       lastY = event.touches[0].clientY;
 
-      state.phi -= dx * rotateSpeed;
+      state.phi += dx * rotateSpeed;
       state.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, state.theta + dy * rotateSpeed));
       dirty = true;
     } else if (event.touches.length === 2) {
+      // Calculate distance for pinch zoom
       const dx = event.touches[1].clientX - event.touches[0].clientX;
       const dy = event.touches[1].clientY - event.touches[0].clientY;
       const dist = Math.sqrt(dx * dx + dy * dy);
 
+      // Calculate center for pan
+      const centerX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
+      const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+
       if (lastTouchDist > 0) {
+        // Pinch zoom
         const scale = lastTouchDist / dist;
         state.distance *= scale;
         state.distance = Math.max(state.near * 10, state.distance);
+
+        // Two-finger pan
+        const rect = element.getBoundingClientRect();
+        const panDx = (centerX - lastTouchCenterX) / rect.width;
+        const panDy = (centerY - lastTouchCenterY) / rect.height;
+        pan(panDx, panDy);
+
         dirty = true;
       }
       lastTouchDist = dist;
+      lastTouchCenterX = centerX;
+      lastTouchCenterY = centerY;
     }
   }
 
