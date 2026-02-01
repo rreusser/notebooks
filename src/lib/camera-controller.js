@@ -181,8 +181,23 @@ export function createCameraController(element, opts = {}) {
 
   function onWheel(event) {
     event.preventDefault();
-    state.distance *= 1 + event.deltaY * zoomSpeed;
-    state.distance = Math.max(state.near * 10, state.distance);
+
+    // Get mouse position relative to element center (normalized -0.5 to 0.5)
+    const rect = element.getBoundingClientRect();
+    const mx = (event.clientX - rect.left) / rect.width - 0.5;
+    const my = (event.clientY - rect.top) / rect.height - 0.5;
+
+    // Calculate zoom factor
+    const zoomFactor = 1 + event.deltaY * zoomSpeed;
+    const oldDistance = state.distance;
+    state.distance = Math.max(state.near * 10, oldDistance * zoomFactor);
+    const actualZoomFactor = state.distance / oldDistance;
+
+    // Pan to keep the point under the mouse stationary
+    // When zooming by factor f, pan by mouse_offset * (1 - f)
+    const panAmount = 1 - actualZoomFactor;
+    pan(-mx * panAmount, -my * panAmount);
+
     dirty = true;
   }
 

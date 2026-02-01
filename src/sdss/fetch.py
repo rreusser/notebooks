@@ -8,6 +8,7 @@ import os
 
 # Query SDSS in redshift bins to avoid the 500k row limit
 # Each bin becomes one chunk file
+# Extended to z=0.8 for ~3x more data
 REDSHIFT_BINS = [
     (0.02, 0.08),
     (0.08, 0.12),
@@ -17,6 +18,9 @@ REDSHIFT_BINS = [
     (0.25, 0.30),
     (0.30, 0.40),
     (0.40, 0.50),
+    (0.50, 0.60),
+    (0.60, 0.70),
+    (0.70, 0.80),
 ]
 
 all_chunks = []
