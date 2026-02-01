@@ -1,0 +1,110 @@
+{
+  "totalCount": 1565099,
+  "format": "float16x4",
+  "bytesPerVertex": 8,
+  "layout": [
+    "x",
+    "y",
+    "z",
+    "redshift_normalized"
+  ],
+  "units": "Mpc",
+  "redshiftRange": [
+    0.02000056,
+    0.4999998
+  ],
+  "bounds": {
+    "min": [
+      -1945.8596317210379,
+      -1795.5619714518932,
+      -368.87185397198147
+    ],
+    "max": [
+      1945.418618046949,
+      1896.2034602953754,
+      1806.9840458342082
+    ]
+  },
+  "chunks": [
+    {
+      "file": "galaxies_00.bin.gz",
+      "count": 259504,
+      "byteLength": 2076032,
+      "compressedSize": 1929976,
+      "redshiftRange": [
+        0.02,
+        0.08
+      ]
+    },
+    {
+      "file": "galaxies_01.bin.gz",
+      "count": 221380,
+      "byteLength": 1771040,
+      "compressedSize": 1594712,
+      "redshiftRange": [
+        0.08,
+        0.12
+      ]
+    },
+    {
+      "file": "galaxies_02.bin.gz",
+      "count": 177524,
+      "byteLength": 1420192,
+      "compressedSize": 1276102,
+      "redshiftRange": [
+        0.12,
+        0.16
+      ]
+    },
+    {
+      "file": "galaxies_03.bin.gz",
+      "count": 111277,
+      "byteLength": 890216,
+      "compressedSize": 791270,
+      "redshiftRange": [
+        0.16,
+        0.2
+      ]
+    },
+    {
+      "file": "galaxies_04.bin.gz",
+      "count": 95639,
+      "byteLength": 765112,
+      "compressedSize": 683533,
+      "redshiftRange": [
+        0.2,
+        0.25
+      ]
+    },
+    {
+      "file": "galaxies_05.bin.gz",
+      "count": 94871,
+      "byteLength": 758968,
+      "compressedSize": 675950,
+      "redshiftRange": [
+        0.25,
+        0.3
+      ]
+    },
+    {
+      "file": "galaxies_06.bin.gz",
+      "count": 247446,
+      "byteLength": 1979568,
+      "compressedSize": 1772436,
+      "redshiftRange": [
+        0.3,
+        0.4
+      ]
+    },
+    {
+      "file": "galaxies_07.bin.gz",
+      "count": 357458,
+      "byteLength": 2859664,
+      "compressedSize": 2540975,
+      "redshiftRange": [
+        0.4,
+        0.5
+      ]
+    }
+  ]
+}
