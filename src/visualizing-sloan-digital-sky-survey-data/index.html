@@ -5,7 +5,7 @@
 # Sloan Digital Sky Survey
 
 
-I got inspired this evening when I learned of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing!), a massive void nearly two hundred *million* light years across which contains just 60 galaxies where we'd expect nearly 2,000.
+I got inspired this evening when I learned of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing, a massive void nearly two hundred *million* light years across which contains just 60 galaxies where we'd expect nearly 2,000.
 
 So I looked into how to acquire data from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS). The [astroquery](https://astroquery.readthedocs.io/en/latest/) module made pretty short work of it, so this notebook plots over 2.3 million galaxies (${tex`z \lesssim 0.7`}) and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (QSOs) extending to ${tex`z \approx 7`}. Data loads progressively in chunks.
 
@@ -87,7 +87,17 @@ const chunkLoader = {
     const chunkInfo = metadata.chunks[index];
     try {
       const response = await fetch(`${dataBaseUrl}/${chunkInfo.file}`);
-      const arrayBuffer = await response.arrayBuffer();
+
+      // Decompress gzip when loading from GitHub raw (serves compressed files as-is)
+      // In dev, Vite handles decompression automatically
+      let arrayBuffer;
+      if (chunkInfo.file.endsWith('.gz') && dataBaseUrl !== '.') {
+        const ds = new DecompressionStream('gzip');
+        const decompressed = response.body.pipeThrough(ds);
+        arrayBuffer = await new Response(decompressed).arrayBuffer();
+      } else {
+        arrayBuffer = await response.arrayBuffer();
+      }
       const galaxyData = new Uint16Array(arrayBuffer);
 
       const buffer = device.createBuffer({
