@@ -737,3 +737,29 @@ a.index__tag:active {
   margin: 4px 0;
 }
 
+/* SDSS controls styling */
+.sdss-controls {
+  max-width: 100%;
+}
+
+.sdss-controls > div[id^="scope-"] {
+  width: min(100%, 500px) !important;
+}
+
+.sdss-controls .range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.sdss-controls .range-slider {
+  flex: 1 1 auto;
+}
+
+.sdss-controls .range-output {
+  flex: 0 0 auto;
+  min-width: 75px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+

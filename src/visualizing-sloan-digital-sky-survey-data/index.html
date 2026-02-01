@@ -6,9 +6,9 @@
 
 This notebook plots over 2.3 million galaxies and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (quasi-stellar objects, or QSOs) from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS). You should also check out [The Map of the Universe](https://mapoftheuniverse.net/) for a view with more context.
 
-Object positions below are computed from their redshifts by converting them to [comoving distance](https://en.wikipedia.org/wiki/Comoving_and_proper_distances) and then projecting those distances along the observed sky directions. This factors out the overall expansion of the universe and lets large-scale structure appear in a roughly fixed coordinate system. Because each object is seen at a different lookback time, the full configuration shown here never existed all at once at any single moment in cosmic history.
-
 Objects are colored by type and redshift. Nearby galaxies cluster into [filaments](https://en.wikipedia.org/wiki/Galaxy_filament) and fade from white to red with distance. Farther out, quasars extend to redshifts near 7 and reveal large-scale structure across cosmic time, shifting from blue nearby to red at great distances. The most distant objects show the universe as it was less than a billion years after the Big Bang.
+
+Object positions below are computed from their redshifts by converting them to [comoving distance](https://en.wikipedia.org/wiki/Comoving_and_proper_distances) and then projecting those distances along the observed sky directions. This factors out the overall expansion of the universe and lets large-scale structure appear in a roughly fixed coordinate system. Because each object is seen at a different lookback time, the full configuration shown here never existed all at once at any single moment in cosmic history.
 
 The most obvious feature is the radial, wedge-shaped pattern. This comes from how SDSS scans the sky, shaped by the telescope’s location in New Mexico and by avoiding regions blocked by dust and stars in our own galaxy. The universe itself surrounds us in all directions and may be much larger than what we can observe, or even infinite.
   </script>
@@ -293,13 +293,17 @@ const pointSize = ctrl(pointSizeInput);
 */
 const pointSize = 1;
 
-const exposureInput = Inputs.range([0.001, 1], {
-  value: 0.02,
-  label: 'Exposure',
-  step: 0.001,
+
+// Full redshift range spans galaxies (z~0.02-0.7) and QSOs (z~0.02-7.0)
+const zMin = Math.min(metadata.galaxyRedshiftRange[0], metadata.qsoRedshiftRange[0]);
+const zMax = metadata.qsoRedshiftRange[1];
+const redshiftRangeInput = interval([+zMin.toFixed(2), +zMax.toFixed(1)], {
+  value: [+zMin.toFixed(2), 0.3],  // Start with nearby view
+  step: 0.01,
+  label: 'Redshift (z)',
   transform: Math.log
 });
-const exposure = ctrl(exposureInput);
+const redshiftRange = ctrl(redshiftRangeInput);
 
 /*
 const whitePointInput = Inputs.range([1, 50], {
@@ -315,16 +319,13 @@ const whitePoint = 25;
 const objectTypesInput = Inputs.checkbox(['Galaxies', 'QSOs'], { value: ['Galaxies'], label: 'Show' });
 const objectTypes = ctrl(objectTypesInput);
 
-// Full redshift range spans galaxies (z~0.02-0.7) and QSOs (z~0.02-7.0)
-const zMin = Math.min(metadata.galaxyRedshiftRange[0], metadata.qsoRedshiftRange[0]);
-const zMax = metadata.qsoRedshiftRange[1];
-const redshiftRangeInput = interval([+zMin.toFixed(2), +zMax.toFixed(1)], {
-  value: [+zMin.toFixed(2), 0.3],  // Start with nearby view
-  step: 0.01,
-  label: 'Redshift (z)',
+const exposureInput = Inputs.range([0.001, 1], {
+  value: 0.02,
+  label: 'Exposure',
+  step: 0.001,
   transform: Math.log
 });
-const redshiftRange = ctrl(redshiftRangeInput);
+const exposure = ctrl(exposureInput);
 
 display(controlsContainer);
   </script>

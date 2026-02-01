@@ -1842,6 +1842,27 @@ a.index__tag:active {
     .expandable-controls-content details {
   margin: 4px 0;
 }
+    /* SDSS controls styling */
+    .sdss-controls {
+  max-width: 100%;
+}
+    .sdss-controls > div[id^="scope-"] {
+  width: min(100%, 500px) !important;
+}
+    .sdss-controls .range {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+    .sdss-controls .range-slider {
+  flex: 1 1 auto;
+}
+    .sdss-controls .range-output {
+  flex: 0 0 auto;
+  min-width: 75px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
   </style>
   <style> main { max-width: 640px; }</style>
 <meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Knocking Down the Gates with our Friend Jacobi</title>  <script type="module" crossorigin src="/notebooks/assets/index-DqW7Cj-m.js"></script>
