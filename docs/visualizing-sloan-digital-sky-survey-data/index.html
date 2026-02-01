@@ -1865,7 +1865,7 @@ a.index__tag:active {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Visualizing Sloan Digital Sky Survey Data</title>  <script type="module" crossorigin src="/notebooks/assets/index-8xUTCBH9.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Visualizing Sloan Digital Sky Survey Data</title>  <script type="module" crossorigin src="/notebooks/assets/index-COyOFaEl.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1913,7 +1913,7 @@ distance = cosmo.comoving_distance(result['z']).to('Mpc').value
 </code></pre>
 <p>Obtaining the data was surprisingly easy.</p>
 <p>Redshifts are converted to 3D Cartesian coordinates using <a href="https://www.astropy.org/">Astropy</a>’s <a href="https://arxiv.org/abs/1807.06209">Planck 2018</a> cosmology. Comoving distance  in Mpc is computed from redshift , then projected: , , , where  and  are right ascension and declination.</p>
-<p>Each object is stored as four float16 values (x, y, z, color_param). The color parameter encodes both object type and redshift: galaxies map to [0, 0.5) and QSOs to [0.5, 1.0], allowing the shader to distinguish types and interpolate colors. Data is gzip-compressed and loaded progressively by redshift range. It would probably be moe efficient to work out positions in the browser, but I opted instead to do the work up front and transfer data in a format that would allow directly uploading to the GPU and piping to the screen.</p>
+<p>Each object is stored as four float16 values (x, y, z, color_param). The color parameter encodes both object type and redshift: galaxies map to [0, 0.5) and QSOs to [0.5, 1.0], allowing the shader to distinguish types and interpolate colors. Data is gzip-compressed and loaded progressively by redshift range. It would probably be more efficient to work out positions in the browser, but I opted instead to do the work up front and transfer data in a format that would allow directly uploading to the GPU and piping to the screen.</p>
 <p>Rendering uses WebGPU with HDR accumulation and tonemapping. Points are rendered as single-pixel point primitives (there was some quad sprite rendering in place for larger points, but single points seem fine when you have 3M points!). To maintain consistent perceived brightness across zoom levels and point sizes, the shader scales intensity inversely with both camera distance and point size. Without this correction, zooming out would cause the image to blow out as millions of points overlap, while zooming in would make sparse regions too dim.</p>
 </div></div></main>
   </div>
