@@ -1,0 +1,334 @@
+{
+  "totalCount": 3347036,
+  "galaxyCount": 2596157,
+  "qsoCount": 750879,
+  "format": "float16x4",
+  "bytesPerVertex": 8,
+  "layout": [
+    "x",
+    "y",
+    "z",
+    "color_param"
+  ],
+  "colorParamDescription": "0-0.5: galaxies (white\u2192red by z), 0.5-1.0: QSOs (blue\u2192red by z)",
+  "units": "Mpc",
+  "galaxyRedshiftRange": [
+    0.02000056,
+    1.199959
+  ],
+  "qsoRedshiftRange": [
+    0.02015577,
+    6.99964
+  ],
+  "bounds": {
+    "min": [
+      -8720.342571038962,
+      -7926.765103855408,
+      -1893.496979041212
+    ],
+    "max": [
+      8790.404338991928,
+      8789.430219322563,
+      8014.901780903967
+    ]
+  },
+  "chunks": [
+    {
+      "file": "objects_00.bin.gz",
+      "count": 257403,
+      "byteLength": 2059224,
+      "compressedSize": 1914184,
+      "redshiftRange": [
+        0.02,
+        0.08
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_01.bin.gz",
+      "count": 220245,
+      "byteLength": 1761960,
+      "compressedSize": 1592281,
+      "redshiftRange": [
+        0.08,
+        0.12
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_02.bin.gz",
+      "count": 176638,
+      "byteLength": 1413104,
+      "compressedSize": 1271298,
+      "redshiftRange": [
+        0.12,
+        0.16
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_03.bin.gz",
+      "count": 110701,
+      "byteLength": 885608,
+      "compressedSize": 786644,
+      "redshiftRange": [
+        0.16,
+        0.2
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_04.bin.gz",
+      "count": 95246,
+      "byteLength": 761968,
+      "compressedSize": 681228,
+      "redshiftRange": [
+        0.2,
+        0.25
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_05.bin.gz",
+      "count": 94539,
+      "byteLength": 756312,
+      "compressedSize": 675624,
+      "redshiftRange": [
+        0.25,
+        0.3
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_06.bin.gz",
+      "count": 246743,
+      "byteLength": 1973944,
+      "compressedSize": 1761203,
+      "redshiftRange": [
+        0.3,
+        0.4
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_07.bin.gz",
+      "count": 357050,
+      "byteLength": 2856400,
+      "compressedSize": 2540830,
+      "redshiftRange": [
+        0.4,
+        0.5
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_08.bin.gz",
+      "count": 487253,
+      "byteLength": 3898024,
+      "compressedSize": 3481121,
+      "redshiftRange": [
+        0.5,
+        0.6
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_09.bin.gz",
+      "count": 261270,
+      "byteLength": 2090160,
+      "compressedSize": 1848058,
+      "redshiftRange": [
+        0.6,
+        0.7
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_10.bin.gz",
+      "count": 77663,
+      "byteLength": 621304,
+      "compressedSize": 541581,
+      "redshiftRange": [
+        0.7,
+        0.75
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_11.bin.gz",
+      "count": 67767,
+      "byteLength": 542136,
+      "compressedSize": 477233,
+      "redshiftRange": [
+        0.75,
+        0.8
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_12.bin.gz",
+      "count": 52688,
+      "byteLength": 421504,
+      "compressedSize": 364512,
+      "redshiftRange": [
+        0.8,
+        0.85
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_13.bin.gz",
+      "count": 37691,
+      "byteLength": 301528,
+      "compressedSize": 261382,
+      "redshiftRange": [
+        0.85,
+        0.9
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_14.bin.gz",
+      "count": 22911,
+      "byteLength": 183288,
+      "compressedSize": 160521,
+      "redshiftRange": [
+        0.9,
+        0.95
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_15.bin.gz",
+      "count": 13311,
+      "byteLength": 106488,
+      "compressedSize": 91926,
+      "redshiftRange": [
+        0.95,
+        1.0
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_16.bin.gz",
+      "count": 12042,
+      "byteLength": 96336,
+      "compressedSize": 85144,
+      "redshiftRange": [
+        1.0,
+        1.1
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_17.bin.gz",
+      "count": 4996,
+      "byteLength": 39968,
+      "compressedSize": 34894,
+      "redshiftRange": [
+        1.1,
+        1.2
+      ],
+      "objectClass": "GALAXY"
+    },
+    {
+      "file": "objects_18.bin.gz",
+      "count": 35547,
+      "byteLength": 284376,
+      "compressedSize": 251561,
+      "redshiftRange": [
+        0.02,
+        0.5
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_19.bin.gz",
+      "count": 118972,
+      "byteLength": 951776,
+      "compressedSize": 827286,
+      "redshiftRange": [
+        0.5,
+        1.0
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_20.bin.gz",
+      "count": 163859,
+      "byteLength": 1310872,
+      "compressedSize": 1140532,
+      "redshiftRange": [
+        1.0,
+        1.5
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_21.bin.gz",
+      "count": 168352,
+      "byteLength": 1346816,
+      "compressedSize": 1176151,
+      "redshiftRange": [
+        1.5,
+        2.0
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_22.bin.gz",
+      "count": 151372,
+      "byteLength": 1210976,
+      "compressedSize": 1048489,
+      "redshiftRange": [
+        2.0,
+        2.5
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_23.bin.gz",
+      "count": 72600,
+      "byteLength": 580800,
+      "compressedSize": 505904,
+      "redshiftRange": [
+        2.5,
+        3.0
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_24.bin.gz",
+      "count": 35894,
+      "byteLength": 287152,
+      "compressedSize": 252832,
+      "redshiftRange": [
+        3.0,
+        4.0
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_25.bin.gz",
+      "count": 2529,
+      "byteLength": 20232,
+      "compressedSize": 17788,
+      "redshiftRange": [
+        4.0,
+        5.0
+      ],
+      "objectClass": "QSO"
+    },
+    {
+      "file": "objects_26.bin.gz",
+      "count": 1754,
+      "byteLength": 14032,
+      "compressedSize": 12459,
+      "redshiftRange": [
+        5.0,
+        7.0
+      ],
+      "objectClass": "QSO"
+    }
+  ]
+}

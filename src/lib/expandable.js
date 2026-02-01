@@ -40,60 +40,25 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
   // Outer container maintains document flow
   const container = document.createElement('div');
   container.className = 'expandable-container';
-  container.style.cssText = `
-    position: relative;
-    width: 100%;
-  `;
 
   // Content wrapper - positions the content
   const contentWrapper = document.createElement('div');
   contentWrapper.className = 'expandable-content';
-  contentWrapper.style.cssText = `
-    position: relative;
-    display: inline-block;
-    z-index: 1;
-  `;
 
   // Overlay backdrop for expanded state
   const overlay = document.createElement('div');
   overlay.className = 'expandable-overlay';
-  overlay.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0, 0, 0, 0.5);
-    opacity: 0;
-    pointer-events: none;
-    transition: opacity 0.2s ease;
-    z-index: 9998;
-  `;
   overlay.addEventListener('click', () => collapse());
 
   // Create floating panel for controls (created once, reused)
   if (controlsArray.length > 0) {
     floatingPanel = document.createElement('div');
     floatingPanel.className = 'expandable-controls-panel';
-    floatingPanel.style.cssText = `display: none;`;
+    floatingPanel.style.display = 'none';
 
     // Draggable header
     const panelHeader = document.createElement('div');
     panelHeader.className = 'expandable-controls-header';
-    panelHeader.style.cssText = `
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      padding: 5px 10px;
-      background: #f5f5f5;
-      border-bottom: 1px solid #e0e0e0;
-      cursor: move;
-      user-select: none;
-      font-family: system-ui, -apple-system, sans-serif;
-      font-size: 12px;
-      font-weight: 500;
-      color: #555;
-    `;
 
     const panelTitle = document.createElement('span');
     panelTitle.textContent = 'Controls';
@@ -102,22 +67,6 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     panelToggle.className = 'expandable-controls-toggle';
     panelToggle.innerHTML = '▼';
     panelToggle.title = 'Collapse controls';
-    panelToggle.style.cssText = `
-      border: none;
-      background: none;
-      cursor: pointer;
-      font-size: 12px;
-      color: #666;
-      padding: 4px 8px;
-      border-radius: 4px;
-      transition: background 0.15s ease;
-    `;
-    panelToggle.addEventListener('mouseenter', () => {
-      panelToggle.style.background = 'rgba(0,0,0,0.1)';
-    });
-    panelToggle.addEventListener('mouseleave', () => {
-      panelToggle.style.background = 'none';
-    });
     panelToggle.addEventListener('click', (e) => {
       e.stopPropagation();
       toggleControlsPanel();
@@ -129,23 +78,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     // Content area
     const panelContent = document.createElement('div');
     panelContent.className = 'expandable-controls-content';
-    panelContent.style.cssText = `
-      padding: 12px;
-      overflow-y: auto;
-      max-height: calc(100vh - 200px);
-      display: flex;
-      flex-direction: column;
-      gap: 4px;
-    `;
 
-    // Add CSS for details elements
-    const panelStyle = document.createElement('style');
-    panelStyle.textContent = `
-      .expandable-controls-content details {
-        margin: 4px 0;
-      }
-    `;
-    floatingPanel.appendChild(panelStyle);
     floatingPanel.appendChild(panelHeader);
     floatingPanel.appendChild(panelContent);
 
@@ -333,33 +266,8 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
   toggleBtn.className = 'expandable-toggle';
   toggleBtn.innerHTML = '⤢';
   toggleBtn.title = 'Expand';
-  toggleBtn.style.cssText = `
-    position: absolute;
-    top: ${-toggleOffset[1]}px;
-    right: ${-toggleOffset[0]}px;
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 4px;
-    background: rgba(255, 255, 255, 0.9);
-    color: #666;
-    font-size: 16px;
-    cursor: pointer;
-    z-index: 1000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.6);
-    transition: background 0.2s ease, box-shadow 0.2s ease;
-  `;
-  toggleBtn.addEventListener('mouseenter', () => {
-    toggleBtn.style.background = 'rgba(255, 255, 255, 1)';
-    toggleBtn.style.boxShadow = '0 2px 6px rgba(0,0,0,0.3)';
-  });
-  toggleBtn.addEventListener('mouseleave', () => {
-    toggleBtn.style.background = 'rgba(255, 255, 255, 0.9)';
-    toggleBtn.style.boxShadow = '0 1px 3px rgba(0,0,0,0.2)';
-  });
+  toggleBtn.style.top = `${-toggleOffset[1]}px`;
+  toggleBtn.style.right = `${-toggleOffset[0]}px`;
 
   // Handle function content (call it to get the element)
   if (typeof content === 'function') {
@@ -438,8 +346,8 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     contentWrapper.style.width = '';
     contentWrapper.style.height = '';
     contentWrapper.style.overflow = '';
-    contentWrapper.style.background = '';
     contentWrapper.style.boxShadow = '';
+    contentWrapper.classList.remove('expanded');
     contentWrapper.style.padding = '';
     contentWrapper.style.borderRadius = '';
     contentWrapper.style.zIndex = '1';
@@ -496,7 +404,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
       contentWrapper.style.borderRadius = '8px';
       contentWrapper.style.boxShadow = '0 8px 32px rgba(0,0,0,0.3)';
     }
-    contentWrapper.style.background = 'white';
+    contentWrapper.classList.add('expanded');
     contentWrapper.style.padding = `${vPadding}px ${hPadding}px`;
 
     // Reset margins on inner content for proper centering
@@ -574,18 +482,9 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
           document.body.appendChild(floatingPanel);
         }
         floatingPanel.classList.add('expandable-expanded');
-        floatingPanel.style.cssText = `
-          position: fixed;
-          z-index: 10000;
-          background: white;
-          border-radius: 8px;
-          box-shadow: 0 4px 20px rgba(0,0,0,0.3);
-          overflow: hidden;
-          max-width: min(360px, calc(100vw - 32px));
-          max-height: calc(100vh - 100px);
-          left: ${controlsPanelPosition.x}px;
-          top: ${controlsPanelPosition.y}px;
-        `;
+        floatingPanel.style.display = '';
+        floatingPanel.style.left = `${controlsPanelPosition.x}px`;
+        floatingPanel.style.top = `${controlsPanelPosition.y}px`;
 
         // Set initial expand/collapse state
         const isMobile = window.innerWidth < 640;

@@ -1,0 +1,943 @@
+<!doctype html>
+<notebook theme="coffee">
+  <title>Sloan Digital Sky Survey</title>
+  <script id="intro" type="text/markdown">
+# Sloan Digital Sky Survey
+
+This notebook visualizes spectroscopically-confirmed objects from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS), including over 2.3 million galaxies (${tex`z \lesssim 0.7`}) and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (QSOs) extending to ${tex`z \approx 7`}. Data loads progressively in chunks.
+
+Objects are colored by type and redshift. Galaxies range from white (nearby) to red (distant). Quasars appear blue (nearby) fading to red at high redshift, visually separating the two populations. The filamentary structure visible in the nearby universe is the [cosmic web](https://science.nasa.gov/resource/cosmic-web/). Galaxies cluster along dense filaments and sheets surrounding vast, nearly empty voids. (I created this notebook just today after learning of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing!) At greater distances, the quasar population traces the large-scale structure of the universe across cosmic time, with the most distant objects showing us the universe when it was less than a billion years old.
+  </script>
+  <script id="webgpu-setup" type="module">
+import { createWebGPUContext } from './lib/webgpu-canvas.js';
+
+const { device, canvasFormat } = await createWebGPUContext({
+  optionalFeatures: ['shader-f16']
+});
+
+invalidation.then(() => device.destroy());
+  </script>
+  <script id="load-data" type="module">
+// In production, load from GitHub raw content (avoids copying large files to docs/)
+const dataBaseUrl = location.hostname === 'rreusser.github.io'
+  ? 'https://raw.githubusercontent.com/rreusser/notebooks/main/src/visualizing-sloan-digital-sky-survey-data'
+  : '.';
+const metadata = await fetch(`${dataBaseUrl}/objects.json`).then(r => r.json());
+
+// Decode float16 to float32
+function decodeFloat16(uint16) {
+  const sign = (uint16 >> 15) & 0x1;
+  const exp = (uint16 >> 10) & 0x1f;
+  const frac = uint16 & 0x3ff;
+  if (exp === 0) {
+    return (sign ? -1 : 1) * Math.pow(2, -14) * (frac / 1024);
+  } else if (exp === 31) {
+    return frac ? NaN : (sign ? -Infinity : Infinity);
+  }
+  return (sign ? -1 : 1) * Math.pow(2, exp - 15) * (1 + frac / 1024);
+}
+
+// Global chunk loader with queue-based concurrency control
+const CONCURRENCY = 1;
+const NUM_DISTANCE_BINS = 100;
+const chunkLoader = {
+  queue: [],           // Pending chunk indices
+  inFlight: new Set(), // Currently loading
+  promises: new Map(), // index -> {promise, resolve, reject}
+  chunks: new Array(metadata.chunks.length).fill(null),
+  loadedCount: 0,
+  // Histogram of galaxy counts by distance (binned by sqrt(x²+y²+z²))
+  distanceHistogram: new Uint32Array(NUM_DISTANCE_BINS),
+  maxDistance: 0,      // Track max distance seen
+
+  // Request a chunk by index, returns promise that resolves when loaded
+  request(index) {
+    // Already loaded - return immediately
+    if (this.chunks[index]) {
+      return Promise.resolve(this.chunks[index]);
+    }
+    // Already requested - return existing promise
+    if (this.promises.has(index)) {
+      return this.promises.get(index).promise;
+    }
+    // Create new promise and queue the request
+    let resolve, reject;
+    const promise = new Promise((res, rej) => { resolve = res; reject = rej; });
+    this.promises.set(index, { promise, resolve, reject });
+    this.queue.push(index);
+    this.processQueue();
+    return promise;
+  },
+
+  // Process queue up to concurrency limit
+  processQueue() {
+    while (this.queue.length > 0 && this.inFlight.size < CONCURRENCY) {
+      const index = this.queue.shift();
+      if (this.chunks[index] || this.inFlight.has(index)) continue;
+      this.inFlight.add(index);
+      this.loadChunk(index);
+    }
+  },
+
+  // Actually fetch and create GPU buffer for a chunk
+  async loadChunk(index) {
+    const chunkInfo = metadata.chunks[index];
+    try {
+      const response = await fetch(`${dataBaseUrl}/${chunkInfo.file}`);
+      const arrayBuffer = await response.arrayBuffer();
+      const galaxyData = new Uint16Array(arrayBuffer);
+
+      const buffer = device.createBuffer({
+        label: `galaxy-chunk-${index}`,
+        size: arrayBuffer.byteLength,
+        usage: GPUBufferUsage.VERTEX | GPUBufferUsage.COPY_DST
+      });
+      device.queue.writeBuffer(buffer, 0, galaxyData);
+
+      // Compute distance histogram from this chunk
+      // Data format: float16x4 (x, y, z, redshift_norm) - 4 uint16 per vertex
+      const maxDist = Math.max(
+        Math.abs(metadata.bounds.min[0]), Math.abs(metadata.bounds.max[0]),
+        Math.abs(metadata.bounds.min[1]), Math.abs(metadata.bounds.max[1]),
+        Math.abs(metadata.bounds.min[2]), Math.abs(metadata.bounds.max[2])
+      ) * 1.5;  // Add some margin
+      if (maxDist > this.maxDistance) this.maxDistance = maxDist;
+
+      for (let i = 0; i < galaxyData.length; i += 4) {
+        const x = decodeFloat16(galaxyData[i]);
+        const y = decodeFloat16(galaxyData[i + 1]);
+        const z = decodeFloat16(galaxyData[i + 2]);
+        const dist = Math.sqrt(x * x + y * y + z * z);
+        const bin = Math.min(NUM_DISTANCE_BINS - 1, Math.floor(dist / maxDist * NUM_DISTANCE_BINS));
+        this.distanceHistogram[bin]++;
+      }
+
+      const chunk = { buffer, count: chunkInfo.count };
+      this.chunks[index] = chunk;
+      this.loadedCount += chunk.count;
+      this.inFlight.delete(index);
+
+      const { resolve } = this.promises.get(index);
+      resolve(chunk);
+
+      renderState.dirty = true;
+      const objType = chunkInfo.objectClass === 'QSO' ? 'QSOs' : 'galaxies';
+      console.log(`Loaded chunk ${index + 1}/${metadata.chunks.length}: ${chunk.count.toLocaleString()} ${objType} (z=${chunkInfo.redshiftRange[0]}-${chunkInfo.redshiftRange[1]})`);
+
+      // Process more from queue
+      this.processQueue();
+    } catch (err) {
+      this.inFlight.delete(index);
+      const { reject } = this.promises.get(index);
+      reject(err);
+      this.processQueue();
+    }
+  }
+};
+
+// Convenience: request all chunks needed for a given redshift
+function loadChunksForRedshift(targetZ) {
+  const epsilon = 0.001;  // Tolerance for floating point comparison
+  for (let i = 0; i < metadata.chunks.length; i++) {
+    const [chunkZMin] = metadata.chunks[i].redshiftRange;
+    if (chunkZMin < targetZ - epsilon) {
+      chunkLoader.request(i);
+    }
+  }
+}
+
+// Expose loadState for compatibility with progress display
+const loadState = {
+  get loadedCount() { return chunkLoader.loadedCount; },
+  get totalCount() { return metadata.totalCount; },
+  get chunks() { return chunkLoader.chunks; },
+  get loadingIndices() { return chunkLoader.inFlight; }
+};
+
+// Initial load for z <= 0.3
+loadChunksForRedshift(0.3);
+
+invalidation.then(() => {
+  for (const chunk of chunkLoader.chunks) {
+    if (chunk) chunk.buffer.destroy();
+  }
+});
+  </script>
+  <script id="main-canvas" type="module">
+import { expandable } from './lib/expandable.js';
+
+// Initial dimensions based on viewport (don't depend on reactive `width` to avoid re-running on resize)
+const dpr = window.devicePixelRatio || 1;
+const maxWidth = 1200;
+const initialWidth = Math.min(maxWidth, window.innerWidth - 40);
+const initialHeight = Math.round(initialWidth * 0.7);
+
+const canvas = document.createElement('canvas');
+canvas.id = 'sdss-canvas';
+canvas.width = Math.floor(initialWidth * dpr);
+canvas.height = Math.floor(initialHeight * dpr);
+canvas.style.width = `${initialWidth}px`;
+canvas.style.height = `${initialHeight}px`;
+canvas.style.maxWidth = 'none';
+canvas.style.height = 'auto';
+canvas.style.aspectRatio = `${initialWidth} / ${initialHeight}`;
+canvas.style.background = '#1B1714';
+
+const gpuContext = canvas.getContext('webgpu');
+gpuContext.configure({
+  device,
+  format: canvasFormat,
+  alphaMode: 'premultiplied'
+});
+
+const renderState = { dirty: true };
+
+const figure = html`<figure style="margin: 0; max-width: none;" id="sdss-figure">
+  ${canvas}
+</figure>`;
+
+// Expand figure outside article bounds on wide screens
+function updateFigureLayout() {
+  const viewportWidth = window.innerWidth;
+  const figureWidth = Math.min(maxWidth, viewportWidth - 40);
+  const figureHeight = Math.round(figureWidth * 0.7);
+  // Use first cell as stable reference (not affected by this figure's width)
+  const refWidth = document.querySelector('.observablehq--cell')?.offsetWidth || 840;
+  const marginLeft = (refWidth - figureWidth) / 2;
+
+  figure.style.width = figureWidth + 'px';
+  figure.style.marginLeft = marginLeft + 'px';
+
+  // Update canvas to match figure
+  canvas.style.width = figureWidth + 'px';
+  canvas.style.height = figureHeight + 'px';
+}
+
+updateFigureLayout();
+window.addEventListener('resize', updateFigureLayout);
+invalidation.then(() => window.removeEventListener('resize', updateFigureLayout));
+
+display(expandable(figure, {
+  width: initialWidth,
+  height: initialHeight,
+  controls: '.sdss-controls',
+  onResize(el, w, h) {
+    canvas.width = Math.floor(w * dpr);
+    canvas.height = Math.floor(h * dpr);
+    canvas.style.width = `${w}px`;
+    canvas.style.height = `${h}px`;
+    gpuContext.configure({
+      device,
+      format: canvasFormat,
+      alphaMode: 'premultiplied'
+    });
+    renderState.dirty = true;
+  }
+}));
+
+// Handle page resize without re-running the cell
+const resizeObserver = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const rect = entry.contentRect;
+    const w = Math.floor(rect.width);
+    const h = Math.floor(rect.height);
+    if (w > 0 && h > 0) {
+      canvas.width = Math.floor(w * dpr);
+      canvas.height = Math.floor(h * dpr);
+      gpuContext.configure({
+        device,
+        format: canvasFormat,
+        alphaMode: 'premultiplied'
+      });
+      renderState.dirty = true;
+    }
+  }
+});
+resizeObserver.observe(canvas);
+
+invalidation.then(() => resizeObserver.disconnect());
+  </script>
+  <script id="range-slider-import" type="module">
+import { interval } from 'observable:@mootari/range-slider';
+  </script>
+  <script id="controls" type="module">
+const controlsContainer = html`<div class="sdss-controls"></div>`;
+
+function ctrl(input) {
+  controlsContainer.appendChild(input);
+  return Generators.input(input);
+}
+
+const pointSizeInput = Inputs.range([0.5, 8], {
+  value: 1,
+  label: 'Point size',
+  step: 0.1,
+  transform: Math.log
+});
+const pointSize = ctrl(pointSizeInput);
+
+const exposureInput = Inputs.range([0.01, 1], {
+  value: 0.05,
+  label: 'Exposure',
+  step: 0.001,
+  transform: Math.log
+});
+const exposure = ctrl(exposureInput);
+
+const whitePointInput = Inputs.range([1, 50], {
+  value: 20,
+  label: 'White point',
+  step: 0.1,
+  transform: Math.log
+});
+const whitePoint = ctrl(whitePointInput);
+
+const objectTypesInput = Inputs.checkbox(['Galaxies', 'QSOs'], { value: ['Galaxies'], label: 'Show' });
+const objectTypes = ctrl(objectTypesInput);
+
+// Full redshift range spans galaxies (z~0.02-0.7) and QSOs (z~0.02-7.0)
+const zMin = Math.min(metadata.galaxyRedshiftRange[0], metadata.qsoRedshiftRange[0]);
+const zMax = metadata.qsoRedshiftRange[1];
+const redshiftRangeInput = interval([+zMin.toFixed(2), +zMax.toFixed(1)], {
+  value: [+zMin.toFixed(2), 0.3],  // Start with nearby view
+  step: 0.01,
+  label: 'Redshift (z)',
+  transform: Math.log
+});
+const redshiftRange = ctrl(redshiftRangeInput);
+
+display(controlsContainer);
+  </script>
+  <script id="cosmic-scale-info" type="module">
+// Comoving distance lookup table (Planck18 cosmology)
+// z → comoving distance in Mpc
+const comovingDistanceTable = [
+  [0.00, 0], [0.02, 85], [0.05, 212], [0.10, 421],
+  [0.15, 627], [0.20, 828], [0.25, 1025], [0.30, 1219],
+  [0.40, 1596], [0.50, 1960], [0.60, 2311], [0.70, 2650],
+  [0.80, 2977], [1.00, 3395], [2.00, 5765], [5.00, 8715],
+  [10.0, 10000], [1100, 46500]  // CMB / observable universe edge
+];
+
+function zToComovingDistance(z) {
+  for (let i = 1; i < comovingDistanceTable.length; i++) {
+    if (z <= comovingDistanceTable[i][0]) {
+      const [z0, d0] = comovingDistanceTable[i - 1];
+      const [z1, d1] = comovingDistanceTable[i];
+      const t = (z - z0) / (z1 - z0);
+      return d0 + t * (d1 - d0);
+    }
+  }
+  return comovingDistanceTable[comovingDistanceTable.length - 1][1];
+}
+
+// Lookback time in billions of years (approximate, Planck18)
+const lookbackTimeTable = [
+  [0.00, 0], [0.02, 0.27], [0.05, 0.67], [0.10, 1.29],
+  [0.20, 2.45], [0.30, 3.45], [0.40, 4.32], [0.50, 5.08],
+  [0.60, 5.75], [0.70, 6.34], [0.80, 6.87], [1.00, 7.79],
+  [2.00, 10.4], [3.00, 11.5], [4.00, 12.1], [5.00, 12.5],
+  [6.00, 12.8], [7.00, 13.0], [10.0, 13.3], [1100, 13.8]
+];
+
+function zToLookbackTime(z) {
+  for (let i = 1; i < lookbackTimeTable.length; i++) {
+    if (z <= lookbackTimeTable[i][0]) {
+      const [z0, t0] = lookbackTimeTable[i - 1];
+      const [z1, t1] = lookbackTimeTable[i];
+      const t = (z - z0) / (z1 - z0);
+      return t0 + t * (t1 - t0);
+    }
+  }
+  return lookbackTimeTable[lookbackTimeTable.length - 1][1];
+}
+
+const UNIVERSE_AGE = 13.8;  // Gyr
+
+// Reactive display
+redshiftRange;  // Dependency
+
+const [zLo, zHi] = redshiftRange;
+const dLo = zToComovingDistance(zLo);
+const dHi = zToComovingDistance(zHi);
+const tLo = zToLookbackTime(zLo);
+const tHi = zToLookbackTime(zHi);
+
+const formatDist = d => d >= 1000 ? `${(d/1000).toFixed(2)} Gpc` : `${d.toFixed(0)} Mpc`;
+const formatTime = t => t.toFixed(2);
+
+display(html`<p style="font-size: 14px; color: var(--theme-foreground-muted); line-height: 1.6; max-width: 640px;">
+<strong>Current selection:</strong> ${tex`z = ${zLo.toFixed(2)}`} to ${tex`z = ${zHi.toFixed(2)}`}<br>
+<strong>Comoving distance:</strong> ${formatDist(dLo)} to ${formatDist(dHi)}<br>
+<strong>Lookback time:</strong> ${formatTime(tLo)} to ${formatTime(tHi)} billion years ago
+</p>`);
+  </script>
+  <script id="lazy-load-trigger" type="module">
+// When redshift range changes, trigger loading of additional chunks
+redshiftRange;  // Reactive dependency
+loadChunksForRedshift(redshiftRange[1]);  // Load based on max value
+  </script>
+  <script id="loading-progress" type="module">
+const progressEl = html`<div style="font-size: 14px; color: var(--theme-foreground-muted); margin-top: 8px;"></div>`;
+display(progressEl);
+
+let lastLoaded = 0;
+let lastLoadingSize = 0;
+const updateInterval = setInterval(() => {
+  const isLoading = loadState.loadingIndices.size > 0;
+  if (loadState.loadedCount !== lastLoaded || loadState.loadingIndices.size !== lastLoadingSize) {
+    lastLoaded = loadState.loadedCount;
+    lastLoadingSize = loadState.loadingIndices.size;
+    if (isLoading) {
+      progressEl.textContent = `Loading... ${loadState.loadedCount.toLocaleString()} objects loaded`;
+    } else {
+      progressEl.textContent = `Loaded ${loadState.loadedCount.toLocaleString()} objects (${metadata.galaxyCount.toLocaleString()} galaxies, ${metadata.qsoCount.toLocaleString()} QSOs)`;
+    }
+  }
+}, 100);
+
+invalidation.then(() => clearInterval(updateInterval));
+  </script>
+  <script id="distance-histogram" type="module">
+// Reactive plot that updates as chunks load (fixed width to avoid re-creating on resize)
+const histogramContainer = html`<div id="histogram-container" style="max-width: 640px;"></div>`;
+display(histogramContainer);
+
+let lastCount = 0;
+const histogramInterval = setInterval(() => {
+  if (chunkLoader.loadedCount === lastCount) return;
+  lastCount = chunkLoader.loadedCount;
+
+  // Build histogram data array
+  const binWidth = chunkLoader.maxDistance / NUM_DISTANCE_BINS;
+  const data = Array.from(chunkLoader.distanceHistogram, (count, i) => ({
+    distance: (i + 0.5) * binWidth,  // Bin center in Mpc
+    count
+  })).filter(d => d.count > 0);
+
+  // Clear and redraw
+  histogramContainer.innerHTML = '';
+  histogramContainer.appendChild(
+    Plot.plot({
+      width: 640,
+      height: 200,
+      marginLeft: 60,
+      x: {
+        label: "Distance (Mpc)",
+        tickFormat: d => d >= 1000 ? `${(d/1000).toFixed(1)}k` : d
+      },
+      y: {
+        label: "Object count",
+        tickFormat: d => d >= 1000 ? `${(d/1000).toFixed(0)}k` : d
+      },
+      marks: [
+        Plot.rectY(data, {
+          x1: d => d.distance - binWidth/2,
+          x2: d => d.distance + binWidth/2,
+          y: "count",
+          fill: "#4a9eff"
+        }),
+        Plot.ruleY([0])
+      ]
+    })
+  );
+}, 200);
+
+invalidation.then(() => clearInterval(histogramInterval));
+  </script>
+  <script id="camera-setup" type="module">
+import { createCameraController } from './lib/camera-controller.js';
+
+const bounds = metadata.bounds;
+const dataRange = Math.max(
+  bounds.max[0] - bounds.min[0],
+  bounds.max[1] - bounds.min[1],
+  bounds.max[2] - bounds.min[2]
+);
+
+// Earth is at the origin - galaxies radiate outward from us
+const center = [0, 0, 0];
+
+// Create camera controller attached to the canvas
+const cameraController = createCameraController(canvas, {
+  center,
+  distance: dataRange * 0.1,
+  phi: 1.2,
+  theta: 0.0,
+  fov: Math.PI / 4,
+  near: dataRange * 0.001,
+  far: dataRange * 10
+});
+
+invalidation.then(() => cameraController.destroy());
+  </script>
+  <script id="render-pipeline" type="module">
+// Shader for rendering galaxy points as instanced quads with additive blending
+const shaderCode = /* wgsl */`
+struct Uniforms {
+  projectionView: mat4x4f,
+  pointSize: f32,
+  brightness: f32,
+  aspectRatio: f32,
+  cameraDistance: f32,
+  referenceDistance: f32,
+  referencePointSize: f32,
+  minRedshift: f32,      // User-selected min z for filtering
+  maxRedshift: f32,      // User-selected max z for filtering
+  galaxyZMin: f32,       // Galaxy z range for decoding color_param
+  galaxyZMax: f32,
+  qsoZMin: f32,          // QSO z range for decoding color_param
+  qsoZMax: f32,
+  showGalaxies: f32,     // 1.0 = show, 0.0 = hide
+  showQSOs: f32,         // 1.0 = show, 0.0 = hide
+}
+
+@group(0) @binding(0) var<uniform> uniforms: Uniforms;
+
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) redshift: f32,
+  @location(1) uv: vec2f,
+}
+
+// Quad vertices for triangle strip: 4 vertices make a quad
+const quadVertices = array<vec2f, 4>(
+  vec2f(-1.0, -1.0),
+  vec2f( 1.0, -1.0),
+  vec2f(-1.0,  1.0),
+  vec2f( 1.0,  1.0)
+);
+
+@vertex
+fn vertexMain(
+  @builtin(vertex_index) vertexIndex: u32,
+  // Instance data: float16x4 (x, y, z, normalized_redshift)
+  @location(0) instanceData: vec4<f32>
+) -> VertexOutput {
+  var output: VertexOutput;
+
+  // Get quad corner from vertex index
+  let corner = quadVertices[vertexIndex];
+
+  // Transform galaxy position to clip space
+  let worldPos = vec4f(instanceData.xyz, 1.0);
+  let clipPos = uniforms.projectionView * worldPos;
+
+  // Expand quad in screen space (size in pixels)
+  let size = uniforms.pointSize / vec2f(uniforms.aspectRatio, 1.0);
+  let offset = corner * size * clipPos.w * 0.001;
+
+  output.position = clipPos + vec4f(offset, 0.0, 0.0);
+  output.redshift = instanceData.w;
+  output.uv = corner;
+
+  return output;
+}
+
+// Color by object type and redshift using the precomputed color_param:
+// [0, 0.5): galaxies — warm white (nearby) → red (distant)
+// [0.5, 1.0]: quasars — bright blue (nearby) → orange-red (distant)
+fn objectColor(colorParam: f32) -> vec3f {
+  if (colorParam < 0.5) {
+    // Galaxies: warm off-white to red (original brightness)
+    let t = colorParam * 2.0;
+    let white = vec3f(1.0, 0.95, 0.9);
+    let red = vec3f(1.0, 0.15, 0.05);
+    return mix(white, red, pow(t, 0.6));
+  } else {
+    // Quasars: bright blue to orange-red (10x brighter to stand out)
+    let t = (colorParam - 0.5) * 2.0;
+    let blue = vec3f(4.0, 7.0, 10.0);
+    let red = vec3f(10.0, 4.0, 1.0);
+    return mix(blue, red, pow(t, 0.5));
+  }
+}
+
+// Decode color_param back to actual redshift for filtering
+fn decodeRedshift(colorParam: f32) -> f32 {
+  if (colorParam < 0.5) {
+    // Galaxy: decode from [0, 0.5) range
+    let t = colorParam * 2.0;
+    return uniforms.galaxyZMin + t * (uniforms.galaxyZMax - uniforms.galaxyZMin);
+  } else {
+    // QSO: decode from [0.5, 1.0] range
+    let t = (colorParam - 0.5) * 2.0;
+    return uniforms.qsoZMin + t * (uniforms.qsoZMax - uniforms.qsoZMin);
+  }
+}
+
+@fragment
+fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+  // Filter by object type (colorParam < 0.5 = galaxy, >= 0.5 = QSO)
+  let isGalaxy = input.redshift < 0.5;
+  if (isGalaxy && uniforms.showGalaxies < 0.5) { discard; }
+  if (!isGalaxy && uniforms.showQSOs < 0.5) { discard; }
+
+  // Decode color_param to actual redshift and filter
+  let z = decodeRedshift(input.redshift);
+  if (z < uniforms.minRedshift || z > uniforms.maxRedshift) {
+    discard;
+  }
+
+  // For sub-pixel points, skip shape calculations
+  var falloff = 1.0;
+  if (uniforms.pointSize >= 1.0) {
+    let dist2 = dot(input.uv, input.uv);
+    if (dist2 > 1.0) {
+      discard;
+    }
+    let t = 1.0 - dist2;
+    falloff = t * t;
+  }
+
+  // Scale brightness by camera distance to maintain perceived brightness when zooming
+  // As we zoom out, points become denser on screen, so reduce brightness to compensate
+  // Use gamma-aware scaling: perceived brightness ~ luminance^(1/gamma)
+  let distanceRatio = uniforms.cameraDistance / uniforms.referenceDistance;
+  let distanceScale = pow(distanceRatio, -0.9);  // Inverse: dimmer when zoomed out
+
+  // Compensate for point size: use linear scaling rather than area (size²)
+  // because the gaussian falloff concentrates perceived brightness at the center
+  let sizeRatio = uniforms.pointSize / uniforms.referencePointSize;
+  let sizeScale = 1.0 / sizeRatio;
+
+  let color = objectColor(input.redshift);
+  let intensity = uniforms.brightness * falloff * distanceScale * sizeScale;
+
+  return vec4f(color * intensity, intensity);
+}
+`;
+
+const shaderModule = device.createShaderModule({
+  label: 'galaxy-shader',
+  code: shaderCode
+});
+
+const uniformBuffer = device.createBuffer({
+  label: 'galaxy-uniforms',
+  size: 128, // mat4x4f (64) + 14 floats (56) + padding (8)
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+});
+
+const bindGroupLayout = device.createBindGroupLayout({
+  entries: [{
+    binding: 0,
+    visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+    buffer: { type: 'uniform' }
+  }]
+});
+
+const bindGroup = device.createBindGroup({
+  layout: bindGroupLayout,
+  entries: [{
+    binding: 0,
+    resource: { buffer: uniformBuffer }
+  }]
+});
+
+const pipelineLayout = device.createPipelineLayout({
+  bindGroupLayouts: [bindGroupLayout]
+});
+
+const pipeline = device.createRenderPipeline({
+  label: 'galaxy-pipeline',
+  layout: pipelineLayout,
+  vertex: {
+    module: shaderModule,
+    entryPoint: 'vertexMain',
+    buffers: [{
+      // Instance buffer: one entry per galaxy
+      arrayStride: 8, // 4 x float16
+      stepMode: 'instance',
+      attributes: [{
+        shaderLocation: 0,
+        offset: 0,
+        format: 'float16x4'
+      }]
+    }]
+  },
+  fragment: {
+    module: shaderModule,
+    entryPoint: 'fragmentMain',
+    targets: [{
+      format: 'rgba16float',  // Render to HDR texture
+      blend: {
+        // Additive blending for overlapping points
+        color: {
+          srcFactor: 'src-alpha',
+          dstFactor: 'one',
+          operation: 'add'
+        },
+        alpha: {
+          srcFactor: 'one',
+          dstFactor: 'one',
+          operation: 'add'
+        }
+      }
+    }]
+  },
+  primitive: {
+    topology: 'triangle-strip'
+  }
+});
+
+// Tonemap shader with extended Reinhard and exposure control
+const tonemapShaderCode = /* wgsl */`
+@group(0) @binding(0) var hdrTexture: texture_2d<f32>;
+@group(0) @binding(1) var texSampler: sampler;
+@group(0) @binding(2) var<uniform> tonemapParams: vec4f;  // x=exposure, y=whitePoint, z/w unused
+
+const backgroundColor = vec3f(0.106, 0.090, 0.078);  // #1B1714
+
+struct VertexOutput {
+  @builtin(position) position: vec4f,
+  @location(0) uv: vec2f,
+}
+
+@vertex
+fn vertexMain(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
+  // Fullscreen triangle
+  var pos = array<vec2f, 3>(
+    vec2f(-1.0, -1.0),
+    vec2f( 3.0, -1.0),
+    vec2f(-1.0,  3.0)
+  );
+  var output: VertexOutput;
+  output.position = vec4f(pos[vertexIndex], 0.0, 1.0);
+  output.uv = (pos[vertexIndex] + 1.0) * 0.5;
+  output.uv.y = 1.0 - output.uv.y;  // Flip Y for texture coordinates
+  return output;
+}
+
+// Extended Reinhard tonemap on scalar: x * (1 + x/white²) / (1 + x)
+fn reinhardExtendedLuminance(x: f32, white: f32) -> f32 {
+  let white2 = white * white;
+  return x * (1.0 + x / white2) / (1.0 + x);
+}
+
+@fragment
+fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+  let hdr = textureSample(hdrTexture, texSampler, input.uv);
+
+  let exposure = tonemapParams.x;
+  let whitePoint = tonemapParams.y;
+
+  // Apply exposure
+  let exposed = hdr.rgb * exposure;
+
+  // Compute luminance (Rec. 709 coefficients)
+  let luminance = dot(exposed, vec3f(0.2126, 0.7152, 0.0722));
+
+  // Tonemap luminance only, then scale color to preserve saturation
+  let tonemappedLum = reinhardExtendedLuminance(luminance, whitePoint);
+  let scale = select(tonemappedLum / luminance, 0.0, luminance < 0.0001);
+  let ldr = exposed * scale;
+
+  // Blend with background based on accumulated alpha
+  let blend = saturate(hdr.a);
+  return vec4f(mix(backgroundColor, ldr, blend), 1.0);
+}
+`;
+
+const tonemapShaderModule = device.createShaderModule({
+  label: 'tonemap-shader',
+  code: tonemapShaderCode
+});
+
+const tonemapUniformBuffer = device.createBuffer({
+  label: 'tonemap-uniforms',
+  size: 16,  // vec4f
+  usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
+});
+
+const tonemapBindGroupLayout = device.createBindGroupLayout({
+  entries: [
+    { binding: 0, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float' } },
+    { binding: 1, visibility: GPUShaderStage.FRAGMENT, sampler: { type: 'filtering' } },
+    { binding: 2, visibility: GPUShaderStage.FRAGMENT, buffer: { type: 'uniform' } }
+  ]
+});
+
+const tonemapPipelineLayout = device.createPipelineLayout({
+  bindGroupLayouts: [tonemapBindGroupLayout]
+});
+
+const tonemapPipeline = device.createRenderPipeline({
+  label: 'tonemap-pipeline',
+  layout: tonemapPipelineLayout,
+  vertex: {
+    module: tonemapShaderModule,
+    entryPoint: 'vertexMain'
+  },
+  fragment: {
+    module: tonemapShaderModule,
+    entryPoint: 'fragmentMain',
+    targets: [{ format: canvasFormat }]
+  },
+  primitive: {
+    topology: 'triangle-list'
+  }
+});
+
+const hdrSampler = device.createSampler({
+  magFilter: 'linear',
+  minFilter: 'linear'
+});
+
+// HDR texture state - will be created/resized in render loop
+const hdrState = {
+  texture: null,
+  bindGroup: null,
+  width: 0,
+  height: 0
+};
+
+function ensureHdrTexture(width, height) {
+  if (hdrState.width === width && hdrState.height === height && hdrState.texture) {
+    return;
+  }
+
+  if (hdrState.texture) {
+    hdrState.texture.destroy();
+  }
+
+  hdrState.texture = device.createTexture({
+    label: 'hdr-texture',
+    size: [width, height],
+    format: 'rgba16float',
+    usage: GPUTextureUsage.RENDER_ATTACHMENT | GPUTextureUsage.TEXTURE_BINDING
+  });
+
+  hdrState.bindGroup = device.createBindGroup({
+    layout: tonemapBindGroupLayout,
+    entries: [
+      { binding: 0, resource: hdrState.texture.createView() },
+      { binding: 1, resource: hdrSampler },
+      { binding: 2, resource: { buffer: tonemapUniformBuffer } }
+    ]
+  });
+
+  hdrState.width = width;
+  hdrState.height = height;
+}
+
+invalidation.then(() => {
+  uniformBuffer.destroy();
+  tonemapUniformBuffer.destroy();
+  if (hdrState.texture) hdrState.texture.destroy();
+});
+  </script>
+  <script id="render-loop" type="module">
+import { createFrameLoop } from './lib/frame-loop.js';
+
+// Reactive dependencies - when these change, this cell re-runs
+pointSize; exposure; whitePoint; redshiftRange; objectTypes;
+
+// Mark dirty so we re-render with new control values
+renderState.dirty = true;
+
+// Pre-allocate uniform data buffer
+const uniformData = new ArrayBuffer(128);
+const uniformF32 = new Float32Array(uniformData);
+
+// Data redshift ranges for decoding color_param in shader
+const [galaxyZMin, galaxyZMax] = metadata.galaxyRedshiftRange;
+const [qsoZMin, qsoZMax] = metadata.qsoRedshiftRange;
+
+// Tonemap uniform buffer
+const tonemapData = new Float32Array(4);
+
+// Reference distance for brightness scaling (initial camera distance)
+const referenceDistance = dataRange * 0.8;
+
+const loop = createFrameLoop(() => {
+  const aspectRatio = canvas.width / canvas.height;
+  const { projectionView, dirty: cameraDirty } = cameraController.update(aspectRatio);
+
+  if (!renderState.dirty && !cameraDirty) return;
+  if (!loadState.chunks.some(c => c !== null)) return;  // Nothing loaded yet
+
+  // Ensure HDR texture matches canvas size
+  ensureHdrTexture(canvas.width, canvas.height);
+
+  // Update uniforms
+  uniformF32.set(projectionView, 0);
+  uniformF32[16] = pointSize * dpr;
+  uniformF32[17] = 0.5;  // Fixed base brightness (exposure controls overall level)
+  uniformF32[18] = aspectRatio;
+  uniformF32[19] = cameraController.state.distance;
+  uniformF32[20] = referenceDistance;
+  uniformF32[21] = 2.0 * dpr;  // Reference point size (default value)
+  uniformF32[22] = redshiftRange[0];  // minRedshift (actual z value)
+  uniformF32[23] = redshiftRange[1];  // maxRedshift (actual z value)
+  uniformF32[24] = galaxyZMin;        // For decoding galaxy color_param
+  uniformF32[25] = galaxyZMax;
+  uniformF32[26] = qsoZMin;           // For decoding QSO color_param
+  uniformF32[27] = qsoZMax;
+  uniformF32[28] = objectTypes.includes('Galaxies') ? 1.0 : 0.0;
+  uniformF32[29] = objectTypes.includes('QSOs') ? 1.0 : 0.0;
+  device.queue.writeBuffer(uniformBuffer, 0, uniformData);
+
+  const encoder = device.createCommandEncoder();
+
+  // Pass 1: Render galaxies to HDR texture with additive blending
+  const hdrPass = encoder.beginRenderPass({
+    colorAttachments: [{
+      view: hdrState.texture.createView(),
+      loadOp: 'clear',
+      storeOp: 'store',
+      clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }
+    }]
+  });
+
+  hdrPass.setPipeline(pipeline);
+  hdrPass.setBindGroup(0, bindGroup);
+
+  // Draw all loaded chunks (shader discards points outside redshift range)
+  for (const chunk of loadState.chunks) {
+    if (chunk) {
+      hdrPass.setVertexBuffer(0, chunk.buffer);
+      hdrPass.draw(4, chunk.count);
+    }
+  }
+
+  hdrPass.end();
+
+  // Update tonemap uniforms
+  tonemapData[0] = exposure;
+  tonemapData[1] = whitePoint;
+  device.queue.writeBuffer(tonemapUniformBuffer, 0, tonemapData);
+
+  // Pass 2: Tonemap HDR to screen
+  const screenPass = encoder.beginRenderPass({
+    colorAttachments: [{
+      view: gpuContext.getCurrentTexture().createView(),
+      loadOp: 'clear',
+      storeOp: 'store',
+      clearValue: { r: 0.106, g: 0.090, b: 0.078, a: 1.0 }  // #1B1714
+    }]
+  });
+
+  screenPass.setPipeline(tonemapPipeline);
+  screenPass.setBindGroup(0, hdrState.bindGroup);
+  screenPass.draw(3);  // Fullscreen triangle
+
+  screenPass.end();
+
+  device.queue.submit([encoder.finish()]);
+
+  renderState.dirty = false;
+});
+
+invalidation.then(() => loop.cancel());
+  </script>
+  <script id="cosmology-notes" type="text/markdown">
+## Data and methods
+
+Data was fetched from [SDSS DR18](https://skyserver.sdss.org/dr18/) using [astroquery](https://astroquery.readthedocs.io/). The query selects spectroscopically-confirmed objects from the SpecObj table, filtered by `class='GALAXY'` or `class='QSO'` with `zWarning=0`. Queries are split into redshift bins to stay under SDSS's 500k row limit.
+
+Redshifts are converted to 3D Cartesian coordinates using [Astropy](https://www.astropy.org/)'s [Planck 2018](https://arxiv.org/abs/1807.06209) cosmology. Comoving distance ${tex`d`} in Mpc is computed from redshift ${tex`z`}, then projected: ${tex`x = d \cos(\delta)\cos(\alpha)`}, ${tex`y = d \cos(\delta)\sin(\alpha)`}, ${tex`z = d \sin(\delta)`}, where ${tex`\alpha`} and ${tex`\delta`} are right ascension and declination.
+
+Each object is stored as four float16 values (x, y, z, color_param). The color parameter encodes both object type and redshift: galaxies map to [0, 0.5) and QSOs to [0.5, 1.0], allowing the shader to distinguish types and interpolate colors. Data is gzip-compressed and loaded progressively by redshift range.
+  </script>
+</notebook>
