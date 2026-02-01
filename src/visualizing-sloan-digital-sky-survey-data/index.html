@@ -4,9 +4,12 @@
   <script id="intro" type="text/markdown">
 # Sloan Digital Sky Survey
 
-This notebook visualizes spectroscopically-confirmed objects from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS), including over 2.3 million galaxies (${tex`z \lesssim 0.7`}) and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (QSOs) extending to ${tex`z \approx 7`}. Data loads progressively in chunks.
 
-Objects are colored by type and redshift. Galaxies range from white (nearby) to red (distant). Quasars appear blue (nearby) fading to red at high redshift, visually separating the two populations. The filamentary structure visible in the nearby universe is the [cosmic web](https://science.nasa.gov/resource/cosmic-web/). Galaxies cluster along dense filaments and sheets surrounding vast, nearly empty voids. (I created this notebook just today after learning of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing!) At greater distances, the quasar population traces the large-scale structure of the universe across cosmic time, with the most distant objects showing us the universe when it was less than a billion years old.
+I got inspired this evening when I learned of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing!), a massive void nearly two hundred *million* light years across which contains just 60 galaxies where we'd expect nearly 2,000.
+
+So I looked into how to acquire data from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS). The [astroquery](https://astroquery.readthedocs.io/en/latest/) module made pretty short work of it, so this notebook plots over 2.3 million galaxies (${tex`z \lesssim 0.7`}) and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (QSOs) extending to ${tex`z \approx 7`}. Data loads progressively in chunks.
+
+Objects are colored by type and redshift. Galaxies range from white (nearby) to red (distant). Quasars appear blue (nearby) fading to red at high redshift, visually separating the two populations. The filamentary structure visible in the nearby universe is the [cosmic web](https://science.nasa.gov/resource/cosmic-web/). Galaxies cluster along dense filaments and sheets surrounding vast, nearly empty voids. At greater distances, the quasar population traces the large-scale structure of the universe across cosmic time, with the most distant objects showing us the universe when it was less than a billion years old.
   </script>
   <script id="webgpu-setup" type="module">
 import { createWebGPUContext } from './lib/webgpu-canvas.js';
