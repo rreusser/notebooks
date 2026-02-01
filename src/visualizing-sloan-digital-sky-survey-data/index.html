@@ -2,11 +2,15 @@
 <notebook theme="coffee">
   <title>Visualizing Sloan Digital Sky Survey Data</title>
   <script id="intro" type="text/markdown">
-I got inspired this evening when I learned of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing, a massive void in the distribution of galaxies nearly *two hundred million light years* across which contains just 60 galaxies where we'd expect about 2,000.
+    I got inspired this evening after learning about the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), also known as the Great Nothing. It's a huge empty region in the distribution of galaxies, nearly 200 million light years across, with only about 60 galaxies where we would expect roughly 2,000. I was a bit annoyed that the image I saw appeared to be an artist’s conception without being labeled as such, so I thought it would be interesting to visualize real data instead.
 
-I thought it would be neat to visualize some galaxies, so I looked into how to acquire data from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS). The [astroquery](https://astroquery.readthedocs.io/en/latest/) module made pretty short work of it, so this notebook plots over 2.3 million galaxies (redshift ${tex`z \lesssim 0.7`}) and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (QSOs) extending to ${tex`z \approx 7`}. Data loads progressively in chunks.
+This notebook plots over 2.3 million galaxies and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (quasi-stellar objects, or QSOs) from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS). 
 
-Objects are colored by type and redshift. Galaxies range from white (nearby) to red (distant). Quasars appear blue (nearby) fading to red at high redshift. The filamentary structure visible in the nearby universe is the [cosmic web](https://science.nasa.gov/resource/cosmic-web/). Galaxies cluster along dense filaments and sheets surrounding vast, nearly empty voids. At greater distances, the quasar population traces the large-scale structure of the universe across cosmic time, with the most distant objects showing us the universe when it was less than a billion years old.
+Object positions are computed from their redshifts by converting them to [comoving distance](https://en.wikipedia.org/wiki/Comoving_and_proper_distances) and then projecting those distances along the observed sky directions. This factors out the overall expansion of the universe and lets large-scale structure appear in a roughly fixed coordinate system. Because each object is seen at a different lookback time, the full configuration shown here never existed all at once at any single moment in cosmic history.
+
+Objects are colored by type and redshift. Nearby galaxies cluster into filaments and fade from white to red with distance. Farther out, quasars extend to redshifts near 7 and reveal large-scale structure across cosmic time, shifting from blue nearby to red at great distances. The most distant objects show the universe as it was less than a billion years after the Big Bang.
+
+The most obvious feature is the radial, wedge-shaped pattern. This comes from how SDSS scans the sky, shaped by the telescope’s location in New Mexico and by avoiding regions blocked by dust and stars in our own galaxy. The universe itself surrounds us in all directions and may be much larger than what we can observe, or even infinite.
   </script>
   <script id="webgpu-setup" type="module">
 import { createWebGPUContext } from './lib/webgpu-canvas.js';
@@ -278,6 +282,7 @@ function ctrl(input) {
   return Generators.input(input);
 }
 
+/*
 const pointSizeInput = Inputs.range([0.5, 8], {
   value: 1,
   label: 'Point size',
@@ -285,15 +290,18 @@ const pointSizeInput = Inputs.range([0.5, 8], {
   transform: Math.log
 });
 const pointSize = ctrl(pointSizeInput);
+*/
+const pointSize = 1;
 
-const exposureInput = Inputs.range([0.01, 1], {
-  value: 0.05,
+const exposureInput = Inputs.range([0.001, 1], {
+  value: 0.02,
   label: 'Exposure',
   step: 0.001,
   transform: Math.log
 });
 const exposure = ctrl(exposureInput);
 
+/*
 const whitePointInput = Inputs.range([1, 50], {
   value: 20,
   label: 'White point',
@@ -301,6 +309,8 @@ const whitePointInput = Inputs.range([1, 50], {
   transform: Math.log
 });
 const whitePoint = ctrl(whitePointInput);
+*/
+const whitePoint = 25;
 
 const objectTypesInput = Inputs.checkbox(['Galaxies', 'QSOs'], { value: ['Galaxies'], label: 'Show' });
 const objectTypes = ctrl(objectTypesInput);
@@ -1081,10 +1091,12 @@ result = SDSS.query_sql("""
 distance = cosmo.comoving_distance(result['z']).to('Mpc').value
 ```
 
+Obtaining the data was surprisingly easy.
+
 Redshifts are converted to 3D Cartesian coordinates using [Astropy](https://www.astropy.org/)'s [Planck 2018](https://arxiv.org/abs/1807.06209) cosmology. Comoving distance ${tex`d`} in Mpc is computed from redshift ${tex`z`}, then projected: ${tex`x = d \cos(\delta)\cos(\alpha)`}, ${tex`y = d \cos(\delta)\sin(\alpha)`}, ${tex`z = d \sin(\delta)`}, where ${tex`\alpha`} and ${tex`\delta`} are right ascension and declination.
 
-Each object is stored as four float16 values (x, y, z, color_param). The color parameter encodes both object type and redshift: galaxies map to [0, 0.5) and QSOs to [0.5, 1.0], allowing the shader to distinguish types and interpolate colors. Data is gzip-compressed and loaded progressively by redshift range.
+Each object is stored as four float16 values (x, y, z, color_param). The color parameter encodes both object type and redshift: galaxies map to [0, 0.5) and QSOs to [0.5, 1.0], allowing the shader to distinguish types and interpolate colors. Data is gzip-compressed and loaded progressively by redshift range. It would probably be moe efficient to work out positions in the browser, but I opted instead to do the work up front and transfer data in a format that would allow directly uploading to the GPU and piping to the screen.
 
-Rendering uses WebGPU with HDR accumulation and tonemapping. Points are rendered as instanced quads with soft falloff, switching to single-pixel point primitives when sub-pixel. To maintain consistent perceived brightness across zoom levels and point sizes, the shader scales intensity inversely with both camera distance and point size. Without this correction, zooming out would cause the image to blow out as millions of points overlap, while zooming in would make sparse regions too dim.
+Rendering uses WebGPU with HDR accumulation and tonemapping. Points are rendered as single-pixel point primitives (there was some quad sprite rendering in place for larger points, but single points seem fine when you have 3M points!). To maintain consistent perceived brightness across zoom levels and point sizes, the shader scales intensity inversely with both camera distance and point size. Without this correction, zooming out would cause the image to blow out as millions of points overlap, while zooming in would make sparse regions too dim.
   </script>
 </notebook>
