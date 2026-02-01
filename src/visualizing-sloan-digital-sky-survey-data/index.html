@@ -564,13 +564,13 @@ fn objectColor(colorParam: f32) -> vec3f {
     let t = colorParam * 2.0;
     let white = vec3f(1.0, 0.95, 0.9);
     let red = vec3f(1.0, 0.15, 0.05);
-    return mix(white, red, pow(t, 0.6));
+    return mix(white, red, sqrt(t));
   } else {
     // Quasars: bright blue to orange-red (10x brighter to stand out)
     let t = (colorParam - 0.5) * 2.0;
     let blue = vec3f(4.0, 7.0, 10.0);
     let red = vec3f(10.0, 4.0, 1.0);
-    return mix(blue, red, pow(t, 0.5));
+    return mix(blue, red, sqrt(t));
   }
 }
 
@@ -611,16 +611,9 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
     falloff = t * t;
   }
 
-  // Scale brightness by camera distance to maintain perceived brightness when zooming
-  // As we zoom out, points become denser on screen, so reduce brightness to compensate
-  // Use gamma-aware scaling: perceived brightness ~ luminance^(1/gamma)
-  let distanceRatio = uniforms.cameraDistance / uniforms.referenceDistance;
-  let distanceScale = pow(distanceRatio, -0.9);  // Inverse: dimmer when zoomed out
-
-  // Compensate for point size: use linear scaling rather than area (size²)
-  // because the gaussian falloff concentrates perceived brightness at the center
-  let sizeRatio = uniforms.pointSize / uniforms.referencePointSize;
-  let sizeScale = 1.0 / sizeRatio;
+  // Scale brightness by camera distance and point size
+  let distanceScale = uniforms.referenceDistance / uniforms.cameraDistance;
+  let sizeScale = uniforms.referencePointSize / uniforms.pointSize;
 
   let color = objectColor(input.redshift);
   let intensity = uniforms.brightness * falloff * distanceScale * sizeScale;
@@ -742,12 +735,12 @@ fn objectColor(colorParam: f32) -> vec3f {
     let t = colorParam * 2.0;
     let white = vec3f(1.0, 0.95, 0.9);
     let red = vec3f(1.0, 0.15, 0.05);
-    return mix(white, red, pow(t, 0.6));
+    return mix(white, red, sqrt(t));
   } else {
     let t = (colorParam - 0.5) * 2.0;
     let blue = vec3f(4.0, 7.0, 10.0);
     let red = vec3f(10.0, 4.0, 1.0);
-    return mix(blue, red, pow(t, 0.5));
+    return mix(blue, red, sqrt(t));
   }
 }
 
@@ -770,10 +763,8 @@ fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
   let z = decodeRedshift(input.redshift);
   if (z < uniforms.minRedshift || z > uniforms.maxRedshift) { discard; }
 
-  let distanceRatio = uniforms.cameraDistance / uniforms.referenceDistance;
-  let distanceScale = pow(distanceRatio, -0.9);
-  let sizeRatio = uniforms.pointSize / uniforms.referencePointSize;
-  let sizeScale = 1.0 / sizeRatio;
+  let distanceScale = uniforms.referenceDistance / uniforms.cameraDistance;
+  let sizeScale = uniforms.referencePointSize / uniforms.pointSize;
 
   let color = objectColor(input.redshift);
   let intensity = uniforms.brightness * distanceScale * sizeScale;
@@ -1032,15 +1023,32 @@ const loop = createFrameLoop(() => {
   hdrPass.setPipeline(usePointPipeline ? pointPipeline : quadPipeline);
   hdrPass.setBindGroup(0, bindGroup);
 
-  // Draw all loaded chunks (shader discards points outside redshift range)
-  for (const chunk of loadState.chunks) {
-    if (chunk) {
-      hdrPass.setVertexBuffer(0, chunk.buffer);
-      if (usePointPipeline) {
-        hdrPass.draw(chunk.count);  // 1 vertex per point
-      } else {
-        hdrPass.draw(4, chunk.count);  // 4 vertices per instance (quad)
-      }
+  // Draw chunks that overlap the selected redshift range
+  // Skip chunks entirely outside range (CPU-side culling)
+  const [zMin, zMax] = redshiftRange;
+  const showGalaxies = objectTypes.includes('Galaxies');
+  const showQSOs = objectTypes.includes('QSOs');
+
+  for (let i = 0; i < loadState.chunks.length; i++) {
+    const chunk = loadState.chunks[i];
+    if (!chunk) continue;
+
+    const chunkMeta = metadata.chunks[i];
+    const [chunkZMin, chunkZMax] = chunkMeta.redshiftRange;
+
+    // Skip if chunk doesn't overlap selected redshift range
+    if (chunkZMax < zMin || chunkZMin > zMax) continue;
+
+    // Skip if object type is hidden
+    const isGalaxyChunk = chunkMeta.objectClass === 'GALAXY';
+    if (isGalaxyChunk && !showGalaxies) continue;
+    if (!isGalaxyChunk && !showQSOs) continue;
+
+    hdrPass.setVertexBuffer(0, chunk.buffer);
+    if (usePointPipeline) {
+      hdrPass.draw(chunk.count);  // 1 vertex per point
+    } else {
+      hdrPass.draw(4, chunk.count);  // 4 vertices per instance (quad)
     }
   }
 
