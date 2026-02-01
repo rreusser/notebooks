@@ -1,6 +1,4 @@
-import{d as S,_ as F}from"./index-ByB2dbry.js";S({root:document.getElementById("cell-1"),expanded:[],variables:[]},{id:1,body:(o,a)=>o`
-
-I got inspired this evening when I learned of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing, a massive void in the distribution of galaxies nearly *two hundred million light years* across which contains just 60 galaxies where we'd expect about 2,000.
+import{d as S,_ as F}from"./index-ByB2dbry.js";S({root:document.getElementById("cell-1"),expanded:[],variables:[]},{id:1,body:(o,a)=>o`I got inspired this evening when I learned of the [Boötes Void](https://en.wikipedia.org/wiki/Bo%C3%B6tes_Void), a.k.a. the Great Nothing, a massive void in the distribution of galaxies nearly *two hundred million light years* across which contains just 60 galaxies where we'd expect about 2,000.
 
 I thought it would be neat to visualize some galaxies, so I looked into how to acquire data from the [Sloan Digital Sky Survey](https://www.sdss.org/) (SDSS). The [astroquery](https://astroquery.readthedocs.io/en/latest/) module made pretty short work of it, so this notebook plots over 2.3 million galaxies (redshift ${a`z \lesssim 0.7`}) and 750,000 [quasars](https://esahubble.org/wordbank/quasar/) (QSOs) extending to ${a`z \approx 7`}. Data loads progressively in chunks.
 
