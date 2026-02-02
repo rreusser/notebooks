@@ -376,6 +376,7 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     contentWrapper.style.transform = '';
     contentWrapper.style.width = '';
     contentWrapper.style.height = '';
+    contentWrapper.style.marginLeft = '';
     contentWrapper.style.overflow = '';
     contentWrapper.style.boxShadow = '';
     contentWrapper.classList.remove('expanded');
@@ -383,16 +384,15 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     contentWrapper.style.borderRadius = '';
     contentWrapper.style.zIndex = '1';
 
-    // Restore figure margin
-    const figure = contentWrapper.querySelector('figure');
-    if (figure) figure.style.margin = figure._savedMargin ?? '';
-
     // For wide layout, reapply breakout styles; otherwise use default dimensions
     if (wide) {
       requestAnimationFrame(updateWideLayout);
     } else {
       setDimensions(width, height);
     }
+
+    // Dispatch resize event so notebook layout handlers can update
+    window.dispatchEvent(new Event('resize'));
 
     // Re-measure collapsed height after resize settles
     requestAnimationFrame(() => {
@@ -444,10 +444,9 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     contentWrapper.classList.add('expanded');
     contentWrapper.style.padding = `${vPadding}px ${hPadding}px`;
 
-    // Reset margins on inner content for proper centering
+    // Zero figure margins for proper centering in expanded mode
     const figure = contentWrapper.querySelector('figure');
     if (figure) {
-      figure._savedMargin = figure._savedMargin ?? figure.style.margin;
       figure.style.margin = '0';
     }
 

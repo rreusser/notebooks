@@ -335,21 +335,15 @@ export function interval(range = [], options = {}) {
   width: 100%;
 }
 #${__ns__} .range {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-  flex-shrink: 1;
+  display: block;
   width: 100%;
 }
 #${__ns__} .range-slider {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
 }
 #${__ns__} .range-output {
-  width: 8em;
-  flex-shrink: 0;
-  text-align: right;
   font-variant-numeric: tabular-nums;
+  margin-top: 2px;
 }
   `;
 
