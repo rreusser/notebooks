@@ -272,7 +272,7 @@ resizeObserver.observe(canvas);
 invalidation.then(() => resizeObserver.disconnect());
   </script>
   <script id="range-slider-import" type="module">
-import { interval } from 'observable:@mootari/range-slider';
+import { interval } from './lib/range-slider.js';
   </script>
   <script id="controls" type="module">
 const controlsContainer = html`<div class="sdss-controls"></div>`;
@@ -299,7 +299,7 @@ const zMin = Math.min(metadata.galaxyRedshiftRange[0], metadata.qsoRedshiftRange
 const zMax = metadata.qsoRedshiftRange[1];
 const redshiftRangeInput = interval([+zMin.toFixed(2), +zMax.toFixed(1)], {
   value: [+zMin.toFixed(2), 0.3],  // Start with nearby view
-  step: 0.01,
+  step: 0.001,
   label: 'Redshift (z)',
   transform: Math.log
 });
