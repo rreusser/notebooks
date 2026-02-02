@@ -330,33 +330,43 @@ state.dirty = true;
   </script>
 
   <script id="main-canvas" type="text/x-typescript">
-// Touch-friendly edit button (disabled when no vertex selected)
+// Touch-friendly edit buttons (disabled when no vertex selected)
+const touchButtonStyle = `
+  position: absolute;
+  bottom: 10px;
+  width: 40px;
+  height: 40px;
+  padding: 0;
+  font-size: 20px;
+  line-height: 40px;
+  text-align: center;
+  background: rgba(255,255,255,0.9);
+  color: #333;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+  cursor: pointer;
+  z-index: 10;
+  touch-action: manipulation;
+  transition: opacity 0.15s;
+  opacity: 0.4;
+`;
+
+const deselectButton = html`<button id="deselect-vertex-btn"
+  aria-label="Deselect vertex"
+  title="Deselect vertex"
+  disabled
+  style="${touchButtonStyle} left: 10px;"
+>&#10005;</button>`;
+
 const deleteButton = html`<button id="delete-vertex-btn"
   aria-label="Delete vertex"
   title="Delete vertex"
   disabled
-  style="
-    position: absolute;
-    bottom: 10px;
-    left: 10px;
-    width: 40px;
-    height: 40px;
-    padding: 0;
-    font-size: 20px;
-    line-height: 40px;
-    text-align: center;
-    background: rgba(255,255,255,0.9);
-    color: #333;
-    border: 1px solid #ccc;
-    border-radius: 6px;
-    cursor: pointer;
-    z-index: 10;
-    touch-action: manipulation;
-    transition: opacity 0.15s;
-    opacity: 0.4;
-">&#128465;</button>`;
+  style="${touchButtonStyle} left: 56px;"
+>&#128465;</button>`;
 
 const container = html`<div id="mesh-canvas" style="position: relative; width: 100%; height: 100%; max-width: 100%;">
+  ${deselectButton}
   ${deleteButton}
 </div>`;
 
@@ -387,6 +397,16 @@ if (!state.regl) {
   });
   state.renderer = createMeshRenderer(state.regl, icosphere);
   state.physics = new MeshPhysics(state.mesh!);
+  // Helper to update touch button states
+  const updateTouchButtons = (hasSelection: boolean) => {
+    deleteButton.disabled = !hasSelection;
+    deleteButton.style.opacity = hasSelection ? '1' : '0.4';
+    deleteButton.style.cursor = hasSelection ? 'pointer' : 'default';
+    deselectButton.disabled = !hasSelection;
+    deselectButton.style.opacity = hasSelection ? '1' : '0.4';
+    deselectButton.style.cursor = hasSelection ? 'pointer' : 'default';
+  };
+
   // Create interactions FIRST so its event listeners are registered first
   state.interactions = new MeshInteractions(
     canvas,
@@ -397,11 +417,7 @@ if (!state.regl) {
         state.dirty = true;
         state.meshVersion++;
         state.meshVersionListeners.forEach(listener => listener());
-        // Update delete button enabled state
-        const hasSelection = state.interactions!.selectedVertexIndex >= 0;
-        deleteButton.disabled = !hasSelection;
-        deleteButton.style.opacity = hasSelection ? '1' : '0.4';
-        deleteButton.style.cursor = hasSelection ? 'pointer' : 'default';
+        updateTouchButtons(state.interactions!.selectedVertexIndex >= 0);
       }
     }
   );
@@ -421,12 +437,23 @@ if (!state.regl) {
       state.dirty = true;
       state.meshVersion++;
       state.meshVersionListeners.forEach(listener => listener());
-      // Update button state
-      const hasSelection = newIdx >= 0;
-      deleteButton.disabled = !hasSelection;
-      deleteButton.style.opacity = hasSelection ? '1' : '0.4';
-      deleteButton.style.cursor = hasSelection ? 'pointer' : 'default';
-      // Return focus to canvas so spacebar works for deselect
+      updateTouchButtons(newIdx >= 0);
+      canvas.focus();
+    }
+  });
+
+  // Deselect button click handler
+  deselectButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (state.interactions && state.interactions.selectedVertexIndex >= 0) {
+      state.interactions.selectedVertexIndex = -1;
+      state.interactions.activeVertexIndex = -1;
+      state.interactions.dirty = true;
+      state.dirty = true;
+      state.meshVersion++;
+      state.meshVersionListeners.forEach(listener => listener());
+      updateTouchButtons(false);
       canvas.focus();
     }
   });
@@ -515,16 +542,18 @@ invalidation.then(() => {
 });
 
 // Create figure with canvas and caption
+const figcaption = html`<figcaption style="padding:0 10px">
+  Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection.
+  <kbd>Space</kbd> to deselect.
+  <kbd>Backspace</kbd> deletes vertices, <kbd>s</kbd>/<kbd>c</kbd> splits/collapses vertices of degree 2.
+  <kbd>e</kbd> to explode a vertex.
+  Drag to rotate, <kbd>Shift</kbd> + drag to pan, <kbd>a</kbd> to aim camera at selected vertex.
+</figcaption>`;
+
 const figure = html`
   <figure id="main-figure" style="max-width: 100%; margin: 0; height: 100%;">
     ${container}
-    <figcaption style="padding:0 10px">
-      Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection.
-      <kbd>Space</kbd> to deselect.
-      <kbd>Backspace</kbd> deletes vertices, <kbd>s</kbd>/<kbd>c</kbd> splits/collapses vertices of degree 2.
-      <kbd>e</kbd> to explode a vertex.
-      Drag to rotate, <kbd>Shift</kbd> + drag to pan, <kbd>a</kbd> to aim camera at selected vertex.
-    </figcaption>
+    ${figcaption}
   </figure>
 `;
 
@@ -541,7 +570,9 @@ display(expandable(figure, {
   onResize: (content, w, h, expanded) => {
     // Size the container and trigger canvas resize
     container.style.width = `${w}px`;
-    container.style.height = expanded ? `${h - 60}px` : `${h}px`;  // Leave room for caption
+    container.style.height = `${h}px`;
+    // Hide caption when expanded
+    figcaption.style.display = expanded ? 'none' : 'block';
     resizeCanvas();
   }
 }));
