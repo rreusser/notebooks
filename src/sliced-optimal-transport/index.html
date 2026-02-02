@@ -1,25 +1,346 @@
 <!doctype html>
 <notebook theme="air">
   <title>Sliced Optimal Transport</title>
-  <script id="0" type="text/markdown">
+  <script id="1" type="text/markdown">
     # Sliced Optimal Transport
   </script>
-  <script id="1" type="text/markdown">
-    Imagine trying to combinatorially rearrange the pixels of one image to represent another image the best you can with respect to some metric like the difference in color. Note that although this may be a fun task, it's most certainly not a particularly good way to accomplish style transfer!
-  </script>
   <script id="2" type="text/markdown">
-    For a grayscale image, the task is relatively simple. Sort the pixels of source and target image by intensity, putting them into 1:1 correspondence, then reassign by transferring values from the target to the source image. The resulting image would look like the source image but would share the histogram of the target image.
+    Imagine wanting to combinatorially reassign the pixels of one image to match another image subject so some cost metric. An exhaustive solution like the [Hungarian Algorithm](https://en.wikipedia.org/wiki/Hungarian_algorithm) has ${tex`\mathcal{O}(n^3)`} complexity, making it both relatively pointless as a style transfer algorithm *and* very expensive.
+
+  </script>
+  <script id="29" type="text/markdown">
+    Sliced optimal transport is an algorithm for approximately solving the assignment problem in high dimensions. Given two point sets, it finds a correspondence that minimizes total displacement by reducing the problem to a series of one-dimensional sorts.
   </script>
   <script id="3" type="text/markdown">
-    For a color image, the task is not so simple, as RGB tuples permit no useful ordering. The [Hungarian Algorithm](https://en.wikipedia.org/wiki/Hungarian_algorithm) provides an exhaustively brute-force solution to the assignment problem we seek to solve, but its ${tex`\mathcal{O}(n^3)`} complexity makes it completely impractical for images. Theo Honohan has pointed to some [good alternative methods](https://graphics.social/@theohonohan/111490607440087628).
+    ## How It Works
+
+    The animation below demonstrates sliced optimal transport in two dimensions. We start with source points (blue) and target points (orange). Each iteration chooses a random direction and projects both point sets onto that line. After sorting both projections, we pair them by rank and nudge each source point along the projection direction based on the difference between its projected value and that of its paired target.
   </script>
-  <script id="4" type="text/markdown">
-    Nonetheless, we'll try out an approximate algorithm, though it's best to think of this problem as a nice testbed for the more general algorithm rather than the algorithm as a particularly good solution to our problem. In his article, [Interpolating Color Image Histograms Using Sliced Optimal Transport](https://blog.demofox.org/2023/11/25/interpolating-color-image-histograms-using-sliced-optimal-transport/), Alan Wolfe summarizes the Sliced Optimal Transport method. For the RGB image case, we select a random three-dimensional unit vector and project RGB tuples onto it. We perform the simple grayscale reassignment algorithm, then unproject the resulting per-pixel adjustments back into three dimensions. We perform this task in batches, each time projecting onto a collection of random vectors and averaging the resulting adjustments together before updating the image. The result is an image which looks like the source image but, approximately at least, contains the reordered pixels of the target image.
+  <script id="5" type="module">
+
+    const demoWidth = width;
+    const demoHeight = width;
+    const margin = { top: 20, right: 20, bottom: 30, left: 20 };
+    const innerWidth = demoWidth - margin.left - margin.right;
+    const innerHeight = demoHeight - margin.top - margin.bottom;
+
+    const svg = d3.create("svg")
+      .attr("width", demoWidth)
+      .attr("height", demoHeight)
+      .attr("viewBox", [0, 0, demoWidth, demoHeight])
+      .style("max-width", "100%")
+      .style("height", "auto")
+      .style("display", "block")
+      .style("margin", "0 auto");
+
+    const g = svg.append("g")
+      .attr("transform", `translate(${margin.left},${margin.top})`);
+
+    const xScale = d3.scaleLinear().domain([-1.5, 1.5]).range([0, innerWidth]);
+    const yScale = d3.scaleLinear().domain([-1.5, 1.5]).range([innerHeight, 0]);
+
+    const nPoints = 24;
+    const sourceColor = "#4682b4";
+    const targetColor = "#e07028";
+    const projectionLineColor = "#999";
+
+    function generateCluster(cx, cy, radius, n) {
+      const points = [];
+      for (let i = 0; i < n; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const r = radius * Math.sqrt(Math.random());
+        points.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle) });
+      }
+      return points;
+    }
+
+    const targetPoints = generateCluster(0, 0, 0.5, nPoints);
+    const initialSourcePoints = generateCluster(-0.9, 0, 0.4, nPoints);
+    let sourcePoints = initialSourcePoints.map(p => ({ ...p }));
+
+    g.append("line")
+      .attr("class", "projection-line")
+      .attr("stroke", projectionLineColor)
+      .attr("stroke-width", 1)
+      .attr("stroke-dasharray", "4,4")
+      .style("opacity", 0);
+
+    const projectionG = g.append("g").attr("class", "projections");
+
+    const targetCircles = g.selectAll(".target")
+      .data(targetPoints)
+      .join("circle")
+      .attr("class", "target")
+      .attr("cx", d => xScale(d.x))
+      .attr("cy", d => yScale(d.y))
+      .attr("r", 6)
+      .attr("fill", targetColor)
+      .attr("opacity", 0.7);
+
+    const sourceCircles = g.selectAll(".source")
+      .data(sourcePoints)
+      .join("circle")
+      .attr("class", "source")
+      .attr("cx", d => xScale(d.x))
+      .attr("cy", d => yScale(d.y))
+      .attr("r", 6)
+      .attr("fill", sourceColor);
+
+
+    let cancelled = false;
+    let iteration = 0;
+
+    async function sleep(ms) {
+      return new Promise(resolve => setTimeout(resolve, ms));
+    }
+
+    function project(point, direction) {
+      return point.x * direction.x + point.y * direction.y;
+    }
+
+    function normalize(v) {
+      const len = Math.sqrt(v.x * v.x + v.y * v.y);
+      return { x: v.x / len, y: v.y / len };
+    }
+
+    async function animateStep() {
+      if (cancelled) return;
+
+      iteration++;
+      const speed = 0.5 + iteration * 0.17;
+      const dur = ms => ms / speed;
+
+
+      const angle = Math.random() * Math.PI * 2;
+      const direction = { x: Math.cos(angle), y: Math.sin(angle) };
+      const perp = { x: -direction.y, y: direction.x };
+      const lineOffset = -1.0;
+
+      const lineLength = 2.5;
+      const projLine = g.select(".projection-line");
+      projLine
+        .attr("x1", xScale(-direction.x * lineLength + perp.x * lineOffset))
+        .attr("y1", yScale(-direction.y * lineLength + perp.y * lineOffset))
+        .attr("x2", xScale(direction.x * lineLength + perp.x * lineOffset))
+        .attr("y2", yScale(direction.y * lineLength + perp.y * lineOffset))
+        .transition()
+        .duration(dur(300))
+        .style("opacity", 1);
+
+      await sleep(dur(400));
+      if (cancelled) return;
+
+
+      const srcProj = sourcePoints.map((p, i) => ({
+        index: i,
+        value: project(p, direction),
+        point: p
+      }));
+      const tgtProj = targetPoints.map((p, i) => ({
+        index: i,
+        value: project(p, direction),
+        point: p
+      }));
+
+      const pointSpread = 0.06;
+      function projectToLine(p, dir, offset, spread) {
+        const t = project(p, dir);
+        return { x: t * dir.x + perp.x * (offset + spread), y: t * dir.y + perp.y * (offset + spread) };
+      }
+
+      const srcProjPoints = sourcePoints.map(p => projectToLine(p, direction, lineOffset, pointSpread));
+      const tgtProjPoints = targetPoints.map(p => projectToLine(p, direction, lineOffset, -pointSpread));
+
+      projectionG.selectAll(".src-proj-line")
+        .data(sourcePoints)
+        .join("line")
+        .attr("class", "src-proj-line")
+        .attr("x1", d => xScale(d.x))
+        .attr("y1", d => yScale(d.y))
+        .attr("x2", (d, i) => xScale(srcProjPoints[i].x))
+        .attr("y2", (d, i) => yScale(srcProjPoints[i].y))
+        .attr("stroke", sourceColor)
+        .attr("stroke-width", 1)
+        .attr("opacity", 0)
+        .transition()
+        .duration(dur(300))
+        .attr("opacity", 0.3);
+
+      projectionG.selectAll(".tgt-proj-line")
+        .data(targetPoints)
+        .join("line")
+        .attr("class", "tgt-proj-line")
+        .attr("x1", d => xScale(d.x))
+        .attr("y1", d => yScale(d.y))
+        .attr("x2", (d, i) => xScale(tgtProjPoints[i].x))
+        .attr("y2", (d, i) => yScale(tgtProjPoints[i].y))
+        .attr("stroke", targetColor)
+        .attr("stroke-width", 1)
+        .attr("opacity", 0)
+        .transition()
+        .duration(dur(300))
+        .attr("opacity", 0.3);
+
+      projectionG.selectAll(".src-proj")
+        .data(srcProjPoints)
+        .join("circle")
+        .attr("class", "src-proj")
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScale(d.y))
+        .attr("r", 4)
+        .attr("fill", sourceColor)
+        .attr("opacity", 0)
+        .transition()
+        .duration(dur(300))
+        .attr("opacity", 0.8);
+
+      projectionG.selectAll(".tgt-proj")
+        .data(tgtProjPoints)
+        .join("circle")
+        .attr("class", "tgt-proj")
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScale(d.y))
+        .attr("r", 4)
+        .attr("fill", targetColor)
+        .attr("opacity", 0)
+        .transition()
+        .duration(dur(300))
+        .attr("opacity", 0.8);
+
+      await sleep(dur(600));
+      if (cancelled) return;
+
+
+      srcProj.sort((a, b) => a.value - b.value);
+      tgtProj.sort((a, b) => a.value - b.value);
+
+      const rankPairs = srcProj.map((src, rank) => ({
+        srcIdx: src.index,
+        tgtIdx: tgtProj[rank].index,
+        srcProj: srcProjPoints[src.index],
+        tgtProj: tgtProjPoints[tgtProj[rank].index]
+      }));
+
+      projectionG.selectAll(".rank-line")
+        .data(rankPairs)
+        .join("line")
+        .attr("class", "rank-line")
+        .attr("x1", d => xScale(d.srcProj.x))
+        .attr("y1", d => yScale(d.srcProj.y))
+        .attr("x2", d => xScale(d.tgtProj.x))
+        .attr("y2", d => yScale(d.tgtProj.y))
+        .attr("stroke", "#666")
+        .attr("stroke-width", 1.5)
+        .attr("opacity", 0)
+        .transition()
+        .duration(dur(300))
+        .attr("opacity", 0.5);
+
+      const stepSize = 0.3;
+      const newSourcePoints = sourcePoints.map(p => ({ ...p }));
+
+      for (let rank = 0; rank < srcProj.length; rank++) {
+        const src = newSourcePoints[srcProj[rank].index];
+        const projDiff = tgtProj[rank].value - srcProj[rank].value;
+        src.x += direction.x * projDiff * stepSize;
+        src.y += direction.y * projDiff * stepSize;
+      }
+
+      await sleep(dur(500));
+      if (cancelled) return;
+
+
+      sourcePoints = newSourcePoints;
+
+      const newSrcProjPoints = sourcePoints.map(p => projectToLine(p, direction, lineOffset, pointSpread));
+
+      sourceCircles
+        .data(sourcePoints)
+        .transition()
+        .duration(dur(500))
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScale(d.y));
+
+      projectionG.selectAll(".src-proj-line")
+        .data(sourcePoints)
+        .transition()
+        .duration(dur(500))
+        .attr("x1", d => xScale(d.x))
+        .attr("y1", d => yScale(d.y))
+        .attr("x2", (d, i) => xScale(newSrcProjPoints[i].x))
+        .attr("y2", (d, i) => yScale(newSrcProjPoints[i].y));
+
+      projectionG.selectAll(".src-proj")
+        .data(newSrcProjPoints)
+        .transition()
+        .duration(dur(500))
+        .attr("cx", d => xScale(d.x))
+        .attr("cy", d => yScale(d.y));
+
+      const newRankPairs = rankPairs.map(pair => ({
+        ...pair,
+        srcProj: newSrcProjPoints[pair.srcIdx]
+      }));
+
+      projectionG.selectAll(".rank-line")
+        .data(newRankPairs)
+        .transition()
+        .duration(dur(500))
+        .attr("x1", d => xScale(d.srcProj.x))
+        .attr("y1", d => yScale(d.srcProj.y));
+
+      await sleep(dur(600));
+      if (cancelled) return;
+
+      projLine.transition().duration(dur(200)).style("opacity", 0);
+      projectionG.selectAll("*").transition().duration(dur(200)).attr("opacity", 0).remove();
+
+      await sleep(dur(400));
+
+      if (!cancelled && iteration < 40) {
+        requestAnimationFrame(animateStep);
+      } else if (!cancelled) {
+        setTimeout(() => {
+          if (cancelled) return;
+          iteration = 0;
+          sourcePoints = initialSourcePoints.map(p => ({ ...p }));
+          sourceCircles
+            .data(sourcePoints)
+            .transition()
+            .duration(500)
+            .attr("cx", d => xScale(d.x))
+            .attr("cy", d => yScale(d.y));
+          setTimeout(() => {
+            if (!cancelled) requestAnimationFrame(animateStep);
+          }, 600);
+        }, 3000);
+      }
+    }
+
+    requestAnimationFrame(animateStep);
+
+    invalidation.then(() => { cancelled = true; });
+
+    display(html`<figure id="sot-demo-figure">
+      ${svg.node()}
+      <figcaption>
+        Blue points (source) move toward orange points (target) via sliced optimal transport.
+      </figcaption>
+    </figure>`);
   </script>
-  <script id="5" type="text/markdown">
-    Alan has described it better than I have so you should read his article; I just wanted to prototype it and get a good intuitive sense of what's going on, and that's all you'll find here. I'm happy with my implementation in general, though I'd like to parallelize work within each batch using web workers and more intelligently select random vectors.
+  <script id="references" type="text/markdown">
+    In practice, we would average updates across a batch of random directions before applying them. For illustration, we show a fractional update from a single direction per step. Repeating this process with new random directions, the source points gradually rearrange to match the target distribution.
+
+    ## References
+
+    Alan Wolfe provides an excellent explanation of sliced optimal transport in his article, [Interpolating Color Image Histograms Using Sliced Optimal Transport](https://blog.demofox.org/2023/11/25/interpolating-color-image-histograms-using-sliced-optimal-transport/). Theo Honohan pointed me to [Color Style Transfer Techniques using Hue, Lightness and Saturation Histogram Matching](https://diglib.eg.org/server/api/core/bitstreams/f24394e8-25f0-42fe-a21c-58d8bf5107f5/content) by László Neumann and Attila Neumann for alternative approaches to color transfer.
   </script>
-  <script id="inputs" type="module">
+  <script id="demo-header" type="text/markdown">
+    ## Demo
+
+    The interactive demo below applies sliced optimal transport to rearrange the pixels of one image to match the color distribution of another.
+  </script>
+  <script id="6" type="module">
     const sourceFile = view(Inputs.select(Object.keys(FILES), {
       label: "Source",
       value: "ellingwood"
@@ -59,7 +380,7 @@
 
     const restart = view(Inputs.button("Restart"));
   </script>
-  <script id="figure-display" type="module">
+  <script id="7" type="module">
     const figure = html`<figure class="image-figure">
       <style>
         .image-figure {
@@ -136,7 +457,7 @@
 
     display(figure);
   </script>
-  <script id="convergence-plot" type="module">
+  <script id="8" type="module">
     // Re-render when result changes (result is yielded iteratively)
     result;
     display(html`<figure>${Plot.plot({
@@ -150,15 +471,15 @@
       ]
     })}</figure>`);
   </script>
-  <script id="smooth-histogram-input" type="module">
+  <script id="9" type="module">
     const smoothHistogram = view(Inputs.checkbox(["Smooth histograms"], {
       value: ["Smooth histograms"]
     }));
   </script>
-  <script id="state" type="module">
+  <script id="10" type="module">
     const state = { history: [] };
   </script>
-  <script id="interpolated" type="module">
+  <script id="11" type="module">
     const N = result.src.length;
     const out = new Uint8ClampedArray(N);
     for (let i = 0; i < N; i++) {
@@ -166,7 +487,7 @@
     }
     const interpolated = out;
   </script>
-  <script id="result" type="module">
+  <script id="12" type="module">
     restart;
     state.history = [];
     const result = Generators.observe(notify => {
@@ -194,7 +515,7 @@
       return () => { cancelled = true; };
     });
   </script>
-  <script id="worker-pool" type="module">
+  <script id="13" type="module">
     // Worker code as a string
     const workerCode = `
       function sort(values, indices, left, right) {
@@ -303,29 +624,29 @@
       pendingJobs.clear();
     });
   </script>
-  <script id="original-code" type="text/markdown">
+  <script id="14" type="text/markdown">
     My original code [from this notebook](https://observablehq.com/@rreusser/sliced-optimal-transport) is presented below. However, this is *not* the code being run in this notebook. This notebook uses a [Web Worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers) pool to perform the batches in parallel since the algorithm can get a bit slow. You can read the modified implementation in [the Notebook Kit source for this page](https://github.com/rreusser/notebooks/tree/main/src/sliced-optimal-transport/index.html).
     ```js
     function* slicedOptimalTransport(
-  src,
-  tgt,
-  { maxIterations = 100, batchSize = 4, tolerance = 1 } = {}
-) {
-  if (src.length !== tgt.length)
+      src,
+      tgt,
+      { maxIterations = 100, batchSize = 4, tolerance = 1 } = {}
+    ) {
+      if (src.length !== tgt.length)
     throw new Error("Source size must equal target size");
 
-  // TODO: I could probably avoid this if I better understood generator functions
-  mutable history = [];
+      // TODO: I could probably avoid this if I better understood generator functions
+      mutable history = [];
 
-  const N = src.length >> 2;
-  const index = new Uint32Array(N);
-  const srcProjection = new Float32Array(N);
-  const tgtProjection = new Float32Array(N);
-  const adjustment = new Float32Array(N * 3);
+      const N = src.length >> 2;
+      const index = new Uint32Array(N);
+      const srcProjection = new Float32Array(N);
+      const tgtProjection = new Float32Array(N);
+      const adjustment = new Float32Array(N * 3);
 
-  let delta = Infinity;
-  let iteration = 0;
-  while (delta > tolerance && ++iteration <= maxIterations) {
+      let delta = Infinity;
+      let iteration = 0;
+      while (delta > tolerance && ++iteration <= maxIterations) {
     adjustment.fill(0);
     for (let batchIndex = 0; batchIndex < batchSize; batchIndex++) {
       let [v0, v1, v2] = vec3normalize([], [randn(), randn(), randn()]);
@@ -365,13 +686,13 @@
     mutable history = mutable history.concat([{ iteration, delta }]);
 
     yield { delta, src };
-  }
+      }
 
-  return { delta, src };
-}
-```
+      return { delta, src };
+    }
+    ```
   </script>
-  <script id="sliced-optimal-transport" type="module">
+  <script id="15" type="module">
     async function* slicedOptimalTransport(
       src,
       tgt,
@@ -422,7 +743,7 @@
       return { delta, src: srcClamped };
     }
   </script>
-  <script id="run-batch-parallel" type="module">
+  <script id="16" type="module">
     async function runBatchParallel(src, tgt, N, batchSize) {
       const promises = [];
       for (let i = 0; i < batchSize; i++) {
@@ -439,10 +760,10 @@
     }
 
   </script>
-  <script id="shape" type="module">
+  <script id="17" type="module">
     const shape = [(src.width / downsample) | 0, (src.height / downsample) | 0];
   </script>
-  <script id="draw-image" type="module">
+  <script id="18" type="module">
     function drawImage(data, width, height, pixelRatio = 2) {
       const canvas = document.createElement("canvas");
       canvas.style.width = `${(width * downsample) / pixelRatio}px`;
@@ -457,7 +778,7 @@
       return canvas;
     }
   </script>
-  <script id="get-pixels" type="module">
+  <script id="19" type="module">
     function getPixels(bitmap, width, height) {
       const canvas = document.createElement("canvas");
       canvas.width = width;
@@ -467,7 +788,7 @@
       return ctx.getImageData(0, 0, canvas.width, canvas.height).data;
     }
   </script>
-  <script id="files" type="module">
+  <script id="20" type="module">
     const FILES = {
       ellingwood: FileAttachment("ellingwood.jpg"),
       gravity: FileAttachment("gravity.jpg"),
@@ -489,19 +810,19 @@
       "ansel adams": FileAttachment("ansel-adams.jpg")
     };
   </script>
-  <script id="src" type="module">
+  <script id="21" type="module">
     const src = await createImageBitmap(await FILES[sourceFile].blob());
   </script>
-  <script id="target" type="module">
+  <script id="22" type="module">
     const target = await createImageBitmap(await FILES[targetFile].blob());
   </script>
-  <script id="src-data" type="module">
+  <script id="23" type="module">
     const srcData = getPixels(src, src.width / downsample, src.height / downsample);
   </script>
-  <script id="target-data" type="module">
+  <script id="24" type="module">
     const targetData = getPixels(target, src.width / downsample, src.height / downsample);
   </script>
-  <script id="smooth" type="module">
+  <script id="25" type="module">
     function smooth(a) {
       const b = a.slice();
       const n = a.length;
@@ -516,7 +837,7 @@
       return a;
     }
   </script>
-  <script id="plot-histogram" type="module">
+  <script id="26" type="module">
     function plotHistogram(
       data,
       { w = Math.max(320, Math.min(src.width / devicePixelRatio, width / 3)), h = 200 } = {}
@@ -575,7 +896,7 @@
       return el;
     }
   </script>
-  <script id="vec3normalize" type="module">
+  <script id="27" type="module">
     function vec3normalize(out, a) {
       const x = a[0], y = a[1], z = a[2];
       let len = x * x + y * y + z * z;
@@ -586,7 +907,7 @@
       return out;
     }
   </script>
-  <script id="randn" type="module">
+  <script id="28" type="module">
     // Box-Muller transform for standard normal distribution
     function randn() {
       let u = 0, v = 0;
