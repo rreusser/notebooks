@@ -469,31 +469,31 @@
   </script>
   <script id="files" type="module">
     const FILES = {
-      ellingwood: "./files/c58f14ea40fe9b49f83785c23645ee1072b664c9bfa5bb37a3655cfa62f7b20a2f4d4d2f8144e8d84f7e8cd00b93dcb5d02182bee95f9296af3b09311c3d95a1.jpeg",
-      gravity: "./files/e39dd4f989d7be57001e54b4b802b1b99ab2fa5cadf1c098188688804cb6195669d716c2fe53db92d5273dac240264b118f82f3d338938768b82239c7dd87c77.jpeg",
-      m61: "./files/4a85b5049d0730eaf366a077a9b2e8ec20f6f1db333016940e5721572b151e78ee0d439c43309b79516fd9294319b9e7b57eb548b805752ae7177e84be0cd82d.jpeg",
-      webb: "./files/0a5749ce7542538934ccfe722a3ca52a660f087d215de9be268debab1426e0fb243cc1727a4e59a50bab0e24fadc2201c51f04197ec4fc8af094784defc1c637.jpeg",
-      yosemite: "./files/71d8bb781fd97bd249fcc54a15bd83d63e89873694b2997b7ad9b74aa0cd53416756a49f88940ca3d0443269a3d7d1d653623eb64740df2a5dbb76d4570c506a.jpeg",
-      yosemite2: "./files/c1f51c8c6e3252ca13e095cb761d53f304b6229ea35d26f0f525afaa58bab8676c7322fc3295c7e4d58d71189ac430e71ac0b58c4150a050f178ee8b782f968a.jpeg",
-      yosemite3: "./files/58ca4af43850e99ae7e803776cb0e0743632409ddb9a8443947b8ced33b0c1f2725f4f4785f01ef2391d4950c7aa2dd69998aaa054c5226609b4d67e8531ccb7.jpeg",
-      yosemite4: "./files/c5704d9f812eb8688d923ee94f1e580e755e9ad2e1e307c20ef0f08476a7e267313332ed25b2e703c3eec6de94cca6145a8477a282419f50426795e8c8bdff5b.jpeg",
-      topographic: "./files/376052d1d580b6d1aef50672fca343a60f4944f87fb2ebb7caaff9d4f0c72403d85cc1d3b055bb9d5d1f59c959aaebc77e289656ecd5f8502be2b0f23b1b9d92.jpeg",
-      bigcat: "./files/996456a95748650ad01099eb60c40918a5223b11a901d6ecfe8501cb3b2d99feabb73b1395429e4a2bab611dcb62627e56e594bf46198028908ca666859f28cd.jpeg",
-      hokitika: "./files/49d6c2c00a0df0ad75f03c4f039fe0c8df2a8b244e4754d53821f4e0ff892a3c541ef65dd2b987b0e7d8b5b5ddc02d055a9037f72df4f48560a90636d1004da6.jpeg",
-      "arthur's pass": "./files/6bc1a98f862ef68f3148b9ed7e9c8db7c570b97a55b492048ad3f2dc905a23dc78c7d299c6d86c941845db1ab8d85db83ff8b171ac41dca3e86990ca99354c5b.jpeg",
-      rainier: "./files/be256269735534c96b4c5d31bdf7658887d43c965c683bce12733255b73953df9547987434ba4eed313bb5ec377fb77f52c7ba45be6e179ba82c0951609f6cb0.jpeg",
-      shelf: "./files/c857167781f363f1ef67c1167806bef2f252d025ae3f0e02790d107d21a54cfd6572f059870c6066d039db832be2f9f75a68500e0590064f98028c1ea1e4c7f2.jpeg",
-      cranes: "./files/95e6df9d1056dc4272cf82fa22ccd42e8fdf710a726f8b7b0634d7d46f81432cf59ad8b99a4ba54a8ee24733fde167eea11340d9b87edaa3ee203e3e4341c620.jpeg",
-      "smith rock": "./files/77f89c7f66afe86a50a1a0ca1ffd15399da4fad3595cd3e8aae81ce29e4600c487e9e2c58b1dfa137535f81e61d940a22e793f36aac74238d3feb2d7e1aa6248.jpeg",
-      dog: "./files/d8d6f7a92241e1b547146a09d0b2accc10e0e26d6af900f06a703a78b698817f53c68542af7009c1f21d9e92d258c752d99947debadeff36b26d83e2d123ad16.jpeg",
-      "ansel adams": "./files/23e308face2741c20e26b3f68362aa6004fd188cca1f97f3dbdbfa7cd2fa66eb3d882487afe50878477ac41c82837ccd1a5ed68946040a61cdaf68709b365bef.jpeg"
+      ellingwood: FileAttachment("ellingwood.jpg"),
+      gravity: FileAttachment("gravity.jpg"),
+      m61: FileAttachment("m61.jpg"),
+      webb: FileAttachment("webb.jpg"),
+      yosemite: FileAttachment("yosemite.jpg"),
+      yosemite2: FileAttachment("yosemite2.jpg"),
+      yosemite3: FileAttachment("yosemite3.jpg"),
+      yosemite4: FileAttachment("yosemite4.jpg"),
+      topographic: FileAttachment("topographic.jpg"),
+      bigcat: FileAttachment("bigcat.jpg"),
+      hokitika: FileAttachment("hokitika.jpg"),
+      "arthur's pass": FileAttachment("arthurs-pass.jpg"),
+      rainier: FileAttachment("rainier.jpg"),
+      shelf: FileAttachment("shelf.jpg"),
+      cranes: FileAttachment("cranes.jpg"),
+      "smith rock": FileAttachment("smith-rock.jpg"),
+      dog: FileAttachment("dog.jpg"),
+      "ansel adams": FileAttachment("ansel-adams.jpg")
     };
   </script>
   <script id="src" type="module">
-    const src = await createImageBitmap(await (await fetch(FILES[sourceFile])).blob());
+    const src = await createImageBitmap(await FILES[sourceFile].blob());
   </script>
   <script id="target" type="module">
-    const target = await createImageBitmap(await (await fetch(FILES[targetFile])).blob());
+    const target = await createImageBitmap(await FILES[targetFile].blob());
   </script>
   <script id="src-data" type="module">
     const srcData = getPixels(src, src.width / downsample, src.height / downsample);
