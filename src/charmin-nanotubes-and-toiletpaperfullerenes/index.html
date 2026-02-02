@@ -330,7 +330,35 @@ state.dirty = true;
   </script>
 
   <script id="main-canvas" type="text/x-typescript">
-const container = html`<div id="mesh-canvas" style="width: 100%; height: 100%; max-width: 100%;"></div>`;
+// Touch-friendly edit button (disabled when no vertex selected)
+const deleteButton = html`<button id="delete-vertex-btn"
+  aria-label="Delete vertex"
+  title="Delete vertex"
+  disabled
+  style="
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    width: 40px;
+    height: 40px;
+    padding: 0;
+    font-size: 20px;
+    line-height: 40px;
+    text-align: center;
+    background: rgba(255,255,255,0.9);
+    color: #333;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    cursor: pointer;
+    z-index: 10;
+    touch-action: manipulation;
+    transition: opacity 0.15s;
+    opacity: 0.4;
+">&#128465;</button>`;
+
+const container = html`<div id="mesh-canvas" style="position: relative; width: 100%; height: 100%; max-width: 100%;">
+  ${deleteButton}
+</div>`;
 
 // Initialize WebGL context if needed
 if (!state.regl) {
@@ -369,11 +397,39 @@ if (!state.regl) {
         state.dirty = true;
         state.meshVersion++;
         state.meshVersionListeners.forEach(listener => listener());
+        // Update delete button enabled state
+        const hasSelection = state.interactions!.selectedVertexIndex >= 0;
+        deleteButton.disabled = !hasSelection;
+        deleteButton.style.opacity = hasSelection ? '1' : '0.4';
+        deleteButton.style.cursor = hasSelection ? 'pointer' : 'default';
       }
     }
   );
   // Now attach camera controller events (after interactions)
   state.controller.attachEvents();
+
+  // Delete button click handler
+  deleteButton.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (state.interactions && state.interactions.selectedVertexIndex >= 0) {
+      const newIdx = state.mesh!.deleteVertex(state.interactions.selectedVertexIndex);
+      state.interactions.selectedVertexIndex = newIdx;
+      state.interactions.hoverVertexIndex = -1;
+      state.interactions.activeVertexIndex = -1;
+      state.interactions.dirty = true;
+      state.dirty = true;
+      state.meshVersion++;
+      state.meshVersionListeners.forEach(listener => listener());
+      // Update button state
+      const hasSelection = newIdx >= 0;
+      deleteButton.disabled = !hasSelection;
+      deleteButton.style.opacity = hasSelection ? '1' : '0.4';
+      deleteButton.style.cursor = hasSelection ? 'pointer' : 'default';
+      // Return focus to canvas so spacebar works for deselect
+      canvas.focus();
+    }
+  });
 }
 
 // Resize canvas to match container
