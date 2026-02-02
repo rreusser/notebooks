@@ -1,5 +1,5 @@
 <!doctype html>
-<notebook theme="air">
+<notebook theme="coffee">
   <title>Particle-Mesh Gravity in WebGPU</title>
   <script id="1" type="text/markdown">
     # Particle-Mesh Gravity in WebGPU
@@ -306,15 +306,24 @@
     device.queue.writeBuffer(particles, 0, particleData);
   </script>
   <script id="16" type="module">
+    import { expandable } from './lib/expandable.js';
+    import { createZoomableAxes } from './lib/zoomable-axes.js';
+
     // Canvas setup
-    const canvasSize = Math.min(width, 640);
-    const pixelRatio = window.devicePixelRatio || 1;
-    const canvas = html`<canvas
-      id="gravity-canvas"
-      width="${canvasSize * pixelRatio}"
-      height="${canvasSize * pixelRatio}"
-      style="width: ${canvasSize}px; height: ${canvasSize}px; background: black;">
-    </canvas>`;
+    const dpr = window.devicePixelRatio || 1;
+    const maxWidth = 800;
+    const initialWidth = Math.min(maxWidth, window.innerWidth - 40);
+    const initialHeight = initialWidth;
+
+    const canvas = document.createElement('canvas');
+    canvas.id = 'gravity-canvas';
+    canvas.width = Math.floor(initialWidth * dpr);
+    canvas.height = Math.floor(initialHeight * dpr);
+    canvas.style.width = `${initialWidth}px`;
+    canvas.style.height = `${initialHeight}px`;
+    canvas.style.maxWidth = 'none';
+    canvas.style.aspectRatio = '1 / 1';
+    canvas.style.background = '#1B1714';
 
     const gpuContext = canvas.getContext('webgpu');
     gpuContext.configure({
@@ -323,7 +332,93 @@
       alphaMode: 'opaque'
     });
 
-    display(canvas);
+    // Render state for dirty tracking
+    const renderState = { dirty: true };
+
+    // Canvas dimensions state (updated on resize)
+    const canvasState = {
+      width: initialWidth,
+      height: initialHeight,
+      pixelRatio: dpr
+    };
+
+    // View state for zoom (simulation domain is [0,1]²)
+    const viewState = {
+      xDomain: [0, 1],
+      yDomain: [0, 1]
+    };
+
+    // Zoomable axes for 2D pan/zoom
+    const axes = createZoomableAxes({
+      d3,
+      element: canvas,
+      xScale: d3.scaleLinear().domain([0, 1]).range([0, initialWidth]),
+      yScale: d3.scaleLinear().domain([0, 1]).range([initialHeight, 0]),
+      aspectRatio: 1,
+      scaleExtent: [0.5, 50],
+      onChange: ({ xDomain, yDomain }) => {
+        viewState.xDomain = xDomain;
+        viewState.yDomain = yDomain;
+        renderState.dirty = true;
+      }
+    });
+
+    const figure = html`<figure style="margin: 0; max-width: none;" id="gravity-figure">
+      ${canvas}
+      <figcaption>Drag to pan, scroll to zoom. Use controls above to adjust simulation parameters.</figcaption>
+    </figure>`;
+
+    display(expandable(figure, {
+      width: initialWidth,
+      height: initialHeight,
+      wide: true,
+      maxWidth: 900,
+      aspectRatio: 1,
+      controls: '#gravity-controls',
+      onResize(el, w, h) {
+        canvasState.width = w;
+        canvasState.height = h;
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+        canvas.style.width = `${w}px`;
+        canvas.style.height = `${h}px`;
+        gpuContext.configure({
+          device,
+          format: canvasFormat,
+          alphaMode: 'opaque'
+        });
+        // Update axes scales for new dimensions
+        axes.updateScales(
+          d3.scaleLinear().domain(viewState.xDomain).range([0, w]),
+          d3.scaleLinear().domain(viewState.yDomain).range([h, 0])
+        );
+        renderState.dirty = true;
+      }
+    }));
+
+    // Handle page resize without re-running the cell
+    const resizeObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const rect = entry.contentRect;
+        const w = Math.floor(rect.width);
+        const h = Math.floor(rect.height);
+        if (w > 0 && h > 0) {
+          canvasState.width = w;
+          canvasState.height = h;
+          canvas.width = Math.floor(w * dpr);
+          canvas.height = Math.floor(h * dpr);
+          gpuContext.configure({
+            device,
+            format: canvasFormat,
+            alphaMode: 'opaque'
+          });
+          renderState.dirty = true;
+        }
+      }
+    });
+    resizeObserver.observe(canvas);
+
+    invalidation.then(() => resizeObserver.disconnect());
   </script>
   <script id="16b" type="text/markdown">
     ## Initial conditions
@@ -462,6 +557,9 @@
     }
   </script>
   <script id="18" type="module">
+    // Explicit dependencies from canvas setup
+    viewState; canvasState; renderState;
+
     // Simulation step
     async function step() {
       updateUniforms();
@@ -576,25 +674,39 @@
       }
     }
 
+    // Background color #1B1714 in linear RGB
+    const bgColor = { r: 0.106, g: 0.090, b: 0.078, a: 1 };
+
     // Render visualization
     function render() {
       updateUniforms();
 
       const showGradient = gradientIntensity > 0;
 
+      // Get current view bounds (clamped to [0,1] for periodic boundary)
+      const [xMin, xMax] = viewState.xDomain;
+      const [yMin, yMax] = viewState.yDomain;
+
       const enc = device.createCommandEncoder();
       const textureView = gpuContext.getCurrentTexture().createView();
 
       if (showGradient) {
-        // Create gradient params buffer with gradient intensity
+        // Create gradient params buffer with gradient intensity and view bounds
+        // Layout: u32 gridSize, f32 scale, f32 canvasSize, f32 pixelRatio, vec2 viewMin, vec2 viewMax
         const gradientParamsBuffer = device.createBuffer({
           label: 'gradientParams',
-          size: 16,
+          size: 32,
           usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
         });
-        const gradientData = new ArrayBuffer(16);
+        const gradientData = new ArrayBuffer(32);
         new Uint32Array(gradientData, 0, 1).set([N]);
-        new Float32Array(gradientData, 4, 3).set([gradientIntensity, canvasSize, pixelRatio]);
+        new Float32Array(gradientData, 4, 7).set([
+          gradientIntensity,
+          canvasState.width,
+          canvasState.pixelRatio,
+          xMin, yMin,  // viewMin
+          xMax, yMax   // viewMax
+        ]);
         device.queue.writeBuffer(gradientParamsBuffer, 0, gradientData);
 
         // First pass: render gradient field
@@ -612,7 +724,7 @@
             view: textureView,
             loadOp: 'clear',
             storeOp: 'store',
-            clearValue: { r: 0, g: 0, b: 0, a: 1 }
+            clearValue: bgColor
           }]
         });
         gradientPass.setPipeline(pipelines.visualizeGradient);
@@ -621,15 +733,20 @@
         gradientPass.end();
       }
 
-      // Create density params buffer
+      // Create density params buffer with view bounds
+      // Layout: u32 gridSize, f32 scale, vec2 viewMin, vec2 viewMax
       const densityParamsBuffer = device.createBuffer({
         label: 'densityParams',
-        size: 16,
+        size: 32,
         usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST
       });
-      const densityData = new ArrayBuffer(16);
+      const densityData = new ArrayBuffer(32);
       new Uint32Array(densityData, 0, 1).set([N]);
-      new Float32Array(densityData, 4, 1).set([brightness]);
+      new Float32Array(densityData, 4, 5).set([
+        brightness,
+        xMin, yMin,  // viewMin (offset 8)
+        xMax, yMax   // viewMax (offset 16)
+      ]);
       device.queue.writeBuffer(densityParamsBuffer, 0, densityData);
 
       // Render density (clear if no gradient, additive blend if gradient was drawn)
@@ -646,7 +763,7 @@
           view: textureView,
           loadOp: showGradient ? 'load' : 'clear',
           storeOp: 'store',
-          clearValue: { r: 0, g: 0, b: 0, a: 1 }
+          clearValue: bgColor
         }]
       });
       densityPass.setPipeline(showGradient ? pipelines.visualizeDensityAdditive : pipelines.visualizeDensity);
@@ -660,7 +777,7 @@
   <script id="19" type="module">
     // Animation loop
     // Note: brightness and gradientIntensity are read fresh each frame in render()
-    step; render; canvas; simulate;
+    step; render; canvas; simulate; renderState;
 
     let animFrameId = null;
     let hasError = false;
@@ -671,8 +788,13 @@
       try {
         if (simulate) {
           await step();
+          renderState.dirty = true;
         }
-        render();
+        // Only render when dirty (simulation ran, view changed, or resize)
+        if (renderState.dirty) {
+          render();
+          renderState.dirty = false;
+        }
         animFrameId = requestAnimationFrame(animationLoop);
       } catch (e) {
         hasError = true;
@@ -682,6 +804,7 @@
 
     // Render immediately, then start the loop
     render();
+    renderState.dirty = false;
     animFrameId = requestAnimationFrame(animationLoop);
 
     invalidation.then(() => {

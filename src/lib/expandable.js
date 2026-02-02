@@ -13,9 +13,12 @@
  *   Can be a CSS selector string, an HTMLElement, or an array of either.
  * @param {Object} [options.state] - Optional external state object to persist expanded state across re-renders.
  *   Should have an `expanded` property (boolean).
+ * @param {boolean} [options.wide=false] - When true, figure expands beyond article bounds with negative margins.
+ * @param {number} [options.maxWidth] - Maximum width when using wide layout (default: 1200).
+ * @param {number} [options.aspectRatio] - Aspect ratio (width/height) to maintain when using wide layout.
  * @returns {HTMLElement} The expandable container
  */
-export function expandable(content, { width, height, toggleOffset = [8, 8], margin = 0, padding = 0, onResize, controls, state }) {
+export function expandable(content, { width, height, toggleOffset = [8, 8], margin = 0, padding = 0, onResize, controls, state, wide = false, maxWidth = 1200, aspectRatio }) {
   // Use external state if provided, otherwise local state
   let expanded = state?.expanded ?? false;
   let currentWidth = width;
@@ -284,8 +287,36 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
   contentWrapper.appendChild(toggleBtn);
   container.appendChild(contentWrapper);
 
+  // Wide/breakout layout: expand figure beyond article bounds
+  function updateWideLayout() {
+    if (!wide || expanded) return;
+
+    const viewportWidth = window.innerWidth;
+    const figureWidth = Math.min(maxWidth, viewportWidth - 40);
+    const figureHeight = aspectRatio ? Math.round(figureWidth / aspectRatio) : height;
+
+    // Use first cell as stable reference for article width
+    const refWidth = document.querySelector('.observablehq--cell')?.offsetWidth || 640;
+    const marginLeft = (refWidth - figureWidth) / 2;
+
+    contentWrapper.style.width = `${figureWidth}px`;
+    contentWrapper.style.marginLeft = `${marginLeft}px`;
+
+    // Update current dimensions and notify
+    if (figureWidth !== currentWidth || figureHeight !== currentHeight) {
+      currentWidth = figureWidth;
+      currentHeight = figureHeight;
+      if (onResize) {
+        onResize(content, figureWidth, figureHeight, false);
+      }
+    }
+  }
+
   // Call onResize immediately to initialize content at the correct size
-  if (onResize) {
+  if (wide) {
+    // For wide layout, defer to updateWideLayout
+    requestAnimationFrame(updateWideLayout);
+  } else if (onResize) {
     onResize(content, width, height, false);
   }
 
@@ -356,7 +387,12 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     const figure = contentWrapper.querySelector('figure');
     if (figure) figure.style.margin = figure._savedMargin ?? '';
 
-    setDimensions(width, height);
+    // For wide layout, reapply breakout styles; otherwise use default dimensions
+    if (wide) {
+      requestAnimationFrame(updateWideLayout);
+    } else {
+      setDimensions(width, height);
+    }
 
     // Re-measure collapsed height after resize settles
     requestAnimationFrame(() => {
@@ -380,13 +416,14 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
     const outerWidth = expandedWidth + hPadding * 2;
     const outerHeight = expandedHeight + vPadding * 2;
 
-    // Position content wrapper
+    // Position content wrapper (reset wide layout margins)
     contentWrapper.style.position = 'fixed';
     contentWrapper.style.display = 'block';
     contentWrapper.style.width = `${outerWidth}px`;
     contentWrapper.style.height = `${outerHeight}px`;
     contentWrapper.style.overflow = 'hidden';
     contentWrapper.style.zIndex = '9999';
+    contentWrapper.style.marginLeft = '0';
 
     const isFullBleed = hMargin === 0 && vMargin === 0;
     if (isFullBleed) {
@@ -526,6 +563,8 @@ export function expandable(content, { width, height, toggleOffset = [8, 8], marg
   const handleResize = () => {
     if (expanded) {
       updateExpandedPosition();
+    } else if (wide) {
+      updateWideLayout();
     }
   };
   window.addEventListener('resize', handleResize);

@@ -1,4 +1,4 @@
-import{createFFTPipelines as j,createVec4FFTPipelines as H}from"./fft-Chkx7JT6.js";const B=`// Clear grid shader - zeros the atomic density accumulator
+import{createFFTPipelines as j,createVec4FFTPipelines as B}from"./fft-Chkx7JT6.js";const H=`// Clear grid shader - zeros the atomic density accumulator
 
 struct ClearParams {
   gridSize: u32,
@@ -389,13 +389,18 @@ fn fullscreen(@builtin(vertex_index) vertexIndex: u32) -> VertexOutput {
 struct DensityVisParams {
   gridSize: u32,
   scale: f32,
+  viewMin: vec2<f32>,
+  viewMax: vec2<f32>,
 }
 
 @group(0) @binding(0) var<storage, read> density: array<vec2<f32>>;
 @group(0) @binding(1) var<uniform> params: DensityVisParams;
 
 @fragment
-fn visualize_density(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+fn visualize_density(@location(0) rawUv: vec2<f32>) -> @location(0) vec4<f32> {
+  // Transform UV by view bounds (for zoom/pan), then wrap to [0,1] for periodic tiling
+  let uv = fract(params.viewMin + rawUv * (params.viewMax - params.viewMin));
+
   let N = params.gridSize;
   let Nf = f32(N);
 
@@ -403,7 +408,7 @@ fn visualize_density(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   let gx = uv.x * Nf - 0.5;
   let gy = uv.y * Nf - 0.5;
 
-  // Cell indices for bilinear interpolation
+  // Cell indices for bilinear interpolation (add Nf to handle negative values near 0)
   let i0 = u32(floor(gx) + Nf) % N;
   let j0 = u32(floor(gy) + Nf) % N;
   let i1 = (i0 + 1u) % N;
@@ -422,11 +427,17 @@ fn visualize_density(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   // Bilinear interpolation
   let rho = mix(mix(d00, d10, fx), mix(d01, d11, fx), fy);
 
+  // Background color #1B1714
+  let bgColor = vec3<f32>(0.106, 0.090, 0.078);
+
   // Log scaling for dynamic range, then per-component 1-exp(-x) tone mapping
   let baseColor = vec3<f32>(0.2, 0.4, 1.0);
   let scaledDensity = rho * params.scale * 50.0 * Nf * Nf;
   let logDensity = log(1.0 + scaledDensity);
-  let color = vec3<f32>(1.0) - exp(-baseColor * logDensity * 2.0);
+  let light = vec3<f32>(1.0) - exp(-baseColor * logDensity * 2.0);
+
+  // Add light on top of background
+  let color = bgColor + light;
 
   return vec4<f32>(color, 1.0);
 }
@@ -441,6 +452,8 @@ struct GradientVisParams {
   scale: f32,        // Opacity control
   canvasSize: f32,   // Canvas size in pixels
   pixelRatio: f32,   // Device pixel ratio
+  viewMin: vec2<f32>,  // View bounds for zoom/pan
+  viewMax: vec2<f32>,
 }
 
 const PI: f32 = 3.141592653589793;
@@ -530,7 +543,10 @@ fn shadedLinearContours(f: f32, screenSpaceGrad: f32, minSpacing: f32) -> f32 {
 }
 
 @fragment
-fn visualize_gradient(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+fn visualize_gradient(@location(0) rawUv: vec2<f32>) -> @location(0) vec4<f32> {
+  // Transform UV by view bounds (for zoom/pan), then wrap to [0,1] for periodic tiling
+  let uv = fract(params.viewMin + rawUv * (params.viewMax - params.viewMin));
+
   let N = params.gridSize;
   let Nf = f32(N);
 
@@ -581,8 +597,10 @@ fn visualize_gradient(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   let dMag_dy = (gradX * dgx_dy + gradY * dgy_dy) * magRecip;
 
   // Convert from domain space to screen space (per pixel)
-  // Domain [0,1] maps to canvasSize pixels, so divide by canvasSize
-  let screenSpaceGrad = hypot2(vec2<f32>(dMag_dx, dMag_dy)) / params.canvasSize;
+  // Visible domain spans (viewMax - viewMin) and maps to canvasSize pixels
+  let viewScale = params.viewMax - params.viewMin;
+  let domainToScreen = viewScale / params.canvasSize;
+  let screenSpaceGrad = hypot2(vec2<f32>(dMag_dx, dMag_dy) * domainToScreen);
 
   // Compute shaded contours of the magnitude (linear mode)
   // The adaptive algorithm selects octaves based on screenSpaceGrad, handling any scale
@@ -615,4 +633,4 @@ fn visualize_gradient(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   return vec4<f32>(color, params.scale);
 }
 `;function r(e,n){const t=n==="f16"?"f16":"f32",i=n==="f16"?`enable f16;
-`:"";return e.replace("// PRECISION_ENABLE",i).replace(/FLOAT_TYPE/g,t)}async function $(e,n,t,i="f32"){const v=j(e,t,i),x=H(e,t,e.limits.maxComputeWorkgroupSizeX,i),h=e.createShaderModule({label:"Clear grid shader",code:B}),b=e.createShaderModule({label:"Accumulate shader",code:R}),P=e.createShaderModule({label:"Convert density shader",code:Y}),S=e.createShaderModule({label:"Poisson solve shader",code:r(W,i)}),N=e.createShaderModule({label:"Integrate shader",code:r(q,i)}),o=e.createShaderModule({label:"Visualize shader",code:X}),a=e.createShaderModule({label:"Fullscreen shader",code:K}),l=e.createShaderModule({label:"Visualize density shader",code:Q}),z=e.createShaderModule({label:"Visualize gradient shader",code:r(Z,i)}),s=e.createBindGroupLayout({label:"Clear grid bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),d=e.createBindGroupLayout({label:"Accumulate bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),c=e.createBindGroupLayout({label:"Convert density bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),p=e.createBindGroupLayout({label:"Poisson solve bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),u=e.createBindGroupLayout({label:"Integrate bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),f=e.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.VERTEX,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),g=e.createBindGroupLayout({label:"Visualize density bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),y=e.createBindGroupLayout({label:"Visualize gradient bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),G=e.createPipelineLayout({label:"Clear grid pipeline layout",bindGroupLayouts:[s]}),_=e.createPipelineLayout({label:"Accumulate pipeline layout",bindGroupLayouts:[d]}),T=e.createPipelineLayout({label:"Convert density pipeline layout",bindGroupLayouts:[c]}),w=e.createPipelineLayout({label:"Poisson solve pipeline layout",bindGroupLayouts:[p]}),C=e.createPipelineLayout({label:"Integrate pipeline layout",bindGroupLayouts:[u]}),F=e.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[f]}),m=e.createPipelineLayout({label:"Visualize density pipeline layout",bindGroupLayouts:[g]}),V=e.createPipelineLayout({label:"Visualize gradient pipeline layout",bindGroupLayouts:[y]}),A=e.createComputePipeline({label:"Clear grid pipeline",layout:G,compute:{module:h,entryPoint:"clear_grid"}}),I=e.createComputePipeline({label:"Accumulate pipeline",layout:_,compute:{module:b,entryPoint:"accumulate"}}),O=e.createComputePipeline({label:"Convert density pipeline",layout:T,compute:{module:P,entryPoint:"convert_density"}}),L=e.createComputePipeline({label:"Poisson solve pipeline",layout:w,compute:{module:S,entryPoint:"poisson_solve"}}),E=e.createComputePipeline({label:"Integrate pipeline",layout:C,compute:{module:N,entryPoint:"integrate"}}),M=e.createRenderPipeline({label:"Visualize pipeline",layout:F,vertex:{module:o,entryPoint:"visualize_vertex"},fragment:{module:o,entryPoint:"visualize_fragment",targets:[{format:n,blend:{color:{srcFactor:"one",dstFactor:"one",operation:"add"},alpha:{srcFactor:"one",dstFactor:"one",operation:"add"}}}]},primitive:{topology:"triangle-list"}}),k=e.createRenderPipeline({label:"Visualize density pipeline",layout:m,vertex:{module:a,entryPoint:"fullscreen"},fragment:{module:l,entryPoint:"visualize_density",targets:[{format:n}]},primitive:{topology:"triangle-list"}}),U=e.createRenderPipeline({label:"Visualize density additive pipeline",layout:m,vertex:{module:a,entryPoint:"fullscreen"},fragment:{module:l,entryPoint:"visualize_density",targets:[{format:n,blend:{color:{srcFactor:"one",dstFactor:"one",operation:"add"},alpha:{srcFactor:"one",dstFactor:"one",operation:"add"}}}]},primitive:{topology:"triangle-list"}}),D=e.createRenderPipeline({label:"Visualize gradient pipeline",layout:V,vertex:{module:a,entryPoint:"fullscreen"},fragment:{module:z,entryPoint:"visualize_gradient",targets:[{format:n,blend:{color:{srcFactor:"src-alpha",dstFactor:"one-minus-src-alpha",operation:"add"},alpha:{srcFactor:"one",dstFactor:"one-minus-src-alpha",operation:"add"}}}]},primitive:{topology:"triangle-list"}});return{fft:v,fftVec4:x,clearGrid:A,accumulate:I,convertDensity:O,poissonSolve:L,integrate:E,visualize:M,visualizeDensity:k,visualizeDensityAdditive:U,visualizeGradient:D,bindGroupLayouts:{clearGrid:s,accumulate:d,convertDensity:c,poissonSolve:p,integrate:u,visualize:f,visualizeDensity:g,visualizeGradient:y}}}export{$ as createGravityPipelines};
+`:"";return e.replace("// PRECISION_ENABLE",i).replace(/FLOAT_TYPE/g,t)}async function $(e,n,t,i="f32"){const v=j(e,t,i),x=B(e,t,e.limits.maxComputeWorkgroupSizeX,i),h=e.createShaderModule({label:"Clear grid shader",code:H}),b=e.createShaderModule({label:"Accumulate shader",code:R}),P=e.createShaderModule({label:"Convert density shader",code:Y}),S=e.createShaderModule({label:"Poisson solve shader",code:r(W,i)}),N=e.createShaderModule({label:"Integrate shader",code:r(q,i)}),o=e.createShaderModule({label:"Visualize shader",code:X}),a=e.createShaderModule({label:"Fullscreen shader",code:K}),l=e.createShaderModule({label:"Visualize density shader",code:Q}),z=e.createShaderModule({label:"Visualize gradient shader",code:r(Z,i)}),s=e.createBindGroupLayout({label:"Clear grid bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),d=e.createBindGroupLayout({label:"Accumulate bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),c=e.createBindGroupLayout({label:"Convert density bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),p=e.createBindGroupLayout({label:"Poisson solve bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:3,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),u=e.createBindGroupLayout({label:"Integrate bind group layout",entries:[{binding:0,visibility:GPUShaderStage.COMPUTE,buffer:{type:"storage"}},{binding:1,visibility:GPUShaderStage.COMPUTE,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.COMPUTE,buffer:{type:"uniform"}}]}),f=e.createBindGroupLayout({label:"Visualize bind group layout",entries:[{binding:0,visibility:GPUShaderStage.VERTEX,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.VERTEX|GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),g=e.createBindGroupLayout({label:"Visualize density bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),y=e.createBindGroupLayout({label:"Visualize gradient bind group layout",entries:[{binding:0,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:1,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"read-only-storage"}},{binding:2,visibility:GPUShaderStage.FRAGMENT,buffer:{type:"uniform"}}]}),G=e.createPipelineLayout({label:"Clear grid pipeline layout",bindGroupLayouts:[s]}),_=e.createPipelineLayout({label:"Accumulate pipeline layout",bindGroupLayouts:[d]}),w=e.createPipelineLayout({label:"Convert density pipeline layout",bindGroupLayouts:[c]}),T=e.createPipelineLayout({label:"Poisson solve pipeline layout",bindGroupLayouts:[p]}),V=e.createPipelineLayout({label:"Integrate pipeline layout",bindGroupLayouts:[u]}),C=e.createPipelineLayout({label:"Visualize pipeline layout",bindGroupLayouts:[f]}),m=e.createPipelineLayout({label:"Visualize density pipeline layout",bindGroupLayouts:[g]}),F=e.createPipelineLayout({label:"Visualize gradient pipeline layout",bindGroupLayouts:[y]}),A=e.createComputePipeline({label:"Clear grid pipeline",layout:G,compute:{module:h,entryPoint:"clear_grid"}}),M=e.createComputePipeline({label:"Accumulate pipeline",layout:_,compute:{module:b,entryPoint:"accumulate"}}),I=e.createComputePipeline({label:"Convert density pipeline",layout:w,compute:{module:P,entryPoint:"convert_density"}}),O=e.createComputePipeline({label:"Poisson solve pipeline",layout:T,compute:{module:S,entryPoint:"poisson_solve"}}),L=e.createComputePipeline({label:"Integrate pipeline",layout:V,compute:{module:N,entryPoint:"integrate"}}),E=e.createRenderPipeline({label:"Visualize pipeline",layout:C,vertex:{module:o,entryPoint:"visualize_vertex"},fragment:{module:o,entryPoint:"visualize_fragment",targets:[{format:n,blend:{color:{srcFactor:"one",dstFactor:"one",operation:"add"},alpha:{srcFactor:"one",dstFactor:"one",operation:"add"}}}]},primitive:{topology:"triangle-list"}}),k=e.createRenderPipeline({label:"Visualize density pipeline",layout:m,vertex:{module:a,entryPoint:"fullscreen"},fragment:{module:l,entryPoint:"visualize_density",targets:[{format:n}]},primitive:{topology:"triangle-list"}}),U=e.createRenderPipeline({label:"Visualize density additive pipeline",layout:m,vertex:{module:a,entryPoint:"fullscreen"},fragment:{module:l,entryPoint:"visualize_density",targets:[{format:n,blend:{color:{srcFactor:"one",dstFactor:"one",operation:"add"},alpha:{srcFactor:"one",dstFactor:"one",operation:"add"}}}]},primitive:{topology:"triangle-list"}}),D=e.createRenderPipeline({label:"Visualize gradient pipeline",layout:F,vertex:{module:a,entryPoint:"fullscreen"},fragment:{module:z,entryPoint:"visualize_gradient",targets:[{format:n,blend:{color:{srcFactor:"src-alpha",dstFactor:"one-minus-src-alpha",operation:"add"},alpha:{srcFactor:"one",dstFactor:"one-minus-src-alpha",operation:"add"}}}]},primitive:{topology:"triangle-list"}});return{fft:v,fftVec4:x,clearGrid:A,accumulate:M,convertDensity:I,poissonSolve:O,integrate:L,visualize:E,visualizeDensity:k,visualizeDensityAdditive:U,visualizeGradient:D,bindGroupLayouts:{clearGrid:s,accumulate:d,convertDensity:c,poissonSolve:p,integrate:u,visualize:f,visualizeDensity:g,visualizeGradient:y}}}export{$ as createGravityPipelines};

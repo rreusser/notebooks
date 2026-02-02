@@ -1,5 +1,5 @@
 <!doctype html>
-<notebook theme="air">
+<notebook theme="near-midnight">
   <title>Night and Day</title>
   <script id="description" type="text/markdown">
 # Night and Day
@@ -72,6 +72,7 @@ The astronomical calculations are based on Vladimir Agafonkin's [SunCalc](https:
       height: 600,
       controls: '.controls-panel',
       state: expandableState,
+      wide: true,
       onResize(el, w, h) {
         const mapEl = el.querySelector('#map-container');
         if (mapEl) {

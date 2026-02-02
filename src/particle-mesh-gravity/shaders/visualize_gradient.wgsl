@@ -9,6 +9,8 @@ struct GradientVisParams {
   scale: f32,        // Opacity control
   canvasSize: f32,   // Canvas size in pixels
   pixelRatio: f32,   // Device pixel ratio
+  viewMin: vec2<f32>,  // View bounds for zoom/pan
+  viewMax: vec2<f32>,
 }
 
 const PI: f32 = 3.141592653589793;
@@ -98,7 +100,10 @@ fn shadedLinearContours(f: f32, screenSpaceGrad: f32, minSpacing: f32) -> f32 {
 }
 
 @fragment
-fn visualize_gradient(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
+fn visualize_gradient(@location(0) rawUv: vec2<f32>) -> @location(0) vec4<f32> {
+  // Transform UV by view bounds (for zoom/pan), then wrap to [0,1] for periodic tiling
+  let uv = fract(params.viewMin + rawUv * (params.viewMax - params.viewMin));
+
   let N = params.gridSize;
   let Nf = f32(N);
 
@@ -149,8 +154,10 @@ fn visualize_gradient(@location(0) uv: vec2<f32>) -> @location(0) vec4<f32> {
   let dMag_dy = (gradX * dgx_dy + gradY * dgy_dy) * magRecip;
 
   // Convert from domain space to screen space (per pixel)
-  // Domain [0,1] maps to canvasSize pixels, so divide by canvasSize
-  let screenSpaceGrad = hypot2(vec2<f32>(dMag_dx, dMag_dy)) / params.canvasSize;
+  // Visible domain spans (viewMax - viewMin) and maps to canvasSize pixels
+  let viewScale = params.viewMax - params.viewMin;
+  let domainToScreen = viewScale / params.canvasSize;
+  let screenSpaceGrad = hypot2(vec2<f32>(dMag_dx, dMag_dy) * domainToScreen);
 
   // Compute shaded contours of the magnitude (linear mode)
   // The adaptive algorithm selects octaves based on screenSpaceGrad, handling any scale

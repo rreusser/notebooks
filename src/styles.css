@@ -200,7 +200,7 @@ main .katex-display {
 
 .comments {
   padding: 30px 20px 0;
-  font-family: sans-serif;
+  font-family: var(--sans-serif);
 }
 
 .comments_count {
@@ -212,6 +212,7 @@ main .katex-display {
   flex-direction: column;
   align-items: center;
   margin-bottom: 10px;
+  color: var(--theme-foreground-muted);
 }
 .comments .spinner {
   margin-bottom: 5px;
@@ -220,18 +221,18 @@ main .katex-display {
 .comment[href] {
   display: flex;
   flex-direction: column;
-  border: 1px solid #ccc;
+  border: 1px solid var(--theme-foreground-faintest);
   border-radius: 5px;
   margin: 15px 0;
   padding: 15px;
-  color: black;
+  color: var(--theme-foreground);
   text-decoration: none;
 }
 .comment[href]:visited {
-  color: black;
+  color: var(--theme-foreground);
 }
 .comment[href]:hover {
-  border-color: #999;
+  border-color: var(--theme-foreground-muted);
   text-decoration: none;
 }
 .comment[href]:last-child {
@@ -248,10 +249,10 @@ main .katex-display {
 }
 
 .comment_ago {
-  color: #666;
+  color: var(--theme-foreground-muted);
 }
 .comment_ago:visited {
-  color: #666;
+  color: var(--theme-foreground-muted);
 }
 
 .comment_user {
@@ -259,17 +260,17 @@ main .katex-display {
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  color: black;
+  color: var(--theme-foreground);
   text-decoration: none;
-  font-family: sans-serif;
+  font-family: var(--sans-serif);
   font-weight: 700;
 }
 .comment_user:visited {
-  color: black;
+  color: var(--theme-foreground);
 }
 .comment_commenter {
   font-weight: 400;
-  color: #666;
+  color: var(--theme-foreground-muted);
 }
 
 .comment_content p:first-child {
@@ -282,7 +283,7 @@ main .katex-display {
 .comment_user img {
   margin-right: 10px;
   border-radius: 2px;
-  border: 1px solid #ddd;
+  border: 1px solid var(--theme-foreground-faintest);
   width: 30px;
   height: 30px;
 }
