@@ -166,8 +166,9 @@ export function createCameraController(element, opts = {}) {
       state.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, state.theta + dy * rotateSpeed));
     } else if (dragMode === 'pan') {
       // Use getBoundingClientRect for SVG compatibility (SVG elements don't have offsetWidth/Height)
+      // Normalize both by height so pan speed is consistent across aspect ratios
       const rect = element.getBoundingClientRect();
-      pan(dx / rect.width, dy / rect.height);
+      pan(dx / rect.height, dy / rect.height);
     }
 
     dirty = true;
@@ -184,10 +185,11 @@ export function createCameraController(element, opts = {}) {
   function onWheel(event) {
     event.preventDefault();
 
-    // Get mouse position relative to element center (normalized -0.5 to 0.5)
+    // Get mouse position relative to element center, normalized by height
+    // (consistent with pan() which uses height-normalization for both axes)
     const rect = element.getBoundingClientRect();
-    const mx = (event.clientX - rect.left) / rect.width - 0.5;
-    const my = (event.clientY - rect.top) / rect.height - 0.5;
+    const mx = (event.clientX - rect.left - rect.width / 2) / rect.height;
+    const my = (event.clientY - rect.top - rect.height / 2) / rect.height;
 
     // Calculate zoom factor
     const zoomFactor = 1 + event.deltaY * zoomSpeed;
@@ -247,9 +249,9 @@ export function createCameraController(element, opts = {}) {
         state.distance *= scale;
         state.distance = Math.max(state.near * 10, state.distance);
 
-        // Two-finger pan
+        // Two-finger pan - normalize both by height for consistent speed
         const rect = element.getBoundingClientRect();
-        const panDx = (centerX - lastTouchCenterX) / rect.width;
+        const panDx = (centerX - lastTouchCenterX) / rect.height;
         const panDy = (centerY - lastTouchCenterY) / rect.height;
         pan(panDx, panDy);
 
