@@ -313,7 +313,7 @@
     const dpr = window.devicePixelRatio || 1;
     const maxWidth = 800;
     const initialWidth = Math.min(maxWidth, window.innerWidth - 40);
-    const initialHeight = initialWidth;
+    const initialHeight = initialWidth * 0.7;
 
     const canvas = document.createElement('canvas');
     canvas.id = 'gravity-canvas';
@@ -322,7 +322,7 @@
     canvas.style.width = `${initialWidth}px`;
     canvas.style.height = `${initialHeight}px`;
     canvas.style.maxWidth = 'none';
-    canvas.style.aspectRatio = '1 / 1';
+    canvas.style.aspectRatio = '1 / 0.7';
     canvas.style.background = '#1B1714';
 
     const gpuContext = canvas.getContext('webgpu');
@@ -355,7 +355,7 @@
       xScale: d3.scaleLinear().domain([0, 1]).range([0, initialWidth]),
       yScale: d3.scaleLinear().domain([0, 1]).range([initialHeight, 0]),
       aspectRatio: 1,
-      scaleExtent: [0.5, 50],
+      scaleExtent: [0.2, 50],
       onChange: ({ xDomain, yDomain }) => {
         viewState.xDomain = xDomain;
         viewState.yDomain = yDomain;
@@ -373,7 +373,7 @@
       height: initialHeight,
       wide: true,
       maxWidth: 900,
-      aspectRatio: 1,
+      aspectRatio: 1 / 0.7,
       controls: '#gravity-controls',
       onResize(el, w, h) {
         canvasState.width = w;

@@ -2091,7 +2091,7 @@ a.index__tag:active {
             <p class="index__description">An explanation and WebGL implementation of Perfectly Matched Layers for absorbing boundary conditions in the scalar wave equation.</p>
           </div>
         </li>
-        <li class="index__item" data-tags="Personal" data-path="reflecting-on-two-years-of-yoga/">
+        <li class="index__item" data-tags="Personal,Data visualization" data-path="reflecting-on-two-years-of-yoga/">
           <div class="index__image-container">
             <img class="index__image" src="./meta/reflecting-on-two-years-of-yoga.jpg" alt="" loading="lazy">
           </div>
@@ -2101,6 +2101,7 @@ a.index__tag:active {
               <time class="index__date">December 27, 2025</time>
               <div class="index__tags">
                 <a href="?tag=Personal" class="index__tag">Personal</a>
+                <a href="?tag=Data%20visualization" class="index__tag">Data visualization</a>
               </div>
             </div>
             <p class="index__description">A personal reflection on consistent yoga practice with attendance visualizations over two years.</p>
@@ -2186,7 +2187,7 @@ a.index__tag:active {
             <p class="index__description">Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.</p>
           </div>
         </li>
-        <li class="index__item" data-tags="Personal,Statistics" data-path="spring-training/">
+        <li class="index__item" data-tags="Personal,Data visualization" data-path="spring-training/">
           <div class="index__image-container">
             <img class="index__image" src="./meta/spring-training.jpg" alt="" loading="lazy">
           </div>
@@ -2196,13 +2197,13 @@ a.index__tag:active {
               <time class="index__date">June 8, 2024</time>
               <div class="index__tags">
                 <a href="?tag=Personal" class="index__tag">Personal</a>
-                <a href="?tag=Statistics" class="index__tag">Statistics</a>
+                <a href="?tag=Data%20visualization" class="index__tag">Data visualization</a>
               </div>
             </div>
             <p class="index__description">Quantifying treadmill efforts (to the point of injury).</p>
           </div>
         </li>
-        <li class="index__item" data-tags="Statistics" data-path="speed-climbing-world-record-progression/">
+        <li class="index__item" data-tags="Data visualization" data-path="speed-climbing-world-record-progression/">
           <div class="index__image-container">
             <img class="index__image" src="./meta/speed-climbing-world-record-progression.jpg" alt="" loading="lazy">
           </div>
@@ -2211,7 +2212,7 @@ a.index__tag:active {
             <div class="index__meta">
               <time class="index__date">May 3, 2024</time>
               <div class="index__tags">
-                <a href="?tag=Statistics" class="index__tag">Statistics</a>
+                <a href="?tag=Data%20visualization" class="index__tag">Data visualization</a>
               </div>
             </div>
             <p class="index__description">Plotting and extrapolating trends in competitive speed climbing</p>
@@ -2612,7 +2613,7 @@ a.index__tag:active {
           const viewBtns = document.querySelectorAll('.index-view-btn');
 
           // View toggle
-          const savedView = localStorage.getItem('indexView') || 'grid';
+          const savedView = localStorage.getItem('indexView') || 'list';
           if (savedView === 'list') {
             indexList.classList.add('index--list');
             viewBtns.forEach(btn => {
