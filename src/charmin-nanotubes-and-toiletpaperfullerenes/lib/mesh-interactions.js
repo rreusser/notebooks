@@ -251,12 +251,21 @@ export class MeshInteractions {
       this.element.focus();
       this.dirty = true;
     } else if (this.selectedVertexIndex >= 0) {
-      // Clicked in empty space with a vertex selected - spawn new vertex
-      this.currentMousePos[0] = clickPos[0];
-      this.currentMousePos[1] = clickPos[1];
-      this._spawnVertex();
-      this.element.focus();
+      // Clicked in empty space with a vertex selected
+      if (this.mesh.degree(this.selectedVertexIndex) < 3) {
+        // Spawn new vertex if selected vertex has room
+        this.currentMousePos[0] = clickPos[0];
+        this.currentMousePos[1] = clickPos[1];
+        this._spawnVertex();
+        this.element.focus();
+      } else {
+        // Can't spawn - deselect instead (don't preventDefault, allow focus change)
+        this.selectedVertexIndex = -1;
+        this.dirty = true;
+      }
     }
+    // If no vertex selected and clicked in empty space, do nothing special
+    // (allow natural focus/blur behavior)
 
     this.onChange();
   }

@@ -93,7 +93,8 @@ export function createOrbitCameraController(element, camera, opts = {}) {
       return;
     }
 
-    event.preventDefault();
+    // Don't preventDefault here - allow clicks to focus/blur elements naturally
+    // We'll preventDefault in onMouseMove once we know it's a drag
     initialX = event.clientX;
     initialY = event.clientY;
     lastX = event.clientX;
@@ -123,6 +124,8 @@ export function createOrbitCameraController(element, camera, opts = {}) {
         return; // Still in dead zone, don't rotate yet
       }
       exitedDeadZone = true;
+      // Now we know it's a drag, prevent text selection etc.
+      event.preventDefault();
     }
 
     const dx = event.clientX - lastX;
