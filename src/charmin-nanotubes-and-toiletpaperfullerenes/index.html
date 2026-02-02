@@ -330,7 +330,7 @@ state.dirty = true;
   </script>
 
   <script id="main-canvas" type="text/x-typescript">
-const container = html`<div id="mesh-canvas" style="width: 100%; height: 100%;"></div>`;
+const container = html`<div id="mesh-canvas" style="width: 100%; height: 100%; max-width: 100%;"></div>`;
 
 // Initialize WebGL context if needed
 if (!state.regl) {
@@ -460,7 +460,7 @@ invalidation.then(() => {
 
 // Create figure with canvas and caption
 const figure = html`
-  <figure id="main-figure" style="max-width: none; margin: 0; height: 100%;">
+  <figure id="main-figure" style="max-width: 100%; margin: 0; height: 100%;">
     ${container}
     <figcaption style="padding:0 10px">
       Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection.
@@ -472,11 +472,13 @@ const figure = html`
   </figure>
 `;
 
-// Wrap in expandable container
+// Wrap in expandable container - use Math.min(width, 640) for responsive sizing
+const figureWidth = Math.min(width, 640);
+const figureHeight = Math.round(figureWidth * 576 / 640);
+
 display(expandable(figure, {
-  wide: true,
-  maxWidth: 640,
-  aspectRatio: 640 / 576,
+  width: figureWidth,
+  height: figureHeight,
   padding: [0, 0],
   controls: ['#primary-controls', '#secondary-controls'],
   state: state.expandedState,

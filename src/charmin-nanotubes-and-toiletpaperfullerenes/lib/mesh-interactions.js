@@ -285,7 +285,7 @@ export class MeshInteractions {
 
     if (closest.index >= 0 && closest.distance < 35) {
       // Touch on a vertex - prevent camera from handling
-      event.stopPropagation();
+      event.stopImmediatePropagation();
       event.preventDefault();
 
       this.touchStartedOnVertex = true;
@@ -317,7 +317,7 @@ export class MeshInteractions {
     }
 
     event.preventDefault();
-    event.stopPropagation();
+    event.stopImmediatePropagation();
 
     const touchPos = this._getTouchPos(event.touches[0]);
     this.previousMousePos[0] = this.currentMousePos[0];
