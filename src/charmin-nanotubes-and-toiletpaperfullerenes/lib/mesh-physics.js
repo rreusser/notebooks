@@ -16,6 +16,7 @@ export class MeshPhysics {
     // Simulation state
     this.gamma = 0.1;       // Step size
     this.frozenVertex = -1; // Vertex to skip (e.g., being dragged)
+    this.frozenVertex2 = -1; // Second frozen vertex (for edge dragging)
   }
 
   _ensureGradient() {
@@ -297,7 +298,7 @@ export class MeshPhysics {
     const gamma = this.gamma;
 
     for (let v = 0; v < mesh.vertexCount; v++) {
-      if (v === this.frozenVertex) continue;
+      if (v === this.frozenVertex || v === this.frozenVertex2) continue;
 
       const i3 = v * 3;
       positions[i3] -= gradient[i3] * gamma;

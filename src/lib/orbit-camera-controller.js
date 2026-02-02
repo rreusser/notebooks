@@ -102,8 +102,9 @@ export function createOrbitCameraController(element, camera, opts = {}) {
     exitedDeadZone = false;
 
     const rect = element.getBoundingClientRect();
-    prevNormX = (event.clientX - rect.left) / rect.width - 0.5;
-    prevNormY = (event.clientY - rect.top) / rect.height - 0.5;
+    // Normalize both by height for consistent rotation speed regardless of aspect ratio
+    prevNormX = (event.clientX - rect.left - rect.width / 2) / rect.height;
+    prevNormY = (event.clientY - rect.top - rect.height / 2) / rect.height;
 
     dragMode = (event.shiftKey || event.button === 2) ? 'pan' : 'rotate';
     isDragging = true;
@@ -135,8 +136,9 @@ export function createOrbitCameraController(element, camera, opts = {}) {
 
     if (dragMode === 'rotate') {
       const rect = element.getBoundingClientRect();
-      const normX = (event.clientX - rect.left) / rect.width - 0.5;
-      const normY = (event.clientY - rect.top) / rect.height - 0.5;
+      // Normalize both by height for consistent rotation speed regardless of aspect ratio
+      const normX = (event.clientX - rect.left - rect.width / 2) / rect.height;
+      const normY = (event.clientY - rect.top - rect.height / 2) / rect.height;
 
       camera.rotate(
         [-prevNormX * rotateSpeed, -prevNormY * rotateSpeed],
@@ -188,8 +190,9 @@ export function createOrbitCameraController(element, camera, opts = {}) {
       lastX = event.touches[0].clientX;
       lastY = event.touches[0].clientY;
       const rect = element.getBoundingClientRect();
-      prevNormX = (event.touches[0].clientX - rect.left) / rect.width - 0.5;
-      prevNormY = (event.touches[0].clientY - rect.top) / rect.height - 0.5;
+      // Normalize both by height for consistent rotation speed regardless of aspect ratio
+      prevNormX = (event.touches[0].clientX - rect.left - rect.width / 2) / rect.height;
+      prevNormY = (event.touches[0].clientY - rect.top - rect.height / 2) / rect.height;
     } else if (event.touches.length === 2) {
       event.preventDefault();
       touchDragMode = 'pinch';
@@ -205,8 +208,9 @@ export function createOrbitCameraController(element, camera, opts = {}) {
     if (event.touches.length === 1 && touchDragMode === 'rotate') {
       event.preventDefault();
       const rect = element.getBoundingClientRect();
-      const normX = (event.touches[0].clientX - rect.left) / rect.width - 0.5;
-      const normY = (event.touches[0].clientY - rect.top) / rect.height - 0.5;
+      // Normalize both by height for consistent rotation speed regardless of aspect ratio
+      const normX = (event.touches[0].clientX - rect.left - rect.width / 2) / rect.height;
+      const normY = (event.touches[0].clientY - rect.top - rect.height / 2) / rect.height;
 
       camera.rotate(
         [-prevNormX * rotateSpeed, -prevNormY * rotateSpeed],
@@ -260,8 +264,9 @@ export function createOrbitCameraController(element, camera, opts = {}) {
       lastX = event.touches[0].clientX;
       lastY = event.touches[0].clientY;
       const rect = element.getBoundingClientRect();
-      prevNormX = (event.touches[0].clientX - rect.left) / rect.width - 0.5;
-      prevNormY = (event.touches[0].clientY - rect.top) / rect.height - 0.5;
+      // Normalize both by height for consistent rotation speed regardless of aspect ratio
+      prevNormX = (event.touches[0].clientX - rect.left - rect.width / 2) / rect.height;
+      prevNormY = (event.touches[0].clientY - rect.top - rect.height / 2) / rect.height;
       lastTouchDist = 0;
     }
   }

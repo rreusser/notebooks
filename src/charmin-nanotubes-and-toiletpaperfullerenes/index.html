@@ -501,7 +501,18 @@ state.frame = state.regl.frame(() => {
 
   // Run physics simulation
   if (state.renderParams.simulate && state.physics) {
+    // Freeze vertices being dragged
     state.physics.frozenVertex = state.interactions?.activeVertexIndex ?? -1;
+    state.physics.frozenVertex2 = -1;
+
+    // If dragging an edge, freeze both its vertices
+    const activeEdge = state.interactions?.activeEdgeIndex ?? -1;
+    if (activeEdge >= 0) {
+      const edge = state.mesh!.getEdge(activeEdge);
+      state.physics.frozenVertex = edge[0];
+      state.physics.frozenVertex2 = edge[1];
+    }
+
     for (let i = 0; i < state.renderParams.iterations; i++) {
       state.physics.iterate();
     }
@@ -510,9 +521,22 @@ state.frame = state.regl.frame(() => {
   // Clear and render
   state.regl!.clear({ color: [1, 1, 1, 1], depth: 1 });
 
-  const selectedIdx = state.interactions?.selectedVertexIndex ?? -1;
-  const hasFocus = selectedIdx >= 0;
-  const focusCenter = hasFocus ? state.mesh!.getPosition(selectedIdx) : [0, 0, 0];
+  const selectedVertexIdx = state.interactions?.selectedVertexIndex ?? -1;
+  const selectedEdgeIdx = state.interactions?.selectedEdgeIndex ?? -1;
+
+  // Determine focus center based on selection
+  let hasFocus = false;
+  let focusCenter = [0, 0, 0];
+  if (selectedVertexIdx >= 0) {
+    hasFocus = true;
+    focusCenter = state.mesh!.getPosition(selectedVertexIdx);
+  } else if (selectedEdgeIdx >= 0) {
+    hasFocus = true;
+    const edge = state.mesh!.getEdge(selectedEdgeIdx);
+    const p0 = state.mesh!.getPosition(edge[0]);
+    const p1 = state.mesh!.getPosition(edge[1]);
+    focusCenter = [(p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2, (p0[2] + p1[2]) / 2];
+  }
 
   state.setCamera!(() => {
     state.renderer?.render(state.mesh!, state.physics!, {
@@ -520,8 +544,10 @@ state.frame = state.regl.frame(() => {
       strainColoring: state.renderParams.strainColoring,
       showFaces: state.renderParams.showFaces,
       faceOpacity: state.renderParams.faceOpacity,
-      selectedVertexIndex: selectedIdx,
+      selectedVertexIndex: selectedVertexIdx,
       hoverVertexIndex: state.interactions?.hoverVertexIndex ?? -1,
+      selectedEdgeIndex: selectedEdgeIdx,
+      hoverEdgeIndex: state.interactions?.hoverEdgeIndex ?? -1,
       depthFalloff: hasFocus,
       depthFalloffWidth: state.renderParams.depthFalloffWidth,
       focusCenter
@@ -543,11 +569,11 @@ invalidation.then(() => {
 
 // Create figure with canvas and caption
 const figcaption = html`<figcaption style="padding:0 10px">
-  Click a vertex to select, then click to add a new vertex or click an existing vertex to create a connection.
+  Click a vertex or edge to select. With a vertex selected, click to add a new vertex or click an existing vertex to create a connection.
   <kbd>Space</kbd> to deselect.
-  <kbd>Backspace</kbd> deletes vertices, <kbd>s</kbd>/<kbd>c</kbd> splits/collapses vertices of degree 2.
-  <kbd>e</kbd> to explode a vertex.
-  Drag to rotate, <kbd>Shift</kbd> + drag to pan, <kbd>a</kbd> to aim camera at selected vertex.
+  <kbd>Backspace</kbd> deletes selected vertices or edges. <kbd>s</kbd>/<kbd>c</kbd> splits/collapses vertices of degree 2.
+  <kbd>e</kbd> to explode a vertex. <kbd>h</kbd> performs a Stone-Wales transformation on a selected edge.
+  Drag to rotate, <kbd>Shift</kbd> + drag to pan, <kbd>a</kbd> to aim camera at selection.
 </figcaption>`;
 
 const figure = html`

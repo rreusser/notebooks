@@ -20,6 +20,8 @@ export function createMeshRenderer(regl, icosphere) {
         strainColoring = 1.5,
         selectedVertexIndex = -1,
         hoverVertexIndex = -1,
+        selectedEdgeIndex = -1,
+        hoverEdgeIndex = -1,
         showFaces = true,
         faceOpacity = 0.3,
         depthFalloff = false,
@@ -62,6 +64,8 @@ export function createMeshRenderer(regl, icosphere) {
         count: mesh.edgeCount,
         strainColoring,
         l0: physics.l0,
+        selectedIndex: selectedEdgeIndex,
+        hoverIndex: hoverEdgeIndex,
         ...depthParams
       });
 
@@ -301,11 +305,13 @@ function createDrawVertices(regl, icosphere) {
 
       void main() {
         vec3 baseColor = vec3(0.14, 0.37, 0.69);
-        vec3 hoverAdd = vec3(0.0, 0.5, 0.0);
-        vec3 selectAdd = vec3(1.0, 0.0, 0.0);
-        vec3 color = baseColor + vIsHover * hoverAdd + vIsSelected * selectAdd;
+        vec3 hoverColor = vec3(0.0, 0.5, 0.0);
+        vec3 selectColor = vec3(1.0, 0.0, 0.0);
         // Highlighted vertices (selected or hovered) always show at full opacity
         float isHighlighted = max(vIsSelected, vIsHover);
+        // Use select color if selected, hover color if hovered, base color otherwise
+        vec3 highlightColor = mix(hoverColor, selectColor, vIsSelected);
+        vec3 color = mix(baseColor, highlightColor, isHighlighted);
         float falloff = mix(depthFalloffFactor(), 1.0, isHighlighted);
         // Fade toward white (background) based on radial distance
         color = mix(vec3(1.0), color, falloff);
@@ -341,6 +347,9 @@ function createDrawVertices(regl, icosphere) {
 }
 
 function createDrawEdges(regl) {
+  // Create edge index buffer
+  const edgeIndexBuffer = regl.buffer({ usage: 'dynamic', data: new Float32Array(65536) });
+
   return regl({
     vert: `
       precision highp float;
@@ -349,13 +358,16 @@ function createDrawEdges(regl) {
       uniform vec3 uFocusCenter;
       uniform float uAspect, uScaleFactor, uPixelRatio, uL0, uStrainColoring;
       uniform float uBorderWidth, uLineWidth;
+      uniform float uSelectedIndex, uHoverIndex;
       attribute vec3 aPosition, aNextPosition;
       attribute vec2 aLinePosition;
+      attribute float aEdgeIndex;
 
       varying float vOffset;
       varying vec2 vStrokeEdges;
       varying vec3 vColor;
       varying float vRadialDist;
+      varying float vIsSelected, vIsHover;
 
       vec2 lineNormal(vec4 p, vec4 n, float aspect) {
         return normalize((p.yx / p.w - n.yx / n.w) * vec2(1, aspect));
@@ -373,6 +385,9 @@ function createDrawEdges(regl) {
       }
 
       void main() {
+        vIsSelected = aEdgeIndex == uSelectedIndex ? 1.0 : 0.0;
+        vIsHover = aEdgeIndex == uHoverIndex ? 1.0 : 0.0;
+
         vec4 currentPoint = projectionView * vec4(aPosition, 1);
         vec4 nextPoint = projectionView * vec4(aNextPosition, 1);
 
@@ -383,7 +398,9 @@ function createDrawEdges(regl) {
         float strain = (length(aNextPosition - aPosition) / uL0 - 1.0);
         vColor = colormap(0.5 + strain * uStrainColoring * 2.0) * 0.8 * (uStrainColoring > 0.0 ? 1.0 : 0.0);
 
-        float totalWidth = uLineWidth + uBorderWidth * 2.0;
+        // Increase width for selected/hovered edges
+        float widthMultiplier = 1.0 + vIsSelected * 0.5 + vIsHover * 0.25;
+        float totalWidth = (uLineWidth + uBorderWidth * 2.0) * widthMultiplier;
 
         gl_Position = mix(currentPoint, nextPoint, aLinePosition.y);
 
@@ -391,7 +408,7 @@ function createDrawEdges(regl) {
         gl_Position.xy += vn / vec2(-uAspect, 1) * aLinePosition.x * totalWidth * gl_Position.w * uScaleFactor;
 
         vOffset = aLinePosition.x * totalWidth;
-        vStrokeEdges = uBorderWidth < 1e-3 ? vec2(-100, -101) : (uLineWidth + vec2(-1, 1) / uPixelRatio);
+        vStrokeEdges = uBorderWidth < 1e-3 ? vec2(-100, -101) : (uLineWidth * widthMultiplier + vec2(-1, 1) / uPixelRatio);
       }
     `,
     frag: `
@@ -403,6 +420,7 @@ function createDrawEdges(regl) {
       varying vec3 vColor;
       varying vec2 vStrokeEdges;
       varying float vRadialDist;
+      varying float vIsSelected, vIsHover;
 
       float depthFalloffFactor() {
         if (uDepthFalloff < 0.5) return 1.0;
@@ -410,11 +428,21 @@ function createDrawEdges(regl) {
       }
 
       void main() {
-        float falloff = depthFalloffFactor();
+        // Highlighted edges (selected or hovered) always show at full opacity
+        float isHighlighted = max(vIsSelected, vIsHover);
+        float falloff = mix(depthFalloffFactor(), 1.0, isHighlighted);
 
         float t = smoothstep(vStrokeEdges.y, vStrokeEdges.x, vOffset) *
                   smoothstep(-vStrokeEdges.y, -vStrokeEdges.x, vOffset);
-        vec3 color = mix(uBorderColor.rgb, vColor, t);
+
+        // Color selected edges red, hovered edges green
+        vec3 selectColor = vec3(1.0, 0.0, 0.0);
+        vec3 hoverColor = vec3(0.0, 0.5, 0.0);
+        vec3 baseColor = vColor;
+        vec3 highlightColor = mix(hoverColor, selectColor, vIsSelected);
+        vec3 innerColor = mix(baseColor, highlightColor, isHighlighted);
+
+        vec3 color = mix(uBorderColor.rgb, innerColor, t);
         float alpha = mix(uBorderColor.a, 1.0, t) * falloff;
         gl_FragColor = vec4(color, alpha);
       }
@@ -445,7 +473,17 @@ function createDrawEdges(regl) {
         offset: 3 * 4,
         stride: 6 * 4,
         divisor: 1
-      })
+      }),
+      aEdgeIndex: (_, props) => {
+        // Update edge index buffer with sequential indices
+        const indices = new Float32Array(props.count);
+        for (let i = 0; i < props.count; i++) indices[i] = i;
+        edgeIndexBuffer.subdata(indices);
+        return {
+          buffer: edgeIndexBuffer,
+          divisor: 1
+        };
+      }
     },
     elements: [[0, 1, 2], [1, 3, 2]],
     uniforms: {
@@ -460,7 +498,9 @@ function createDrawEdges(regl) {
       uDepthFalloff: (_, props) => props.depthFalloff ?? 0,
       uFocusCenter: (_, props) => props.focusCenter ?? [0, 0, 0],
       uDepthFalloffWidth: (_, props) => props.depthFalloffWidth ?? 3,
-      uMinOpacity: 0.2
+      uMinOpacity: 0.2,
+      uSelectedIndex: (_, props) => props.selectedIndex ?? -1,
+      uHoverIndex: (_, props) => props.hoverIndex ?? -1
     },
     primitive: 'triangles',
     instances: (_, props) => props.count,

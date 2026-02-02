@@ -12,10 +12,13 @@ export class MeshInteractions {
     this.camera = controller.camera;
     this.projectionView = controller.projectionView;
 
-    // Selection state
+    // Selection state (vertex and edge selection are mutually exclusive)
     this.selectedVertexIndex = -1;
     this.hoverVertexIndex = -1;
     this.activeVertexIndex = -1;
+    this.selectedEdgeIndex = -1;
+    this.hoverEdgeIndex = -1;
+    this.activeEdgeIndex = -1;  // Edge being dragged
 
     // Drag state
     this.isDragging = false;
@@ -29,6 +32,13 @@ export class MeshInteractions {
     // Touch state
     this.touchStartedOnVertex = false;
     this.touchVertexIndex = -1;
+
+    // Background click tracking (for camera rotation vs click detection)
+    this.backgroundClickStart = null;  // [x, y] of mousedown on empty space
+    this.backgroundExitedDeadZone = false;
+
+    // Track if selection was made in mousedown (to skip re-evaluation in onClick)
+    this.selectionHandledInMouseDown = false;
 
     // Candidate edge for connection
     this.candidateEdge = null;
@@ -97,7 +107,7 @@ export class MeshInteractions {
     return Math.sqrt(dx * dx + dy * dy) < this.deadZoneRadius;
   }
 
-  // ============ Vertex Picking ============
+  // ============ Picking ============
 
   _getClosestVertex(x, y) {
     const mesh = this.mesh;
@@ -133,6 +143,100 @@ export class MeshInteractions {
     return { index: minIndex, distance: minDistance };
   }
 
+  _getClosestEdge(x, y) {
+    const mesh = this.mesh;
+    const projectionView = this.projectionView;
+    const width = this.element.offsetWidth;
+    const height = this.element.offsetHeight;
+
+    const projected0 = vec3.create();
+    const projected1 = vec3.create();
+    let minIndex = -1;
+    let minDistance = Infinity;
+
+    for (let i = 0; i < mesh.edgeCount; i++) {
+      const edge = mesh.getEdge(i);
+      const pos0 = mesh.getPosition(edge[0]);
+      const pos1 = mesh.getPosition(edge[1]);
+
+      vec3.transformMat4(projected0, pos0, projectionView);
+      vec3.transformMat4(projected1, pos1, projectionView);
+
+      // Skip if either endpoint is outside the view frustum (behind camera or past far plane)
+      if (projected0[2] < -1 || projected0[2] > 1 ||
+          projected1[2] < -1 || projected1[2] > 1) continue;
+
+      // Convert to screen coordinates
+      const sx0 = (0.5 + 0.5 * projected0[0]) * width;
+      const sy0 = (0.5 - 0.5 * projected0[1]) * height;
+      const sx1 = (0.5 + 0.5 * projected1[0]) * width;
+      const sy1 = (0.5 - 0.5 * projected1[1]) * height;
+
+      // Distance from point to line segment
+      const dist = this._pointToSegmentDistance(x, y, sx0, sy0, sx1, sy1);
+
+      if (dist < minDistance) {
+        minDistance = dist;
+        minIndex = i;
+      }
+    }
+
+    return { index: minIndex, distance: minDistance };
+  }
+
+  // Compute distance from point (px, py) to line segment (x0, y0) - (x1, y1)
+  _pointToSegmentDistance(px, py, x0, y0, x1, y1) {
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const lengthSq = dx * dx + dy * dy;
+
+    if (lengthSq < 0.0001) {
+      // Degenerate segment (endpoints very close)
+      return Math.sqrt((px - x0) * (px - x0) + (py - y0) * (py - y0));
+    }
+
+    // Parameter t for projection onto line
+    let t = ((px - x0) * dx + (py - y0) * dy) / lengthSq;
+    t = Math.max(0, Math.min(1, t)); // Clamp to segment
+
+    // Closest point on segment
+    const closestX = x0 + t * dx;
+    const closestY = y0 + t * dy;
+
+    return Math.sqrt((px - closestX) * (px - closestX) + (py - closestY) * (py - closestY));
+  }
+
+  // Get selection target (vertex first, then edge)
+  // Vertex threshold is smaller to make it easier to select edges near vertices
+  _getSelectionTarget(x, y, vertexThreshold = 18, edgeThreshold = 12) {
+    const closestVertex = this._getClosestVertex(x, y);
+    const closestEdge = this._getClosestEdge(x, y);
+
+    const vertexInRange = closestVertex.index >= 0 && closestVertex.distance < vertexThreshold;
+    const edgeInRange = closestEdge.index >= 0 && closestEdge.distance < edgeThreshold;
+
+    // Vertex always wins if very close (within tight threshold)
+    const vertexPriorityThreshold = 10;
+    if (closestVertex.index >= 0 && closestVertex.distance < vertexPriorityThreshold) {
+      return { type: 'vertex', index: closestVertex.index, distance: closestVertex.distance };
+    }
+
+    if (vertexInRange && edgeInRange) {
+      // Both in range - pick the closer one (edge wins ties)
+      if (closestEdge.distance <= closestVertex.distance) {
+        return { type: 'edge', index: closestEdge.index, distance: closestEdge.distance };
+      } else {
+        return { type: 'vertex', index: closestVertex.index, distance: closestVertex.distance };
+      }
+    } else if (vertexInRange) {
+      return { type: 'vertex', index: closestVertex.index, distance: closestVertex.distance };
+    } else if (edgeInRange) {
+      return { type: 'edge', index: closestEdge.index, distance: closestEdge.distance };
+    }
+
+    return { type: 'none', index: -1, distance: Infinity };
+  }
+
   // ============ Mouse Events ============
 
   _onMouseDown(event) {
@@ -143,10 +247,10 @@ export class MeshInteractions {
     this.previousMousePos[1] = this.initialMousePos[1];
     this.exitedDeadZone = false;
 
-    // Check for vertex under cursor
-    const closest = this._getClosestVertex(this.initialMousePos[0], this.initialMousePos[1]);
+    // Check for vertex or edge under cursor
+    const target = this._getSelectionTarget(this.initialMousePos[0], this.initialMousePos[1]);
 
-    if (closest.index >= 0 && closest.distance < 25) {
+    if (target.type === 'vertex') {
       // Clicked on a vertex - prevent camera controller from handling
       event.preventDefault();
       event.stopPropagation();
@@ -155,19 +259,56 @@ export class MeshInteractions {
       // Ensure canvas has focus for keyboard events
       this.element.focus();
 
-      if (this.selectedVertexIndex >= 0 && this.selectedVertexIndex !== closest.index) {
+      // Clear edge selection (mutually exclusive)
+      this.selectedEdgeIndex = -1;
+
+      if (this.selectedVertexIndex >= 0 && this.selectedVertexIndex !== target.index) {
         // Potential edge creation
-        this.candidateEdge = [this.selectedVertexIndex, closest.index];
+        this.candidateEdge = [this.selectedVertexIndex, target.index];
       }
-      this.activeVertexIndex = closest.index;
-      this.selectedVertexIndex = closest.index;
+      this.activeVertexIndex = target.index;
+      this.selectedVertexIndex = target.index;
       this.dragMode = 'vertex';
       this.element.style.cursor = 'move';
+      this.selectionHandledInMouseDown = true;
 
       this.isDragging = true;
       this.dirty = true;
 
       // Listen for mouse up/move on window
+      window.addEventListener('mousemove', this._onMouseMove);
+      window.addEventListener('mouseup', this._onMouseUp);
+    } else if (target.type === 'edge') {
+      // Clicked on an edge - prevent camera controller from handling
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      // Ensure canvas has focus for keyboard events
+      this.element.focus();
+
+      // Clear vertex selection (mutually exclusive)
+      this.selectedVertexIndex = -1;
+      this.activeVertexIndex = -1;
+      this.candidateEdge = null;
+
+      this.selectedEdgeIndex = target.index;
+      this.activeEdgeIndex = target.index;  // Track active edge for physics exclusion
+      this.dragMode = 'edge';
+      this.element.style.cursor = 'move';
+      this.selectionHandledInMouseDown = true;
+
+      this.isDragging = true;
+      this.dirty = true;
+
+      // Listen for mouse up/move on window
+      window.addEventListener('mousemove', this._onMouseMove);
+      window.addEventListener('mouseup', this._onMouseUp);
+    } else {
+      // Clicked on empty space - track for background drag detection
+      this.backgroundClickStart = [this.initialMousePos[0], this.initialMousePos[1]];
+      this.backgroundExitedDeadZone = false;
+      this.selectionHandledInMouseDown = false;
       window.addEventListener('mousemove', this._onMouseMove);
       window.addEventListener('mouseup', this._onMouseUp);
     }
@@ -179,14 +320,36 @@ export class MeshInteractions {
     this.previousMousePos[1] = this.currentMousePos[1];
     this._getMousePos(event, this.currentMousePos);
 
-    if (!this.isDragging) {
-      // Passive hover
-      const closest = this._getClosestVertex(this.currentMousePos[0], this.currentMousePos[1]);
-      const newHover = (closest.index >= 0 && closest.distance < 25) ? closest.index : -1;
+    // Track background drag (camera rotation) - check if exited dead zone
+    // Must be done before the isDragging check since background clicks don't set isDragging
+    if (this.backgroundClickStart && !this.backgroundExitedDeadZone) {
+      const dx = this.currentMousePos[0] - this.backgroundClickStart[0];
+      const dy = this.currentMousePos[1] - this.backgroundClickStart[1];
+      if (Math.sqrt(dx * dx + dy * dy) >= this.deadZoneRadius) {
+        this.backgroundExitedDeadZone = true;
+      }
+    }
 
-      if (newHover !== this.hoverVertexIndex) {
-        this.hoverVertexIndex = newHover;
-        this.element.style.cursor = newHover >= 0 ? 'move' : 'grab';
+    if (!this.isDragging) {
+      // Passive hover - check vertex first, then edge
+      const target = this._getSelectionTarget(this.currentMousePos[0], this.currentMousePos[1], 20, 12);
+
+      let newVertexHover = -1;
+      let newEdgeHover = -1;
+      let cursor = 'grab';
+
+      if (target.type === 'vertex') {
+        newVertexHover = target.index;
+        cursor = 'move';
+      } else if (target.type === 'edge') {
+        newEdgeHover = target.index;
+        cursor = 'pointer';
+      }
+
+      if (newVertexHover !== this.hoverVertexIndex || newEdgeHover !== this.hoverEdgeIndex) {
+        this.hoverVertexIndex = newVertexHover;
+        this.hoverEdgeIndex = newEdgeHover;
+        this.element.style.cursor = cursor;
         this.dirty = true;
       }
       return;
@@ -199,6 +362,8 @@ export class MeshInteractions {
 
     if (this.dragMode === 'vertex' && this.exitedDeadZone) {
       this._dragVertex();
+    } else if (this.dragMode === 'edge' && this.exitedDeadZone) {
+      this._dragEdge();
     }
     // Camera rotation/pan handled by orbit-camera-controller
   }
@@ -207,47 +372,88 @@ export class MeshInteractions {
     window.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('mouseup', this._onMouseUp);
 
+    // Clean up background click tracking (but preserve exitedDeadZone for _onClick)
+    // Will be reset in _onClick or next mousedown
+
     if (!this.isDragging) return;
 
     this._getMousePos(event, this.currentMousePos);
 
     if (!this.exitedDeadZone && this._insideDeadZone()) {
-      // Click without drag on vertex
-      const closest = this._getClosestVertex(this.currentMousePos[0], this.currentMousePos[1]);
+      // Click without drag
+      const target = this._getSelectionTarget(this.currentMousePos[0], this.currentMousePos[1], 20, 12);
 
       if (this.dragMode === 'vertex') {
         // Started click on a vertex
-        if (closest.index >= 0 && closest.distance < 25) {
+        if (target.type === 'vertex') {
           // Clicked on existing vertex - maybe create edge
           if (this.candidateEdge) {
             this.mesh.addEdge(this.candidateEdge[0], this.candidateEdge[1]);
           }
-          this.selectedVertexIndex = closest.index;
+          this.selectedVertexIndex = target.index;
+          this.selectedEdgeIndex = -1;
         } else if (this.selectedVertexIndex >= 0) {
           // Clicked in empty space while vertex was selected - spawn new vertex
           this._spawnVertex();
         }
       }
+      // Edge clicks are already handled in mousedown, no additional action needed
     }
 
     this.isDragging = false;
     this.dragMode = null;
     this.activeVertexIndex = -1;
+    this.activeEdgeIndex = -1;
     this.candidateEdge = null;
-    this.element.style.cursor = this.hoverVertexIndex >= 0 ? 'move' : 'grab';
+    // Update cursor based on current hover state
+    if (this.hoverVertexIndex >= 0) {
+      this.element.style.cursor = 'move';
+    } else if (this.hoverEdgeIndex >= 0) {
+      this.element.style.cursor = 'pointer';
+    } else {
+      this.element.style.cursor = 'grab';
+    }
     this.dirty = true;
 
     this.onChange();
   }
 
   _onClick(event) {
-    // Handle clicks in empty space (vertex clicks are handled in mousedown)
-    const clickPos = this._getMousePos(event);
-    const closest = this._getClosestVertex(clickPos[0], clickPos[1]);
+    // If we dragged the camera (background drag), don't process as a click
+    const wasCameraDrag = this.backgroundExitedDeadZone;
 
-    if (closest.index >= 0 && closest.distance < 25) {
-      // Clicked on a vertex - already handled by mousedown, but ensure selection
-      this.selectedVertexIndex = closest.index;
+    // Check if selection was already handled in mousedown
+    const selectionAlreadyHandled = this.selectionHandledInMouseDown;
+
+    // Reset tracking flags
+    this.backgroundClickStart = null;
+    this.backgroundExitedDeadZone = false;
+    this.selectionHandledInMouseDown = false;
+
+    if (wasCameraDrag) {
+      // This was a camera rotation drag, not a click - don't change selection
+      return;
+    }
+
+    // If selection was already handled in mousedown, don't re-evaluate
+    if (selectionAlreadyHandled) {
+      return;
+    }
+
+    // Handle clicks on empty space (vertex/edge clicks are handled in mousedown)
+    const clickPos = this._getMousePos(event);
+    const target = this._getSelectionTarget(clickPos[0], clickPos[1], 20, 12);
+
+    if (target.type === 'vertex') {
+      // Clicked on a vertex
+      this.selectedVertexIndex = target.index;
+      this.selectedEdgeIndex = -1;
+      this.element.focus();
+      this.dirty = true;
+    } else if (target.type === 'edge') {
+      // Clicked on an edge
+      this.selectedEdgeIndex = target.index;
+      this.selectedVertexIndex = -1;
       this.element.focus();
       this.dirty = true;
     } else if (this.selectedVertexIndex >= 0) {
@@ -261,10 +467,15 @@ export class MeshInteractions {
       } else {
         // Can't spawn - deselect instead (don't preventDefault, allow focus change)
         this.selectedVertexIndex = -1;
+        this.selectedEdgeIndex = -1;
         this.dirty = true;
       }
+    } else if (this.selectedEdgeIndex >= 0) {
+      // Clicked in empty space with an edge selected - deselect
+      this.selectedEdgeIndex = -1;
+      this.dirty = true;
     }
-    // If no vertex selected and clicked in empty space, do nothing special
+    // If nothing selected and clicked in empty space, do nothing special
     // (allow natural focus/blur behavior)
 
     this.onChange();
@@ -317,10 +528,23 @@ export class MeshInteractions {
       // Let camera controller handle rotation
       this.touchStartedOnVertex = false;
       this.touchVertexIndex = -1;
+      // Track for background drag detection (tap on empty space vs rotation)
+      this.backgroundClickStart = [touchPos[0], touchPos[1]];
+      this.backgroundExitedDeadZone = false;
     }
   }
 
   _onTouchMove(event) {
+    // Track background touch drag (camera rotation) before early return
+    if (event.touches.length === 1 && this.backgroundClickStart && !this.backgroundExitedDeadZone) {
+      const touchPos = this._getTouchPos(event.touches[0]);
+      const dx = touchPos[0] - this.backgroundClickStart[0];
+      const dy = touchPos[1] - this.backgroundClickStart[1];
+      if (Math.sqrt(dx * dx + dy * dy) >= this.deadZoneRadius) {
+        this.backgroundExitedDeadZone = true;
+      }
+    }
+
     if (!this.touchStartedOnVertex || event.touches.length !== 1) {
       return;
     }
@@ -345,6 +569,8 @@ export class MeshInteractions {
 
   _onTouchEnd(event) {
     if (!this.touchStartedOnVertex) {
+      // Background touch ended - the synthetic click event will check backgroundExitedDeadZone
+      // Don't reset here; let _onClick handle it
       return;
     }
 
@@ -394,7 +620,17 @@ export class MeshInteractions {
           const newIdx = this.mesh.deleteVertex(this.selectedVertexIndex);
           this.selectedVertexIndex = newIdx;
           this.hoverVertexIndex = -1;
+          this.hoverEdgeIndex = -1;
           this.activeVertexIndex = -1;
+          this.dirty = true;
+          event.preventDefault();
+          event.stopPropagation();
+        } else if (this.selectedEdgeIndex >= 0) {
+          // Delete selected edge (preserves vertices)
+          this.mesh.deleteEdge(this.selectedEdgeIndex);
+          this.selectedEdgeIndex = -1;
+          this.hoverEdgeIndex = -1;
+          this.hoverVertexIndex = -1;
           this.dirty = true;
           event.preventDefault();
           event.stopPropagation();
@@ -403,6 +639,7 @@ export class MeshInteractions {
 
       case 'Space':
         this.selectedVertexIndex = -1;
+        this.selectedEdgeIndex = -1;
         this.activeVertexIndex = -1;
         this.dirty = true;
         event.preventDefault();
@@ -445,11 +682,34 @@ export class MeshInteractions {
         }
         break;
 
+      case 'KeyH':
+        // Stone-Wales transformation on selected edge
+        if (this.selectedEdgeIndex >= 0) {
+          const newEdgeIndex = this.mesh.stoneWales(this.selectedEdgeIndex);
+          if (newEdgeIndex >= 0) {
+            // Update selection to the new edge index (the A-B edge may have moved)
+            this.selectedEdgeIndex = newEdgeIndex;
+            this.hoverEdgeIndex = -1;
+            this.hoverVertexIndex = -1;
+          }
+          this.dirty = true;
+          event.preventDefault();
+          event.stopPropagation();
+        }
+        break;
+
       case 'KeyA':
-        // Aim camera at selected vertex or centroid
+        // Aim camera at selected vertex, edge midpoint, or centroid
         if (this.selectedVertexIndex >= 0) {
           const pos = this.mesh.getPosition(this.selectedVertexIndex);
           vec3.copy(this.camera.center, pos);
+        } else if (this.selectedEdgeIndex >= 0) {
+          const edge = this.mesh.getEdge(this.selectedEdgeIndex);
+          const p0 = this.mesh.getPosition(edge[0]);
+          const p1 = this.mesh.getPosition(edge[1]);
+          this.camera.center[0] = (p0[0] + p1[0]) / 2;
+          this.camera.center[1] = (p0[1] + p1[1]) / 2;
+          this.camera.center[2] = (p0[2] + p1[2]) / 2;
         } else {
           const centroid = this.mesh.computeCentroid();
           vec3.copy(this.camera.center, centroid);
@@ -487,6 +747,62 @@ export class MeshInteractions {
     vec3.transformMat4(newPos, projected, invProjView);
 
     this.mesh.setPosition(this.activeVertexIndex, newPos[0], newPos[1], newPos[2]);
+    this.dirty = true;
+  }
+
+  _dragEdge() {
+    if (this.selectedEdgeIndex < 0) return;
+
+    const width = this.element.offsetWidth;
+    const height = this.element.offsetHeight;
+    const projectionView = this.projectionView;
+
+    // Get the two vertices of the edge
+    const edge = this.mesh.getEdge(this.selectedEdgeIndex);
+    const pos0 = this.mesh.getPosition(edge[0]);
+    const pos1 = this.mesh.getPosition(edge[1]);
+
+    // Compute the midpoint (used as reference for the drag)
+    const midpoint = vec3.fromValues(
+      (pos0[0] + pos1[0]) / 2,
+      (pos0[1] + pos1[1]) / 2,
+      (pos0[2] + pos1[2]) / 2
+    );
+
+    // Project midpoint to get current screen position and depth
+    const projectedMid = vec3.create();
+    vec3.transformMat4(projectedMid, midpoint, projectionView);
+
+    // Compute screen delta from previous to current mouse position
+    const prevClipX = (2.0 * this.previousMousePos[0]) / width - 1.0;
+    const prevClipY = 1.0 - (2.0 * this.previousMousePos[1]) / height;
+    const currClipX = (2.0 * this.currentMousePos[0]) / width - 1.0;
+    const currClipY = 1.0 - (2.0 * this.currentMousePos[1]) / height;
+
+    const deltaClipX = currClipX - prevClipX;
+    const deltaClipY = currClipY - prevClipY;
+
+    // Unproject both endpoints with the delta applied
+    const invProjView = mat4.create();
+    mat4.invert(invProjView, projectionView);
+
+    // Move both vertices by the same screen-space delta
+    for (const vertexIdx of [edge[0], edge[1]]) {
+      const pos = this.mesh.getPosition(vertexIdx);
+      const projected = vec3.create();
+      vec3.transformMat4(projected, pos, projectionView);
+
+      // Apply delta in clip space
+      projected[0] += deltaClipX;
+      projected[1] += deltaClipY;
+
+      // Unproject back
+      const newPos = vec3.create();
+      vec3.transformMat4(newPos, projected, invProjView);
+
+      this.mesh.setPosition(vertexIdx, newPos[0], newPos[1], newPos[2]);
+    }
+
     this.dirty = true;
   }
 

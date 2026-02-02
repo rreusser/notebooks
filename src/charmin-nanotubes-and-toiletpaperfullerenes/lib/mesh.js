@@ -337,6 +337,134 @@ export class Mesh {
     return out;
   }
 
+  // Delete an edge by index, preserving both vertices
+  // Returns true if edge was deleted, false if invalid index
+  deleteEdge(edgeIndex) {
+    if (edgeIndex < 0 || edgeIndex >= this.edgeCount) return false;
+    this._faces = null;
+
+    const i2 = edgeIndex * 2;
+    const v0 = this.edges[i2];
+    const v1 = this.edges[i2 + 1];
+
+    // Remove from neighbor lists
+    this._removeNeighbor(v0, v1);
+    this._removeNeighbor(v1, v0);
+
+    // Swap with last edge and decrement count
+    const lastEdge = this.edgeCount - 1;
+    if (edgeIndex !== lastEdge) {
+      this.edges[i2] = this.edges[lastEdge * 2];
+      this.edges[i2 + 1] = this.edges[lastEdge * 2 + 1];
+    }
+    this.edgeCount--;
+
+    return true;
+  }
+
+  // ============ Stone-Wales Transformation ============
+
+  // Perform a Stone-Wales transformation on an edge
+  // Both endpoints must have degree 3
+  // Returns the new edge index of the transformed edge, or -1 if failed
+  stoneWales(edgeIndex) {
+    if (edgeIndex < 0 || edgeIndex >= this.edgeCount) return -1;
+
+    const edge = this.getEdge(edgeIndex);
+    const a = edge[0];
+    const b = edge[1];
+
+    // Both endpoints must have degree 3
+    if (this.degree(a) !== 3 || this.degree(b) !== 3) return -1;
+
+    // Get other neighbors (not the edge endpoints themselves)
+    const neighborsA = this.getNeighbors(a).filter(n => n !== b);
+    const neighborsB = this.getNeighbors(b).filter(n => n !== a);
+
+    if (neighborsA.length !== 2 || neighborsB.length !== 2) return -1;
+
+    const c = neighborsA[0];
+    const d = neighborsA[1];
+    const e = neighborsB[0];
+    const f = neighborsB[1];
+
+    // Get positions
+    const pa = this.getPosition(a);
+    const pb = this.getPosition(b);
+    const pc = this.getPosition(c);
+    const pd = this.getPosition(d);
+    const pe = this.getPosition(e);
+    const pf = this.getPosition(f);
+
+    // Determine which wings are on the same "side" of the a-b edge.
+    // 1. Cross ab with ca to get normal n (perpendicular to H plane)
+    // 2. Cross n with ab to get in-plane vector pointing toward c
+    // 3. Dot be and bf with this to find which is on same side as c
+
+    const ab = [pb[0] - pa[0], pb[1] - pa[1], pb[2] - pa[2]];
+    const ca = [pa[0] - pc[0], pa[1] - pc[1], pa[2] - pc[2]];
+
+    // n = ab × ca (normal to H plane)
+    const n = [
+      ab[1] * ca[2] - ab[2] * ca[1],
+      ab[2] * ca[0] - ab[0] * ca[2],
+      ab[0] * ca[1] - ab[1] * ca[0]
+    ];
+
+    // inPlane = n × ab (in-plane direction toward c)
+    const inPlane = [
+      n[1] * ab[2] - n[2] * ab[1],
+      n[2] * ab[0] - n[0] * ab[2],
+      n[0] * ab[1] - n[1] * ab[0]
+    ];
+
+    // Wings from b
+    const be = [pe[0] - pb[0], pe[1] - pb[1], pe[2] - pb[2]];
+    const bf = [pf[0] - pb[0], pf[1] - pb[1], pf[2] - pb[2]];
+
+    // Dot products tell which of e/f is on same side as c
+    const dotE = be[0] * inPlane[0] + be[1] * inPlane[1] + be[2] * inPlane[2];
+    const dotF = bf[0] * inPlane[0] + bf[1] * inPlane[1] + bf[2] * inPlane[2];
+
+    // Swap the same-side pair
+    let swapC, swapE;
+    if (dotE > dotF) {
+      // e is on same side as c → swap (c, e)
+      swapC = c;
+      swapE = e;
+    } else {
+      // f is on same side as c → swap (c, f)
+      swapC = c;
+      swapE = f;
+    }
+
+    // Perform the swap:
+    // - Remove A-swapC and B-swapE
+    // - Add A-swapE and B-swapC
+    this._removeEdgeBetween(a, swapC);
+    this._removeEdgeBetween(b, swapE);
+    this._addEdgeInternal(a, swapE);
+    this._addEdgeInternal(b, swapC);
+
+    this._faces = null;
+
+    // Find and return the new index of edge A-B
+    return this.findEdge(a, b);
+  }
+
+  // Find the index of an edge between two vertices, or -1 if not found
+  findEdge(v0, v1) {
+    for (let i = 0; i < this.edgeCount; i++) {
+      const i2 = i * 2;
+      const a = this.edges[i2];
+      const b = this.edges[i2 + 1];
+      if ((a === v0 && b === v1) || (a === v1 && b === v0)) {
+        return i;
+      }
+    }
+    return -1;
+  }
+
   // ============ Editing Operations ============
 
   // Collapse a degree-2 vertex, connecting its two neighbors
