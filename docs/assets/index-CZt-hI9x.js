@@ -169,7 +169,7 @@ This is minimized (equals ${e`-1`}) when ${e`\vec{\alpha} \times \vec{\beta}`} i
 
 ### Simplification Using BAC-CAB
 
-Using the [BAC-CAB identity](https://en.wikipedia.org/wiki/Triple_product#Vector_triple_product) for the scalar triple product:
+Using the [Lagrange identity](https://en.wikipedia.org/wiki/Lagrange%27s_identity#Lagrange's_identity_for_complex_numbers) for the dot product of two cross products:
 
 ${e.block`(\vec{\alpha} \times \vec{\beta}) \cdot (\vec{\alpha} \times \vec{\gamma}) = (\vec{\alpha} \cdot \vec{\alpha})(\vec{\beta} \cdot \vec{\gamma}) - (\vec{\alpha} \cdot \vec{\beta})(\vec{\alpha} \cdot \vec{\gamma})`}
 
