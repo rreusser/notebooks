@@ -3,8 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Notebooks">
-  <meta property="og:title" content="Notebooks">
+  <meta name="twitter:title" content="Sliced Optimal Transport">
+  <meta property="og:title" content="Sliced Optimal Transport">
+  <meta name="twitter:description" content="Approximate pixel redistribution between images using sliced optimal transport.">
+  <meta name="subject" content="Approximate pixel redistribution between images using sliced optimal transport.">
+  <meta name="description" content="Approximate pixel redistribution between images using sliced optimal transport.">
+  <meta property="og:description" content="Approximate pixel redistribution between images using sliced optimal transport.">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/sliced-optimal-transport.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/sliced-optimal-transport.jpg">
   <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
@@ -1858,8 +1865,9 @@ a.index__tag:active {
   font-variant-numeric: tabular-nums;
 }
   </style>
-  
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Notebooks</title>  <script type="module" crossorigin src="/notebooks/assets/index-ByB2dbry.js"></script>
+  <style> main { max-width: 640px; }</style>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Sliced Optimal Transport</title>  <script type="module" crossorigin src="/notebooks/assets/original-jvDoPZrC.js"></script>
+  <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
   <nav class="menu">
@@ -1870,797 +1878,101 @@ a.index__tag:active {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Notebooks</h1>
+    <h1>Sliced Optimal Transport</h1>
     <div class="byline">
-      
-      
+      <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
+      <time pubdate="" datetime="20231128">November 28, 2023</time>
     </div>
     <div class="resource-links">
+        <a href="https://observablehq.com/@rreusser/sliced-optimal-transport" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <circle cx="12" cy="12" r="10" fill="white"></circle>
+            <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
+          </svg>
+          Live notebook
+        </a>
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/sliced-optimal-transport/original.html" class="resource-link">
+          <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
+          </svg>
+          View source
+        </a>
     </div>
   </header>
   <div class="container">
-      <div class="index-controls">
-        <div id="index-filter-container"></div>
-        <div class="index-view-toggle" role="group" aria-label="View options">
-          <button class="index-view-btn index-view-btn--grid active" data-view="grid" title="Grid view" aria-label="Grid view" aria-pressed="true">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <rect x="1" y="1" width="6" height="6" rx="1"></rect>
-              <rect x="9" y="1" width="6" height="6" rx="1"></rect>
-              <rect x="1" y="9" width="6" height="6" rx="1"></rect>
-              <rect x="9" y="9" width="6" height="6" rx="1"></rect>
-            </svg>
-          </button>
-          <button class="index-view-btn index-view-btn--list" data-view="list" title="List view" aria-label="List view" aria-pressed="false">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <rect x="1" y="2" width="3" height="3" rx="0.5"></rect>
-              <rect x="6" y="2.5" width="9" height="2" rx="0.5"></rect>
-              <rect x="1" y="6.5" width="3" height="3" rx="0.5"></rect>
-              <rect x="6" y="7" width="9" height="2" rx="0.5"></rect>
-              <rect x="1" y="11" width="3" height="3" rx="0.5"></rect>
-              <rect x="6" y="11.5" width="9" height="2" rx="0.5"></rect>
-            </svg>
-          </button>
-        </div>
-      </div>
-      <ul class="index" id="index-list">
-        <li class="index__item" data-tags="WebGPU,Astronomy,Data Visualization" data-path="visualizing-sloan-digital-sky-survey-data/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/visualizing-sloan-digital-sky-survey-data.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="visualizing-sloan-digital-sky-survey-data/" class="index__title-link">Visualizing Sloan Digital Sky Survey Data</a></h2>
-            <div class="index__meta">
-              <time class="index__date">February 1, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=Astronomy" class="index__tag">Astronomy</a>
-                <a href="?tag=Data%20Visualization" class="index__tag">Data Visualization</a>
-              </div>
-            </div>
-            <p class="index__description">Visualizing 3.3 million galaxies and quasars from the Sloan Digital Sky Survey</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,Aerodynamics,PDE" data-path="stable-fluids/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/stable-fluids.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="stable-fluids/" class="index__title-link">Fluid Instability with Stable Fluids</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 25, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=Aerodynamics" class="index__tag">Aerodynamics</a>
-                <a href="?tag=PDE" class="index__tag">PDE</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive fluid flow with the Stable Fluids method of Jos Stam.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Physics,Aerodynamics" data-path="hess-smith-panel-solver/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/hess-smith-panel-solver.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="hess-smith-panel-solver/" class="index__title-link">Hess-Smith Panel Method</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 25, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=Physics" class="index__tag">Physics</a>
-                <a href="?tag=Aerodynamics" class="index__tag">Aerodynamics</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive demonstration of using the Hess-Smith panel method to compute the aerodynamic flow around an airfoil</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,PDE" data-path="multiscale-turing-patterns/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/multiscale-turing-patterns.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="multiscale-turing-patterns/" class="index__title-link">Multi-Scale Turing Patterns in WebGPU</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 20, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=PDE" class="index__tag">PDE</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive multi-scale Turing patterns computed in WebGPU</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,Chaos" data-path="strange-attractors-in-webgpu/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/strange-attractors-in-webgpu.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="strange-attractors-in-webgpu/" class="index__title-link">Strange Attractors in WebGPU</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 17, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=Chaos" class="index__tag">Chaos</a>
-              </div>
-            </div>
-            <p class="index__description">Integrating strange attractors in WebGPU</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,Graphics" data-path="webgpu-lines/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/webgpu-lines.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="webgpu-lines/" class="index__title-link">WebGPU Instanced Lines</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 16, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">GPU-accelerated line rendering for WebGPU with instanced triangle strips</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Tutorial,Programming" data-path="plot-with-zoom/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/plot-with-zoom.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="plot-with-zoom/" class="index__title-link">Zoomable Multi-Layer Plots in Notebook Kit</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 13, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=Tutorial" class="index__tag">Tutorial</a>
-                <a href="?tag=Programming" class="index__tag">Programming</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive mathematical plotting in Observable Notebook Kit</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,PDE" data-path="simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="simulating-the-2d-kuramoto-sivashinsky-equation-in-webgpu/" class="index__title-link">Simulating the 2D Kuramoto-Sivashinsky Equation in WebGPU</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 10, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=PDE" class="index__tag">PDE</a>
-              </div>
-            </div>
-            <p class="index__description">WebGPU implementation of the 2D Kuramoto-Sivashinsky equation solver using compute shaders and Cooley-Tukey FFT for 3-5x performance improvement over WebGL.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Statistics" data-path="wilcoxon-signed-rank-test/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/wilcoxon-signed-rank-test.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="wilcoxon-signed-rank-test/" class="index__title-link">Wilcoxon Signed-Rank Test for Performance Testing</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 6, 2026</time>
-              <div class="index__tags">
-                <a href="?tag=Statistics" class="index__tag">Statistics</a>
-              </div>
-            </div>
-            <p class="index__description">An interactive explainer of the Wilcoxon signed-rank test for comparing paired performance measurements.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGL,PDE" data-path="perfectly-matched-layers-for-the-wave-equation/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/perfectly-matched-layers-for-the-wave-equation.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="perfectly-matched-layers-for-the-wave-equation/" class="index__title-link">Perfectly Matched Layers for the Wave Equation</a></h2>
-            <div class="index__meta">
-              <time class="index__date">December 31, 2025</time>
-              <div class="index__tags">
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-                <a href="?tag=PDE" class="index__tag">PDE</a>
-              </div>
-            </div>
-            <p class="index__description">An explanation and WebGL implementation of Perfectly Matched Layers for absorbing boundary conditions in the scalar wave equation.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Personal" data-path="reflecting-on-two-years-of-yoga/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/reflecting-on-two-years-of-yoga.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="reflecting-on-two-years-of-yoga/" class="index__title-link">Reflecting on Two Years of Yoga</a></h2>
-            <div class="index__meta">
-              <time class="index__date">December 27, 2025</time>
-              <div class="index__tags">
-                <a href="?tag=Personal" class="index__tag">Personal</a>
-              </div>
-            </div>
-            <p class="index__description">A personal reflection on consistent yoga practice with attendance visualizations over two years.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Personal,essay" data-path="of-noise-and-neighbors/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/of-noise-and-neighbors.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="of-noise-and-neighbors/" class="index__title-link">Of Noise and Neighbors</a></h2>
-            <div class="index__meta">
-              <time class="index__date">September 29, 2025</time>
-              <div class="index__tags">
-                <a href="?tag=Personal" class="index__tag">Personal</a>
-                <a href="?tag=essay" class="index__tag">essay</a>
-              </div>
-            </div>
-            <p class="index__description">A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Tutorial,WebGL" data-path="regl-canvas/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/regl-canvas.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="regl-canvas/" class="index__title-link">REGL in Observable Notebooks 2.0</a></h2>
-            <div class="index__meta">
-              <time class="index__date">August 12, 2025</time>
-              <div class="index__tags">
-                <a href="?tag=Tutorial" class="index__tag">Tutorial</a>
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-              </div>
-            </div>
-            <p class="index__description">Tips and tricks for instantiating and managing a REGL WebGL Canvas in Observable Notebooks 2.0.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Tutorial" data-path="hello-observable-notebooks-2/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/hello-observable-notebooks-2.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="hello-observable-notebooks-2/" class="index__title-link">Hello, Observable Notebooks 2.0!</a></h2>
-            <div class="index__meta">
-              <time class="index__date">August 3, 2025</time>
-              <div class="index__tags">
-                <a href="?tag=Tutorial" class="index__tag">Tutorial</a>
-              </div>
-            </div>
-            <p class="index__description">Kicking the tires of Observable's new notebook tooling!</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Chaos,Graphics" data-path="clifford-and-de-jong-attractors/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/clifford-and-de-jong-attractors.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="clifford-and-de-jong-attractors/" class="index__title-link">Clifford and de Jong Attractors</a></h2>
-            <div class="index__meta">
-              <time class="index__date">May 16, 2025</time>
-              <div class="index__tags">
-                <a href="?tag=Chaos" class="index__tag">Chaos</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">High-resolution visualization of Clifford and de Jong strange attractors with interactive zooming and trajectory-based coloring.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Chaos,Physics,WebGL" data-path="chaotic-magnetic-pendulum/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/chaotic-magnetic-pendulum.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="chaotic-magnetic-pendulum/" class="index__title-link">Chaotic Magnetic Pendulum</a></h2>
-            <div class="index__meta">
-              <time class="index__date">August 7, 2024</time>
-              <div class="index__tags">
-                <a href="?tag=Chaos" class="index__tag">Chaos</a>
-                <a href="?tag=Physics" class="index__tag">Physics</a>
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive visualization of a magnetic pendulum demonstrating chaotic dynamics.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Personal,Statistics" data-path="spring-training/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/spring-training.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="spring-training/" class="index__title-link">Spring Training on the Treadmill</a></h2>
-            <div class="index__meta">
-              <time class="index__date">June 8, 2024</time>
-              <div class="index__tags">
-                <a href="?tag=Personal" class="index__tag">Personal</a>
-                <a href="?tag=Statistics" class="index__tag">Statistics</a>
-              </div>
-            </div>
-            <p class="index__description">Quantifying treadmill efforts (to the point of injury).</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Statistics" data-path="speed-climbing-world-record-progression/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/speed-climbing-world-record-progression.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="speed-climbing-world-record-progression/" class="index__title-link">Speed Climbing World Record Progression</a></h2>
-            <div class="index__meta">
-              <time class="index__date">May 3, 2024</time>
-              <div class="index__tags">
-                <a href="?tag=Statistics" class="index__tag">Statistics</a>
-              </div>
-            </div>
-            <p class="index__description">Plotting and extrapolating trends in competitive speed climbing</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Algorithms,Image Processing" data-path="sliced-optimal-transport/original.html">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/sliced-optimal-transport/original.html.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="sliced-optimal-transport/original.html" class="index__title-link">Sliced Optimal Transport</a></h2>
-            <div class="index__meta">
-              <time class="index__date">November 28, 2023</time>
-              <div class="index__tags">
-                <a href="?tag=Algorithms" class="index__tag">Algorithms</a>
-                <a href="?tag=Image%20Processing" class="index__tag">Image Processing</a>
-              </div>
-            </div>
-            <p class="index__description">Approximate pixel redistribution between images using sliced optimal transport.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Algorithms,Image Processing" data-path="sliced-optimal-transport/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/sliced-optimal-transport.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="sliced-optimal-transport/" class="index__title-link">Sliced Optimal Transport</a></h2>
-            <div class="index__meta">
-              <time class="index__date">November 28, 2023</time>
-              <div class="index__tags">
-                <a href="?tag=Algorithms" class="index__tag">Algorithms</a>
-                <a href="?tag=Image%20Processing" class="index__tag">Image Processing</a>
-              </div>
-            </div>
-            <p class="index__description">Approximate pixel redistribution between images using sliced optimal transport.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Math,Numerics" data-path="shanks-transformation/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/shanks-transformation.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="shanks-transformation/" class="index__title-link">Series Acceleration with Shanks Transformation</a></h2>
-            <div class="index__meta">
-              <time class="index__date">September 23, 2023</time>
-              <div class="index__tags">
-                <a href="?tag=Math" class="index__tag">Math</a>
-                <a href="?tag=Numerics" class="index__tag">Numerics</a>
-              </div>
-            </div>
-            <p class="index__description">The Shanks transformation for accelerating slowly-converging series, demonstrated on the arctangent formula for π.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Math,Graphics" data-path="cubic-basis-vs-hermite-interpolation/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/cubic-basis-vs-hermite-interpolation.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="cubic-basis-vs-hermite-interpolation/" class="index__title-link">Cubic basis vs. Hermite interpolation</a></h2>
-            <div class="index__meta">
-              <time class="index__date">May 13, 2023</time>
-              <div class="index__tags">
-                <a href="?tag=Math" class="index__tag">Math</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">Visually compare cubic interpolation using different basis functions.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGL,Graphics" data-path="bicubic-texture-interpolation-using-linear-filtering/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/bicubic-texture-interpolation-using-linear-filtering.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="bicubic-texture-interpolation-using-linear-filtering/" class="index__title-link">Bicubic Texture Interpolation using Linear Filtering</a></h2>
-            <div class="index__meta">
-              <time class="index__date">January 6, 2023</time>
-              <div class="index__tags">
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">Implementing smooth bicubic texture filtering using only 4 hardware-filtered samples instead of 16.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Math,Physics" data-path="knocking-down-the-gates-with-jacobi/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/knocking-down-the-gates-with-jacobi.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="knocking-down-the-gates-with-jacobi/" class="index__title-link">Knocking Down the Gates with our Friend Jacobi</a></h2>
-            <div class="index__meta">
-              <time class="index__date">November 16, 2022</time>
-              <div class="index__tags">
-                <a href="?tag=Math" class="index__tag">Math</a>
-                <a href="?tag=Physics" class="index__tag">Physics</a>
-              </div>
-            </div>
-            <p class="index__description">Using Jacobi elliptic functions to solve an optimization problem about falling poles and large-amplitude pendulum dynamics.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Maps,Graphics" data-path="night-and-day/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/night-and-day.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="night-and-day/" class="index__title-link">Night and Day</a></h2>
-            <div class="index__meta">
-              <time class="index__date">October 24, 2022</time>
-              <div class="index__tags">
-                <a href="?tag=Maps" class="index__tag">Maps</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">Visualizing Earth's solar terminator on a Mapbox map using NASA Black Marble imagery and WebGL shaders.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Graphics,WebGL" data-path="fast-generalized-winding-numbers-in-2d/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/fast-generalized-winding-numbers-in-2d.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="fast-generalized-winding-numbers-in-2d/" class="index__title-link">Fast Generalized Winding Numbers in 2D</a></h2>
-            <div class="index__meta">
-              <time class="index__date">September 7, 2022</time>
-              <div class="index__tags">
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-              </div>
-            </div>
-            <p class="index__description">Computing generalized winding numbers in 2D using hierarchical Barnes-Hut approximation for fast inside-outside queries.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Math,Numerics" data-path="computing-pi-with-the-bailey-borwein-plouffe-formula/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/computing-pi-with-the-bailey-borwein-plouffe-formula.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="computing-pi-with-the-bailey-borwein-plouffe-formula/" class="index__title-link">Computing π with the Bailey-Borwein-Plouffe Formula</a></h2>
-            <div class="index__meta">
-              <time class="index__date">May 24, 2021</time>
-              <div class="index__tags">
-                <a href="?tag=Math" class="index__tag">Math</a>
-                <a href="?tag=Numerics" class="index__tag">Numerics</a>
-              </div>
-            </div>
-            <p class="index__description">Computing hexadecimal digits of π at arbitrary positions using the Bailey-Borwein-Plouffe formula.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Chaos,Physics,WebGL" data-path="double-pendulum-map/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/double-pendulum-map.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="double-pendulum-map/" class="index__title-link">The Double Pendulum Map</a></h2>
-            <div class="index__meta">
-              <time class="index__date">May 14, 2021</time>
-              <div class="index__tags">
-                <a href="?tag=Chaos" class="index__tag">Chaos</a>
-                <a href="?tag=Physics" class="index__tag">Physics</a>
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-              </div>
-            </div>
-            <p class="index__description">Visualizing the phase space of simple and compound double pendulums, showing how chaos emerges from coupled nonlinear oscillations.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Chaos,Physics" data-path="malkus-waterwheel/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/malkus-waterwheel.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="malkus-waterwheel/" class="index__title-link">Malkus Waterwheel</a></h2>
-            <div class="index__meta">
-              <time class="index__date">February 13, 2021</time>
-              <div class="index__tags">
-                <a href="?tag=Chaos" class="index__tag">Chaos</a>
-                <a href="?tag=Physics" class="index__tag">Physics</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive simulation of a chaotic mechanical system whose dynamics map to the Lorenz attractor.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGL,Graphics" data-path="point-cloud-point-opacity/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/point-cloud-point-opacity.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="point-cloud-point-opacity/" class="index__title-link">Selecting the Right Opacity for 2D Point Clouds</a></h2>
-            <div class="index__meta">
-              <time class="index__date">December 8, 2020</time>
-              <div class="index__tags">
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">Deriving the formula for point opacity in large point cloud visualizations to maintain consistent visual density.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGL,Graphics" data-path="adaptive-contouring-in-fragment-shaders/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/adaptive-contouring-in-fragment-shaders.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="adaptive-contouring-in-fragment-shaders/" class="index__title-link">Adaptive Contouring in Fragment Shaders</a></h2>
-            <div class="index__meta">
-              <time class="index__date">November 21, 2020</time>
-              <div class="index__tags">
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">GPU techniques for rendering adaptive contours using screen-space derivatives, with multi-octave blending and antialiasing.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,Graphics" data-path="webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="webgpu-voronoi-diagrams-using-the-jump-flooding-algorithm/" class="index__title-link">WebGPU Voronoi Diagrams using the Jump Flooding Algorithm</a></h2>
-            <div class="index__meta">
-              <time class="index__date">July 9, 2020</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">Computing Voronoi diagrams and distance fields on the GPU using the Jump Flooding Algorithm.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="math,visualization,webgl" data-path="sphere-eversion/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/sphere-eversion.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="sphere-eversion/" class="index__title-link">Sphere Eversion</a></h2>
-            <div class="index__meta">
-              <time class="index__date">June 29, 2020</time>
-              <div class="index__tags">
-                <a href="?tag=math" class="index__tag">math</a>
-                <a href="?tag=visualization" class="index__tag">visualization</a>
-                <a href="?tag=webgl" class="index__tag">webgl</a>
-              </div>
-            </div>
-            <p class="index__description">An interactive visualization of the Bednorz and Bednorz analytic sphere eversion using scroll-driven animation</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Math" data-path="charmin-nanotubes-and-toiletpaperfullerenes/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/charmin-nanotubes-and-toiletpaperfullerenes.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="charmin-nanotubes-and-toiletpaperfullerenes/" class="index__title-link">Toiletpaperfullerenes and Charmin Nanotubes</a></h2>
-            <div class="index__meta">
-              <time class="index__date">May 1, 2020</time>
-              <div class="index__tags">
-                <a href="?tag=Math" class="index__tag">Math</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive 3D simulation of nanotube and fullerene structures that can be physically constructed from toilet paper tubes.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,PDE" data-path="3d-reaction-diffusion/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/3d-reaction-diffusion.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="3d-reaction-diffusion/" class="index__title-link">3D Reaction-Diffusion</a></h2>
-            <div class="index__meta">
-              <time class="index__date">March 17, 2020</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=PDE" class="index__tag">PDE</a>
-              </div>
-            </div>
-            <p class="index__description">Gray-Scott reaction-diffusion in 3D using WebGPU compute shaders with volumetric rendering via instanced depth-sorted slices.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Math,Numerics" data-path="integers-in-single-precision-floating-point/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/integers-in-single-precision-floating-point.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="integers-in-single-precision-floating-point/" class="index__title-link">Visualizing Integers in Floating-Point</a></h2>
-            <div class="index__meta">
-              <time class="index__date">February 9, 2020</time>
-              <div class="index__tags">
-                <a href="?tag=Math" class="index__tag">Math</a>
-                <a href="?tag=Numerics" class="index__tag">Numerics</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive bit-level visualization of how IEEE-754 single-precision floats represent integers.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="WebGPU,Physics,PDE" data-path="particle-mesh-gravity/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/particle-mesh-gravity.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="particle-mesh-gravity/" class="index__title-link">Particle-Mesh Gravity in WebGPU</a></h2>
-            <div class="index__meta">
-              <time class="index__date">November 3, 2019</time>
-              <div class="index__tags">
-                <a href="?tag=WebGPU" class="index__tag">WebGPU</a>
-                <a href="?tag=Physics" class="index__tag">Physics</a>
-                <a href="?tag=PDE" class="index__tag">PDE</a>
-              </div>
-            </div>
-            <p class="index__description">Simulating 2D gravitational N-body dynamics using FFT-based Poisson solving on the GPU.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Chaos,Physics,WebGL" data-path="periodic-planar-three-body-orbits/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/periodic-planar-three-body-orbits.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="periodic-planar-three-body-orbits/" class="index__title-link">Periodic Planar Three-Body Orbits</a></h2>
-            <div class="index__meta">
-              <time class="index__date">September 1, 2019</time>
-              <div class="index__tags">
-                <a href="?tag=Chaos" class="index__tag">Chaos</a>
-                <a href="?tag=Physics" class="index__tag">Physics</a>
-                <a href="?tag=WebGL" class="index__tag">WebGL</a>
-              </div>
-            </div>
-            <p class="index__description">Interactive catalog of periodic three-body orbits with topological classification via free group words.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="generative,gallery" data-path="multi-scale-turing-pattern-gallery-2/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/multi-scale-turing-pattern-gallery-2.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="multi-scale-turing-pattern-gallery-2/" class="index__title-link">Multi-Scale Turing Pattern Gallery 2</a></h2>
-            <div class="index__meta">
-              <time class="index__date">March 15, 2019</time>
-              <div class="index__tags">
-                <a href="?tag=generative" class="index__tag">generative</a>
-                <a href="?tag=gallery" class="index__tag">gallery</a>
-              </div>
-            </div>
-            <p class="index__description">Another gallery of multi-scale Turing patterns</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="generative,gallery" data-path="multi-scale-turing-pattern-gallery-1/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/multi-scale-turing-pattern-gallery-1.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="multi-scale-turing-pattern-gallery-1/" class="index__title-link">Multi-Scale Turing Pattern Gallery 1</a></h2>
-            <div class="index__meta">
-              <time class="index__date">October 19, 2018</time>
-              <div class="index__tags">
-                <a href="?tag=generative" class="index__tag">generative</a>
-                <a href="?tag=gallery" class="index__tag">gallery</a>
-              </div>
-            </div>
-            <p class="index__description">A gallery of multi-scale Turing patterns</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Math,Graphics" data-path="aligning-3d-scans/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/aligning-3d-scans.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="aligning-3d-scans/" class="index__title-link">Aligning 3D Scans</a></h2>
-            <div class="index__meta">
-              <time class="index__date">July 28, 2018</time>
-              <div class="index__tags">
-                <a href="?tag=Math" class="index__tag">Math</a>
-                <a href="?tag=Graphics" class="index__tag">Graphics</a>
-              </div>
-            </div>
-            <p class="index__description">Automatically orienting 3D scans by computing principal axes from surface normals using eigenvalue decomposition.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="Programming" data-path="things-i-learned-the-hard-way-using-react-native/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/things-i-learned-the-hard-way-using-react-native.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="things-i-learned-the-hard-way-using-react-native/" class="index__title-link">Things I Learned the Hard Way Using React Native</a></h2>
-            <div class="index__meta">
-              <time class="index__date">May 5, 2016</time>
-              <div class="index__tags">
-                <a href="?tag=Programming" class="index__tag">Programming</a>
-              </div>
-            </div>
-            <p class="index__description">A collection of lessons learned from eight months of React Native development - environment setup, Redux patterns, performance optimization, and cross-platform gotchas.</p>
-          </div>
-        </li>
-        <li class="index__item" data-tags="essay,programming" data-path="a-series-of-unfortunate-things-i-programmed-one-time/">
-          <div class="index__image-container">
-            <img class="index__image" src="./meta/a-series-of-unfortunate-things-i-programmed-one-time.jpg" alt="" loading="lazy">
-          </div>
-          <div class="index__content">
-            <h2 class="index__title"><a href="a-series-of-unfortunate-things-i-programmed-one-time/" class="index__title-link">A Series of Unfortunate Things I Programmed One Time</a></h2>
-            <div class="index__meta">
-              <time class="index__date">March 16, 2015</time>
-              <div class="index__tags">
-                <a href="?tag=essay" class="index__tag">essay</a>
-                <a href="?tag=programming" class="index__tag">programming</a>
-              </div>
-            </div>
-            <p class="index__description">Reflections on a decade of programming projects and the search for meaning in complexity</p>
-          </div>
-        </li>
-      </ul>
-      <script>
-        (function() {
-          const urlParams = new URLSearchParams(window.location.search);
-          const activeTag = urlParams.get('tag');
-          const indexList = document.getElementById('index-list');
-          const viewBtns = document.querySelectorAll('.index-view-btn');
 
-          // View toggle
-          const savedView = localStorage.getItem('indexView') || 'grid';
-          if (savedView === 'list') {
-            indexList.classList.add('index--list');
-            viewBtns.forEach(btn => {
-              const isActive = btn.dataset.view === 'list';
-              btn.classList.toggle('active', isActive);
-              btn.setAttribute('aria-pressed', isActive);
-            });
-          }
+    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p>Imagine trying to combinatorially rearrange the pixels of one image to represent another image the best you can with respect to some metric like the difference in color. (Note that although this may be a fun task, it’s most certainly not a particularly good way to accomplish style transfer!)</p>
+<p>For a grayscale image, the task is relatively simple. Sort the pixels of source and target image by intensity, putting them into 1:1 correspondence, then reassign by transferring values from the target to the source image. The resulting image would look like the source image but would share the histogram of the target image.</p>
+<p>For a color image, the task is not so simple, as RGB tuples permit no useful ordering. The <a href="https://en.wikipedia.org/wiki/Hungarian_algorithm">Hungarian Algorithm</a> provides an exhaustively brute-force solution to the assignment problem we seek to solve, but its  complexity makes it completely impractical for images. Theo Honohan has pointed to some <a href="https://graphics.social/@theohonohan/111490607440087628">good alternative methods</a>.</p>
+<p>Nonetheless, we’ll try out an approximate algorithm, though it’s best to think of this problem as a nice testbed for the more general algorithm rather than the algorithm as a particularly good solution to our problem. In his article, <a href="https://blog.demofox.org/2023/11/25/interpolating-color-image-histograms-using-sliced-optimal-transport/">Interpolating Color Image Histograms Using Sliced Optimal Transport</a>, Alan Wolfe summarizes the Sliced Optimal Transport method. For the RGB image case, we select a random three-dimensional unit vector and project RGB tuples onto it. We perform the simple grayscale reassignment algorithm, then unproject the resulting per-pixel adjustments back into three dimensions. We perform this task in batches, each time projecting onto a collection of random vectors and averaging the resulting adjustments together before updating the image. The result is an image which looks like the source image but—<em>approximately</em>, at least—contains the reordered pixels of the target image.</p>
+<p>Alan has described it better than I have so you should read his article; I just wanted to prototype it and get a good intuitive sense of what’s going on, and that’s all you’ll find here. I’m happy with my implementation in general, though I’d like to:</p>
+<ul>
+<li>parallelize work within each batch using web workers</li>
+<li>more intelligently select random vectors</li>
+</ul>
+</div></div><div id="cell-709" class="observablehq observablehq--cell"></div><div id="cell-686" class="observablehq observablehq--cell"></div><div id="cell-751" class="observablehq observablehq--cell"></div><div id="cell-864" class="observablehq observablehq--cell"></div><div id="cell-862" class="observablehq observablehq--cell"></div><div id="cell-1102" class="observablehq observablehq--cell"></div><div id="cell-969" class="observablehq observablehq--cell"></div><div id="cell-652" class="observablehq observablehq--cell"></div><div id="cell-477" class="observablehq observablehq--cell"></div><div id="cell-428" class="observablehq observablehq--cell"></div><div id="cell-898" class="observablehq observablehq--cell"></div><div id="cell-1177" class="observablehq observablehq--cell"></div><div id="cell-965" class="observablehq observablehq--cell"></div><div id="cell-188" class="observablehq observablehq--cell"></div><div id="cell-1122" class="observablehq observablehq--cell"></div><div id="cell-1060" class="observablehq observablehq--cell"></div><pre data-language="ojs"><code class="language-ojs">function* slicedOptimalTransport(
+  src,
+  tgt,
+  { maxIterations = 100, batchSize = 4, tolerance = 1 } = {}
+) {
+  if (src.length !== tgt.length)
+    throw new Error("Source size must equal target size");
 
-          viewBtns.forEach(btn => {
-            btn.addEventListener('click', () => {
-              const view = btn.dataset.view;
-              indexList.classList.toggle('index--list', view === 'list');
-              viewBtns.forEach(b => {
-                const isActive = b.dataset.view === view;
-                b.classList.toggle('active', isActive);
-                b.setAttribute('aria-pressed', isActive);
-              });
-              localStorage.setItem('indexView', view);
-            });
-          });
+  // TODO: I could probably avoid this if I better understood generator functions
+  mutable history = [];
 
-          // Add click handlers to cards
-          const items = document.querySelectorAll('.index__item');
-          items.forEach(item => {
-            item.addEventListener('click', function(e) {
-              // Don't navigate if clicking a tag link
-              if (e.target.closest('.index__tag')) return;
-              const path = item.dataset.path;
-              if (path) window.location.href = path;
-            });
-          });
+  const N = src.length &gt;&gt; 2;
+  const index = new Uint32Array(N);
+  const srcProjection = new Float32Array(N);
+  const tgtProjection = new Float32Array(N);
+  const adjustment = new Float32Array(N * 3);
 
-          if (activeTag) {
-            // Show filter indicator
-            const filterContainer = document.getElementById('index-filter-container');
-            filterContainer.innerHTML = `
-              <div class="index__active-filter">
-                <span class="index__filter-label">Filtered by:</span>
-                <span class="index__filter-tag">
-                  ${activeTag}
-                  <a href="./" class="index__filter-remove" aria-label="Remove filter">×</a>
-                </span>
-              </div>
-            `;
+  let delta = Infinity;
+  let iteration = 0;
+  while (delta &gt; tolerance &amp;&amp; ++iteration &lt;= maxIterations) {
+    adjustment.fill(0);
+    for (let batchIndex = 0; batchIndex &lt; batchSize; batchIndex++) {
+      let [v0, v1, v2] = vec3normalize([], [randn(), randn(), randn()]);
 
-            // Filter items (case-insensitive)
-            const activeTagLower = activeTag.toLowerCase();
-            items.forEach(item => {
-              const tags = (item.dataset.tags || '').split(',').filter(Boolean);
-              if (!tags.some(t => t.toLowerCase() === activeTagLower)) {
-                item.style.display = 'none';
-              }
-            });
-          }
-        })();
-      </script>
+      for (let i = 0, i4 = 0; i &lt; N; i++, i4 += 4) {
+        index[i] = i;
+        srcProjection[i] = v0 * src[i4] + v1 * src[i4 + 1] + v2 * src[i4 + 2];
+        tgtProjection[i] = v0 * tgt[i4] + v1 * tgt[i4 + 1] + v2 * tgt[i4 + 2];
+      }
 
-    <main></main>
+      // Native sort works for target since all we need is the sorted vector, but
+      // custom sort is required for the source since we need to sort the indices
+      // in parallel with the projection.
+      sort(srcProjection, index, 0, N - 1);
+      tgtProjection.sort();
+
+      for (let j = 0; j &lt; N; j++) {
+        const projectedDiff = tgtProjection[j] - srcProjection[j];
+        const i3 = index[j] * 3;
+        adjustment[i3 + 0] += v0 * projectedDiff;
+        adjustment[i3 + 1] += v1 * projectedDiff;
+        adjustment[i3 + 2] += v2 * projectedDiff;
+      }
+    }
+
+    delta = 0;
+    for (let i3 = 0, i4 = 0; i4 &lt; N * 4; i3 += 3, i4 += 4) {
+      const dr = adjustment[i3] / batchSize;
+      const dg = adjustment[i3 + 1] / batchSize;
+      const db = adjustment[i3 + 2] / batchSize;
+      src[i4] += dr;
+      src[i4 + 1] += dg;
+      src[i4 + 2] += db;
+      delta += dr * dr + dg * dg + db * db;
+    }
+    delta = Math.sqrt(delta / N);
+    mutable history = mutable history.concat([{ iteration, delta }]);
+
+    yield { delta, src };
+  }
+
+  return { delta, src };
+}</code></pre><div id="cell-766" class="observablehq observablehq--cell"></div><div id="cell-891" class="observablehq observablehq--cell"></div><div id="cell-462" class="observablehq observablehq--cell"></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-693" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-25" class="observablehq observablehq--cell"></div><div id="cell-162" class="observablehq observablehq--cell"></div><div id="cell-1171" class="observablehq observablehq--cell"></div><div id="cell-104" class="observablehq observablehq--cell"></div><div id="cell-1140" class="observablehq observablehq--cell"></div><div id="cell-78" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer>
     <div class="footer__attrib">© 2026 Ricky Reusser</div>

@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Mon, 02 Feb 2026 00:58:17 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 02 Feb 2026 02:45:52 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Visualizing Sloan Digital Sky Survey Data</title>
@@ -150,6 +150,22 @@
       <pubDate>Fri, 03 May 2024 07:00:00 GMT</pubDate>
       <description>Plotting and extrapolating trends in competitive speed climbing</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/speed-climbing-world-record-progression.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Sliced Optimal Transport</title>
+      <link>https://rreusser.github.io/notebooks/sliced-optimal-transport/original.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/sliced-optimal-transport/original.html</guid>
+      <pubDate>Tue, 28 Nov 2023 08:00:00 GMT</pubDate>
+      <description>Approximate pixel redistribution between images using sliced optimal transport.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/sliced-optimal-transport.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Sliced Optimal Transport</title>
+      <link>https://rreusser.github.io/notebooks/sliced-optimal-transport/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/sliced-optimal-transport/</guid>
+      <pubDate>Tue, 28 Nov 2023 08:00:00 GMT</pubDate>
+      <description>Approximate pixel redistribution between images using sliced optimal transport.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/sliced-optimal-transport.jpg" medium="image" />
     </item>
     <item>
       <title>Series Acceleration with Shanks Transformation</title>
