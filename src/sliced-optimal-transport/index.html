@@ -304,7 +304,7 @@
     });
   </script>
   <script id="original-code" type="text/markdown">
-    My original code [from this notebook](https://observablehq.com/@rreusser/sliced-optimal-transport) is presented below. However, this is *not* the code being run in this notebook. This notebook uses a Web Worker pool to perform the batches in parallel since the algorithm can get a bit slow. You can read the modified implementation [the Notebook Kit source for this page](https://github.com/rreusser/notebooks/tree/main/src/sliced-optimal-transport/index.html).
+    My original code [from this notebook](https://observablehq.com/@rreusser/sliced-optimal-transport) is presented below. However, this is *not* the code being run in this notebook. This notebook uses a [Web Worker](https://developer.mozilla.org/en-US/docs/Web/API/Web_Workers_API/Using_web_workers) pool to perform the batches in parallel since the algorithm can get a bit slow. You can read the modified implementation in [the Notebook Kit source for this page](https://github.com/rreusser/notebooks/tree/main/src/sliced-optimal-transport/index.html).
     ```js
     function* slicedOptimalTransport(
   src,
