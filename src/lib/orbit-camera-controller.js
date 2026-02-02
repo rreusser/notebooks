@@ -108,7 +108,7 @@ export function createOrbitCameraController(element, camera, opts = {}) {
 
     dragMode = (event.shiftKey || event.button === 2) ? 'pan' : 'rotate';
     isDragging = true;
-    element.style.cursor = 'grabbing';
+    // Cursor managed by mesh-interactions
 
     window.addEventListener('mousemove', onMouseMove);
     window.addEventListener('mouseup', onMouseUp);
@@ -158,7 +158,7 @@ export function createOrbitCameraController(element, camera, opts = {}) {
   function onMouseUp() {
     isDragging = false;
     dragMode = null;
-    element.style.cursor = 'grab';
+    // Cursor managed by mesh-interactions
     window.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('mouseup', onMouseUp);
   }
@@ -280,7 +280,7 @@ export function createOrbitCameraController(element, camera, opts = {}) {
   function attachEvents() {
     if (eventsAttached) return;
     eventsAttached = true;
-    element.style.cursor = 'grab';
+    // Cursor managed by mesh-interactions
     element.addEventListener('mousedown', onMouseDown);
     element.addEventListener('wheel', onWheel, { passive: false });
     element.addEventListener('touchstart', onTouchStart, { passive: false });

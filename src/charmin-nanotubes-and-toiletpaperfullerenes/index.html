@@ -365,6 +365,16 @@ const deleteButton = html`<button id="delete-vertex-btn"
   style="${touchButtonStyle} left: 56px;"
 >&#128465;</button>`;
 
+// Add cursor styles to document head
+const cursorStyle = document.createElement('style');
+cursorStyle.textContent = `
+  #mesh-canvas canvas { cursor: grab !important; }
+  #mesh-canvas canvas.cursor-move { cursor: move !important; }
+  #mesh-canvas canvas.cursor-pointer { cursor: pointer !important; }
+  #mesh-canvas canvas.cursor-grabbing { cursor: grabbing !important; }
+`;
+document.head.appendChild(cursorStyle);
+
 const container = html`<div id="mesh-canvas" style="position: relative; width: 100%; height: 100%; max-width: 100%;">
   ${deselectButton}
   ${deleteButton}

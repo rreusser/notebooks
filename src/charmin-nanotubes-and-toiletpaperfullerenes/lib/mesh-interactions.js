@@ -68,7 +68,7 @@ export class MeshInteractions {
     const el = this.element;
     el.tabIndex = 1;
     el.style.outline = 'none';
-    // Cursor now managed by camera controller
+    // Cursor managed via CSS classes (see index.html #mesh-canvas style)
 
     el.addEventListener('mousedown', this._onMouseDown);
     el.addEventListener('mousemove', this._onMouseMove);
@@ -269,7 +269,8 @@ export class MeshInteractions {
       this.activeVertexIndex = target.index;
       this.selectedVertexIndex = target.index;
       this.dragMode = 'vertex';
-      this.element.style.cursor = 'move';
+      this.element.classList.remove('cursor-pointer', 'cursor-grabbing');
+      this.element.classList.add('cursor-move');
       this.selectionHandledInMouseDown = true;
 
       this.isDragging = true;
@@ -295,7 +296,8 @@ export class MeshInteractions {
       this.selectedEdgeIndex = target.index;
       this.activeEdgeIndex = target.index;  // Track active edge for physics exclusion
       this.dragMode = 'edge';
-      this.element.style.cursor = 'move';
+      this.element.classList.remove('cursor-pointer', 'cursor-grabbing');
+      this.element.classList.add('cursor-move');
       this.selectionHandledInMouseDown = true;
 
       this.isDragging = true;
@@ -327,29 +329,41 @@ export class MeshInteractions {
       const dy = this.currentMousePos[1] - this.backgroundClickStart[1];
       if (Math.sqrt(dx * dx + dy * dy) >= this.deadZoneRadius) {
         this.backgroundExitedDeadZone = true;
+        // Set grabbing cursor for camera rotation
+        this.element.classList.remove('cursor-move', 'cursor-pointer');
+        this.element.classList.add('cursor-grabbing');
       }
     }
 
     if (!this.isDragging) {
+      // Skip hover detection during camera rotation (background drag)
+      if (this.backgroundClickStart) {
+        return;
+      }
+
       // Passive hover - check vertex first, then edge
       const target = this._getSelectionTarget(this.currentMousePos[0], this.currentMousePos[1], 20, 12);
 
       let newVertexHover = -1;
       let newEdgeHover = -1;
-      let cursor = 'grab';
 
       if (target.type === 'vertex') {
         newVertexHover = target.index;
-        cursor = 'move';
       } else if (target.type === 'edge') {
         newEdgeHover = target.index;
-        cursor = 'pointer';
       }
 
       if (newVertexHover !== this.hoverVertexIndex || newEdgeHover !== this.hoverEdgeIndex) {
         this.hoverVertexIndex = newVertexHover;
         this.hoverEdgeIndex = newEdgeHover;
-        this.element.style.cursor = cursor;
+        // Update cursor via CSS classes
+        this.element.classList.remove('cursor-move', 'cursor-pointer', 'cursor-grabbing');
+        if (newVertexHover >= 0) {
+          this.element.classList.add('cursor-move');
+        } else if (newEdgeHover >= 0) {
+          this.element.classList.add('cursor-pointer');
+        }
+        // Default 'grab' cursor comes from CSS rule, no class needed
         this.dirty = true;
       }
       return;
@@ -406,13 +420,13 @@ export class MeshInteractions {
     this.activeEdgeIndex = -1;
     this.candidateEdge = null;
     // Update cursor based on current hover state
+    this.element.classList.remove('cursor-move', 'cursor-pointer', 'cursor-grabbing');
     if (this.hoverVertexIndex >= 0) {
-      this.element.style.cursor = 'move';
+      this.element.classList.add('cursor-move');
     } else if (this.hoverEdgeIndex >= 0) {
-      this.element.style.cursor = 'pointer';
-    } else {
-      this.element.style.cursor = 'grab';
+      this.element.classList.add('cursor-pointer');
     }
+    // Default 'grab' comes from CSS
     this.dirty = true;
 
     this.onChange();
