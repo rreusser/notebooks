@@ -1,14 +1,16 @@
-// Interactive mesh editor with camera controls
-// Handles mouse/keyboard input for vertex manipulation and camera orbit
+// Interactive mesh editor with vertex manipulation
+// Handles mouse/keyboard/touch input for vertex manipulation
+// Camera control is delegated to orbit-camera-controller
 
 import { mat4, vec3 } from 'npm:gl-matrix@3.4.3';
 
 export class MeshInteractions {
-  constructor(element, mesh, camera, opts = {}) {
+  constructor(element, mesh, controller, opts = {}) {
     this.element = element;
     this.mesh = mesh;
-    this.camera = camera;
-    this.projectionView = opts.projectionView;
+    this.controller = controller;
+    this.camera = controller.camera;
+    this.projectionView = controller.projectionView;
 
     // Selection state
     this.selectedVertexIndex = -1;
@@ -17,12 +19,16 @@ export class MeshInteractions {
 
     // Drag state
     this.isDragging = false;
-    this.dragMode = null; // 'vertex', 'rotate', 'pan'
+    this.dragMode = null; // 'vertex' only - camera handled by controller
     this.initialMousePos = [0, 0];
     this.currentMousePos = [0, 0];
     this.previousMousePos = [0, 0];
     this.deadZoneRadius = 5;
     this.exitedDeadZone = false;
+
+    // Touch state
+    this.touchStartedOnVertex = false;
+    this.touchVertexIndex = -1;
 
     // Candidate edge for connection
     this.candidateEdge = null;
@@ -37,9 +43,12 @@ export class MeshInteractions {
     this._onMouseDown = this._onMouseDown.bind(this);
     this._onMouseMove = this._onMouseMove.bind(this);
     this._onMouseUp = this._onMouseUp.bind(this);
-    this._onWheel = this._onWheel.bind(this);
+    this._onClick = this._onClick.bind(this);
     this._onKeyDown = this._onKeyDown.bind(this);
     this._onKeyUp = this._onKeyUp.bind(this);
+    this._onTouchStart = this._onTouchStart.bind(this);
+    this._onTouchMove = this._onTouchMove.bind(this);
+    this._onTouchEnd = this._onTouchEnd.bind(this);
 
     // Setup
     this._setup();
@@ -49,23 +58,28 @@ export class MeshInteractions {
     const el = this.element;
     el.tabIndex = 1;
     el.style.outline = 'none';
-    el.style.cursor = 'grab';
+    // Cursor now managed by camera controller
 
     el.addEventListener('mousedown', this._onMouseDown);
     el.addEventListener('mousemove', this._onMouseMove);
-    el.addEventListener('wheel', this._onWheel, { passive: false });
+    el.addEventListener('click', this._onClick);
     el.addEventListener('keydown', this._onKeyDown);
     el.addEventListener('keyup', this._onKeyUp);
-    el.addEventListener('contextmenu', (e) => e.preventDefault());
+    el.addEventListener('touchstart', this._onTouchStart, { passive: false });
+    el.addEventListener('touchmove', this._onTouchMove, { passive: false });
+    el.addEventListener('touchend', this._onTouchEnd);
   }
 
   destroy() {
     const el = this.element;
     el.removeEventListener('mousedown', this._onMouseDown);
     el.removeEventListener('mousemove', this._onMouseMove);
-    el.removeEventListener('wheel', this._onWheel);
+    el.removeEventListener('click', this._onClick);
     el.removeEventListener('keydown', this._onKeyDown);
     el.removeEventListener('keyup', this._onKeyUp);
+    el.removeEventListener('touchstart', this._onTouchStart);
+    el.removeEventListener('touchmove', this._onTouchMove);
+    el.removeEventListener('touchend', this._onTouchEnd);
     window.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('mouseup', this._onMouseUp);
   }
@@ -133,7 +147,14 @@ export class MeshInteractions {
     const closest = this._getClosestVertex(this.initialMousePos[0], this.initialMousePos[1]);
 
     if (closest.index >= 0 && closest.distance < 25) {
-      // Clicked on a vertex
+      // Clicked on a vertex - prevent camera controller from handling
+      event.preventDefault();
+      event.stopPropagation();
+      event.stopImmediatePropagation();
+
+      // Ensure canvas has focus for keyboard events
+      this.element.focus();
+
       if (this.selectedVertexIndex >= 0 && this.selectedVertexIndex !== closest.index) {
         // Potential edge creation
         this.candidateEdge = [this.selectedVertexIndex, closest.index];
@@ -142,18 +163,15 @@ export class MeshInteractions {
       this.selectedVertexIndex = closest.index;
       this.dragMode = 'vertex';
       this.element.style.cursor = 'move';
-    } else {
-      // Camera control - right click or shift+left click = pan
-      this.dragMode = (event.shiftKey || event.button === 2) ? 'pan' : 'rotate';
-      this.element.style.cursor = 'grabbing';
+
+      this.isDragging = true;
+      this.dirty = true;
+
+      // Listen for mouse up/move on window
+      window.addEventListener('mousemove', this._onMouseMove);
+      window.addEventListener('mouseup', this._onMouseUp);
     }
-
-    this.isDragging = true;
-    this.dirty = true;
-
-    // Listen for mouse up/move on window
-    window.addEventListener('mousemove', this._onMouseMove);
-    window.addEventListener('mouseup', this._onMouseUp);
+    // Camera control is handled by orbit-camera-controller
   }
 
   _onMouseMove(event) {
@@ -181,21 +199,20 @@ export class MeshInteractions {
 
     if (this.dragMode === 'vertex' && this.exitedDeadZone) {
       this._dragVertex();
-    } else if (this.dragMode === 'rotate') {
-      this._rotateCamera();
-    } else if (this.dragMode === 'pan') {
-      this._panCamera();
     }
+    // Camera rotation/pan handled by orbit-camera-controller
   }
 
   _onMouseUp(event) {
     window.removeEventListener('mousemove', this._onMouseMove);
     window.removeEventListener('mouseup', this._onMouseUp);
 
+    if (!this.isDragging) return;
+
     this._getMousePos(event, this.currentMousePos);
 
     if (!this.exitedDeadZone && this._insideDeadZone()) {
-      // Click without drag
+      // Click without drag on vertex
       const closest = this._getClosestVertex(this.currentMousePos[0], this.currentMousePos[1]);
 
       if (this.dragMode === 'vertex') {
@@ -210,15 +227,6 @@ export class MeshInteractions {
           // Clicked in empty space while vertex was selected - spawn new vertex
           this._spawnVertex();
         }
-      } else if (closest.index >= 0 && closest.distance < 25) {
-        // Clicked on a vertex (wasn't dragging it) - select it
-        this.selectedVertexIndex = closest.index;
-      } else if (this.selectedVertexIndex >= 0) {
-        // Clicked in empty space with a vertex selected - spawn new vertex
-        this._spawnVertex();
-      } else {
-        // Clicked in empty space with nothing selected - deselect (no-op)
-        this.selectedVertexIndex = -1;
       }
     }
 
@@ -232,10 +240,129 @@ export class MeshInteractions {
     this.onChange();
   }
 
-  _onWheel(event) {
+  _onClick(event) {
+    // Handle clicks in empty space (vertex clicks are handled in mousedown)
+    const clickPos = this._getMousePos(event);
+    const closest = this._getClosestVertex(clickPos[0], clickPos[1]);
+
+    if (closest.index >= 0 && closest.distance < 25) {
+      // Clicked on a vertex - already handled by mousedown, but ensure selection
+      this.selectedVertexIndex = closest.index;
+      this.element.focus();
+      this.dirty = true;
+    } else if (this.selectedVertexIndex >= 0) {
+      // Clicked in empty space with a vertex selected - spawn new vertex
+      this.currentMousePos[0] = clickPos[0];
+      this.currentMousePos[1] = clickPos[1];
+      this._spawnVertex();
+      this.element.focus();
+    }
+
+    this.onChange();
+  }
+
+  // Wheel is handled by orbit-camera-controller
+
+  // ============ Touch Events ============
+
+  _getTouchPos(touch, out = [0, 0]) {
+    const rect = this.element.getBoundingClientRect();
+    out[0] = touch.clientX - rect.left;
+    out[1] = touch.clientY - rect.top;
+    return out;
+  }
+
+  _onTouchStart(event) {
+    if (event.touches.length !== 1) {
+      // Multi-touch is handled by camera controller
+      this.touchStartedOnVertex = false;
+      this.touchVertexIndex = -1;
+      return;
+    }
+
+    const touchPos = this._getTouchPos(event.touches[0]);
+    const closest = this._getClosestVertex(touchPos[0], touchPos[1]);
+
+    if (closest.index >= 0 && closest.distance < 35) {
+      // Touch on a vertex - prevent camera from handling
+      event.stopPropagation();
+      event.preventDefault();
+
+      this.touchStartedOnVertex = true;
+      this.touchVertexIndex = closest.index;
+      this.initialMousePos[0] = touchPos[0];
+      this.initialMousePos[1] = touchPos[1];
+      this.currentMousePos[0] = touchPos[0];
+      this.currentMousePos[1] = touchPos[1];
+      this.exitedDeadZone = false;
+
+      if (this.selectedVertexIndex >= 0 && this.selectedVertexIndex !== closest.index) {
+        this.candidateEdge = [this.selectedVertexIndex, closest.index];
+      }
+      this.activeVertexIndex = closest.index;
+      this.selectedVertexIndex = closest.index;
+      this.isDragging = true;
+      this.dragMode = 'vertex';
+      this.dirty = true;
+    } else {
+      // Let camera controller handle rotation
+      this.touchStartedOnVertex = false;
+      this.touchVertexIndex = -1;
+    }
+  }
+
+  _onTouchMove(event) {
+    if (!this.touchStartedOnVertex || event.touches.length !== 1) {
+      return;
+    }
+
     event.preventDefault();
-    this.camera.zoom(event.deltaY * 0.03);
-    this.dirty = true;
+    event.stopPropagation();
+
+    const touchPos = this._getTouchPos(event.touches[0]);
+    this.previousMousePos[0] = this.currentMousePos[0];
+    this.previousMousePos[1] = this.currentMousePos[1];
+    this.currentMousePos[0] = touchPos[0];
+    this.currentMousePos[1] = touchPos[1];
+
+    if (!this.exitedDeadZone && !this._insideDeadZone()) {
+      this.exitedDeadZone = true;
+    }
+
+    if (this.exitedDeadZone && this.activeVertexIndex >= 0) {
+      this._dragVertex();
+    }
+  }
+
+  _onTouchEnd(event) {
+    if (!this.touchStartedOnVertex) {
+      return;
+    }
+
+    if (event.touches.length === 0) {
+      // All fingers lifted
+      if (!this.exitedDeadZone && this._insideDeadZone()) {
+        // Tap without drag
+        const closest = this._getClosestVertex(this.currentMousePos[0], this.currentMousePos[1]);
+
+        if (closest.index >= 0 && closest.distance < 35) {
+          // Tapped on existing vertex - maybe create edge
+          if (this.candidateEdge) {
+            this.mesh.addEdge(this.candidateEdge[0], this.candidateEdge[1]);
+          }
+          this.selectedVertexIndex = closest.index;
+        }
+      }
+
+      this.touchStartedOnVertex = false;
+      this.touchVertexIndex = -1;
+      this.isDragging = false;
+      this.dragMode = null;
+      this.activeVertexIndex = -1;
+      this.candidateEdge = null;
+      this.dirty = true;
+      this.onChange();
+    }
   }
 
   // ============ Keyboard Events ============
@@ -246,6 +373,7 @@ export class MeshInteractions {
       case 'Space':
       case 'Backspace':
         event.preventDefault();
+        event.stopPropagation();
         break;
     }
   }
@@ -260,6 +388,7 @@ export class MeshInteractions {
           this.activeVertexIndex = -1;
           this.dirty = true;
           event.preventDefault();
+          event.stopPropagation();
         }
         break;
 
@@ -268,6 +397,7 @@ export class MeshInteractions {
         this.activeVertexIndex = -1;
         this.dirty = true;
         event.preventDefault();
+        event.stopPropagation();
         break;
 
       case 'KeyC':
@@ -278,6 +408,7 @@ export class MeshInteractions {
           this.activeVertexIndex = -1;
           this.dirty = true;
           event.preventDefault();
+          event.stopPropagation();
         }
         break;
 
@@ -289,6 +420,7 @@ export class MeshInteractions {
           this.activeVertexIndex = -1;
           this.dirty = true;
           event.preventDefault();
+          event.stopPropagation();
         }
         break;
 
@@ -300,6 +432,7 @@ export class MeshInteractions {
           this.activeVertexIndex = -1;
           this.dirty = true;
           event.preventDefault();
+          event.stopPropagation();
         }
         break;
 
@@ -313,6 +446,8 @@ export class MeshInteractions {
           vec3.copy(this.camera.center, centroid);
         }
         this.dirty = true;
+        event.preventDefault();
+        event.stopPropagation();
         break;
     }
 
@@ -343,34 +478,6 @@ export class MeshInteractions {
     vec3.transformMat4(newPos, projected, invProjView);
 
     this.mesh.setPosition(this.activeVertexIndex, newPos[0], newPos[1], newPos[2]);
-    this.dirty = true;
-  }
-
-  _rotateCamera() {
-    const width = this.element.offsetWidth;
-    const height = this.element.offsetHeight;
-
-    this.camera.rotate(
-      [
-        -(this.previousMousePos[0] / width - 0.5),
-        -(this.previousMousePos[1] / height - 0.5)
-      ],
-      [
-        -(this.currentMousePos[0] / width - 0.5),
-        -(this.currentMousePos[1] / height - 0.5)
-      ]
-    );
-    this.dirty = true;
-  }
-
-  _panCamera() {
-    const width = this.element.offsetWidth;
-    const height = this.element.offsetHeight;
-
-    const dx = this.currentMousePos[0] - this.previousMousePos[0];
-    const dy = this.currentMousePos[1] - this.previousMousePos[1];
-
-    this.camera.pan([dx / width, dy / height]);
     this.dirty = true;
   }
 

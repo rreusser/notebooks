@@ -102,7 +102,8 @@ import createREGL from 'npm:regl@2.1.1';
 import createIcosphere from 'npm:icosphere@1.0.0';
 import { Mesh } from './lib/mesh.js';
 import { MeshPhysics } from './lib/mesh-physics.js';
-import { createReglCamera } from './shared-lib/orbit-camera.js';
+import { OrbitCamera } from './shared-lib/orbit-camera.js';
+import { createOrbitCameraController } from './lib/orbit-camera-controller.js';
 import { createMeshRenderer } from './lib/mesh-renderer.js';
 import { MeshInteractions } from './lib/mesh-interactions.js';
 import { expandable } from './shared-lib/expandable.js';
@@ -228,7 +229,8 @@ const state: {
   physics: MeshPhysics | null;
   interactions: MeshInteractions | null;
   renderer: ReturnType<typeof createMeshRenderer> | null;
-  camera: ReturnType<typeof createReglCamera> | null;
+  controller: ReturnType<typeof createOrbitCameraController> | null;
+  setCamera: ((callback: () => void) => void) | null;
   regl: ReturnType<typeof createREGL> | null;
   frame: { cancel: () => void } | null;
   dirty: boolean;
@@ -251,7 +253,8 @@ const state: {
   physics: null,
   interactions: null,
   renderer: null,
-  camera: null,
+  controller: null,
+  setCamera: null,
   regl: null,
   frame: null,
   dirty: true,
@@ -339,15 +342,29 @@ if (!state.regl) {
   });
 
   const icosphere = createIcosphere(1);
-  state.camera = createReglCamera(state.regl, { eye: [0, 1, -20] });
+  const canvas = state.regl._gl.canvas;
+  const camera = new OrbitCamera([0, 1, -20], [0, 0, 0], [0, 1, 0]);
+  // Create controller without attaching event listeners yet
+  state.controller = createOrbitCameraController(canvas, camera, {
+    fov: Math.PI / 4,
+    near: 0.1,
+    far: 200.0,
+    deferEvents: true  // Don't attach events yet
+  });
+  // Create regl scope for camera uniforms
+  state.setCamera = state.regl({
+    uniforms: {
+      projectionView: () => state.controller!.projectionView
+    }
+  });
   state.renderer = createMeshRenderer(state.regl, icosphere);
   state.physics = new MeshPhysics(state.mesh!);
+  // Create interactions FIRST so its event listeners are registered first
   state.interactions = new MeshInteractions(
-    state.regl._gl.canvas,
+    canvas,
     state.mesh!,
-    state.camera.camera,
+    state.controller,
     {
-      projectionView: state.camera.projectionView,
       onChange: () => {
         state.dirty = true;
         state.meshVersion++;
@@ -355,6 +372,8 @@ if (!state.regl) {
       }
     }
   );
+  // Now attach camera controller events (after interactions)
+  state.controller.attachEvents();
 }
 
 // Resize canvas to match container
@@ -369,7 +388,7 @@ const resizeCanvas = () => {
     canvas.width = newWidth;
     canvas.height = newHeight;
     state.dirty = true;
-    state.camera?.taint();
+    state.controller?.taint();
   }
 };
 
@@ -388,27 +407,31 @@ if (state.frame) {
   state.frame = null;
 }
 state.frame = state.regl.frame(() => {
-  if (!visible || !state.mesh) return;
+  if (!visible || !state.mesh || !state.controller) return;
 
-  state.camera!.tick(({ dirty: cameraDirty }) => {
-    const shouldRender = state.renderParams.simulate || state.dirty || cameraDirty || state.interactions?.dirty;
-    if (!shouldRender) return;
+  const gl = state.regl!._gl;
+  const aspectRatio = gl.canvas.width / gl.canvas.height;
+  const { dirty: controllerDirty } = state.controller.update(aspectRatio);
 
-    // Run physics simulation
-    if (state.renderParams.simulate && state.physics) {
-      state.physics.frozenVertex = state.interactions?.activeVertexIndex ?? -1;
-      for (let i = 0; i < state.renderParams.iterations; i++) {
-        state.physics.iterate();
-      }
+  const shouldRender = state.renderParams.simulate || state.dirty || controllerDirty || state.interactions?.dirty;
+  if (!shouldRender) return;
+
+  // Run physics simulation
+  if (state.renderParams.simulate && state.physics) {
+    state.physics.frozenVertex = state.interactions?.activeVertexIndex ?? -1;
+    for (let i = 0; i < state.renderParams.iterations; i++) {
+      state.physics.iterate();
     }
+  }
 
-    // Clear and render
-    state.regl!.clear({ color: [1, 1, 1, 1], depth: 1 });
+  // Clear and render
+  state.regl!.clear({ color: [1, 1, 1, 1], depth: 1 });
 
-    const selectedIdx = state.interactions?.selectedVertexIndex ?? -1;
-    const hasFocus = selectedIdx >= 0;
-    const focusCenter = hasFocus ? state.mesh!.getPosition(selectedIdx) : [0, 0, 0];
+  const selectedIdx = state.interactions?.selectedVertexIndex ?? -1;
+  const hasFocus = selectedIdx >= 0;
+  const focusCenter = hasFocus ? state.mesh!.getPosition(selectedIdx) : [0, 0, 0];
 
+  state.setCamera!(() => {
     state.renderer?.render(state.mesh!, state.physics!, {
       pointSize: state.renderParams.pointSize,
       strainColoring: state.renderParams.strainColoring,
@@ -420,10 +443,10 @@ state.frame = state.regl.frame(() => {
       depthFalloffWidth: state.renderParams.depthFalloffWidth,
       focusCenter
     });
-
-    state.dirty = false;
-    if (state.interactions) state.interactions.dirty = false;
   });
+
+  state.dirty = false;
+  if (state.interactions) state.interactions.dirty = false;
 });
 
 invalidation.then(() => {
@@ -451,8 +474,9 @@ const figure = html`
 
 // Wrap in expandable container
 display(expandable(figure, {
-  width: 640,
-  height: 576,
+  wide: true,
+  maxWidth: 640,
+  aspectRatio: 640 / 576,
   padding: [0, 0],
   controls: ['#primary-controls', '#secondary-controls'],
   state: state.expandedState,
