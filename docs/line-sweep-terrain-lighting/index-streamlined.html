@@ -1735,11 +1735,38 @@ a.index__tag:active {
     grid-template-columns: 1fr;
     gap: 16px;
   }
+  /* Hide view toggle on narrow screens - always show grid */
+  .index-view-toggle {
+    display: none;
+  }
+  /* Force grid view styles even if index--list class is present */
+  .index--list {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 16px;
+    max-width: none;
+  }
   .index--list .index__item {
-    flex-direction: column;
+    display: block;
+    flex-direction: unset;
+    align-items: unset;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.06);
   }
   .index--list .index__image-container {
     width: 100%;
+    flex-shrink: unset;
+  }
+  .index--list .index__content {
+    flex: unset;
+    padding: 16px;
+  }
+  .index--list .index__title {
+    font-size: 15px;
+    margin: 0 0 6px 0;
+  }
+  .index--list .index__description {
+    display: none;
   }
   .resource-links {
     justify-content: flex-start;
