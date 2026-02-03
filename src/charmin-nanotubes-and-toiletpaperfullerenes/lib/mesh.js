@@ -1542,6 +1542,198 @@ export class Mesh {
   }
 
 
+  // ============ Normal Computation ============
+
+  // Compute consistent face normals using flood fill to ensure uniform winding
+  // Returns an array of normals (one per face, same order as extractFaces())
+  // Each normal is [nx, ny, nz] pointing "outward" from the mesh
+  computeFaceNormals() {
+    const faces = this.extractFaces();
+    if (faces.length === 0) return [];
+
+    // Compute raw normals for each face using Newell's method
+    const normals = [];
+    for (const face of faces) {
+      normals.push(this._computeFaceNormal(face));
+    }
+
+    // Build face adjacency (which faces share edges)
+    const edgeToFaces = new Map();
+    for (let fi = 0; fi < faces.length; fi++) {
+      const face = faces[fi];
+      for (let i = 0; i < face.length; i++) {
+        const a = face[i];
+        const b = face[(i + 1) % face.length];
+        const key = a < b ? `${a},${b}` : `${b},${a}`;
+        if (!edgeToFaces.has(key)) {
+          edgeToFaces.set(key, []);
+        }
+        edgeToFaces.get(key).push({ faceIndex: fi, v1: a, v2: b });
+      }
+    }
+
+    // Flood fill to make normals consistent
+    const visited = new Array(faces.length).fill(false);
+    const flipped = new Array(faces.length).fill(false);
+    const queue = [0];
+    visited[0] = true;
+
+    while (queue.length > 0) {
+      const fi = queue.shift();
+      const face = faces[fi];
+
+      // Check all adjacent faces
+      for (let i = 0; i < face.length; i++) {
+        const a = face[i];
+        const b = face[(i + 1) % face.length];
+        const key = a < b ? `${a},${b}` : `${b},${a}`;
+        const adjacent = edgeToFaces.get(key) || [];
+
+        for (const adj of adjacent) {
+          if (adj.faceIndex === fi) continue;
+          if (visited[adj.faceIndex]) continue;
+
+          visited[adj.faceIndex] = true;
+          queue.push(adj.faceIndex);
+
+          // Check winding consistency
+          // If both faces traverse the shared edge in the same direction,
+          // they have opposite winding and one should be flipped
+          const thisEdgeOrder = (a === face[i] && b === face[(i + 1) % face.length]);
+          const adjFace = faces[adj.faceIndex];
+          const adjEdgeOrder = (adj.v1 === a && adj.v2 === b);
+
+          // If edge directions match, normals should point opposite ways
+          // (consistent winding means edges go opposite directions on shared edge)
+          if (thisEdgeOrder === adjEdgeOrder) {
+            // Same edge direction -> flip adjacent normal
+            if (flipped[fi]) {
+              // If current face was flipped, adjacent should not be
+              flipped[adj.faceIndex] = false;
+            } else {
+              flipped[adj.faceIndex] = true;
+            }
+          } else {
+            // Opposite edge direction -> same normal direction
+            flipped[adj.faceIndex] = flipped[fi];
+          }
+        }
+      }
+    }
+
+    // Apply flips
+    for (let i = 0; i < normals.length; i++) {
+      if (flipped[i]) {
+        normals[i][0] = -normals[i][0];
+        normals[i][1] = -normals[i][1];
+        normals[i][2] = -normals[i][2];
+      }
+    }
+
+    // Orient normals outward (away from mesh centroid)
+    const centroid = this.computeCentroid();
+    let outwardCount = 0;
+    let inwardCount = 0;
+
+    for (let fi = 0; fi < faces.length; fi++) {
+      const face = faces[fi];
+      // Compute face centroid
+      let fx = 0, fy = 0, fz = 0;
+      for (const v of face) {
+        const p = v * 3;
+        fx += this.positions[p];
+        fy += this.positions[p + 1];
+        fz += this.positions[p + 2];
+      }
+      fx /= face.length;
+      fy /= face.length;
+      fz /= face.length;
+
+      // Vector from mesh centroid to face centroid
+      const dx = fx - centroid[0];
+      const dy = fy - centroid[1];
+      const dz = fz - centroid[2];
+
+      // Dot with normal
+      const dot = normals[fi][0] * dx + normals[fi][1] * dy + normals[fi][2] * dz;
+      if (dot > 0) outwardCount++;
+      else inwardCount++;
+    }
+
+    // If majority point inward, flip all
+    if (inwardCount > outwardCount) {
+      for (const n of normals) {
+        n[0] = -n[0];
+        n[1] = -n[1];
+        n[2] = -n[2];
+      }
+    }
+
+    return normals;
+  }
+
+  // Compute the normal of a single face using Newell's method
+  _computeFaceNormal(face) {
+    let nx = 0, ny = 0, nz = 0;
+    const n = face.length;
+
+    for (let i = 0; i < n; i++) {
+      const v0 = face[i];
+      const v1 = face[(i + 1) % n];
+      const p0 = v0 * 3;
+      const p1 = v1 * 3;
+
+      const x0 = this.positions[p0], y0 = this.positions[p0 + 1], z0 = this.positions[p0 + 2];
+      const x1 = this.positions[p1], y1 = this.positions[p1 + 1], z1 = this.positions[p1 + 2];
+
+      nx += (y0 - y1) * (z0 + z1);
+      ny += (z0 - z1) * (x0 + x1);
+      nz += (x0 - x1) * (y0 + y1);
+    }
+
+    const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+    if (len > 0.0001) {
+      return [nx / len, ny / len, nz / len];
+    }
+    return [0, 1, 0]; // Fallback
+  }
+
+  // Compute per-vertex normals by averaging adjacent face normals
+  // Returns Float32Array with 3 components per vertex
+  computeVertexNormals() {
+    const faces = this.extractFaces();
+    const faceNormals = this.computeFaceNormals();
+    const vertexNormals = new Float32Array(this.vertexCount * 3);
+
+    // Accumulate face normals to vertices
+    for (let fi = 0; fi < faces.length; fi++) {
+      const face = faces[fi];
+      const fn = faceNormals[fi];
+      for (const v of face) {
+        const i3 = v * 3;
+        vertexNormals[i3] += fn[0];
+        vertexNormals[i3 + 1] += fn[1];
+        vertexNormals[i3 + 2] += fn[2];
+      }
+    }
+
+    // Normalize
+    for (let v = 0; v < this.vertexCount; v++) {
+      const i3 = v * 3;
+      const nx = vertexNormals[i3];
+      const ny = vertexNormals[i3 + 1];
+      const nz = vertexNormals[i3 + 2];
+      const len = Math.sqrt(nx * nx + ny * ny + nz * nz);
+      if (len > 0.0001) {
+        vertexNormals[i3] = nx / len;
+        vertexNormals[i3 + 1] = ny / len;
+        vertexNormals[i3 + 2] = nz / len;
+      }
+    }
+
+    return vertexNormals;
+  }
+
   // ============ Iteration Helpers for Physics ============
 
   // Iterate over edges: callback(v0, v1, edgeIndex)

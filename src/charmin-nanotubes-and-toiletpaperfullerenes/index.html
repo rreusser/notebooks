@@ -144,7 +144,7 @@ function ctrl(input: HTMLElement) {
 
 const presetGraph = ctrl(Inputs.select(Object.keys(presetGraphs), {
   label: "Preset",
-  value: "Starter"
+  value: "C260 I[5,7]"
 }));
 
 const resetButton = ctrl(Inputs.button("Reset"));
@@ -209,10 +209,21 @@ const pointSize = ctrl2(Inputs.range([0.5, 5], {
   step: 0.5
 }));
 
+const edgeWidth = ctrl2(Inputs.range([0, 6], {
+  label: "Edge width",
+  value: 2,
+  step: 0.5
+}));
+
 const faceOpacity = ctrl2(Inputs.range([0, 1], {
   label: "Face opacity",
   value: 0.3,
   step: 0.05
+}));
+
+const faceShading = ctrl2(Inputs.toggle({
+  label: "Face shading",
+  value: true
 }));
 
 const depthFalloffWidth = ctrl2(Inputs.range([1, 20], {
@@ -243,9 +254,11 @@ const state: {
     simulate: boolean;
     iterations: number;
     pointSize: number;
+    edgeWidth: number;
     strainColoring: number;
     showFaces: boolean;
     faceOpacity: number;
+    faceShading: boolean;
     depthFalloffWidth: number;
   };
 } = {
@@ -267,9 +280,11 @@ const state: {
     simulate: true,
     iterations: 1,
     pointSize: 3,
+    edgeWidth: 2,
     strainColoring: 0,
     showFaces: true,
     faceOpacity: 0.3,
+    faceShading: false,
     depthFalloffWidth: 7
   }
 };
@@ -322,9 +337,11 @@ if (state.physics) {
 state.renderParams.simulate = simulate;
 state.renderParams.iterations = iterations;
 state.renderParams.pointSize = pointSize;
+state.renderParams.edgeWidth = edgeWidth;
 state.renderParams.strainColoring = strainColoring ? 1.5 : 0;
 state.renderParams.showFaces = faceOpacity > 0;
 state.renderParams.faceOpacity = faceOpacity;
+state.renderParams.faceShading = faceShading;
 state.renderParams.depthFalloffWidth = depthFalloffWidth * l0;
 state.dirty = true;
   </script>
@@ -551,9 +568,12 @@ state.frame = state.regl.frame(() => {
   state.setCamera!(() => {
     state.renderer?.render(state.mesh!, state.physics!, {
       pointSize: state.renderParams.pointSize,
+      edgeWidth: state.renderParams.edgeWidth,
       strainColoring: state.renderParams.strainColoring,
       showFaces: state.renderParams.showFaces,
       faceOpacity: state.renderParams.faceOpacity,
+      faceShading: state.renderParams.faceShading,
+      cameraPosition: state.controller!.camera.eye(),
       selectedVertexIndex: selectedVertexIdx,
       hoverVertexIndex: state.interactions?.hoverVertexIndex ?? -1,
       selectedEdgeIndex: selectedEdgeIdx,

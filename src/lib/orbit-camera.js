@@ -52,6 +52,17 @@ export class OrbitCamera {
     return out;
   }
 
+  // Get eye position in world space
+  eye(out = vec3.create()) {
+    // Eye is at center + rotation * (0, 0, distance)
+    out[0] = 0;
+    out[1] = 0;
+    out[2] = this.distance;
+    vec3.transformQuat(out, out, this.rotation);
+    vec3.add(out, out, this.center);
+    return out;
+  }
+
   pan(dpan) {
     const d = this.distance;
     const scratch = this._scratchVec;

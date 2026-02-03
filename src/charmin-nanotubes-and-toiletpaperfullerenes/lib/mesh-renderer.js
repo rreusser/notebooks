@@ -1,6 +1,100 @@
 // Mesh rendering for trivalent graphs using regl
 // Draws vertices as instanced icospheres, edges as thick lines, and faces as filled polygons
 
+// Cache for mesh topology - avoids re-triangulating every frame
+const meshTopologyCache = new WeakMap();
+
+function getOrUpdateTopologyCache(mesh) {
+  let cache = meshTopologyCache.get(mesh);
+
+  // Check if cache is valid (topology unchanged)
+  if (cache && cache.vertexCount === mesh.vertexCount && cache.edgeCount === mesh.edgeCount) {
+    return cache;
+  }
+
+  // Rebuild cache - topology changed
+  const faces = mesh.extractFaces();
+
+  // Count triangles
+  let totalTriangles = 0;
+  for (const face of faces) {
+    if (face.length >= 3) totalTriangles += face.length - 2;
+  }
+
+  // Build triangle vertex indices (which mesh vertex each expanded triangle vertex maps to)
+  const triangleVertexIndices = new Uint32Array(totalTriangles * 3);
+  const triangleEdgeCounts = new Float32Array(totalTriangles * 3);
+
+  let triIdx = 0;
+  for (const face of faces) {
+    if (face.length < 3) continue;
+    const edgeCount = face.length;
+    const v0 = face[0];
+
+    for (let i = 1; i < face.length - 1; i++) {
+      const idx = triIdx * 3;
+      triangleVertexIndices[idx] = v0;
+      triangleVertexIndices[idx + 1] = face[i];
+      triangleVertexIndices[idx + 2] = face[i + 1];
+
+      triangleEdgeCounts[idx] = edgeCount;
+      triangleEdgeCounts[idx + 1] = edgeCount;
+      triangleEdgeCounts[idx + 2] = edgeCount;
+
+      triIdx++;
+    }
+  }
+
+  // Preallocate reusable data arrays
+  const triangleData = new Float32Array(totalTriangles * 9);
+  const normalData = new Float32Array(totalTriangles * 9);
+
+  cache = {
+    vertexCount: mesh.vertexCount,
+    edgeCount: mesh.edgeCount,
+    triangleCount: totalTriangles,
+    triangleVertexIndices,
+    triangleEdgeCounts,
+    triangleData,
+    normalData
+  };
+
+  meshTopologyCache.set(mesh, cache);
+  return cache;
+}
+
+function updateFaceBuffers(mesh, cache) {
+  const { triangleVertexIndices, triangleData, normalData, triangleCount } = cache;
+  const positions = mesh.positions;
+
+  // Recompute vertex normals (positions changed, but this uses cached faces)
+  const vertexNormals = mesh.computeVertexNormals();
+
+  // Fill in position and normal data using cached indices
+  for (let t = 0; t < triangleCount; t++) {
+    const triBase = t * 3;
+    const dataBase = t * 9;
+
+    for (let v = 0; v < 3; v++) {
+      const meshVertex = triangleVertexIndices[triBase + v];
+      const srcIdx = meshVertex * 3;
+      const dstIdx = dataBase + v * 3;
+
+      // Position
+      triangleData[dstIdx] = positions[srcIdx];
+      triangleData[dstIdx + 1] = positions[srcIdx + 1];
+      triangleData[dstIdx + 2] = positions[srcIdx + 2];
+
+      // Normal
+      normalData[dstIdx] = vertexNormals[srcIdx];
+      normalData[dstIdx + 1] = vertexNormals[srcIdx + 1];
+      normalData[dstIdx + 2] = vertexNormals[srcIdx + 2];
+    }
+  }
+
+  return { triangleData, normalData, edgeCounts: cache.triangleEdgeCounts, triangleCount };
+}
+
 export function createMeshRenderer(regl, icosphere) {
   const drawVertices = createDrawVertices(regl, icosphere);
   const drawEdges = createDrawEdges(regl);
@@ -10,6 +104,7 @@ export function createMeshRenderer(regl, icosphere) {
   const vertexBuffer = regl.buffer({ usage: 'dynamic', data: new Float32Array(65536) });
   const edgeBuffer = regl.buffer({ usage: 'dynamic', data: new Float32Array(65536) });
   const faceBuffer = regl.buffer({ usage: 'dynamic', data: new Float32Array(65536) });
+  const faceNormalBuffer = regl.buffer({ usage: 'dynamic', data: new Float32Array(65536) });
   const faceEdgeCountBuffer = regl.buffer({ usage: 'dynamic', data: new Float32Array(65536) });
   const indexBuffer = regl.buffer(new Uint16Array(Array.from({ length: 65536 }, (_, i) => i)));
 
@@ -17,6 +112,7 @@ export function createMeshRenderer(regl, icosphere) {
     render(mesh, physics, opts = {}) {
       const {
         pointSize = 3,
+        edgeWidth = 2,
         strainColoring = 1.5,
         selectedVertexIndex = -1,
         hoverVertexIndex = -1,
@@ -24,6 +120,8 @@ export function createMeshRenderer(regl, icosphere) {
         hoverEdgeIndex = -1,
         showFaces = true,
         faceOpacity = 0.3,
+        faceShading = false,
+        cameraPosition = [0, 0, 20],
         depthFalloff = false,
         depthFalloffWidth = 7,
         focusCenter = [0, 0, 0]
@@ -44,30 +142,39 @@ export function createMeshRenderer(regl, icosphere) {
 
       // Draw faces first (behind everything)
       if (showFaces) {
-        const { triangleData, edgeCounts, triangleCount } = triangulateFaces(mesh);
-        if (triangleCount > 0) {
+        const cache = getOrUpdateTopologyCache(mesh);
+        if (cache.triangleCount > 0) {
+          const { triangleData, normalData, edgeCounts, triangleCount } = updateFaceBuffers(mesh, cache);
           faceBuffer.subdata(triangleData);
+          faceNormalBuffer.subdata(normalData);
           faceEdgeCountBuffer.subdata(edgeCounts);
           drawFaces({
             faceBuffer,
+            faceNormalBuffer,
             faceEdgeCountBuffer,
             count: triangleCount,
             faceOpacity,
+            faceShading,
+            cameraPosition,
             ...depthParams
           });
         }
       }
 
-      // Draw edges
-      drawEdges({
-        vertexBuffer: edgeBuffer,
-        count: mesh.edgeCount,
-        strainColoring,
-        l0: physics.l0,
-        selectedIndex: selectedEdgeIndex,
-        hoverIndex: hoverEdgeIndex,
-        ...depthParams
-      });
+      // Draw edges (skip if width is 0)
+      if (edgeWidth > 0) {
+        drawEdges({
+          vertexBuffer: edgeBuffer,
+          count: mesh.edgeCount,
+          edgeWidth,
+          strainColoring,
+          l0: physics.l0,
+          selectedIndex: selectedEdgeIndex,
+          hoverIndex: hoverEdgeIndex,
+          faceShading,
+          ...depthParams
+        });
+      }
 
       // Draw vertices on top
       drawVertices({
@@ -86,70 +193,11 @@ export function createMeshRenderer(regl, icosphere) {
       vertexBuffer.destroy();
       edgeBuffer.destroy();
       faceBuffer.destroy();
+      faceNormalBuffer.destroy();
       faceEdgeCountBuffer.destroy();
       indexBuffer.destroy();
     }
   };
-}
-
-// Triangulate faces using fan triangulation (works for convex polygons)
-// Returns position data and edge count for each triangle (for coloring)
-function triangulateFaces(mesh) {
-  const faces = mesh.extractFaces();
-  if (faces.length === 0) {
-    return { triangleData: new Float32Array(0), edgeCounts: new Float32Array(0), triangleCount: 0 };
-  }
-
-  // Count total triangles needed
-  let totalTriangles = 0;
-  for (const face of faces) {
-    if (face.length >= 3) {
-      totalTriangles += face.length - 2;
-    }
-  }
-
-  // Create triangle data (3 vertices * 3 components * triangleCount)
-  const triangleData = new Float32Array(totalTriangles * 9);
-  // Edge count per triangle vertex (for coloring)
-  const edgeCounts = new Float32Array(totalTriangles * 3);
-  const positions = mesh.positions;
-  let offset = 0;
-  let edgeOffset = 0;
-
-  for (const face of faces) {
-    if (face.length < 3) continue;
-
-    const faceEdgeCount = face.length;
-
-    // Fan triangulation from first vertex
-    const v0 = face[0];
-    const p0 = v0 * 3;
-
-    for (let i = 1; i < face.length - 1; i++) {
-      const v1 = face[i];
-      const v2 = face[i + 1];
-      const p1 = v1 * 3;
-      const p2 = v2 * 3;
-
-      // Triangle: v0, v1, v2
-      triangleData[offset++] = positions[p0];
-      triangleData[offset++] = positions[p0 + 1];
-      triangleData[offset++] = positions[p0 + 2];
-      triangleData[offset++] = positions[p1];
-      triangleData[offset++] = positions[p1 + 1];
-      triangleData[offset++] = positions[p1 + 2];
-      triangleData[offset++] = positions[p2];
-      triangleData[offset++] = positions[p2 + 1];
-      triangleData[offset++] = positions[p2 + 2];
-
-      // Store edge count for all 3 vertices of this triangle
-      edgeCounts[edgeOffset++] = faceEdgeCount;
-      edgeCounts[edgeOffset++] = faceEdgeCount;
-      edgeCounts[edgeOffset++] = faceEdgeCount;
-    }
-  }
-
-  return { triangleData, edgeCounts, triangleCount: totalTriangles };
 }
 
 function flattenEdges(mesh) {
@@ -176,22 +224,48 @@ function flattenEdges(mesh) {
 }
 
 function createDrawFaces(regl) {
-  return regl({
-    vert: `
-      precision highp float;
-      attribute vec3 position;
-      attribute float edgeCount;
-      uniform mat4 projectionView;
-      uniform vec3 uFocusCenter;
-      varying float vEdgeCount;
-      varying float vRadialDist;
+  const faceVert = `
+    precision highp float;
+    attribute vec3 position;
+    attribute vec3 normal;
+    attribute float edgeCount;
+    uniform mat4 projectionView;
+    uniform vec3 uFocusCenter;
+    varying float vEdgeCount;
+    varying float vRadialDist;
+    varying vec3 vNormal;
+    varying vec3 vPosition;
 
-      void main() {
-        vEdgeCount = edgeCount;
-        vRadialDist = length(position - uFocusCenter);
-        gl_Position = projectionView * vec4(position, 1);
-      }
-    `,
+    void main() {
+      vEdgeCount = edgeCount;
+      vRadialDist = length(position - uFocusCenter);
+      vNormal = normal;
+      vPosition = position;
+      gl_Position = projectionView * vec4(position, 1);
+    }
+  `;
+
+  const faceAttributes = {
+    position: (_, props) => ({
+      buffer: props.faceBuffer,
+      offset: 0,
+      stride: 3 * 4
+    }),
+    normal: (_, props) => ({
+      buffer: props.faceNormalBuffer,
+      offset: 0,
+      stride: 3 * 4
+    }),
+    edgeCount: (_, props) => ({
+      buffer: props.faceEdgeCountBuffer,
+      offset: 0,
+      stride: 4
+    })
+  };
+
+  // Transparent flat-shaded faces (original)
+  const drawFacesTransparent = regl({
+    vert: faceVert,
     frag: `
       precision highp float;
       uniform float opacity;
@@ -199,14 +273,14 @@ function createDrawFaces(regl) {
       varying float vEdgeCount;
       varying float vRadialDist;
 
-      // Color faces by edge count using distinct colors
+
       vec3 getFaceColor(float edges) {
-        if (edges < 3.5) return vec3(1.0, 1.0, 0.5);       // Triangle: green
-        if (edges < 4.5) return vec3(1.0, 0.6, 0.2);       // Quad: orange
-        if (edges < 5.5) return vec3(0.2, 0.2, 1.0);       // Pentagon: blue
-        if (edges < 6.5) return vec3(0.2, 0.8, 0.3);       // Hexagon: green
-        if (edges < 7.5) return vec3(1.0, 0.3, 0.3);       // Heptagon: red
-        return vec3(0.6, 0.2, 0.8);                         // Octagon+: purple
+        if (edges < 3.5) return vec3(1.0, 0.65, 0.25);     // Triangle: bright yellow
+        if (edges < 4.5) return vec3(1.0, 0.7, 0.45);      // Quad: tangerine
+        if (edges < 5.5) return vec3(0.45, 0.75, 1.0);     // Pentagon: candy blue
+        if (edges < 6.5) return vec3(1.0, 0.75, 0.35);     // Hexagon: bright orange
+        if (edges < 7.5) return vec3(1.0, 0.5, 0.55);      // Heptagon: candy pink
+        return vec3(0.75, 0.6, 1.0);                        // Octagon+: bright lavender
       }
 
       float depthFalloffFactor() {
@@ -217,23 +291,11 @@ function createDrawFaces(regl) {
       void main() {
         vec3 color = getFaceColor(vEdgeCount);
         float falloff = depthFalloffFactor();
-        // For reverse subtract (dst - src): output what to subtract from white
-        // Subtracting (1 - color) * opacity tints toward the face color
+        // For reverse subtract: output what to subtract from white
         gl_FragColor = vec4(1.0 - color, opacity * falloff);
       }
     `,
-    attributes: {
-      position: (_, props) => ({
-        buffer: props.faceBuffer,
-        offset: 0,
-        stride: 3 * 4
-      }),
-      edgeCount: (_, props) => ({
-        buffer: props.faceEdgeCountBuffer,
-        offset: 0,
-        stride: 4
-      })
-    },
+    attributes: faceAttributes,
     uniforms: {
       opacity: (_, props) => props.faceOpacity ?? 0.3,
       uDepthFalloff: (_, props) => props.depthFalloff ?? 0,
@@ -243,27 +305,115 @@ function createDrawFaces(regl) {
     },
     blend: {
       enable: true,
-      equation: {
-        rgb: 'reverse subtract',
-        alpha: 'add'
-      },
-      func: {
-        srcRGB: 'src alpha',
-        srcAlpha: 'src alpha',
-        dstRGB: 'one',
-        dstAlpha: 'one'
-      }
+      equation: { rgb: 'reverse subtract', alpha: 'add' },
+      func: { srcRGB: 'src alpha', srcAlpha: 'src alpha', dstRGB: 'one', dstAlpha: 'one' }
     },
-    depth: {
-      enable: true,
-      mask: false
-    },
-    cull: {
-      enable: false
-    },
+    depth: { enable: true, mask: false },
+    cull: { enable: false },
     primitive: 'triangles',
     count: (_, props) => props.count * 3
   });
+
+  // Opaque lit-shaded faces
+  const drawFacesOpaque = regl({
+    vert: faceVert,
+    frag: `
+      precision highp float;
+      uniform vec3 uCameraPos;
+      uniform vec3 uLightOffset;
+      varying float vEdgeCount;
+      varying vec3 vNormal;
+      varying vec3 vPosition;
+
+      // Bright candy/plastic colors for a fun cartoony look
+      vec3 getFaceColor(float edges) {
+        if (edges < 3.5) return vec3(1.0, 0.65, 0.25);     // Triangle: bright yellow
+        if (edges < 4.5) return vec3(1.0, 0.7, 0.45);      // Quad: tangerine
+        if (edges < 5.5) return vec3(0.45, 0.75, 1.0);     // Pentagon: candy blue
+        if (edges < 6.5) return vec3(1.0, 0.75, 0.35);     // Hexagon: bright orange
+        if (edges < 7.5) return vec3(1.0, 0.5, 0.55);      // Heptagon: candy pink
+        return vec3(0.75, 0.6, 1.0);                        // Octagon+: bright lavender
+      }
+
+      // sRGB to linear conversion
+      vec3 toLinear(vec3 srgb) {
+        return pow(srgb, vec3(2.2));
+      }
+
+      // Linear to sRGB conversion
+      vec3 toSRGB(vec3 linear) {
+        return pow(linear, vec3(1.0 / 2.2));
+      }
+
+      void main() {
+        // Convert base color to linear space for lighting calculations
+        vec3 baseColor = toLinear(getFaceColor(vEdgeCount));
+
+        vec3 N = normalize(vNormal);
+        vec3 V = normalize(uCameraPos - vPosition);
+
+        // Light offset relative to camera (key light above and to the right)
+        vec3 lightPos = uCameraPos + uLightOffset;
+        vec3 L = normalize(lightPos - vPosition);
+
+        float NdotL = abs(dot(N, L));
+        float NdotV = abs(dot(N, V));
+
+        // Lighting in linear space - bright for candy/plastic look
+        float ambient = 0.4;
+        float diffuse = 0.5 * NdotL;
+
+        // Specular (Blinn-Phong) - bright highlights
+        vec3 H = normalize(L + V);
+        float NdotH = abs(dot(N, H));
+        float specular = 0.6 * pow(NdotH, 64.0);
+
+        // Multi-layer fresnel rim lighting for a glowing effect
+        float fresnel1 = pow(1.0 - NdotV, 2.0);   // Soft wide glow
+        float fresnel2 = pow(1.0 - NdotV, 4.0);   // Tighter bright rim
+        float fresnel3 = pow(1.0 - NdotV, 8.0);   // Very tight highlight
+
+        // Glow colors - warm tinted
+        vec3 glowColor = mix(baseColor, vec3(1.0), 0.5);  // Blend base with white
+        vec3 rimColor = vec3(1.0, 0.95, 0.9);             // Warm white
+
+        float lighting = ambient + diffuse;
+        vec3 color = baseColor * lighting;
+
+        // Layered rim/glow effect
+        color += glowColor * fresnel1 * 0.35;     // Soft colored glow
+        color += rimColor * fresnel2 * 0.5;       // Bright rim
+        color += vec3(1.0) * fresnel3 * 0.4;      // Hot edge highlight
+        color += vec3(1.0) * specular;            // Specular highlight
+
+        // Convert back to sRGB for display
+        color = toSRGB(clamp(color, 0.0, 1.0));
+
+        gl_FragColor = vec4(color, 1.0);
+      }
+    `,
+    attributes: faceAttributes,
+    uniforms: {
+      uCameraPos: (_, props) => props.cameraPosition ?? [0, 0, 20],
+      uFocusCenter: (_, props) => props.focusCenter ?? [0, 0, 0],
+      // Light offset relative to camera (above and to the right)
+      uLightOffset: [5, 8, 2]
+    },
+    blend: { enable: false },
+    depth: { enable: true, mask: true },
+    cull: { enable: false },
+    primitive: 'triangles',
+    count: (_, props) => props.count * 3
+  });
+
+  // Return a function that picks the right draw command
+  return (props) => {
+    if (props.faceShading) {
+      drawFacesOpaque(props);
+    } else {
+      drawFacesTransparent(props);
+    }
+  };
 }
 
 function createDrawVertices(regl, icosphere) {
@@ -458,7 +608,10 @@ function createDrawEdges(regl) {
     },
     polygonOffset: {
       enable: true,
-      offset: { factor: 2, units: 2 }
+      offset: {
+        factor: (_, props) => props.faceShading ? -1 : 2,
+        units: (_, props) => props.faceShading ? -100 : 2
+      }
     },
     attributes: {
       aLinePosition: [[-1, 0], [1, 0], [-1, 1], [1, 1]],
@@ -490,8 +643,8 @@ function createDrawEdges(regl) {
       uL0: (_, props) => props.l0 ?? 1,
       uStrainColoring: (_, props) => props.strainColoring ?? 0,
       uBorderColor: [1, 1, 1, 0.8],
-      uLineWidth: 2,
-      uBorderWidth: 1,
+      uLineWidth: (_, props) => props.edgeWidth ?? 2,
+      uBorderWidth: (_, props) => props.faceShading ? 0 : 1,
       uAspect: ctx => ctx.viewportWidth / ctx.viewportHeight,
       uScaleFactor: ctx => ctx.pixelRatio / ctx.viewportHeight,
       uPixelRatio: regl.context('pixelRatio'),

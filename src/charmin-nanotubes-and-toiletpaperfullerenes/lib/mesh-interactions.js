@@ -111,6 +111,8 @@ export class MeshInteractions {
 
   _getClosestVertex(x, y) {
     const mesh = this.mesh;
+    if (!mesh) return { index: -1, distance: Infinity };
+
     const projectionView = this.projectionView;
     const width = this.element.offsetWidth;
     const height = this.element.offsetHeight;
@@ -145,6 +147,8 @@ export class MeshInteractions {
 
   _getClosestEdge(x, y) {
     const mesh = this.mesh;
+    if (!mesh) return { index: -1, distance: Infinity };
+
     const projectionView = this.projectionView;
     const width = this.element.offsetWidth;
     const height = this.element.offsetHeight;
