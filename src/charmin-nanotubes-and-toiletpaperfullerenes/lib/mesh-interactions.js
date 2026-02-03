@@ -400,12 +400,25 @@ export class MeshInteractions {
       if (this.dragMode === 'vertex') {
         // Started click on a vertex
         if (target.type === 'vertex') {
-          // Clicked on existing vertex - maybe create edge
+          // Clicked on existing vertex - maybe create edge or merge
           if (this.candidateEdge) {
-            this.mesh.addEdge(this.candidateEdge[0], this.candidateEdge[1]);
+            if (event.shiftKey) {
+              // Shift+click: merge vertices instead of creating edge
+              const merged = this.mesh.mergeVertices(this.candidateEdge[0], this.candidateEdge[1]);
+              if (merged >= 0) {
+                this.selectedVertexIndex = merged;
+                this.selectedEdgeIndex = -1;
+              }
+            } else {
+              // Normal click: create edge
+              this.mesh.addEdge(this.candidateEdge[0], this.candidateEdge[1]);
+              this.selectedVertexIndex = target.index;
+              this.selectedEdgeIndex = -1;
+            }
+          } else {
+            this.selectedVertexIndex = target.index;
+            this.selectedEdgeIndex = -1;
           }
-          this.selectedVertexIndex = target.index;
-          this.selectedEdgeIndex = -1;
         } else if (this.selectedVertexIndex >= 0) {
           // Clicked in empty space while vertex was selected - spawn new vertex
           this._spawnVertex();
@@ -660,29 +673,6 @@ export class MeshInteractions {
         event.stopPropagation();
         break;
 
-      case 'KeyC':
-        if (this.selectedVertexIndex >= 0) {
-          const newIdx = this.mesh.collapseVertex(this.selectedVertexIndex);
-          this.selectedVertexIndex = newIdx;
-          this.hoverVertexIndex = -1;
-          this.activeVertexIndex = -1;
-          this.dirty = true;
-          event.preventDefault();
-          event.stopPropagation();
-        }
-        break;
-
-      case 'KeyS':
-        if (this.selectedVertexIndex >= 0) {
-          const newIdx = this.mesh.splitVertex(this.selectedVertexIndex);
-          this.selectedVertexIndex = newIdx;
-          this.hoverVertexIndex = -1;
-          this.activeVertexIndex = -1;
-          this.dirty = true;
-          event.preventDefault();
-          event.stopPropagation();
-        }
-        break;
 
       case 'KeyE':
         if (this.selectedVertexIndex >= 0) {
@@ -732,6 +722,119 @@ export class MeshInteractions {
         event.preventDefault();
         event.stopPropagation();
         break;
+    }
+
+    // Handle 's' key (extend degree-1, split degree-2, or split edge)
+    if (event.key === 's') {
+      if (this.selectedVertexIndex >= 0) {
+        const degree = this.mesh.degree(this.selectedVertexIndex);
+        if (degree === 1) {
+          // Extend degree-1 vertex with a new dangling vertex
+          const newEdgeIdx = this.mesh.extendVertex(this.selectedVertexIndex);
+          if (newEdgeIdx >= 0) {
+            const edge = this.mesh.getEdge(newEdgeIdx);
+            const newVertex = this.mesh.degree(edge[0]) === 1 ? edge[0] : edge[1];
+            this.selectedVertexIndex = newVertex;
+            this.selectedEdgeIndex = -1;
+            this.hoverEdgeIndex = -1;
+            this.hoverVertexIndex = -1;
+            this.dirty = true;
+          }
+        } else if (degree === 2) {
+          // Split degree-2 vertex into two degree-2 vertices
+          const newVertexIdx = this.mesh.splitVertex(this.selectedVertexIndex);
+          if (newVertexIdx !== this.selectedVertexIndex) {
+            this.selectedVertexIndex = newVertexIdx;
+            this.selectedEdgeIndex = -1;
+            this.hoverEdgeIndex = -1;
+            this.hoverVertexIndex = -1;
+            this.dirty = true;
+          }
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      } else if (this.selectedEdgeIndex >= 0) {
+        // Split selected edge
+        const newEdgeIdx = this.mesh.splitEdge(this.selectedEdgeIndex);
+        if (newEdgeIdx >= 0) {
+          this.selectedEdgeIndex = newEdgeIdx;
+          this.selectedVertexIndex = -1;
+          this.hoverEdgeIndex = -1;
+          this.hoverVertexIndex = -1;
+          this.dirty = true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+
+    // Handle 'v' key (extend vertex with dangling edge)
+    if (event.key === 'v') {
+      if (this.selectedVertexIndex >= 0) {
+        // Extend from selected vertex if it has room (degree < 3)
+        const newEdgeIdx = this.mesh.extendVertex(this.selectedVertexIndex);
+        if (newEdgeIdx >= 0) {
+          // Select the new vertex (the degree-1 endpoint of the new edge)
+          const edge = this.mesh.getEdge(newEdgeIdx);
+          const newVertex = this.mesh.degree(edge[0]) === 1 ? edge[0] : edge[1];
+          this.selectedVertexIndex = newVertex;
+          this.selectedEdgeIndex = -1;
+          this.hoverEdgeIndex = -1;
+          this.hoverVertexIndex = -1;
+          this.dirty = true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      }
+    }
+
+    // Handle 'c' key (collapse edge or vertex)
+    if (event.key === 'c') {
+      if (this.selectedEdgeIndex >= 0) {
+        // Collapse selected edge
+        const newEdgeIdx = this.mesh.collapseEdge(this.selectedEdgeIndex);
+        this.selectedEdgeIndex = newEdgeIdx;
+        this.selectedVertexIndex = -1;
+        this.hoverEdgeIndex = -1;
+        this.hoverVertexIndex = -1;
+        this.dirty = true;
+        event.preventDefault();
+        event.stopPropagation();
+      } else if (this.selectedVertexIndex >= 0) {
+        const degree = this.mesh.degree(this.selectedVertexIndex);
+        if (degree === 1) {
+          // Delete dangling vertex and select the adjacent vertex
+          const adjacentVertex = this.mesh.deleteVertex(this.selectedVertexIndex);
+          this.selectedVertexIndex = adjacentVertex;
+          this.hoverVertexIndex = -1;
+          this.activeVertexIndex = -1;
+          this.dirty = true;
+          event.preventDefault();
+          event.stopPropagation();
+        } else if (degree === 2) {
+          // Collapse degree-2 vertex
+          const newIdx = this.mesh.collapseVertex(this.selectedVertexIndex);
+          this.selectedVertexIndex = newIdx;
+          this.hoverVertexIndex = -1;
+          this.activeVertexIndex = -1;
+          this.dirty = true;
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }
+    }
+
+    // Handle number keys 3-8 (add face on selected edge)
+    if (this.selectedEdgeIndex >= 0) {
+      const num = parseInt(event.key, 10);
+      if (num >= 3 && num <= 8) {
+        const success = this.mesh.addFaceOnEdge(this.selectedEdgeIndex, num);
+        if (success) {
+          this.dirty = true;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+      }
     }
 
     this.onChange();

@@ -144,7 +144,7 @@ function ctrl(input: HTMLElement) {
 
 const presetGraph = ctrl(Inputs.select(Object.keys(presetGraphs), {
   label: "Preset",
-  value: "C260 I[5,7]"
+  value: "Starter"
 }));
 
 const resetButton = ctrl(Inputs.button("Reset"));
@@ -579,11 +579,22 @@ invalidation.then(() => {
 
 // Create figure with canvas and caption
 const figcaption = html`<figcaption style="padding:0 10px">
-  Click a vertex or edge to select. With a vertex selected, click to add a new vertex or click an existing vertex to create a connection.
-  <kbd>Space</kbd> to deselect.
-  <kbd>Backspace</kbd> deletes selected vertices or edges. <kbd>s</kbd>/<kbd>c</kbd> splits/collapses vertices of degree 2.
-  <kbd>e</kbd> to explode a vertex. <kbd>h</kbd> performs a Stone-Wales transformation on a selected edge.
-  Drag to rotate, <kbd>Shift</kbd> + drag to pan, <kbd>a</kbd> to aim camera at selection.
+  Click a vertex or edge to select. Drag to rotate, <kbd>Shift</kbd> + drag to pan.
+  <details style="margin-top: 0.5em">
+    <summary style="cursor: pointer">Keyboard shortcuts</summary>
+    <table style="margin-top: 0.5em; font-size: 0.9em; border-collapse: collapse">
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>Space</kbd></td><td>Deselect</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>Backspace</kbd></td><td>Delete selected vertex or edge</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>s</kbd></td><td>Extend degree-1 vertex, split degree-2 vertex, or split edge</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>c</kbd></td><td>Collapse edge, degree-2 vertex, or dangling vertex</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>v</kbd></td><td>Extend vertex with dangling edge</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>e</kbd></td><td>Explode vertex</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>h</kbd></td><td>Stone-Wales transformation on edge</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>a</kbd></td><td>Aim camera at selection</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>Shift</kbd>+click</td><td>Merge vertices instead of connecting</td></tr>
+      <tr><td style="padding: 2px 8px 2px 0"><kbd>3</kbd>-<kbd>8</kbd></td><td>Add polygon face on selected edge</td></tr>
+    </table>
+  </details>
 </figcaption>`;
 
 const figure = html`

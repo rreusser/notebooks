@@ -266,6 +266,73 @@ export class Mesh {
     return adjacentVertex;
   }
 
+  // Merge two vertices into one (vertex b is deleted, its edges move to a)
+  // Returns the merged vertex index, or -1 if merge is not possible
+  mergeVertices(a, b) {
+    if (a < 0 || a >= this.vertexCount) return -1;
+    if (b < 0 || b >= this.vertexCount) return -1;
+    if (a === b) return a;
+
+    const neighborsA = this.getNeighbors(a);
+    const neighborsB = this.getNeighbors(b);
+
+    // Check if they're already connected (would need to remove that edge)
+    const alreadyConnected = neighborsA.includes(b);
+
+    // Calculate resulting degree
+    // If connected: degree = degA + degB - 2 (remove the connecting edge from both)
+    // If not connected: degree = degA + degB
+    const degA = neighborsA.length;
+    const degB = neighborsB.length;
+    const resultingDegree = alreadyConnected ? (degA + degB - 2) : (degA + degB);
+
+    if (resultingDegree > 3) return -1;
+
+    // Check for shared neighbors (other than each other) - would create duplicate edges
+    const sharedNeighbors = neighborsA.filter(n => n !== b && neighborsB.includes(n));
+    if (sharedNeighbors.length > 0) return -1;
+
+    this._faces = null;
+
+    // If connected, remove the edge between them first
+    if (alreadyConnected) {
+      this._removeEdgeBetween(a, b);
+    }
+
+    // Transfer B's edges to A
+    const neighborsOfB = this.getNeighbors(b); // Get fresh list after potential edge removal
+    for (const neighbor of neighborsOfB) {
+      this._removeEdgeBetween(b, neighbor);
+      this._addEdgeInternal(a, neighbor);
+    }
+
+    // Delete vertex B (now has no edges)
+    const lastVertex = this.vertexCount - 1;
+    let aAdjusted = a;
+
+    if (b !== lastVertex) {
+      // B gets swapped with last vertex
+      const b3 = b * 3;
+      const last3 = lastVertex * 3;
+      this.positions[b3] = this.positions[last3];
+      this.positions[b3 + 1] = this.positions[last3 + 1];
+      this.positions[b3 + 2] = this.positions[last3 + 2];
+      this.neighbors[b3] = this.neighbors[last3];
+      this.neighbors[b3 + 1] = this.neighbors[last3 + 1];
+      this.neighbors[b3 + 2] = this.neighbors[last3 + 2];
+      this._remapVertex(lastVertex, b);
+
+      // If a was the last vertex, it moved to b's slot
+      if (a === lastVertex) {
+        aAdjusted = b;
+      }
+    }
+
+    this.vertexCount--;
+
+    return aAdjusted;
+  }
+
   _removeEdgeBetween(v0, v1) {
     // Find and remove edge from edge list
     for (let i = 0; i < this.edgeCount; i++) {
@@ -360,6 +427,736 @@ export class Mesh {
     this.edgeCount--;
 
     return true;
+  }
+
+  // ============ Edge Operations ============
+
+  // Collapse an edge by merging its two endpoints into one vertex
+  // The new vertex is placed at the midpoint
+  // Returns the edge index of an incident edge, or -1 if failed
+  collapseEdge(edgeIndex) {
+    if (edgeIndex < 0 || edgeIndex >= this.edgeCount) return -1;
+
+    const edge = this.getEdge(edgeIndex);
+    const a = edge[0];
+    const b = edge[1];
+
+    // Check if collapse would result in valid geometry
+    // The merged vertex would have (degree(a) - 1) + (degree(b) - 1) neighbors
+    // This must be <= 3 for a valid trivalent graph
+    const degA = this.degree(a);
+    const degB = this.degree(b);
+    if (degA + degB - 2 > 3) return -1;
+
+    // Also check for shared neighbors (would create duplicate edges)
+    const neighborsA = this.getNeighbors(a);
+    const neighborsB = this.getNeighbors(b);
+    const sharedNeighbors = neighborsA.filter(n => n !== b && neighborsB.includes(n));
+    if (sharedNeighbors.length > 0) return -1;
+
+    // BEFORE any modification, find the continuation target.
+    // Priority: if one endpoint has degree 2, continue through it to its other neighbor.
+    // This ensures we stay on chains when collapsing.
+    let continuationTarget = -1;
+
+    // If B has degree 2, its other neighbor is the continuation
+    if (degB === 2) {
+      for (const n of neighborsB) {
+        if (n !== a) {
+          continuationTarget = n;
+          break;
+        }
+      }
+    }
+    // Otherwise if A has degree 2, its other neighbor is the continuation
+    if (continuationTarget < 0 && degA === 2) {
+      for (const n of neighborsA) {
+        if (n !== b) {
+          continuationTarget = n;
+          break;
+        }
+      }
+    }
+
+    // Secondary: look for degree-2 or degree-1 neighbors (for chain/wing following)
+    let chainTarget = -1;
+    let wingTarget = -1;
+    for (const n of neighborsB) {
+      if (n !== a) {
+        if (this.degree(n) === 2 && chainTarget < 0) {
+          chainTarget = n;
+        } else if (this.degree(n) === 1 && wingTarget < 0) {
+          wingTarget = n;
+        }
+      }
+    }
+    let chainTargetA = -1;
+    let wingTargetA = -1;
+    for (const n of neighborsA) {
+      if (n !== b) {
+        if (this.degree(n) === 2 && chainTargetA < 0) {
+          chainTargetA = n;
+        } else if (this.degree(n) === 1 && wingTargetA < 0) {
+          wingTargetA = n;
+        }
+      }
+    }
+
+    this._faces = null;
+
+    // Get the midpoint position
+    const posA = this.getPosition(a);
+    const posB = this.getPosition(b);
+    const midX = (posA[0] + posB[0]) / 2;
+    const midY = (posA[1] + posB[1]) / 2;
+    const midZ = (posA[2] + posB[2]) / 2;
+
+    // Collect all neighbors of a and b (excluding each other)
+    const allNeighbors = [
+      ...neighborsA.filter(n => n !== b),
+      ...neighborsB.filter(n => n !== a)
+    ];
+
+    // Remove all edges from both vertices
+    for (const n of neighborsA) {
+      this._removeEdgeBetween(a, n);
+    }
+    for (const n of neighborsB) {
+      this._removeEdgeBetween(b, n);
+    }
+
+    // Delete vertex b (swap with last)
+    // First, handle the case where a or b might be swapped
+    const lastVertex = this.vertexCount - 1;
+
+    // Delete b first
+    let aAdjusted = a;
+    if (b !== lastVertex) {
+      // b gets swapped with last
+      // If a is the last vertex, a moves to b's position
+      if (a === lastVertex) {
+        aAdjusted = b;
+      }
+      // Copy last vertex to b's slot
+      const b3 = b * 3;
+      const last3 = lastVertex * 3;
+      this.positions[b3] = this.positions[last3];
+      this.positions[b3 + 1] = this.positions[last3 + 1];
+      this.positions[b3 + 2] = this.positions[last3 + 2];
+      this.neighbors[b3] = this.neighbors[last3];
+      this.neighbors[b3 + 1] = this.neighbors[last3 + 1];
+      this.neighbors[b3 + 2] = this.neighbors[last3 + 2];
+      this._remapVertex(lastVertex, b);
+
+      // Update allNeighbors if any was the last vertex
+      for (let i = 0; i < allNeighbors.length; i++) {
+        if (allNeighbors[i] === lastVertex) {
+          allNeighbors[i] = b;
+        }
+      }
+    }
+    this.vertexCount--;
+
+    // Now set the remaining vertex (aAdjusted) position to midpoint
+    this.setPosition(aAdjusted, midX, midY, midZ);
+
+    // Clear neighbor slots for aAdjusted
+    const a3 = aAdjusted * 3;
+    this.neighbors[a3] = -1;
+    this.neighbors[a3 + 1] = -1;
+    this.neighbors[a3 + 2] = -1;
+
+    // Map targets through the vertex deletion
+    // If target was the lastVertex and got remapped to b's slot, update it
+    let continuationTargetMapped = continuationTarget;
+    if (continuationTarget === lastVertex && b !== lastVertex) {
+      continuationTargetMapped = b;
+    }
+    let chainTargetMapped = chainTarget;
+    if (chainTarget === lastVertex && b !== lastVertex) {
+      chainTargetMapped = b;
+    }
+    let chainTargetAMapped = chainTargetA;
+    if (chainTargetA === lastVertex && b !== lastVertex) {
+      chainTargetAMapped = b;
+    }
+    let wingTargetMapped = wingTarget;
+    if (wingTarget === lastVertex && b !== lastVertex) {
+      wingTargetMapped = b;
+    }
+    let wingTargetAMapped = wingTargetA;
+    if (wingTargetA === lastVertex && b !== lastVertex) {
+      wingTargetAMapped = b;
+    }
+
+    // Re-add edges to the merged vertex
+    for (const n of allNeighbors) {
+      if (n >= this.vertexCount) continue;  // Skip if out of bounds
+      if (n === aAdjusted) continue;  // Skip self-loops
+      this._addEdgeInternal(aAdjusted, n);
+    }
+
+    // Priority 1: continuation through degree-2 endpoint (stay on the chain we came from)
+    if (continuationTargetMapped >= 0 && continuationTargetMapped < this.vertexCount) {
+      const edgeIdx = this.findEdge(aAdjusted, continuationTargetMapped);
+      if (edgeIdx >= 0) return edgeIdx;
+    }
+
+    // Priority 2: neighbor that has degree 2 (continue along a chain)
+    if (chainTargetMapped >= 0 && chainTargetMapped < this.vertexCount) {
+      const edgeIdx = this.findEdge(aAdjusted, chainTargetMapped);
+      if (edgeIdx >= 0) return edgeIdx;
+    }
+
+    if (chainTargetAMapped >= 0 && chainTargetAMapped < this.vertexCount) {
+      const edgeIdx = this.findEdge(aAdjusted, chainTargetAMapped);
+      if (edgeIdx >= 0) return edgeIdx;
+    }
+
+    // Wing targets: stay on the wing edge (B's side first)
+    if (wingTargetMapped >= 0 && wingTargetMapped < this.vertexCount) {
+      const edgeIdx = this.findEdge(aAdjusted, wingTargetMapped);
+      if (edgeIdx >= 0) return edgeIdx;
+    }
+
+    if (wingTargetAMapped >= 0 && wingTargetAMapped < this.vertexCount) {
+      const edgeIdx = this.findEdge(aAdjusted, wingTargetAMapped);
+      if (edgeIdx >= 0) return edgeIdx;
+    }
+
+    // Fallback: prefer interior edges (to vertices with degree > 1) over wing edges
+    const validNeighbors = allNeighbors.filter(n => n < this.vertexCount && n !== aAdjusted);
+
+    // First try to find an interior neighbor (degree > 1)
+    for (const n of validNeighbors) {
+      if (this.degree(n) > 1) {
+        const edgeIdx = this.findEdge(aAdjusted, n);
+        if (edgeIdx >= 0) return edgeIdx;
+      }
+    }
+
+    // Otherwise return any edge
+    if (validNeighbors.length > 0) {
+      const fallbackEdge = this.findEdge(aAdjusted, validNeighbors[0]);
+      return fallbackEdge >= 0 ? fallbackEdge : -1;
+    }
+
+    return -1;
+  }
+
+  // Extend from a vertex by adding a new vertex connected to it
+  // Only works if vertex has degree < 3
+  // Returns the edge index of the new edge, or -1 if can't extend
+  extendVertex(vertexIndex) {
+    if (vertexIndex < 0 || vertexIndex >= this.vertexCount) return -1;
+
+    const deg = this.degree(vertexIndex);
+    if (deg >= 3) return -1;  // No room for another edge
+
+    this._faces = null;
+
+    const pos = this.getPosition(vertexIndex);
+    const neighbors = this.getNeighbors(vertexIndex);
+
+    let newX, newY, newZ;
+
+    if (deg === 0) {
+      // Isolated vertex: extend in arbitrary direction
+      newX = pos[0] + 1;
+      newY = pos[1];
+      newZ = pos[2];
+    } else if (deg === 1) {
+      // Degree 1: extend opposite to the single neighbor
+      const posNeighbor = this.getPosition(neighbors[0]);
+      const dx = pos[0] - posNeighbor[0];
+      const dy = pos[1] - posNeighbor[1];
+      const dz = pos[2] - posNeighbor[2];
+      newX = pos[0] + dx;
+      newY = pos[1] + dy;
+      newZ = pos[2] + dz;
+    } else {
+      // Degree 2: extend outward (opposite to average of neighbor directions)
+      let avgDx = 0, avgDy = 0, avgDz = 0;
+      for (const n of neighbors) {
+        const posN = this.getPosition(n);
+        avgDx += posN[0] - pos[0];
+        avgDy += posN[1] - pos[1];
+        avgDz += posN[2] - pos[2];
+      }
+      const len = Math.sqrt(avgDx * avgDx + avgDy * avgDy + avgDz * avgDz);
+      if (len > 0.0001) {
+        avgDx /= len;
+        avgDy /= len;
+        avgDz /= len;
+      }
+      // Use average edge length
+      let avgLen = 0;
+      for (const n of neighbors) {
+        const posN = this.getPosition(n);
+        const dx = posN[0] - pos[0];
+        const dy = posN[1] - pos[1];
+        const dz = posN[2] - pos[2];
+        avgLen += Math.sqrt(dx * dx + dy * dy + dz * dz);
+      }
+      avgLen /= neighbors.length;
+
+      newX = pos[0] - avgDx * avgLen;
+      newY = pos[1] - avgDy * avgLen;
+      newZ = pos[2] - avgDz * avgLen;
+    }
+
+    // Add new vertex and edge
+    const newVertex = this._addVertexInternal(newX, newY, newZ);
+    const newEdgeIdx = this._addEdgeInternal(vertexIndex, newVertex);
+
+    return newEdgeIdx;
+  }
+
+  // Extend an edge by adding a new vertex at an endpoint with degree < 3
+  // Prefers degree-1 endpoints, but also works for degree-2
+  // Returns the edge index of the new edge, or -1 if can't extend
+  extendEdge(edgeIndex) {
+    if (edgeIndex < 0 || edgeIndex >= this.edgeCount) return -1;
+
+    const edge = this.getEdge(edgeIndex);
+    const a = edge[0];
+    const b = edge[1];
+    const degA = this.degree(a);
+    const degB = this.degree(b);
+
+    // Find an extendable endpoint (degree < 3), preferring degree 1
+    let extendVertex, otherVertex;
+    if (degA === 1) {
+      extendVertex = a;
+      otherVertex = b;
+    } else if (degB === 1) {
+      extendVertex = b;
+      otherVertex = a;
+    } else if (degA === 2) {
+      extendVertex = a;
+      otherVertex = b;
+    } else if (degB === 2) {
+      extendVertex = b;
+      otherVertex = a;
+    } else {
+      // Both endpoints are degree 3, can't extend
+      return -1;
+    }
+
+    this._faces = null;
+
+    const posExtend = this.getPosition(extendVertex);
+    const neighbors = this.getNeighbors(extendVertex);
+    const deg = this.degree(extendVertex);
+
+    let newX, newY, newZ;
+
+    if (deg === 1) {
+      // Degree 1: extend in the same direction as the edge
+      const posOther = this.getPosition(otherVertex);
+      const dx = posExtend[0] - posOther[0];
+      const dy = posExtend[1] - posOther[1];
+      const dz = posExtend[2] - posOther[2];
+      newX = posExtend[0] + dx;
+      newY = posExtend[1] + dy;
+      newZ = posExtend[2] + dz;
+    } else {
+      // Degree 2: extend outward (opposite to the average of neighbor directions)
+      let avgDx = 0, avgDy = 0, avgDz = 0;
+      for (const n of neighbors) {
+        const posN = this.getPosition(n);
+        avgDx += posN[0] - posExtend[0];
+        avgDy += posN[1] - posExtend[1];
+        avgDz += posN[2] - posExtend[2];
+      }
+      // Normalize and invert
+      const len = Math.sqrt(avgDx * avgDx + avgDy * avgDy + avgDz * avgDz);
+      if (len > 0.0001) {
+        avgDx /= len;
+        avgDy /= len;
+        avgDz /= len;
+      }
+      // Use average edge length for extension distance
+      let avgLen = 0;
+      for (const n of neighbors) {
+        const posN = this.getPosition(n);
+        const dx = posN[0] - posExtend[0];
+        const dy = posN[1] - posExtend[1];
+        const dz = posN[2] - posExtend[2];
+        avgLen += Math.sqrt(dx * dx + dy * dy + dz * dz);
+      }
+      avgLen /= neighbors.length;
+
+      newX = posExtend[0] - avgDx * avgLen;
+      newY = posExtend[1] - avgDy * avgLen;
+      newZ = posExtend[2] - avgDz * avgLen;
+    }
+
+    // Add new vertex and edge
+    const newVertex = this._addVertexInternal(newX, newY, newZ);
+    const newEdgeIdx = this._addEdgeInternal(extendVertex, newVertex);
+
+    return newEdgeIdx;
+  }
+
+  // Split an edge by inserting a new vertex at its midpoint
+  // Returns the edge index of the first new edge (from original vertex a to new vertex)
+  splitEdge(edgeIndex) {
+    if (edgeIndex < 0 || edgeIndex >= this.edgeCount) return -1;
+
+    const edge = this.getEdge(edgeIndex);
+    const a = edge[0];
+    const b = edge[1];
+
+    this._faces = null;
+
+    // Get midpoint position
+    const posA = this.getPosition(a);
+    const posB = this.getPosition(b);
+    const midX = (posA[0] + posB[0]) / 2;
+    const midY = (posA[1] + posB[1]) / 2;
+    const midZ = (posA[2] + posB[2]) / 2;
+
+    // Create new vertex at midpoint
+    const newVertex = this._addVertexInternal(midX, midY, midZ);
+
+    // Remove old edge
+    this._removeEdgeBetween(a, b);
+
+    // Add two new edges
+    const newEdgeIdx = this._addEdgeInternal(a, newVertex);
+    this._addEdgeInternal(newVertex, b);
+
+    return newEdgeIdx;
+  }
+
+  // Add a face of given size (3-8) on one side of an edge
+  // If endpoints have degree 3, follows existing edges; otherwise creates new vertices
+  // Returns true if successful
+  addFaceOnEdge(edgeIndex, faceSize, normalHint = null) {
+    if (edgeIndex < 0 || edgeIndex >= this.edgeCount) return false;
+    if (faceSize < 3 || faceSize > 8) return false;
+
+    const edge = this.getEdge(edgeIndex);
+    const a = edge[0];
+    const b = edge[1];
+
+    const posA = this.getPosition(a);
+    const posB = this.getPosition(b);
+
+    // Edge vector and length
+    const edgeVec = [posB[0] - posA[0], posB[1] - posA[1], posB[2] - posA[2]];
+    const edgeLen = Math.sqrt(edgeVec[0] ** 2 + edgeVec[1] ** 2 + edgeVec[2] ** 2);
+    if (edgeLen < 0.0001) return false;
+
+    // Normalize edge vector
+    const edgeDir = [edgeVec[0] / edgeLen, edgeVec[1] / edgeLen, edgeVec[2] / edgeLen];
+
+    // Determine the normal direction for the polygon plane
+    let normal = normalHint || this._inferFaceNormal(a, b, edgeDir);
+
+    // Compute the "outward" direction perpendicular to the edge within the polygon plane
+    const outward = [
+      edgeDir[1] * normal[2] - edgeDir[2] * normal[1],
+      edgeDir[2] * normal[0] - edgeDir[0] * normal[2],
+      edgeDir[0] * normal[1] - edgeDir[1] * normal[0]
+    ];
+
+    // For a regular n-gon with edge length L
+    const n = faceSize;
+    const angleStep = (2 * Math.PI) / n;
+    const apothem = edgeLen / (2 * Math.tan(Math.PI / n));
+    const circumradius = edgeLen / (2 * Math.sin(Math.PI / n));
+
+    // Edge midpoint and polygon center
+    const midpoint = [(posA[0] + posB[0]) / 2, (posA[1] + posB[1]) / 2, (posA[2] + posB[2]) / 2];
+    const center = [
+      midpoint[0] + outward[0] * apothem,
+      midpoint[1] + outward[1] * apothem,
+      midpoint[2] + outward[2] * apothem
+    ];
+
+    // Calculate starting angle from center to a
+    const toA = [posA[0] - center[0], posA[1] - center[1], posA[2] - center[2]];
+    const aOutward = toA[0] * outward[0] + toA[1] * outward[1] + toA[2] * outward[2];
+    const aEdge = toA[0] * edgeDir[0] + toA[1] * edgeDir[1] + toA[2] * edgeDir[2];
+    const startAngle = Math.atan2(aEdge, aOutward);
+
+    // Generate target positions for all polygon vertices
+    const polyPositions = [];
+    for (let i = 0; i < n; i++) {
+      const angle = startAngle + i * angleStep;
+      polyPositions.push([
+        center[0] + circumradius * (Math.cos(angle) * outward[0] + Math.sin(angle) * edgeDir[0]),
+        center[1] + circumradius * (Math.cos(angle) * outward[1] + Math.sin(angle) * edgeDir[1]),
+        center[2] + circumradius * (Math.cos(angle) * outward[2] + Math.sin(angle) * edgeDir[2])
+      ]);
+    }
+
+    // PHASE 1: Bidirectional planning
+    // Trace from A forward and from B backward, then fill the gap
+    const plan = { vertices: new Array(n), newVertexPositions: [], edgesToAdd: [] };
+    plan.vertices[0] = a;
+    plan.vertices[n - 1] = b;
+
+    // Helper: find next vertex going outward from current (returns -1 if none)
+    const findOutwardNeighbor = (current, prev) => {
+      if (this.degree(current) < 3) return -1;  // Can create new vertex instead
+
+      const neighbors = this.getNeighbors(current);
+      const posCurr = this.getPosition(current);
+      let best = -1;
+      let bestOutward = -Infinity;
+
+      for (const neighbor of neighbors) {
+        if (neighbor === prev) continue;
+
+        // Skip edges that share a face with previous edge
+        const sharesFace = prev >= 0 && this.getNeighbors(prev).includes(neighbor);
+        if (sharesFace) continue;
+
+        const posN = this.getPosition(neighbor);
+        const vOut = [posN[0] - posCurr[0], posN[1] - posCurr[1], posN[2] - posCurr[2]];
+        const outwardComp = vOut[0] * outward[0] + vOut[1] * outward[1] + vOut[2] * outward[2];
+
+        if (outwardComp > 0 && outwardComp > bestOutward) {
+          bestOutward = outwardComp;
+          best = neighbor;
+        }
+      }
+      return best;
+    };
+
+    // Trace forward from A (positions 1, 2, 3, ...)
+    let forwardPath = [a];
+    let current = a;
+    let prev = b;
+    while (forwardPath.length < n - 1) {
+      const next = findOutwardNeighbor(current, prev);
+      if (next < 0) break;  // Can't continue with existing edges
+      forwardPath.push(next);
+      prev = current;
+      current = next;
+    }
+
+    // Trace backward from B (positions n-2, n-3, ...)
+    let backwardPath = [b];
+    current = b;
+    prev = a;
+    while (backwardPath.length < n - 1) {
+      const next = findOutwardNeighbor(current, prev);
+      if (next < 0) break;
+      backwardPath.push(next);
+      prev = current;
+      current = next;
+    }
+
+    // Check if paths meet or overlap
+    const forwardSet = new Set(forwardPath);
+    let meetPoint = -1;
+    for (const v of backwardPath) {
+      if (forwardSet.has(v) && v !== a && v !== b) {
+        meetPoint = v;
+        break;
+      }
+    }
+
+    // Build the final vertex list
+    // Forward path fills from position 0, backward path fills from position n-1
+    const forwardEnd = forwardPath.length - 1;  // Last index filled by forward
+    const backwardEnd = n - backwardPath.length;  // First index filled by backward
+
+    // Fill forward path
+    for (let i = 0; i < forwardPath.length && i < n; i++) {
+      plan.vertices[i] = forwardPath[i];
+    }
+
+    // Fill backward path (in reverse)
+    for (let i = 0; i < backwardPath.length && (n - 1 - i) >= 0; i++) {
+      const pos = n - 1 - i;
+      if (plan.vertices[pos] === undefined || plan.vertices[pos] === backwardPath[i]) {
+        plan.vertices[pos] = backwardPath[i];
+      }
+    }
+
+    // Fill the gap with new vertices
+    const gapStart = forwardPath.length;
+    const gapEnd = n - backwardPath.length;
+
+    for (let i = gapStart; i <= gapEnd && i < n - 1; i++) {
+      if (plan.vertices[i] === undefined) {
+        const newIdx = -(plan.newVertexPositions.length + 1);
+        plan.newVertexPositions.push(polyPositions[i]);
+        plan.vertices[i] = newIdx;
+      }
+    }
+
+    // Build edges list - track planned degrees to avoid exceeding 3
+    const plannedDegrees = {};  // Track additional edges being added to existing vertices
+
+    for (let i = 0; i < n - 1; i++) {
+      const v1 = plan.vertices[i];
+      const v2 = plan.vertices[i + 1];
+
+      const v1Real = v1 >= 0;
+      const v2Real = v2 >= 0;
+
+      if (v1Real && v2Real) {
+        // Both existing - check if already connected
+        if (!this.getNeighbors(v1).includes(v2)) {
+          // Need to add edge - check if possible (including planned edges)
+          const v1TotalDeg = this.degree(v1) + (plannedDegrees[v1] || 0);
+          const v2TotalDeg = this.degree(v2) + (plannedDegrees[v2] || 0);
+
+          if (v1TotalDeg >= 3 || v2TotalDeg >= 3) {
+            return false;  // Can't add edge - would exceed degree 3
+          }
+
+          plan.edgesToAdd.push([v1, v2]);
+          plannedDegrees[v1] = (plannedDegrees[v1] || 0) + 1;
+          plannedDegrees[v2] = (plannedDegrees[v2] || 0) + 1;
+        }
+      } else {
+        // At least one new vertex - will need edge
+        // Still track degrees for existing vertices
+        if (v1Real) {
+          const v1TotalDeg = this.degree(v1) + (plannedDegrees[v1] || 0);
+          if (v1TotalDeg >= 3) return false;
+          plannedDegrees[v1] = (plannedDegrees[v1] || 0) + 1;
+        }
+        if (v2Real) {
+          const v2TotalDeg = this.degree(v2) + (plannedDegrees[v2] || 0);
+          if (v2TotalDeg >= 3) return false;
+          plannedDegrees[v2] = (plannedDegrees[v2] || 0) + 1;
+        }
+        plan.edgesToAdd.push([v1, v2]);
+      }
+    }
+
+    // Close the polygon (edge from last to first is the original edge, already exists)
+
+    // PHASE 2: Execute the plan
+    this._faces = null;
+
+    // Create new vertices and build mapping from negative indices to real indices
+    const vertexMap = {};
+    for (let i = 0; i < plan.newVertexPositions.length; i++) {
+      const pos = plan.newVertexPositions[i];
+      const newIdx = this._addVertexInternal(pos[0], pos[1], pos[2]);
+      vertexMap[-(i + 1)] = newIdx;
+    }
+
+    // Update plan.vertices with real indices
+    for (let i = 0; i < n; i++) {
+      if (plan.vertices[i] < 0) {
+        plan.vertices[i] = vertexMap[plan.vertices[i]];
+      }
+    }
+
+    // Add edges
+    for (const [v1, v2] of plan.edgesToAdd) {
+      const realV1 = v1 < 0 ? vertexMap[v1] : v1;
+      const realV2 = v2 < 0 ? vertexMap[v2] : v2;
+      this._addEdgeInternal(realV1, realV2);
+    }
+
+    return true;
+  }
+
+  // Infer a normal direction for a new face based on existing geometry
+  // Key insight: if a face already exists on one side of the edge, build on the opposite side
+  _inferFaceNormal(a, b, edgeDir) {
+    const posA = this.getPosition(a);
+    const posB = this.getPosition(b);
+
+    // Find neighbors of a and b (excluding each other)
+    const neighborsA = this.getNeighbors(a).filter(n => n !== b);
+    const neighborsB = this.getNeighbors(b).filter(n => n !== a);
+
+    // Check for shared neighbors - these indicate existing faces containing edge a-b
+    const sharedNeighbors = neighborsA.filter(n => neighborsB.includes(n));
+
+    const midpoint = [
+      (posA[0] + posB[0]) / 2,
+      (posA[1] + posB[1]) / 2,
+      (posA[2] + posB[2]) / 2
+    ];
+
+    // If there's a shared neighbor, there's already a face on that side
+    // We want to build on the OPPOSITE side
+    if (sharedNeighbors.length > 0) {
+      const c = sharedNeighbors[0];
+      const posC = this.getPosition(c);
+
+      // Compute normal of existing face a-b-c
+      const ab = [posB[0] - posA[0], posB[1] - posA[1], posB[2] - posA[2]];
+      const ac = [posC[0] - posA[0], posC[1] - posA[1], posC[2] - posA[2]];
+      const faceNormal = [
+        ab[1] * ac[2] - ab[2] * ac[1],
+        ab[2] * ac[0] - ab[0] * ac[2],
+        ab[0] * ac[1] - ab[1] * ac[0]
+      ];
+      const len = Math.sqrt(faceNormal[0] ** 2 + faceNormal[1] ** 2 + faceNormal[2] ** 2);
+      if (len > 0.0001) {
+        // Return OPPOSITE normal (build on other side)
+        return [-faceNormal[0] / len, -faceNormal[1] / len, -faceNormal[2] / len];
+      }
+    }
+
+    // No shared neighbor found - use neighbor positions to infer a reasonable plane
+    const neighborPositions = [];
+    for (const n of neighborsA) {
+      neighborPositions.push(this.getPosition(n));
+    }
+    for (const n of neighborsB) {
+      neighborPositions.push(this.getPosition(n));
+    }
+
+    if (neighborPositions.length > 0) {
+      // Average the cross products of (neighbor - edgeMidpoint) with edgeDir
+
+      let avgNormal = [0, 0, 0];
+      for (const nPos of neighborPositions) {
+        const toN = [nPos[0] - midpoint[0], nPos[1] - midpoint[1], nPos[2] - midpoint[2]];
+        const cross = [
+          edgeDir[1] * toN[2] - edgeDir[2] * toN[1],
+          edgeDir[2] * toN[0] - edgeDir[0] * toN[2],
+          edgeDir[0] * toN[1] - edgeDir[1] * toN[0]
+        ];
+        avgNormal[0] += cross[0];
+        avgNormal[1] += cross[1];
+        avgNormal[2] += cross[2];
+      }
+
+      const len = Math.sqrt(avgNormal[0] ** 2 + avgNormal[1] ** 2 + avgNormal[2] ** 2);
+      if (len > 0.0001) {
+        return [avgNormal[0] / len, avgNormal[1] / len, avgNormal[2] / len];
+      }
+    }
+
+    // Fallback: use a default normal perpendicular to edge
+    // Pick the axis most perpendicular to edgeDir
+    const absX = Math.abs(edgeDir[0]);
+    const absY = Math.abs(edgeDir[1]);
+    const absZ = Math.abs(edgeDir[2]);
+
+    let perpAxis;
+    if (absX <= absY && absX <= absZ) {
+      perpAxis = [1, 0, 0];
+    } else if (absY <= absZ) {
+      perpAxis = [0, 1, 0];
+    } else {
+      perpAxis = [0, 0, 1];
+    }
+
+    // Cross product to get normal
+    const normal = [
+      edgeDir[1] * perpAxis[2] - edgeDir[2] * perpAxis[1],
+      edgeDir[2] * perpAxis[0] - edgeDir[0] * perpAxis[2],
+      edgeDir[0] * perpAxis[1] - edgeDir[1] * perpAxis[0]
+    ];
+    const len = Math.sqrt(normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2);
+    return [normal[0] / len, normal[1] / len, normal[2] / len];
   }
 
   // ============ Stone-Wales Transformation ============
