@@ -1,0 +1,13 @@
+{
+  "name": "@rreusser/mapviewer",
+  "version": "0.0.1",
+  "description": "WebGPU 3D terrain map viewer",
+  "type": "module",
+  "main": "terrain-viewer.js",
+  "exports": {
+    ".": "./terrain-viewer.js"
+  },
+  "dependencies": {
+    "suncalc": "^1.9.0"
+  }
+}

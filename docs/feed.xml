@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Tue, 03 Feb 2026 16:44:31 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 09 Feb 2026 06:44:55 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Visualizing Sloan Digital Sky Survey Data</title>
@@ -342,6 +342,153 @@
       <pubDate>Mon, 16 Mar 2015 07:00:00 GMT</pubDate>
       <description>Reflections on a decade of programming projects and the search for meaning in complexity</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/a-series-of-unfortunate-things-i-programmed-one-time.jpg" medium="image" />
+    </item>
+    <item>
+      <title>WebGPU Text Rendering</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>WebGPU Axes Demo</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/axes.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/axes.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/tests/fixtures/two-way-iframe.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/tests/fixtures/two-way-iframe.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/tests/fixtures/iframe.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/tests/fixtures/iframe.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/tests/fixtures/attack-iframe.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/tests/fixtures/attack-iframe.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/99-nonworker-examples/iframes/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/99-nonworker-examples/iframes/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/99-nonworker-examples/iframes/iframe.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/99-nonworker-examples/iframes/iframe.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/07-sharedworker-example/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/07-sharedworker-example/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/05-serviceworker-example/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/05-serviceworker-example/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/04-eventlistener-example/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/04-eventlistener-example/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/03-classes-example/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/03-classes-example/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/02-callback-example/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/02-callback-example/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/01-simple-example/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/comlink/docs/examples/01-simple-example/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Second notebook instance</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/second-notebook.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/second-notebook.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Debug Test Cases</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Debug Test Cases</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/dist/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@rreusser/mcp-observable-notebookkit-debug/example/dist/</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Untitled</title>
+      <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</guid>
+      <pubDate></pubDate>
+      <description></description>
+    </item>
+    <item>
+      <title>Denali 3D Terrain</title>
+      <link>https://rreusser.github.io/notebooks/denali/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/denali/</guid>
+      <pubDate></pubDate>
+      <description></description>
     </item>
   </channel>
 </rss>

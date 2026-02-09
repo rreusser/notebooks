@@ -1,0 +1,500 @@
+<!doctype html>
+<notebook theme="air">
+  <title>WebGPU Axes Demo</title>
+  <script id="0" type="text/markdown">
+# WebGPU Axes with 1-2-5 Tick Spacing
+
+This demo shows how to create plot axes with:
+- **1-2-5 spacing rules** for "nice" tick intervals
+- **Persistent label management** - labels are reused across frames, referenced by (spacing, multiplier) tuples
+- **Pan and zoom** via d3.zoom
+  </script>
+
+  <script id="1" type="module">
+    if (!navigator.gpu) {
+      display(html`<p style="color: red;">WebGPU is not supported.</p>`);
+      throw new Error('WebGPU not supported');
+    }
+
+    const adapter = await navigator.gpu.requestAdapter();
+    const device = await adapter.requestDevice();
+    const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
+
+    invalidation.then(() => device.destroy());
+  </script>
+
+  <script id="2" type="module">
+    import { createElementStack } from './lib/element-stack.js';
+    import { createZoomableAxes } from './lib/zoomable-axes.js';
+
+    const dpr = window.devicePixelRatio || 1;
+    const canvasWidth = Math.min(700, width);
+    const canvasHeight = 500;
+
+    // Margins for axes (in CSS pixels)
+    const margin = { top: 20, right: 20, bottom: 40, left: 60 };
+    const plotWidth = canvasWidth - margin.left - margin.right;
+    const plotHeight = canvasHeight - margin.top - margin.bottom;
+
+    const stack = createElementStack({
+      width: canvasWidth,
+      height: canvasHeight,
+      layers: [{
+        id: 'canvas',
+        element: ({ current, width, height }) => {
+          const canvas = current || document.createElement('canvas');
+          canvas.width = Math.floor(width * dpr);
+          canvas.height = Math.floor(height * dpr);
+          canvas.style.width = `${width}px`;
+          canvas.style.height = `${height}px`;
+          canvas.style.border = '1px solid rgba(0,0,0,0.2)';
+          return canvas;
+        }
+      }, {
+        id: 'svg',
+        element: ({ current, width, height }) =>
+          (current ? d3.select(current) : d3.create("svg"))
+            .attr("width", width)
+            .attr("height", height)
+            .style("cursor", "grab")
+            .node()
+      }]
+    });
+
+    const canvas = stack.elements.canvas;
+
+    const gpuContext = canvas.getContext('webgpu');
+    gpuContext.configure({
+      device,
+      format: canvasFormat,
+      alphaMode: 'premultiplied'
+    });
+
+    const renderState = { dirty: true };
+
+    // Zoomable axes for plot area (accounting for margins)
+    const axes = createZoomableAxes({
+      d3,
+      element: stack.elements.svg,
+      xScale: d3.scaleLinear().domain([margin.left, margin.left + plotWidth]).range([margin.left, margin.left + plotWidth]),
+      yScale: d3.scaleLinear().domain([margin.top, margin.top + plotHeight]).range([margin.top, margin.top + plotHeight]),
+      flipY: true,
+      scaleExtent: [0.5, 10],
+      onChange: () => {
+        renderState.dirty = true;
+      }
+    });
+
+    // Data domain for the plot (what values we're displaying)
+    // We'll map this to the plot area inside margins
+    const dataDomain = {
+      x: [-5, 15],
+      y: [-3, 10],
+    };
+
+    display(html`<figure style="margin: 0;">
+      ${stack.element}
+      <figcaption style="margin-top:5px">Drag to pan, scroll to zoom.</figcaption>
+    </figure>`);
+  </script>
+
+  <script id="3" type="module">
+    import { createGPUTextContext, loadFontAtlas } from './webgpu-text.ts';
+
+    const fontAtlas = await loadFontAtlas(device, {
+      atlasUrl: './roboto-regular.png',
+      metadataUrl: './roboto-regular.json',
+    });
+
+    invalidation.then(() => fontAtlas.texture.destroy());
+
+    const textContext = createGPUTextContext(device, {
+      fontAtlas,
+      colorTargets: {
+        format: canvasFormat,
+        blend: {
+          color: { srcFactor: 'src-alpha', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+          alpha: { srcFactor: 'one', dstFactor: 'one-minus-src-alpha', operation: 'add' },
+        },
+      },
+    });
+
+    invalidation.then(() => textContext.destroy());
+  </script>
+
+  <script id="4" type="module">
+    // =========================================================================
+    // 1-2-5 Tick Spacing Algorithm
+    // =========================================================================
+
+    function niceTickSpacing(rangeSize, targetTickCount) {
+      if (rangeSize <= 0 || targetTickCount <= 0) return 1;
+      const rawSpacing = rangeSize / targetTickCount;
+      const magnitude = Math.pow(10, Math.floor(Math.log10(rawSpacing)));
+      const normalized = rawSpacing / magnitude;
+
+      let niceNormalized;
+      if (normalized < 1.5) niceNormalized = 1;
+      else if (normalized < 3.5) niceNormalized = 2;
+      else if (normalized < 7.5) niceNormalized = 5;
+      else niceNormalized = 10;
+
+      return niceNormalized * magnitude;
+    }
+
+    function generateTicks(min, max, targetCount = 8) {
+      const spacing = niceTickSpacing(max - min, targetCount);
+      const firstMultiplier = Math.ceil(min / spacing);
+      const lastMultiplier = Math.floor(max / spacing);
+
+      const ticks = [];
+      for (let m = firstMultiplier; m <= lastMultiplier; m++) {
+        ticks.push({ value: m * spacing, multiplier: m });
+      }
+      return { spacing, ticks };
+    }
+
+    function formatTickValue(value, spacing) {
+      const absSpacing = Math.abs(spacing);
+      const decimals = absSpacing >= 1 ? 0 : Math.ceil(-Math.log10(absSpacing));
+      return value.toFixed(decimals);
+    }
+  </script>
+
+  <script id="5" type="module">
+    // =========================================================================
+    // Persistent Label Manager
+    // =========================================================================
+
+    class LabelManager {
+      constructor(textContext, defaultOptions = {}) {
+        this.textContext = textContext;
+        this.defaultOptions = defaultOptions;
+        this.labels = new Map();
+        this.currentFrame = 0;
+      }
+
+      getLabel(key, text, position, options = {}) {
+        let entry = this.labels.get(key);
+        if (!entry) {
+          const span = this.textContext.createSpan({
+            text, position,
+            ...this.defaultOptions,
+            ...options,
+          });
+          entry = { span, lastUsedFrame: this.currentFrame };
+          this.labels.set(key, entry);
+        } else {
+          entry.span.setText(text);
+          entry.span.setPosition(position);
+          entry.lastUsedFrame = this.currentFrame;
+        }
+        return entry.span;
+      }
+
+      beginFrame() { this.currentFrame++; }
+
+      endFrame() {
+        for (const [key, entry] of this.labels) {
+          if (entry.lastUsedFrame < this.currentFrame) {
+            entry.span.destroy();
+            this.labels.delete(key);
+          }
+        }
+      }
+
+      getStats() { return { totalLabels: this.labels.size }; }
+
+      destroy() {
+        for (const entry of this.labels.values()) entry.span.destroy();
+        this.labels.clear();
+      }
+    }
+
+    const xLabelManager = new LabelManager(textContext, {
+      fontSize: 11,
+      color: [0.3, 0.3, 0.3, 1],
+      align: 'center',
+      baseline: 'top',
+    });
+
+    const yLabelManager = new LabelManager(textContext, {
+      fontSize: 11,
+      color: [0.3, 0.3, 0.3, 1],
+      align: 'right',
+      baseline: 'middle',
+    });
+
+    invalidation.then(() => {
+      xLabelManager.destroy();
+      yLabelManager.destroy();
+    });
+  </script>
+
+  <script id="6" type="module">
+    // =========================================================================
+    // Line Rendering
+    // =========================================================================
+
+    const lineShader = /* wgsl */`
+      struct Uniforms { resolution: vec2f }
+      @group(0) @binding(0) var<uniform> uniforms: Uniforms;
+      @group(0) @binding(1) var<storage, read> lines: array<f32>;
+
+      struct VertexOutput {
+        @builtin(position) position: vec4f,
+        @location(0) color: vec4f,
+      }
+
+      @vertex
+      fn vertexMain(@builtin(vertex_index) vid: u32) -> VertexOutput {
+        let lineIndex = vid / 6u;
+        let vertexInLine = vid % 6u;
+        let base = lineIndex * 10u;
+
+        let p0 = vec2f(lines[base], lines[base + 1u]);
+        let p1 = vec2f(lines[base + 2u], lines[base + 3u]);
+        let color = vec4f(lines[base + 4u], lines[base + 5u], lines[base + 6u], lines[base + 7u]);
+        let thickness = lines[base + 8u];
+
+        let dir = normalize(p1 - p0);
+        let perp = vec2f(-dir.y, dir.x) * thickness * 0.5;
+
+        var positions = array<vec2f, 6>(
+          p0 - perp, p0 + perp, p1 - perp,
+          p1 - perp, p0 + perp, p1 + perp
+        );
+        let pos = positions[vertexInLine];
+
+        var output: VertexOutput;
+        output.position = vec4f(
+          pos.x / uniforms.resolution.x * 2.0 - 1.0,
+          1.0 - pos.y / uniforms.resolution.y * 2.0,
+          0.0, 1.0
+        );
+        output.color = color;
+        return output;
+      }
+
+      @fragment
+      fn fragmentMain(input: VertexOutput) -> @location(0) vec4f {
+        return input.color;
+      }
+    `;
+
+    const lineModule = device.createShaderModule({ code: lineShader });
+    const linePipeline = device.createRenderPipeline({
+      layout: 'auto',
+      vertex: { module: lineModule, entryPoint: 'vertexMain' },
+      fragment: {
+        module: lineModule, entryPoint: 'fragmentMain',
+        targets: [{ format: canvasFormat }],
+      },
+      primitive: { topology: 'triangle-list' },
+    });
+
+    const lineUniformBuffer = device.createBuffer({
+      size: 8, usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+    });
+    const MAX_LINES = 200;
+    const lineBuffer = device.createBuffer({
+      size: MAX_LINES * 40, usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
+    });
+    const lineBindGroup = device.createBindGroup({
+      layout: linePipeline.getBindGroupLayout(0),
+      entries: [
+        { binding: 0, resource: { buffer: lineUniformBuffer } },
+        { binding: 1, resource: { buffer: lineBuffer } },
+      ],
+    });
+
+    invalidation.then(() => { lineUniformBuffer.destroy(); lineBuffer.destroy(); });
+
+    const lineData = new Float32Array(MAX_LINES * 10);
+    let lineCount = 0;
+
+    function clearLines() { lineCount = 0; }
+    function addLine(x0, y0, x1, y1, color, thickness = 1) {
+      if (lineCount >= MAX_LINES) return;
+      const o = lineCount * 10;
+      lineData[o] = x0; lineData[o+1] = y0;
+      lineData[o+2] = x1; lineData[o+3] = y1;
+      lineData[o+4] = color[0]; lineData[o+5] = color[1];
+      lineData[o+6] = color[2]; lineData[o+7] = color[3];
+      lineData[o+8] = thickness; lineData[o+9] = 0;
+      lineCount++;
+    }
+    function uploadLines() {
+      if (lineCount > 0) device.queue.writeBuffer(lineBuffer, 0, lineData, 0, lineCount * 10);
+    }
+    function drawLines(pass) {
+      if (lineCount === 0) return;
+      pass.setPipeline(linePipeline);
+      pass.setBindGroup(0, lineBindGroup);
+      pass.draw(lineCount * 6);
+    }
+  </script>
+
+  <script id="7" type="module">
+    import { createFrameLoop } from './lib/frame-loop.js';
+
+    const statsDiv = html`<div style="font-family: monospace; font-size: 12px; padding: 8px; background: #f5f5f5; border-radius: 4px; margin-top: 10px;">
+      X labels: <span id="x-count">0</span> | Y labels: <span id="y-count">0</span><br>
+      Data X: <span id="x-domain">-</span><br>
+      Data Y: <span id="y-domain">-</span>
+    </div>`;
+    display(statsDiv);
+
+    const gridColor = [0.9, 0.9, 0.9, 1];
+    const axisColor = [0.4, 0.4, 0.4, 1];
+    const tickColor = [0.5, 0.5, 0.5, 1];
+
+    // Orthographic matrix for rendering labels in screen coordinates (no pan/zoom)
+    // Maps [0, canvasWidth] x [0, canvasHeight] to clip space with Y=0 at top
+    function createScreenOrthoMatrix(width, height) {
+      return new Float32Array([
+        2 / width, 0, 0, 0,
+        0, -2 / height, 0, 0,
+        0, 0, 1, 0,
+        -1, 1, 0, 1,
+      ]);
+    }
+    const screenMatrix = createScreenOrthoMatrix(canvasWidth, canvasHeight);
+
+    // Map data coordinates to screen coordinates
+    function dataToScreen(dataX, dataY, xDataDomain, yDataDomain) {
+      const x = margin.left + (dataX - xDataDomain[0]) / (xDataDomain[1] - xDataDomain[0]) * plotWidth;
+      const y = margin.top + (1 - (dataY - yDataDomain[0]) / (yDataDomain[1] - yDataDomain[0])) * plotHeight;
+      return [x, y];
+    }
+
+    function renderAxes() {
+      clearLines();
+      xLabelManager.beginFrame();
+      yLabelManager.beginFrame();
+
+      // Get current view domain from axes (in screen coords)
+      // Convert to data domain
+      const screenXDomain = axes.xDomain;
+      const screenYDomain = axes.yDomain;
+
+      // Map screen domain (plot area) to data domain
+      // Screen plot area [margin.left, margin.left + plotWidth] maps to data domain
+      const xDataDomain = [
+        dataDomain.x[0] + ((screenXDomain[0] - margin.left) / plotWidth) * (dataDomain.x[1] - dataDomain.x[0]),
+        dataDomain.x[0] + ((screenXDomain[1] - margin.left) / plotWidth) * (dataDomain.x[1] - dataDomain.x[0]),
+      ];
+      // Y is flipped (flipY: true), so invert the mapping
+      const yDataDomain = [
+        dataDomain.y[1] - ((screenYDomain[1] - margin.top) / plotHeight) * (dataDomain.y[1] - dataDomain.y[0]),
+        dataDomain.y[1] - ((screenYDomain[0] - margin.top) / plotHeight) * (dataDomain.y[1] - dataDomain.y[0]),
+      ];
+
+      // Generate ticks in data space
+      const xTicks = generateTicks(xDataDomain[0], xDataDomain[1], Math.floor(plotWidth / 80));
+      const yTicks = generateTicks(yDataDomain[0], yDataDomain[1], Math.floor(plotHeight / 50));
+
+      // Draw grid lines
+      for (const tick of xTicks.ticks) {
+        const [x] = dataToScreen(tick.value, 0, xDataDomain, yDataDomain);
+        if (x >= margin.left && x <= margin.left + plotWidth) {
+          addLine(x, margin.top, x, margin.top + plotHeight, gridColor, 1);
+        }
+      }
+      for (const tick of yTicks.ticks) {
+        const [, y] = dataToScreen(0, tick.value, xDataDomain, yDataDomain);
+        if (y >= margin.top && y <= margin.top + plotHeight) {
+          addLine(margin.left, y, margin.left + plotWidth, y, gridColor, 1);
+        }
+      }
+
+      // Draw axis frame
+      addLine(margin.left, margin.top, margin.left + plotWidth, margin.top, axisColor, 1);
+      addLine(margin.left, margin.top + plotHeight, margin.left + plotWidth, margin.top + plotHeight, axisColor, 1);
+      addLine(margin.left, margin.top, margin.left, margin.top + plotHeight, axisColor, 1);
+      addLine(margin.left + plotWidth, margin.top, margin.left + plotWidth, margin.top + plotHeight, axisColor, 1);
+
+      // X ticks and labels
+      const tickLen = 5;
+      for (const tick of xTicks.ticks) {
+        const [x] = dataToScreen(tick.value, 0, xDataDomain, yDataDomain);
+        if (x >= margin.left && x <= margin.left + plotWidth) {
+          addLine(x, margin.top + plotHeight, x, margin.top + plotHeight + tickLen, tickColor, 1);
+          const key = `x:${xTicks.spacing}:${tick.multiplier}`;
+          xLabelManager.getLabel(key, formatTickValue(tick.value, xTicks.spacing),
+            [x, margin.top + plotHeight + tickLen + 3]);
+        }
+      }
+
+      // Y ticks and labels
+      for (const tick of yTicks.ticks) {
+        const [, y] = dataToScreen(0, tick.value, xDataDomain, yDataDomain);
+        if (y >= margin.top && y <= margin.top + plotHeight) {
+          addLine(margin.left - tickLen, y, margin.left, y, tickColor, 1);
+          const key = `y:${yTicks.spacing}:${tick.multiplier}`;
+          yLabelManager.getLabel(key, formatTickValue(tick.value, yTicks.spacing),
+            [margin.left - tickLen - 3, y]);
+        }
+      }
+
+      xLabelManager.endFrame();
+      yLabelManager.endFrame();
+
+      // Update stats
+      statsDiv.querySelector('#x-count').textContent = xLabelManager.getStats().totalLabels;
+      statsDiv.querySelector('#y-count').textContent = yLabelManager.getStats().totalLabels;
+      statsDiv.querySelector('#x-domain').textContent = `[${xDataDomain[0].toFixed(2)}, ${xDataDomain[1].toFixed(2)}]`;
+      statsDiv.querySelector('#y-domain').textContent = `[${yDataDomain[0].toFixed(2)}, ${yDataDomain[1].toFixed(2)}]`;
+    }
+
+    const loop = createFrameLoop(() => {
+      if (!renderState.dirty) return;
+
+      renderAxes();
+      uploadLines();
+
+      device.queue.writeBuffer(lineUniformBuffer, 0, new Float32Array([canvasWidth, canvasHeight]));
+
+      const encoder = device.createCommandEncoder();
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: gpuContext.getCurrentTexture().createView(),
+          loadOp: 'clear',
+          storeOp: 'store',
+          clearValue: { r: 1, g: 1, b: 1, a: 1 },
+        }],
+      });
+
+      drawLines(pass);
+
+      // Use screen ortho matrix for labels - no pan/zoom transform
+      textContext.draw(pass, {
+        resolution: [canvas.width / dpr, canvas.height / dpr],
+        viewMatrix: screenMatrix,
+      });
+
+      pass.end();
+      device.queue.submit([encoder.finish()]);
+      renderState.dirty = false;
+    });
+
+    invalidation.then(() => loop.cancel());
+  </script>
+
+  <script id="8" type="text/markdown">
+---
+
+## How It Works
+
+### 1-2-5 Tick Spacing
+Tick intervals are always 1, 2, or 5 times a power of 10 (e.g., 0.1, 0.2, 0.5, 1, 2, 5, 10...).
+
+### Persistent Label Management
+Labels are keyed by `"axis:spacing:multiplier"`:
+- `x:1:5` → x-axis label at value 5
+- `x:0.1:15` → x-axis label at value 1.5
+- When panning, existing labels are **reused** (just repositioned)
+- Labels that leave the viewport are **destroyed**
+- New labels are **created** only when they first become visible
+  </script>
+</notebook>

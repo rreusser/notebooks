@@ -1,0 +1,260 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Denali 3D Terrain</title>
+
+  <script id="viewer" type="module">
+    import { TerrainMap } from './mapviewer/terrain-viewer.js';
+    import { createGPULines } from 'npm:webgpu-instanced-lines';
+    import simplify from 'npm:simplify-js';
+    import { expandable } from './lib/expandable.js';
+
+    const canvas = document.createElement('canvas');
+    canvas.className = 'terrain';
+
+    const viewer = await TerrainMap.create(canvas, {
+      sources: {
+        'arctic-dem': {
+          type: 'terrain',
+          tiles: [__TILE_URL_TERRAIN__],
+          minzoom: 4,
+          maxzoom: 14,
+          bounds: [-152.9, 62.2, -148.8, 64.0],
+          attribution: '<a href="https://www.pgc.umn.edu/data/arcticdem/" target="_blank" rel="noopener">ArcticDEM</a> | <a href="https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface" target="_blank" rel="noopener">SRTM30</a>',
+        },
+        'sentinel': {
+          type: 'raster',
+          tiles: [__TILE_URL_SENTINEL__],
+          minzoom: 4,
+          maxzoom: 11,
+          bounds: [-152.9, 62.2, -148.8, 64.0],
+          attribution: '<a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Sentinel-2</a>',
+        },
+        'peaks': {
+          type: 'geojson',
+          data: 'data/osm/peaks.geojson',
+          attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+        },
+        'fkt': {
+          type: 'geojson',
+          data: 'data/strava/fkt.geojson',
+          simplify: 0.0001,
+          attribution: '<a href="https://www.strava.com/activities/9223277277" target="_blank" rel="noopener">Strava</a>',
+        },
+      },
+      camera: {
+        center: [0.08005793958567985, 0.00021365516506647512, 0.27291423467021114],
+        distance: 0.0004971889617079275,
+        phi: 2.4972122538258654,
+        theta: 0.13580281526641474,
+      },
+      font: {
+        atlas: './mapviewer/fonts/roboto-regular.png',
+        metadata: './mapviewer/fonts/roboto-regular.json',
+      },
+      base: [
+        { id: 'satellite', source: 'sentinel', blend: 'source-over' },
+      ],
+      features: [
+        /*{
+          id: 'ski-tracks-casing',
+          type: 'line',
+          source: 'fkt',
+          paint: {
+            'line-color': '#331100',
+            'line-width': 7,
+            'atmosphere-opacity': 0.5
+          }
+        },*/
+        {
+          id: 'ski-tracks',
+          type: 'line',
+          source: 'fkt',
+          paint: {
+            'line-color': '#ff8800',
+            'line-width': 5,
+            'line-border-color': '#331100',
+            'line-border-width': 2,
+            'atmosphere-opacity': 0.5
+          }
+        },
+        {
+          id: 'peak-circles',
+          type: 'circle',
+          source: 'peaks',
+          paint: {
+            'circle-radius': 3,
+            'circle-color': '#000000',
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1.5,
+            'atmosphere-opacity': 0.5
+          }
+        },
+        {
+          id: 'peak-labels',
+          type: 'text',
+          source: 'peaks',
+          paint: {
+            'text-field': 'name',
+            'text-size': 16,
+            'text-color': '#000000',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 3.0,
+            'atmosphere-opacity': 0.5
+          }
+        },
+      ],
+      createGPULines,
+      simplifyFn: simplify,
+    });
+
+    const container = html`<div style="position: relative">`;
+    container.appendChild(canvas);
+    container.appendChild(viewer.attribution);
+
+    display(expandable(container, {
+      width: 640,
+      height: 600,
+      toggleOffset: [-12, -12],
+      controls: '.terrain-controls',
+      onResize(el, w, h, expanded) {
+        if (expanded) {
+          canvas.style.width = `${w}px`;
+          canvas.style.height = `${h}px`;
+        } else {
+          canvas.style.width = '';
+          canvas.style.height = '';
+        }
+        viewer.camera.taint();
+      }
+    }));
+
+    invalidation.then(() => viewer.destroy());
+  </script>
+
+  <script id="controls" type="module">
+    import SunCalc from 'npm:suncalc';
+
+    const controlsContainer = html`<div class="terrain-controls"></div>`;
+
+    const sunState = { date: new Date(), timeOfDay: 14 };
+    const location = viewer._location;
+
+    function updateSunDirection() {
+      const tod = sunState.timeOfDay;
+      const d = sunState.date;
+      const sunDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(tod) + 8, (tod % 1) * 60, 0));
+      const sunPos = SunCalc.getPosition(sunDate, location.lat, location.lon);
+      const alt = sunPos.altitude;
+      const az = sunPos.azimuth;
+      viewer.settings.sunDirection = [
+        -Math.cos(alt) * Math.sin(az),
+        Math.sin(alt),
+        Math.cos(alt) * Math.cos(az)
+      ];
+    }
+    updateSunDirection();
+
+    function addControl(parent, input, onInput) {
+      parent.appendChild(input);
+      input.addEventListener('input', () => onInput(input.value));
+    }
+
+    addControl(controlsContainer,
+      Inputs.date({ value: sunState.date, label: "Date" }),
+      v => { if (v) { sunState.date = v; updateSunDirection(); } }
+    );
+    addControl(controlsContainer,
+      Inputs.range([0, 24], { value: sunState.timeOfDay, step: 0.01, label: "Time of day (AKDT)" }),
+      v => { sunState.timeOfDay = v; updateSunDirection(); }
+    );
+    addControl(controlsContainer,
+      Inputs.range([0, 1], { value: viewer.settings.hillshadeOpacity, step: 0.01, label: "Hillshade opacity" }),
+      v => { viewer.settings.hillshadeOpacity = v; }
+    );
+    addControl(controlsContainer,
+      Inputs.range([0.05, 1], { value: viewer.settings.atmosphereDensity, step: 0.01, label: "Atmosphere density" }),
+      v => { viewer.settings.atmosphereDensity = v; }
+    );
+
+    const debug = html`<details><summary style="cursor: pointer;">Debug</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
+    const debugContent = debug.querySelector('div');
+    controlsContainer.appendChild(debug);
+
+    addControl(debugContent,
+      Inputs.range([0.0, 5], { value: viewer.settings.verticalExaggeration, step: 0.1, label: "Vertical exaggeration" }),
+      v => { viewer.settings.verticalExaggeration = v; }
+    );
+    addControl(debugContent,
+      Inputs.range([1, 4], { value: viewer.settings.densityThreshold, step: 0.1, label: "Tile scale" }),
+      v => { viewer.settings.densityThreshold = v; }
+    );
+    addControl(debugContent,
+      Inputs.toggle({ label: "Show tile borders" }),
+      v => { viewer.settings.showTileBorders = v; }
+    );
+    addControl(debugContent,
+      Inputs.toggle({ label: "Freeze coverage" }),
+      v => { viewer.settings.freezeCoverage = v; }
+    );
+    addControl(debugContent,
+      Inputs.toggle({ label: "Feature depth test" }),
+      v => { viewer.settings.featureDepthTest = v; }
+    );
+    addControl(debugContent,
+      Inputs.toggle({ label: "Show collision boxes" }),
+      v => { viewer.settings.showCollisionBoxes = v; }
+    );
+
+    display(controlsContainer);
+  </script>
+
+  <script id="intro" type="text/markdown">
+This notebook implements an interactive 3D terrain viewer from scratch using [WebGPU](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API). It renders elevation data for the Denali region of Alaska, composited with satellite imagery and OpenStreetMap feature labels.
+
+The elevation data comes from the [ArcticDEM](https://www.pgc.umn.edu/data/arcticdem/) mosaic (2m resolution) with [SRTM30](https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface) as a base layer for coverage at lower zoom levels. Satellite imagery is from [Copernicus Sentinel-2](https://dataspace.copernicus.eu/). Peak locations are sourced from [OpenStreetMap](https://www.openstreetmap.org/copyright). The tile pipeline uses [STAC](https://stacspec.org/) APIs for data discovery, [GDAL](https://gdal.org/) for reprojection, and [rio-tiler](https://github.com/cogeotiff/rio-tiler) for slicing Cloud-Optimized GeoTIFFs into map tiles.
+
+The renderer implements terrain mesh rendering with Mapbox Terrain-RGB decoding, imagery compositing, screen-space label collision detection with terrain occlusion, and single-scattering atmospheric fog. The atmosphere uses Rayleigh and Mie scattering, inspired by [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere) and [GPU Gems 2, Chapter 16](https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering).
+  </script>
+
+  <script id="styles" type="text/html">
+    <style>
+      canvas.terrain {
+        width: 100%;
+        min-width: 0;
+        height: 600px;
+        display: block;
+        border-radius: 4px;
+        cursor: grab;
+      }
+      .status {
+        font-family: monospace;
+        font-size: 12px;
+        color: #666;
+      }
+
+      .terrain-attribution {
+        position: absolute;
+        bottom: 0;
+        right: 0;
+        background: rgba(255, 255, 255, 0.65);
+        padding: 1px 5px;
+        font-size: 10px;
+        border-top-left-radius: 2px;
+        line-height: 1.4;
+        pointer-events: auto;
+      }
+      .terrain-attribution a {
+        color: #333;
+        text-decoration: none;
+      }
+      .terrain-attribution a:hover {
+        text-decoration: underline;
+      }
+    </style>
+  </script>
+
+  <script id="caption" type="text/markdown">
+    Drag to rotate. Shift+drag or right-click drag to pan. Scroll to zoom.
+  </script>
+
+</notebook>

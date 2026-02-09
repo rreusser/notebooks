@@ -95,10 +95,10 @@ function updateFaceBuffers(mesh, cache) {
   return { triangleData, normalData, edgeCounts: cache.triangleEdgeCounts, triangleCount };
 }
 
-export function createMeshRenderer(regl, icosphere) {
+export function createMeshRenderer(regl, icosphere, matcapTexture = null) {
   const drawVertices = createDrawVertices(regl, icosphere);
   const drawEdges = createDrawEdges(regl);
-  const drawFaces = createDrawFaces(regl);
+  const drawFaces = createDrawFaces(regl, matcapTexture);
 
   // Preallocated buffers
   const vertexBuffer = regl.buffer({ usage: 'dynamic', data: new Float32Array(65536) });
@@ -122,6 +122,7 @@ export function createMeshRenderer(regl, icosphere) {
         faceOpacity = 0.3,
         faceShading = false,
         cameraPosition = [0, 0, 20],
+        viewMatrix = null,
         depthFalloff = false,
         depthFalloffWidth = 7,
         focusCenter = [0, 0, 0]
@@ -156,6 +157,7 @@ export function createMeshRenderer(regl, icosphere) {
             faceOpacity,
             faceShading,
             cameraPosition,
+            viewMatrix,
             ...depthParams
           });
         }
@@ -223,7 +225,7 @@ function flattenEdges(mesh) {
   return data;
 }
 
-function createDrawFaces(regl) {
+function createDrawFaces(regl, matcapTexture) {
   const faceVert = `
     precision highp float;
     attribute vec3 position;
@@ -314,90 +316,125 @@ function createDrawFaces(regl) {
     count: (_, props) => props.count * 3
   });
 
-  // Opaque lit-shaded faces
+  // Opaque matcap-shaded faces
   const drawFacesOpaque = regl({
     vert: faceVert,
     frag: `
       precision highp float;
       uniform vec3 uCameraPos;
-      uniform vec3 uLightOffset;
+      uniform mat4 uView;
+      uniform sampler2D uMatcap;
       varying float vEdgeCount;
       varying vec3 vNormal;
       varying vec3 vPosition;
 
       // Bright candy/plastic colors for a fun cartoony look
       vec3 getFaceColor(float edges) {
-        if (edges < 3.5) return vec3(1.0, 0.65, 0.25);     // Triangle: bright yellow
-        if (edges < 4.5) return vec3(1.0, 0.7, 0.45);      // Quad: tangerine
-        if (edges < 5.5) return vec3(0.45, 0.75, 1.0);     // Pentagon: candy blue
-        if (edges < 6.5) return vec3(1.0, 0.75, 0.35);     // Hexagon: bright orange
-        if (edges < 7.5) return vec3(1.0, 0.5, 0.55);      // Heptagon: candy pink
-        return vec3(0.75, 0.6, 1.0);                        // Octagon+: bright lavender
+        if (edges < 3.5) return vec3(1.0, 0.85, 0.3);      // Triangle: bright yellow
+        if (edges < 4.5) return vec3(1.0, 0.6, 0.3);       // Quad: tangerine
+        if (edges < 5.5) return vec3(0.3, 0.7, 1.0);       // Pentagon: candy blue
+        if (edges < 6.5) return vec3(1.0, 0.55, 0.2);      // Hexagon: bright orange
+        if (edges < 7.5) return vec3(1.0, 0.4, 0.5);       // Heptagon: candy pink
+        return vec3(0.7, 0.5, 1.0);                         // Octagon+: bright lavender
       }
 
-      // sRGB to linear conversion
-      vec3 toLinear(vec3 srgb) {
-        return pow(srgb, vec3(2.2));
+      // Matcap UV from eye direction and normal (hughsk formula)
+      vec2 matcapUV(vec3 eye, vec3 normal) {
+        vec3 r = reflect(eye, normal);
+        float m = 2.8284271247461903 * sqrt(r.z + 1.0);
+        return r.xy / m + 0.5;
       }
 
-      // Linear to sRGB conversion
-      vec3 toSRGB(vec3 linear) {
-        return pow(linear, vec3(1.0 / 2.2));
+      // RGB to HSL conversion
+      vec3 rgb2hsl(vec3 c) {
+        float maxC = max(max(c.r, c.g), c.b);
+        float minC = min(min(c.r, c.g), c.b);
+        float l = (maxC + minC) * 0.5;
+
+        if (maxC == minC) {
+          return vec3(0.0, 0.0, l); // achromatic
+        }
+
+        float d = maxC - minC;
+        float s = l > 0.5 ? d / (2.0 - maxC - minC) : d / (maxC + minC);
+
+        float h;
+        if (maxC == c.r) {
+          h = (c.g - c.b) / d + (c.g < c.b ? 6.0 : 0.0);
+        } else if (maxC == c.g) {
+          h = (c.b - c.r) / d + 2.0;
+        } else {
+          h = (c.r - c.g) / d + 4.0;
+        }
+        h /= 6.0;
+
+        return vec3(h, s, l);
+      }
+
+      // Helper for HSL to RGB
+      float hue2rgb(float p, float q, float t) {
+        if (t < 0.0) t += 1.0;
+        if (t > 1.0) t -= 1.0;
+        if (t < 1.0/6.0) return p + (q - p) * 6.0 * t;
+        if (t < 1.0/2.0) return q;
+        if (t < 2.0/3.0) return p + (q - p) * (2.0/3.0 - t) * 6.0;
+        return p;
+      }
+
+      // HSL to RGB conversion
+      vec3 hsl2rgb(vec3 hsl) {
+        float h = hsl.x, s = hsl.y, l = hsl.z;
+
+        if (s == 0.0) {
+          return vec3(l); // achromatic
+        }
+
+        float q = l < 0.5 ? l * (1.0 + s) : l + s - l * s;
+        float p = 2.0 * l - q;
+
+        return vec3(
+          hue2rgb(p, q, h + 1.0/3.0),
+          hue2rgb(p, q, h),
+          hue2rgb(p, q, h - 1.0/3.0)
+        );
       }
 
       void main() {
-        // Convert base color to linear space for lighting calculations
-        vec3 baseColor = toLinear(getFaceColor(vEdgeCount));
+        vec3 faceColor = getFaceColor(vEdgeCount);
 
-        vec3 N = normalize(vNormal);
-        vec3 V = normalize(uCameraPos - vPosition);
+        // World space normal
+        vec3 worldNormal = normalize(vNormal);
+        vec3 toCamera = normalize(uCameraPos - vPosition);
 
-        // Light offset relative to camera (key light above and to the right)
-        vec3 lightPos = uCameraPos + uLightOffset;
-        vec3 L = normalize(lightPos - vPosition);
+        // Flip normal if back-facing
+        if (dot(worldNormal, toCamera) < 0.0) worldNormal = -worldNormal;
 
-        float NdotL = abs(dot(N, L));
-        float NdotV = abs(dot(N, V));
+        // Transform normal to view space
+        vec3 viewNormal = normalize(mat3(uView) * worldNormal);
 
-        // Lighting in linear space - bright for candy/plastic look
-        float ambient = 0.4;
-        float diffuse = 0.5 * NdotL;
+        // Simple matcap: just use view-space normal xy
+        vec2 uv = viewNormal.xy * 0.5 + 0.5;
+        vec3 matcap = texture2D(uMatcap, uv).rgb;
 
-        // Specular (Blinn-Phong) - bright highlights
-        vec3 H = normalize(L + V);
-        float NdotH = abs(dot(N, H));
-        float specular = 0.6 * pow(NdotH, 64.0);
+        // Photoshop "Color" blend in HSL space:
+        // Take hue and saturation from face color, luminance from matcap
+        vec3 faceHSL = rgb2hsl(faceColor);
+        vec3 matcapHSL = rgb2hsl(matcap);
+        vec3 color = hsl2rgb(pow(mix(
+          faceHSL,
+          matcapHSL,
+          vec3(0.0, 0.0, 1.0)
+        ), vec3(1, 1, 1.5)));
 
-        // Multi-layer fresnel rim lighting for a glowing effect
-        float fresnel1 = pow(1.0 - NdotV, 2.0);   // Soft wide glow
-        float fresnel2 = pow(1.0 - NdotV, 4.0);   // Tighter bright rim
-        float fresnel3 = pow(1.0 - NdotV, 8.0);   // Very tight highlight
-
-        // Glow colors - warm tinted
-        vec3 glowColor = mix(baseColor, vec3(1.0), 0.5);  // Blend base with white
-        vec3 rimColor = vec3(1.0, 0.95, 0.9);             // Warm white
-
-        float lighting = ambient + diffuse;
-        vec3 color = baseColor * lighting;
-
-        // Layered rim/glow effect
-        color += glowColor * fresnel1 * 0.35;     // Soft colored glow
-        color += rimColor * fresnel2 * 0.5;       // Bright rim
-        color += vec3(1.0) * fresnel3 * 0.4;      // Hot edge highlight
-        color += vec3(1.0) * specular;            // Specular highlight
-
-        // Convert back to sRGB for display
-        color = toSRGB(clamp(color, 0.0, 1.0));
-
-        gl_FragColor = vec4(color, 1.0);
+        gl_FragColor = vec4(clamp(color, 0.0, 1.0), 1.0);
       }
     `,
     attributes: faceAttributes,
     uniforms: {
       uCameraPos: (_, props) => props.cameraPosition ?? [0, 0, 20],
       uFocusCenter: (_, props) => props.focusCenter ?? [0, 0, 0],
-      // Light offset relative to camera (above and to the right)
-      uLightOffset: [5, 8, 2]
+      uMatcap: matcapTexture,
+      uView: (_, props) => props.viewMatrix ?? [1,0,0,0, 0,1,0,0, 0,0,1,0, 0,0,0,1]
     },
     blend: { enable: false },
     depth: { enable: true, mask: true },

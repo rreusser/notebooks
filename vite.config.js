@@ -23,6 +23,19 @@ const GITHUB_BASE_URL = "https://github.com/rreusser/notebooks/tree/main/src";
 const META_IMAGE_BASE_URL = "https://rreusser.github.io/notebooks/meta";
 const NOTEBOOKS_DIR = join(__dirname, "src");
 
+
+// Tile URLs for src/denali
+const S3_BASE = "https://s3.us-east-1.amazonaws.com/tilesets.rreusser.github.io";
+
+const tileUrls = {
+  terrain: process.env.NODE_ENV === "production"
+    ? `${S3_BASE}/denali-arcticdem-srtm30-v1/{z}/{x}/{y}.webp`
+    : "data/tiles/denali-arcticdem-srtm30-v1/{z}/{x}/{y}.webp",
+  sentinel: process.env.NODE_ENV === "production"
+    ? `${S3_BASE}/denali-sentinel2-v1/{z}/{x}/{y}.webp`
+    : "data/tiles/denali-sentinel2-v1/{z}/{x}/{y}.webp",
+};
+
 // Register Handlebars helpers for index page rendering
 Handlebars.registerHelper('encodeURIComponent', (str) => encodeURIComponent(str));
 Handlebars.registerHelper('ifEquals', function(arg1, arg2, options) {
@@ -31,6 +44,7 @@ Handlebars.registerHelper('ifEquals', function(arg1, arg2, options) {
 const notebookPaths = glob.sync(join(NOTEBOOKS_DIR, "**", "*.html"), {
   nodir: true,
   absolute: true,
+  ignore: [join(NOTEBOOKS_DIR, "lib", "**")],
 });
 
 async function fileExists(path) {
@@ -75,6 +89,7 @@ async function computeIndex() {
   const currentPaths = glob.sync(join(NOTEBOOKS_DIR, "**", "*.html"), {
     nodir: true,
     absolute: true,
+    ignore: [join(NOTEBOOKS_DIR, "lib", "**")],
   });
   const notebooks = [];
   for (const path of currentPaths) {
@@ -100,78 +115,82 @@ export default defineConfig(({ command }) => {
   const isDev = command === 'serve';
 
   return {
-  ...config(),
-  plugins: [
-    useHttps && basicSsl(),
-    metadataWarningPlugin({ rootDir: NOTEBOOKS_DIR }),
-    debugNotebook(),
-    observable({
-      template: TEMPLATE_PATH,
-      transformTemplate: async function (template, { filename, path }) {
-        const notebook = deserialize(await readFile(filename, "utf8"), {
-          parser,
-        });
-        const metadata = await readMetadata(filename);
-        const isIndex = path === "/index.html";
-        const data = {
-          sourceUrl: `${GITHUB_BASE_URL}/${path.replace(/^\//, "")}`,
-          author: "Ricky Reusser",
-          authorUrl: "https://rreusser.github.io",
-          ...notebook,
-          ...metadata,
-        };
-        if (isIndex) {
-          delete data.sourceUrl;
-          delete data.author;
-
-          // Add notebook links
-          data.index = await computeIndex();
-          // Add image URLs for template rendering
-          // In dev: ./slug/meta.ext, in build: ./meta/slug.ext
-          data.index = data.index.map((nb) => {
-            const slug = nb.path.replace(/\/$/, '');
-            const imageExt = nb.image ? (nb.image.endsWith('.jpg') ? 'jpg' : 'png') : null;
-            let imageUrl = null;
-            if (imageExt) {
-              imageUrl = isDev ? `./${slug}/meta.${imageExt}` : `./meta/${slug}.${imageExt}`;
-            }
-            return {
-              ...nb,
-              imageUrl
-            };
+    ...config(),
+    plugins: [
+      useHttps && basicSsl(),
+      metadataWarningPlugin({ rootDir: NOTEBOOKS_DIR }),
+      debugNotebook(),
+      observable({
+        template: TEMPLATE_PATH,
+        transformTemplate: async function (template, { filename, path }) {
+          const notebook = deserialize(await readFile(filename, "utf8"), {
+            parser,
           });
-        }
+          const metadata = await readMetadata(filename);
+          const isIndex = path === "/index.html";
+          const data = {
+            sourceUrl: `${GITHUB_BASE_URL}/${path.replace(/^\//, "")}`,
+            author: "Ricky Reusser",
+            authorUrl: "https://rreusser.github.io",
+            ...notebook,
+            ...metadata,
+          };
+          if (isIndex) {
+            delete data.sourceUrl;
+            delete data.author;
 
-        return Handlebars.compile(template)(data);
+            // Add notebook links
+            data.index = await computeIndex();
+            // Add image URLs for template rendering
+            // In dev: ./slug/meta.ext, in build: ./meta/slug.ext
+            data.index = data.index.map((nb) => {
+              const slug = nb.path.replace(/\/$/, '');
+              const imageExt = nb.image ? (nb.image.endsWith('.jpg') ? 'jpg' : 'png') : null;
+              let imageUrl = null;
+              if (imageExt) {
+                imageUrl = isDev ? `./${slug}/meta.${imageExt}` : `./meta/${slug}.${imageExt}`;
+              }
+              return {
+                ...nb,
+                imageUrl
+              };
+            });
+          }
+
+          return Handlebars.compile(template)(data);
+        },
+        transformNotebook: async function (notebook, { filename }) {
+          // Remove the leading h1, preserving additional cell content, if present.
+          if (!notebook.cells.length) return notebook;
+          const lines = notebook.cells[0].value.split("\n") || [];
+          if (lines[0].startsWith("# ")) lines.splice(0, 1);
+          if (lines.filter(Boolean).length) {
+            notebook.cells[0].value = lines.join("\n");
+          } else {
+            notebook.cells.splice(0, 1);
+          }
+          return notebook;
+        },
+      }),
+    ],
+    build: {
+      outDir: join(__dirname, "docs"),
+      emptyOutDir: true,
+      rollupOptions: {
+        input: notebookPaths,
       },
-      transformNotebook: async function (notebook, { filename }) {
-        // Remove the leading h1, preserving additional cell content, if present.
-        if (!notebook.cells.length) return notebook;
-        const lines = notebook.cells[0].value.split("\n") || [];
-        if (lines[0].startsWith("# ")) lines.splice(0, 1);
-        if (lines.filter(Boolean).length) {
-          notebook.cells[0].value = lines.join("\n");
-        } else {
-          notebook.cells.splice(0, 1);
-        }
-        return notebook;
+    },
+    root: "src",
+    base: "/notebooks/",
+    server: {
+      host: true,
+      hmr: {
+        host: undefined,
       },
-    }),
-  ],
-  build: {
-    outDir: join(__dirname, "docs"),
-    emptyOutDir: true,
-    rollupOptions: {
-      input: notebookPaths,
     },
-  },
-  root: "src",
-  base: "/notebooks/",
-  server: {
-    host: true,
-    hmr: {
-      host: undefined,
+    define: {
+      __TILE_URL_TERRAIN__: JSON.stringify(tileUrls.terrain),
+      __TILE_URL_SENTINEL__: JSON.stringify(tileUrls.sentinel),
     },
-  },
-};
+  };
 });
