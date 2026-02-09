@@ -1,6 +1,6 @@
 import { observable, config } from "@observablehq/notebook-kit/vite";
 import { defineConfig } from "vite";
-import { readFile, access } from "node:fs/promises";
+import { readFile, access, copyFile, mkdir } from "node:fs/promises";
 import Handlebars from "handlebars";
 import { join, dirname, resolve, relative } from "node:path";
 import yaml from "yaml";
@@ -111,6 +111,24 @@ async function computeIndex() {
   return notebooks;
 }
 
+function copyStaticAssets(patterns) {
+  return {
+    name: 'copy-static-assets',
+    apply: 'build',
+    async closeBundle() {
+      for (const pattern of patterns) {
+        const files = glob.sync(join(NOTEBOOKS_DIR, pattern), { nodir: true, absolute: true });
+        for (const file of files) {
+          const rel = relative(NOTEBOOKS_DIR, file);
+          const dest = join(__dirname, 'docs', rel);
+          await mkdir(dirname(dest), { recursive: true });
+          await copyFile(file, dest);
+        }
+      }
+    },
+  };
+}
+
 export default defineConfig(({ command }) => {
   const isDev = command === 'serve';
 
@@ -119,6 +137,7 @@ export default defineConfig(({ command }) => {
     plugins: [
       useHttps && basicSsl(),
       metadataWarningPlugin({ rootDir: NOTEBOOKS_DIR }),
+      copyStaticAssets(['**/*.geojson']),
       debugNotebook(),
       observable({
         template: TEMPLATE_PATH,
