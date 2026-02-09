@@ -270,10 +270,10 @@ export class LineLayer {
           const idx = (polyline.offset + i) * 4;
 
           if (elev == null || elev <= 0) {
-            data[idx] = 0;
+            data[idx] = coord.mercatorX;
             data[idx + 1] = 0;
-            data[idx + 2] = 0;
-            data[idx + 3] = 0;
+            data[idx + 2] = coord.mercatorY;
+            data[idx + 3] = 1.0;
           } else {
             const elevScale = this._estimateElevScale(coord.mercatorY);
             data[idx] = coord.mercatorX;
