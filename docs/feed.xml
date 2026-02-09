@@ -5,8 +5,16 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Mon, 09 Feb 2026 06:44:55 GMT</lastBuildDate>
+    <lastBuildDate>Mon, 09 Feb 2026 07:12:27 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
+    <item>
+      <title>Denali Terrain</title>
+      <link>https://rreusser.github.io/notebooks/denali/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/denali/</guid>
+      <pubDate>Sun, 08 Feb 2026 08:00:00 GMT</pubDate>
+      <description>Interactive 3D terrain viewer for the Denali region built from scratch with WebGPU</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/denali.jpg" medium="image" />
+    </item>
     <item>
       <title>Visualizing Sloan Digital Sky Survey Data</title>
       <link>https://rreusser.github.io/notebooks/visualizing-sloan-digital-sky-survey-data/</link>
@@ -480,13 +488,6 @@
       <title>Untitled</title>
       <link>https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</link>
       <guid isPermaLink="true">https://rreusser.github.io/notebooks/lib/webgpu-text/node_modules/@observablehq/notebook-kit/dist/src/templates/default.html</guid>
-      <pubDate></pubDate>
-      <description></description>
-    </item>
-    <item>
-      <title>Denali 3D Terrain</title>
-      <link>https://rreusser.github.io/notebooks/denali/</link>
-      <guid isPermaLink="true">https://rreusser.github.io/notebooks/denali/</guid>
       <pubDate></pubDate>
       <description></description>
     </item>

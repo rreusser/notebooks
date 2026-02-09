@@ -1,6 +1,6 @@
 <!doctype html>
 <notebook theme="air">
-  <title>Denali 3D Terrain</title>
+  <title>Denali Terrain</title>
 
   <script id="viewer" type="module">
     import { TerrainMap } from './mapviewer/terrain-viewer.js';
@@ -160,6 +160,15 @@
     }
 
     addControl(controlsContainer,
+      Inputs.checkbox(["Imagery", "Features", "Route"], { value: ["Imagery", "Features", "Route"], label: "Layers" }),
+      v => {
+        viewer.settings.showImagery = v.includes("Imagery");
+        viewer.settings.showFeatures = v.includes("Features");
+        viewer.settings.showRoute = v.includes("Route");
+      }
+    );
+
+    addControl(controlsContainer,
       Inputs.date({ value: sunState.date, label: "Date" }),
       v => { if (v) { sunState.date = v; updateSunDirection(); } }
     );
@@ -211,9 +220,22 @@
   <script id="intro" type="text/markdown">
 This notebook implements an interactive 3D terrain viewer from scratch using [WebGPU](https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API). It renders elevation data for the Denali region of Alaska, composited with satellite imagery and OpenStreetMap feature labels.
 
-The elevation data comes from the [ArcticDEM](https://www.pgc.umn.edu/data/arcticdem/) mosaic (2m resolution) with [SRTM30](https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface) as a base layer for coverage at lower zoom levels. Satellite imagery is from [Copernicus Sentinel-2](https://dataspace.copernicus.eu/). Peak locations are sourced from [OpenStreetMap](https://www.openstreetmap.org/copyright). The tile pipeline uses [STAC](https://stacspec.org/) APIs for data discovery, [GDAL](https://gdal.org/) for reprojection, and [rio-tiler](https://github.com/cogeotiff/rio-tiler) for slicing Cloud-Optimized GeoTIFFs into map tiles.
+The elevation data comes from the [ArcticDEM](https://www.pgc.umn.edu/data/arcticdem/) mosaic with [SRTM30](https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface) as a base layer to fill in gaps in ArcticDEM coverage. Satellite imagery is from [Copernicus Sentinel-2](https://dataspace.copernicus.eu/). Peak locations are sourced from [OpenStreetMap](https://www.openstreetmap.org/copyright). The tile pipeline uses [STAC](https://stacspec.org/) APIs for data discovery, [GDAL](https://gdal.org/) for reprojection, and [rio-tiler](https://github.com/cogeotiff/rio-tiler) for slicing and mosaicking Cloud-Optimized GeoTIFFs into map tiles.
 
-The renderer implements terrain mesh rendering with Mapbox Terrain-RGB decoding, imagery compositing, screen-space label collision detection with terrain occlusion, and single-scattering atmospheric fog. The atmosphere uses Rayleigh and Mie scattering, inspired by [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere) and [GPU Gems 2, Chapter 16](https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering).
+The renderer implements terrain mesh rendering, imagery compositing, basic GeoJSON features (no vector tiles!), and single-scattering atmospheric fog. The atmosphere uses Rayleigh and Mie scattering, inspired by [wwwtyro/glsl-atmosphere](https://github.com/wwwtyro/glsl-atmosphere) and [GPU Gems 2, Chapter 16](https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering).
+
+I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It uses way too much data for the (remarkably!) high resolution terrain. At the top of my list is to lower the terrain resolution and precompute the hillshading, rather than relying live terrain sampling for the hillshading.
+  </script>
+
+  <script id="controls-help" type="text/markdown">
+| Input | Action |
+|---|---|
+| Drag | Pan |
+| ⌘+Drag / Right-drag | Orbit |
+| Ctrl+Drag | Pivot (look around) |
+| ⌥+Drag | Zoom |
+| Shift+Drag | Pan (camera plane) |
+| Scroll | Zoom |
   </script>
 
   <script id="styles" type="text/html">
@@ -252,9 +274,4 @@ The renderer implements terrain mesh rendering with Mapbox Terrain-RGB decoding,
       }
     </style>
   </script>
-
-  <script id="caption" type="text/markdown">
-    Drag to rotate. Shift+drag or right-click drag to pan. Scroll to zoom.
-  </script>
-
 </notebook>

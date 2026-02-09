@@ -18,10 +18,10 @@ export function createCameraController(element, opts = {}) {
   const zoomSpeed = opts.zoomSpeed || 0.001;
   const panSpeed = opts.panSpeed || 1;
 
-  const _view = new Float32Array(16);
-  const _proj = new Float32Array(16);
-  const _projView = new Float32Array(16);
-  const _invProjView = new Float32Array(16);
+  const _view = new Float64Array(16);
+  const _proj = new Float64Array(16);
+  const _projView = new Float64Array(16);
+  const _invProjView = new Float64Array(16);
 
   let dirty = true;
   let lastAspect = 1;
@@ -190,6 +190,7 @@ export function createCameraController(element, opts = {}) {
       : (event.button === 2 || event.button === 1) ? 'rotate'
       : event.ctrlKey ? 'pivot'
       : event.metaKey ? 'rotate'
+      : event.altKey ? 'zoom'
       : 'grab';
     if (dragMode === 'rotate' && rotateStartCallback) {
       const rect = element.getBoundingClientRect();
@@ -230,6 +231,8 @@ export function createCameraController(element, opts = {}) {
       state.center[0] = eyeX - distance * Math.cos(state.theta) * Math.cos(state.phi);
       state.center[1] = eyeY - distance * Math.sin(state.theta);
       state.center[2] = eyeZ - distance * Math.cos(state.theta) * Math.sin(state.phi);
+    } else if (dragMode === 'zoom') {
+      state.distance = Math.max(state.near * 2, state.distance * Math.exp(dy * 0.005));
     } else if (dragMode === 'pan') {
       const rect = element.getBoundingClientRect();
       pan(dx / rect.height, dy / rect.height);

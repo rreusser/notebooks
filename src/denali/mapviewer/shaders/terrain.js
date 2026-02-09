@@ -15,13 +15,25 @@ struct Uniforms {
   hillshade_opacity: f32,
 };
 
+struct GlobalUniforms {
+  camera_position: vec4<f32>,
+  sun_direction: vec4<f32>,
+  rayleigh_params: vec4<f32>,
+  mie_params: vec4<f32>,
+  cam_right: vec4<f32>,
+  cam_up: vec4<f32>,
+};
+
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 @group(1) @binding(0) var elevationTexture: texture_2d<f32>;
+@group(2) @binding(0) var<uniform> globals: GlobalUniforms;
 
 struct VertexOutput {
   @builtin(position) position: vec4<f32>,
   @location(0) uv: vec2<f32>,
   @location(1) world_position: vec3<f32>,
+  @location(2) shade: f32,
+  @location(3) elevation_m: f32,
 };
 
 fn loadElevation(coord: vec2<i32>) -> f32 {
@@ -67,6 +79,23 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   out.uv = vec2<f32>((u + 1.0) / 514.0, (v + 1.0) / 514.0);
   out.world_position = (uniforms.model * pos).xyz;
 
+  // Hillshade: compute normal from neighbor elevations
+  let zL = loadElevation(vec2<i32>(clamp(raw_u - 1, 0, 513), raw_v));
+  let zR = loadElevation(vec2<i32>(clamp(raw_u + 1, 0, 513), raw_v));
+  let zU = loadElevation(vec2<i32>(raw_u, clamp(raw_v - 1, 0, 513)));
+  let zD = loadElevation(vec2<i32>(raw_u, clamp(raw_v + 1, 0, 513)));
+
+  let cellSize = uniforms.cell_size_meters;
+  let zFactor = uniforms.vertical_exaggeration;
+  let dzdx = ((zR - zL) / (2.0 * cellSize)) * zFactor;
+  let dzdy = ((zD - zU) / (2.0 * cellSize)) * zFactor;
+
+  let normal = vec3<f32>(-dzdx, 1.0, -dzdy);
+  let sun = globals.sun_direction.xyz;
+  let sun_horizon = smoothstep(-0.02, 0.02, sun.y);
+  out.shade = max(0.0, dot(normal, sun) * inverseSqrt(dot(normal, normal))) * sun_horizon;
+  out.elevation_m = elevation;
+
   // Reject sea-level vertices (no terrain data) — degenerate w=0 prevents rasterization
   if (elevation <= 0.0) {
     out.position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
@@ -92,31 +121,12 @@ struct Uniforms {
 ` + atmosphereCode + /* wgsl */`
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
-@group(1) @binding(0) var elevationTexture: texture_2d<f32>;
 @group(2) @binding(0) var<uniform> globals: GlobalUniforms;
 @group(3) @binding(0) var imageryTexture: texture_2d<f32>;
 @group(3) @binding(1) var imagerySampler: sampler;
 
 fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
   return pow(c, vec3<f32>(2.2));
-}
-
-// Bilinear interpolation of elevation. With CPU-decoded r32float textures,
-// we can interpolate the float values directly.
-fn sampleElevation(uv: vec2<f32>) -> f32 {
-  let dim = textureDimensions(elevationTexture, 0);
-  let size = vec2<f32>(dim);
-  let tc = uv * size;
-  let i = vec2<i32>(floor(tc));
-  let f = tc - floor(tc);
-  let mx = vec2<i32>(dim) - vec2<i32>(1);
-
-  let e00 = textureLoad(elevationTexture, clamp(i, vec2<i32>(0), mx), 0).r;
-  let e10 = textureLoad(elevationTexture, clamp(i + vec2<i32>(1, 0), vec2<i32>(0), mx), 0).r;
-  let e01 = textureLoad(elevationTexture, clamp(i + vec2<i32>(0, 1), vec2<i32>(0), mx), 0).r;
-  let e11 = textureLoad(elevationTexture, clamp(i + vec2<i32>(1, 1), vec2<i32>(0), mx), 0).r;
-
-  return mix(mix(e00, e10, f.x), mix(e01, e11, f.x), f.y);
 }
 
 fn applyAtmosphere(color: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
@@ -139,30 +149,12 @@ fn applyAtmosphere(color: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
 }
 
 @fragment
-fn fs_main(@location(0) uv: vec2<f32>, @location(1) world_position: vec3<f32>) -> @location(0) vec4<f32> {
-  let texel = uniforms.texel_size;
-
-  // Sample center and neighbors for gradient (manual bilinear of decoded elevation)
-  let zC = sampleElevation(uv);
-  let zL = sampleElevation(uv + vec2<f32>(-texel, 0.0));
-  let zR = sampleElevation(uv + vec2<f32>(texel, 0.0));
-  let zU = sampleElevation(uv + vec2<f32>(0.0, -texel));
-  let zD = sampleElevation(uv + vec2<f32>(0.0, texel));
-
-  // Gradient in meters
-  let cellSize = uniforms.cell_size_meters;
-  let zFactor = uniforms.vertical_exaggeration;
-  let dzdx = ((zR - zL) / (2.0 * cellSize)) * zFactor;
-  let dzdy = ((zD - zU) / (2.0 * cellSize)) * zFactor;
-
-  // Hillshade using sun direction from globals
-  let normal = vec3<f32>(-dzdx, 1.0, -dzdy);
-  let sun = globals.sun_direction.xyz;
-  let light = sun;
-  // Fade direct illumination as sun drops below horizon
-  let sun_horizon = smoothstep(-0.02, 0.02, sun.y);
-  let shade = max(0.0, dot(normal, light) * inverseSqrt(dot(normal, normal))) * sun_horizon;
-
+fn fs_main(
+  @location(0) uv: vec2<f32>,
+  @location(1) world_position: vec3<f32>,
+  @location(2) shade: f32,
+  @location(3) elevation_m: f32,
+) -> @location(0) vec4<f32> {
   // Base color: satellite imagery or elevation-based fallback
   var base_color: vec3<f32>;
   if (uniforms.has_imagery > 0.5) {
@@ -173,7 +165,7 @@ fn fs_main(@location(0) uv: vec2<f32>, @location(1) world_position: vec3<f32>) -
   } else {
     let minElev = 500.0;
     let maxElev = 6200.0;
-    let normalized = clamp((zC - minElev) / (maxElev - minElev), 0.0, 1.0);
+    let normalized = clamp((elevation_m - minElev) / (maxElev - minElev), 0.0, 1.0);
     let gray = normalized * 0.15 + 0.05;
     base_color = vec3<f32>(gray, gray, gray);
   }

@@ -150,6 +150,20 @@ export class TerrainMap {
       ],
     });
 
+    // White 1x1 fallback for when imagery is toggled off
+    this._whiteImageryTexture = device.createTexture({
+      size: [1, 1], format: 'rgba8unorm',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    device.queue.writeTexture({ texture: this._whiteImageryTexture }, new Uint8Array([255, 255, 255, 255]), { bytesPerRow: 4 }, [1, 1]);
+    this._whiteImageryBindGroup = device.createBindGroup({
+      layout: imageryBGL,
+      entries: [
+        { binding: 0, resource: this._whiteImageryTexture.createView() },
+        { binding: 1, resource: this._imagerySampler },
+      ],
+    });
+
     this._pipeline = device.createRenderPipeline({
       layout: device.createPipelineLayout({ bindGroupLayouts: [uniformBGL, textureBGL, globalUniformBGL, imageryBGL] }),
       vertex: {
@@ -235,8 +249,8 @@ export class TerrainMap {
     // Raycast infrastructure
     this._bvh = null;
     this._bvhTileList = [];
-    this._lastProjView = new Float32Array(16);
-    this._invProjView = new Float32Array(16);
+    this._lastProjView = new Float64Array(16);
+    this._invProjView = new Float64Array(16);
 
     this.camera.rotateStartCallback = (clientX, clientY) => this._hitTest(clientX, clientY);
 
@@ -381,14 +395,23 @@ export class TerrainMap {
       ud[34] = this._currentExaggeration;
       ud[35] = 1 / 514;
       ud[36] = settings.showTileBorders ? 1.0 : 0.0;
-      ud[37] = hasImagery ? 1.0 : 0.0;
+      ud[37] = settings.showImagery ? (hasImagery ? 1.0 : 0.0) : 1.0;
       ud[38] = settings.hillshadeOpacity;
+
+      let imageryBindGroup;
+      if (!settings.showImagery) {
+        imageryBindGroup = this._whiteImageryBindGroup;
+      } else if (hasImagery) {
+        imageryBindGroup = this._compositor.getBindGroup(tile.z, tile.x, tile.y);
+      } else {
+        imageryBindGroup = this._fallbackImageryBindGroup;
+      }
 
       device.queue.writeBuffer(this._uniformBuffer, tileIndex * this._UNIFORM_STRIDE, ud.buffer, ud.byteOffset, 160);
       draws.push({
         offset: tileIndex * this._UNIFORM_STRIDE,
         bindGroup: entry.bindGroup,
-        imageryBindGroup: hasImagery ? this._compositor.getBindGroup(tile.z, tile.x, tile.y) : this._fallbackImageryBindGroup,
+        imageryBindGroup,
       });
       tileIndex++;
     }
@@ -465,18 +488,22 @@ export class TerrainMap {
     this._frustumOverlay.draw(pass, projectionView, canvas.width, canvas.height);
 
     // Line feature layers (drawn after terrain, before circles/text)
-    for (const ll of this._lineLayers) {
-      ll.draw(pass);
+    if (settings.showRoute) {
+      for (const ll of this._lineLayers) {
+        ll.draw(pass);
+      }
     }
 
     // Circle feature layers
-    for (const cl of this._circleLayers) {
-      cl.draw(pass, this._globalUniformBindGroup, settings.featureDepthTest);
-    }
+    if (settings.showFeatures) {
+      for (const cl of this._circleLayers) {
+        cl.draw(pass, this._globalUniformBindGroup, settings.featureDepthTest);
+      }
 
-    // Text feature layers (drawn after circles)
-    for (const { layer } of this._textLayers) {
-      layer.draw(pass);
+      // Text feature layers (drawn after circles)
+      for (const { layer } of this._textLayers) {
+        layer.draw(pass);
+      }
     }
 
     // Collision debug bounding boxes
@@ -601,19 +628,21 @@ export class TerrainMap {
       this._renderDirty = true;
     }
 
-    // Prepare circle layers with current projectionView
-    for (const cl of this._circleLayers) {
-      cl.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
-    }
-
-    // Prepare text layers
-    for (const { layer } of this._textLayers) {
-      layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+    // Prepare circle and text layers with current projectionView
+    if (settings.showFeatures) {
+      for (const cl of this._circleLayers) {
+        cl.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+      }
+      for (const { layer } of this._textLayers) {
+        layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+      }
     }
 
     // Prepare line layers
-    for (const ll of this._lineLayers) {
-      ll.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+    if (settings.showRoute) {
+      for (const ll of this._lineLayers) {
+        ll.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+      }
     }
 
     this.paint();
@@ -752,6 +781,7 @@ export class TerrainMap {
     this._uniformBuffer.destroy();
     this._globalUniformBuffer.destroy();
     this._fallbackImageryTexture.destroy();
+    this._whiteImageryTexture.destroy();
     for (const ll of this._lineLayers) ll.destroy();
     this._device.destroy();
   }

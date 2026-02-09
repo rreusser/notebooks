@@ -3,8 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Denali 3D Terrain">
-  <meta property="og:title" content="Denali 3D Terrain">
+  <meta name="twitter:title" content="Denali Terrain">
+  <meta property="og:title" content="Denali Terrain">
+  <meta name="twitter:description" content="Interactive 3D terrain viewer for the Denali region built from scratch with WebGPU">
+  <meta name="subject" content="Interactive 3D terrain viewer for the Denali region built from scratch with WebGPU">
+  <meta name="description" content="Interactive 3D terrain viewer for the Denali region built from scratch with WebGPU">
+  <meta property="og:description" content="Interactive 3D terrain viewer for the Denali region built from scratch with WebGPU">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/denali.jpg">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/denali.jpg">
   <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
@@ -1886,7 +1893,7 @@ a.index__tag:active {
 }
   </style>
   
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Denali 3D Terrain</title>  <script type="module" crossorigin src="/notebooks/assets/index-fU0lpyq3.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Denali Terrain</title>  <script type="module" crossorigin src="/notebooks/assets/index-D5coEmg7.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1897,10 +1904,10 @@ a.index__tag:active {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Denali 3D Terrain</h1>
+    <h1>Denali Terrain</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      
+      <time pubdate="" datetime="20260208">February 8, 2026</time>
     </div>
     <div class="resource-links">
         <a href="https://github.com/rreusser/notebooks/tree/main/src/denali/index.html" class="resource-link">
@@ -1914,9 +1921,44 @@ a.index__tag:active {
   <div class="container">
 
     <main><div id="cell-1" class="observablehq observablehq--cell"></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"><div><p>This notebook implements an interactive 3D terrain viewer from scratch using <a href="https://developer.mozilla.org/en-US/docs/Web/API/WebGPU_API">WebGPU</a>. It renders elevation data for the Denali region of Alaska, composited with satellite imagery and OpenStreetMap feature labels.</p>
-<p>The elevation data comes from the <a href="https://www.pgc.umn.edu/data/arcticdem/">ArcticDEM</a> mosaic (2m resolution) with <a href="https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface">SRTM30</a> as a base layer for coverage at lower zoom levels. Satellite imagery is from <a href="https://dataspace.copernicus.eu/">Copernicus Sentinel-2</a>. Peak locations are sourced from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>. The tile pipeline uses <a href="https://stacspec.org/">STAC</a> APIs for data discovery, <a href="https://gdal.org/">GDAL</a> for reprojection, and <a href="https://github.com/cogeotiff/rio-tiler">rio-tiler</a> for slicing Cloud-Optimized GeoTIFFs into map tiles.</p>
-<p>The renderer implements terrain mesh rendering with Mapbox Terrain-RGB decoding, imagery compositing, screen-space label collision detection with terrain occlusion, and single-scattering atmospheric fog. The atmosphere uses Rayleigh and Mie scattering, inspired by <a href="https://github.com/wwwtyro/glsl-atmosphere">wwwtyro/glsl-atmosphere</a> and <a href="https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering">GPU Gems 2, Chapter 16</a>.</p>
-</div></div><div id="cell-4" class="observablehq observablehq--cell"><style>
+<p>The elevation data comes from the <a href="https://www.pgc.umn.edu/data/arcticdem/">ArcticDEM</a> mosaic with <a href="https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface">SRTM30</a> as a base layer to fill in gaps in ArcticDEM coverage. Satellite imagery is from <a href="https://dataspace.copernicus.eu/">Copernicus Sentinel-2</a>. Peak locations are sourced from <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>. The tile pipeline uses <a href="https://stacspec.org/">STAC</a> APIs for data discovery, <a href="https://gdal.org/">GDAL</a> for reprojection, and <a href="https://github.com/cogeotiff/rio-tiler">rio-tiler</a> for slicing and mosaicking Cloud-Optimized GeoTIFFs into map tiles.</p>
+<p>The renderer implements terrain mesh rendering, imagery compositing, basic GeoJSON features (no vector tiles!), and single-scattering atmospheric fog. The atmosphere uses Rayleigh and Mie scattering, inspired by <a href="https://github.com/wwwtyro/glsl-atmosphere">wwwtyro/glsl-atmosphere</a> and <a href="https://developer.nvidia.com/gpugems/gpugems2/part-ii-shading-lighting-and-shadows/chapter-16-accurate-atmospheric-scattering">GPU Gems 2, Chapter 16</a>.</p>
+<p>I mean, let’s be clear. This is a totally half-baked one-off ad hoc renderer. It uses way too much data for the (remarkably!) high resolution terrain. At the top of my list is to lower the terrain resolution and precompute the hillshading, rather than relying live terrain sampling for the hillshading.</p>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"><div><table>
+<thead>
+<tr>
+<th>Input</th>
+<th>Action</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Drag</td>
+<td>Pan</td>
+</tr>
+<tr>
+<td>⌘+Drag / Right-drag</td>
+<td>Orbit</td>
+</tr>
+<tr>
+<td>Ctrl+Drag</td>
+<td>Pivot (look around)</td>
+</tr>
+<tr>
+<td>⌥+Drag</td>
+<td>Zoom</td>
+</tr>
+<tr>
+<td>Shift+Drag</td>
+<td>Pan (camera plane)</td>
+</tr>
+<tr>
+<td>Scroll</td>
+<td>Zoom</td>
+</tr>
+</tbody>
+</table>
+</div></div><div id="cell-5" class="observablehq observablehq--cell"><style>
   canvas.terrain {
     width: 100%;
     min-width: 0;
@@ -1949,8 +1991,7 @@ a.index__tag:active {
   .terrain-attribution a:hover {
     text-decoration: underline;
   }
-</style></div><div id="cell-5" class="observablehq observablehq--cell"><div><p>Drag to rotate. Shift+drag or right-click drag to pan. Scroll to zoom.</p>
-</div></div></main>
+</style></div></main>
   </div>
   <footer>
     <div class="footer__attrib">© 2026 Ricky Reusser</div>
