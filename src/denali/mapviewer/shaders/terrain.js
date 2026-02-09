@@ -95,9 +95,12 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   out.shade = max(0.0, dot(normal, sun) * inverseSqrt(dot(normal, normal))) * sun_horizon;
   out.elevation_m = elevation;
 
-  // Reject sea-level vertices (no terrain data) — degenerate w=0 prevents rasterization
+  // Reject sea-level vertices (no terrain data) — move behind near plane.
+  // Preserves clip-space XY so boundary triangles don't stretch across the screen,
+  // while the hardware clipper discards the out-of-frustum portion.
+  // (Using w=0 to create a degenerate point is undefined on some GPUs.)
   if (elevation <= 0.0) {
-    out.position = vec4<f32>(0.0, 0.0, 0.0, 0.0);
+    out.position.z = -out.position.w;
   }
 
   return out;
