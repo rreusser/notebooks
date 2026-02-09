@@ -190,6 +190,10 @@
       Inputs.range([0.0, 2], { value: viewer.settings.verticalExaggeration, step: 0.01, label: "Vertical exaggeration" }),
       v => { viewer.settings.verticalExaggeration = v; }
     );
+    addControl(controlsContainer,
+      Inputs.range([10, 90], { value: Math.round(viewer.camera.state.fov * 180 / Math.PI), step: 1, label: "FOV (degrees)" }),
+      v => { viewer.camera.state.fov = v * Math.PI / 180; viewer.camera.taint(); }
+    );
 
     const debug = html`<details><summary style="cursor: pointer;">Debug</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
     const debugContent = debug.querySelector('div');

@@ -296,7 +296,7 @@ export function createCameraController(element, opts = {}) {
     state.distance = Math.max(state.near * 2, oldDistance * zoomFactor);
     const actualZoomFactor = state.distance / oldDistance;
 
-    const panAmount = 1 - actualZoomFactor;
+    const panAmount = (1 / actualZoomFactor - 1) * 2 * Math.tan(state.fov / 2);
     pan(-mx * panAmount, -my * panAmount);
     dirty = true;
   }
