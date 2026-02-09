@@ -137,7 +137,7 @@ export default defineConfig(({ command }) => {
     plugins: [
       useHttps && basicSsl(),
       metadataWarningPlugin({ rootDir: NOTEBOOKS_DIR }),
-      copyStaticAssets(['**/*.geojson']),
+      copyStaticAssets(['**/*.geojson', '**/fonts/*.json', '**/fonts/*.png']),
       debugNotebook(),
       observable({
         template: TEMPLATE_PATH,
