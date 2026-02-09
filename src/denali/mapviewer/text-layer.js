@@ -112,6 +112,7 @@ export class TextLayer {
     this._atmosphereBindGroup = null;
     this._textAtmosBuffer = null;
     this._textAtmosData = new Float32Array(4);
+    this._lastScaledStrokeWidth = null;
   }
 
   init(device, fontAtlas, format, depthStencilFormat, globalUniformBuffer) {
@@ -189,6 +190,15 @@ export class TextLayer {
 
   prepare(projectionView, canvasW, canvasH, pixelRatio, exaggeration) {
     if (!this._ready) return;
+
+    // Scale stroke width by pixel ratio for consistent CSS-pixel appearance
+    const scaledStrokeWidth = this._strokeWidth * pixelRatio;
+    if (scaledStrokeWidth !== this._lastScaledStrokeWidth) {
+      this._lastScaledStrokeWidth = scaledStrokeWidth;
+      for (const { span } of this._spans) {
+        span.setStrokeWidth(scaledStrokeWidth);
+      }
+    }
 
     // Update span positions with world coordinates
     // The vertex shader applies projectionView via viewMatrix
