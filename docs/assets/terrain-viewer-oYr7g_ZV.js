@@ -172,9 +172,8 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   let zD = loadElevation(vec2<i32>(raw_u, clamp(raw_v + 1, 0, 513)));
 
   let cellSize = uniforms.cell_size_meters;
-  let zFactor = uniforms.vertical_exaggeration;
-  let dzdx = ((zR - zL) / (2.0 * cellSize)) * zFactor;
-  let dzdy = ((zD - zU) / (2.0 * cellSize)) * zFactor;
+  let dzdx = (zR - zL) / (2.0 * cellSize);
+  let dzdy = (zD - zU) / (2.0 * cellSize);
 
   let normal = vec3<f32>(-dzdx, 1.0, -dzdy);
   let sun = globals.sun_direction.xyz;

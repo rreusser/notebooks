@@ -186,15 +186,15 @@
       Inputs.range([0.05, 1], { value: viewer.settings.atmosphereDensity, step: 0.01, label: "Atmosphere density" }),
       v => { viewer.settings.atmosphereDensity = v; }
     );
+    addControl(controlsContainer,
+      Inputs.range([0.0, 2], { value: viewer.settings.verticalExaggeration, step: 0.01, label: "Vertical exaggeration" }),
+      v => { viewer.settings.verticalExaggeration = v; }
+    );
 
     const debug = html`<details><summary style="cursor: pointer;">Debug</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
     const debugContent = debug.querySelector('div');
     controlsContainer.appendChild(debug);
 
-    addControl(debugContent,
-      Inputs.range([0.0, 5], { value: viewer.settings.verticalExaggeration, step: 0.1, label: "Vertical exaggeration" }),
-      v => { viewer.settings.verticalExaggeration = v; }
-    );
     addControl(debugContent,
       Inputs.range([1, 4], { value: viewer.settings.densityThreshold, step: 0.1, label: "Tile scale" }),
       v => { viewer.settings.densityThreshold = v; }
