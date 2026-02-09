@@ -1,0 +1,2 @@
+export const TILE_URL_TERRAIN = __TILE_URL_TERRAIN__;
+export const TILE_URL_SENTINEL = __TILE_URL_SENTINEL__;

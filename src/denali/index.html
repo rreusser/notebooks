@@ -4,6 +4,7 @@
 
   <script id="viewer" type="module">
     import { TerrainMap } from './mapviewer/terrain-viewer.js';
+    import { TILE_URL_TERRAIN, TILE_URL_SENTINEL } from './tile-urls.js';
     import { createGPULines } from 'npm:webgpu-instanced-lines';
     import simplify from 'npm:simplify-js';
     import { expandable } from './lib/expandable.js';
@@ -15,7 +16,7 @@
       sources: {
         'arctic-dem': {
           type: 'terrain',
-          tiles: [__TILE_URL_TERRAIN__],
+          tiles: [TILE_URL_TERRAIN],
           minzoom: 4,
           maxzoom: 14,
           bounds: [-152.9, 62.2, -148.8, 64.0],
@@ -23,7 +24,7 @@
         },
         'sentinel': {
           type: 'raster',
-          tiles: [__TILE_URL_SENTINEL__],
+          tiles: [TILE_URL_SENTINEL],
           minzoom: 4,
           maxzoom: 11,
           bounds: [-152.9, 62.2, -148.8, 64.0],
