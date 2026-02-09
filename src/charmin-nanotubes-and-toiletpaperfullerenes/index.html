@@ -223,7 +223,7 @@ const faceOpacity = ctrl2(Inputs.range([0, 1], {
 
 const faceShading = ctrl2(Inputs.toggle({
   label: "Face shading",
-  value: true
+  value: false
 }));
 
 const depthFalloffWidth = ctrl2(Inputs.range([1, 20], {
@@ -422,22 +422,7 @@ if (!state.regl) {
       projectionView: () => state.controller!.projectionView
     }
   });
-
-  // Load matcap texture
-  const matcapImage = new Image();
-  matcapImage.src = './matcap.webp';
-  const matcapTexture = state.regl.texture({
-    data: matcapImage,
-    mag: 'linear',
-    min: 'linear',
-    flipY: true
-  });
-  matcapImage.onload = () => {
-    matcapTexture({ data: matcapImage, flipY: true });
-    state.dirty = true;
-  };
-
-  state.renderer = createMeshRenderer(state.regl, icosphere, matcapTexture);
+  state.renderer = createMeshRenderer(state.regl, icosphere);
   state.physics = new MeshPhysics(state.mesh!);
   // Helper to update touch button states
   const updateTouchButtons = (hasSelection: boolean) => {
@@ -536,7 +521,7 @@ state.frame = state.regl.frame(() => {
 
   const gl = state.regl!._gl;
   const aspectRatio = gl.canvas.width / gl.canvas.height;
-  const { view: viewMatrix, dirty: controllerDirty } = state.controller.update(aspectRatio);
+  const { dirty: controllerDirty } = state.controller.update(aspectRatio);
 
   const shouldRender = state.renderParams.simulate || state.dirty || controllerDirty || state.interactions?.dirty;
   if (!shouldRender) return;
@@ -589,7 +574,6 @@ state.frame = state.regl.frame(() => {
       faceOpacity: state.renderParams.faceOpacity,
       faceShading: state.renderParams.faceShading,
       cameraPosition: state.controller!.camera.eye(),
-      viewMatrix: viewMatrix,
       selectedVertexIndex: selectedVertexIdx,
       hoverVertexIndex: state.interactions?.hoverVertexIndex ?? -1,
       selectedEdgeIndex: selectedEdgeIdx,
