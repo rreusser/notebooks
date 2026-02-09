@@ -86,6 +86,7 @@ export function createCameraController(element, opts = {}) {
   let lastTouchDist = 0;
   let lastTouchCenterX = 0;
   let lastTouchCenterY = 0;
+  let lastTouchAngle = 0;
 
   function computeMatrices(aspectRatio) {
     const { phi, theta, distance, center, fov, near, far } = state;
@@ -314,6 +315,14 @@ export function createCameraController(element, opts = {}) {
       lastTouchDist = Math.sqrt(dx * dx + dy * dy);
       lastTouchCenterX = (event.touches[0].clientX + event.touches[1].clientX) / 2;
       lastTouchCenterY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
+      lastTouchAngle = Math.atan2(dy, dx);
+
+      // Recenter orbit on terrain under viewport center (same as mouse rotate)
+      if (rotateStartCallback) {
+        const rect = element.getBoundingClientRect();
+        const result = rotateStartCallback(rect.left + rect.width / 2, rect.top + rect.height / 2);
+        if (Array.isArray(result) && result.length === 3) recenterOrbit(result);
+      }
     }
   }
 
@@ -334,14 +343,23 @@ export function createCameraController(element, opts = {}) {
       const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
 
       if (lastTouchDist > 0) {
+        // Pinch-to-zoom
         const scale = lastTouchDist / dist;
         state.distance *= scale;
         state.distance = Math.max(state.near * 2, state.distance);
+
+        // Two-finger twist → orbit (phi rotation)
+        const angle = Math.atan2(dy, dx);
+        const angleDelta = angle - lastTouchAngle;
+        state.phi -= angleDelta;
+
+        // Vertical center-point drag → tilt (theta)
         const rect = element.getBoundingClientRect();
-        const panDx = (centerX - lastTouchCenterX) / rect.height;
-        const panDy = (centerY - lastTouchCenterY) / rect.height;
-        pan(panDx, panDy);
+        const tiltDelta = (centerY - lastTouchCenterY) / rect.height;
+        state.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, state.theta + tiltDelta * 2));
+
         dirty = true;
+        lastTouchAngle = angle;
       }
       lastTouchDist = dist;
       lastTouchCenterX = centerX;
@@ -354,6 +372,7 @@ export function createCameraController(element, opts = {}) {
     dragMode = null;
     grabAnchor = null;
     lastTouchDist = 0;
+    lastTouchAngle = 0;
   }
 
   function onContextMenu(event) {
