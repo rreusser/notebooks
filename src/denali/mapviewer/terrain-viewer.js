@@ -397,6 +397,7 @@ export class TerrainMap {
       ud[36] = settings.showTileBorders ? 1.0 : 0.0;
       ud[37] = settings.showImagery ? (hasImagery ? 1.0 : 0.0) : 1.0;
       ud[38] = settings.hillshadeOpacity;
+      ud[39] = settings.slopeAngleOpacity;
 
       let imageryBindGroup;
       if (!settings.showImagery) {

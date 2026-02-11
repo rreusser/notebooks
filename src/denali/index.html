@@ -108,8 +108,21 @@
       simplifyFn: simplify,
     });
 
+    const slopeLegend = html`<div class="slope-legend" style="display: none">
+      <div class="slope-legend-title">Slope angle</div>
+      <div class="slope-legend-bar"></div>
+      <div class="slope-legend-labels">
+        <span style="left: 0%">25°</span>
+        <span style="left: 25%">30°</span>
+        <span style="left: 50%">35°</span>
+        <span style="left: 100%">45°+</span>
+      </div>
+    </div>`;
+    viewer._slopeLegend = slopeLegend;
+
     const container = html`<div style="position: relative">`;
     container.appendChild(canvas);
+    container.appendChild(slopeLegend);
     container.appendChild(viewer.attribution);
 
     display(expandable(container, {
@@ -167,6 +180,13 @@
         viewer.settings.showImagery = v.includes("Imagery");
         viewer.settings.showFeatures = v.includes("Features");
         viewer.settings.showRoute = v.includes("Route");
+      }
+    );
+    addControl(controlsContainer,
+      Inputs.range([0, 1], { value: viewer.settings.slopeAngleOpacity, step: 0.01, label: "Slope angle opacity" }),
+      v => {
+        viewer.settings.slopeAngleOpacity = v;
+        viewer._slopeLegend.style.display = v > 0 ? '' : 'none';
       }
     );
 
@@ -258,6 +278,48 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
         font-family: monospace;
         font-size: 12px;
         color: #666;
+      }
+
+      .slope-legend {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        background: rgba(255, 255, 255, 0.8);
+        backdrop-filter: blur(4px);
+        border-radius: 4px;
+        padding: 2px 14px 0px;
+        pointer-events: none;
+        font-size: 11px;
+        line-height: 1;
+        font-family: system-ui, sans-serif;
+      }
+      .slope-legend-title {
+        font-weight: 600;
+        margin-bottom: 6px;
+        color: #333;
+      }
+      .slope-legend-bar {
+        width: 160px;
+        height: 12px;
+        border-radius: 2px;
+        background: linear-gradient(to right,
+          rgb(51, 204, 51) 0%,
+          rgb(242, 217, 26) 25%,
+          rgb(230, 26, 26) 50%,
+          rgb(140, 26, 191) 100%
+        );
+      }
+      .slope-legend-labels {
+        position: relative;
+        width: 160px;
+        height: 16px;
+        margin-top: 3px;
+      }
+      .slope-legend-labels span {
+        position: absolute;
+        transform: translateX(-50%);
+        color: #555;
+        white-space: nowrap;
       }
 
       .terrain-attribution {

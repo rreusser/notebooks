@@ -13,6 +13,7 @@ struct Uniforms {
   show_tile_borders: f32,
   has_imagery: f32,
   hillshade_opacity: f32,
+  slope_angle_opacity: f32,
 };
 
 struct GlobalUniforms {
@@ -34,6 +35,7 @@ struct VertexOutput {
   @location(1) world_position: vec3<f32>,
   @location(2) shade: f32,
   @location(3) elevation_m: f32,
+  @location(4) slope_angle: f32,
 };
 
 fn loadElevation(coord: vec2<i32>) -> f32 {
@@ -79,11 +81,20 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   out.uv = vec2<f32>((u + 1.0) / 514.0, (v + 1.0) / 514.0);
   out.world_position = (uniforms.model * pos).xyz;
 
-  // Hillshade: compute normal from neighbor elevations
-  let zL = loadElevation(vec2<i32>(clamp(raw_u - 1, 0, 513), raw_v));
-  let zR = loadElevation(vec2<i32>(clamp(raw_u + 1, 0, 513), raw_v));
-  let zU = loadElevation(vec2<i32>(raw_u, clamp(raw_v - 1, 0, 513)));
-  let zD = loadElevation(vec2<i32>(raw_u, clamp(raw_v + 1, 0, 513)));
+  // Hillshade: compute normal from neighbor elevations.
+  // At tile borders, extend the stencil so it always spans 2 texels
+  // to avoid halving the gradient (which creates visible seams).
+  var lu = raw_u - 1; var ru = raw_u + 1;
+  if (lu < 0) { lu = 0; ru = 2; }
+  else if (ru > 513) { ru = 513; lu = 511; }
+  var uv_ = raw_v - 1; var dv = raw_v + 1;
+  if (uv_ < 0) { uv_ = 0; dv = 2; }
+  else if (dv > 513) { dv = 513; uv_ = 511; }
+
+  let zL = loadElevation(vec2<i32>(lu, raw_v));
+  let zR = loadElevation(vec2<i32>(ru, raw_v));
+  let zU = loadElevation(vec2<i32>(raw_u, uv_));
+  let zD = loadElevation(vec2<i32>(raw_u, dv));
 
   let cellSize = uniforms.cell_size_meters;
   let dzdx = (zR - zL) / (2.0 * cellSize);
@@ -94,13 +105,16 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   let sun_horizon = smoothstep(-0.02, 0.02, sun.y);
   out.shade = max(0.0, dot(normal, sun) * inverseSqrt(dot(normal, normal))) * sun_horizon;
   out.elevation_m = elevation;
+  out.slope_angle = atan(sqrt(dzdx * dzdx + dzdy * dzdy)) * 57.29578;
 
-  // Reject sea-level vertices (no terrain data) — move behind near plane.
-  // Preserves clip-space XY so boundary triangles don't stretch across the screen,
-  // while the hardware clipper discards the out-of-frustum portion.
-  // (Using w=0 to create a degenerate point is undefined on some GPUs.)
+  // Reject sea-level vertices (no terrain data).
+  // NaN in any vertex position causes the rasterizer to discard the entire
+  // triangle, cleanly eliminating partial edge triangles without clipping artifacts.
+  // Use a var to prevent the compiler from constant-folding the bitcast.
   if (elevation <= 0.0) {
-    out.position.z = -out.position.w;
+    var nan_bits = 0x7FC00000u;
+    let nan = bitcast<f32>(nan_bits);
+    out.position = vec4<f32>(nan, nan, nan, nan);
   }
 
   return out;
@@ -118,6 +132,7 @@ struct Uniforms {
   show_tile_borders: f32,
   has_imagery: f32,
   hillshade_opacity: f32,
+  slope_angle_opacity: f32,
 };
 
 ` + atmosphereCode + /* wgsl */`
@@ -129,6 +144,24 @@ struct Uniforms {
 
 fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
   return pow(c, vec3<f32>(2.2));
+}
+
+fn slopeAngleColor(deg: f32) -> vec4<f32> {
+  // Colors in sRGB, converted to linear for compositing
+  let green  = pow(vec3<f32>(0.2, 0.8, 0.2), vec3<f32>(2.2));
+  let yellow = pow(vec3<f32>(0.95, 0.85, 0.1), vec3<f32>(2.2));
+  let red    = pow(vec3<f32>(0.9, 0.1, 0.1), vec3<f32>(2.2));
+  let purple = pow(vec3<f32>(0.55, 0.1, 0.75), vec3<f32>(2.2));
+
+  let t_enter  = smoothstep(23.0, 27.0, deg);
+  let t_yellow = smoothstep(28.0, 32.0, deg);
+  let t_red    = smoothstep(33.0, 37.0, deg);
+  let t_purple = smoothstep(42.0, 48.0, deg);
+
+  var color = mix(green, yellow, t_yellow);
+  color = mix(color, red, t_red);
+  color = mix(color, purple, t_purple);
+  return vec4<f32>(color, t_enter);
 }
 
 fn applyAtmosphere(color: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
@@ -156,6 +189,7 @@ fn fs_main(
   @location(1) world_position: vec3<f32>,
   @location(2) shade: f32,
   @location(3) elevation_m: f32,
+  @location(4) slope_angle: f32,
 ) -> @location(0) vec4<f32> {
   // Base color: satellite imagery or elevation-based fallback
   var base_color: vec3<f32>;
@@ -172,8 +206,15 @@ fn fs_main(
     base_color = vec3<f32>(gray, gray, gray);
   }
 
+  // Slope angle overlay (before hillshade so shading applies to slope colors)
+  let slope_opacity = uniforms.slope_angle_opacity;
+  if (slope_opacity > 0.0) {
+    let slope_col = slopeAngleColor(slope_angle);
+    base_color = mix(base_color, slope_col.rgb, slope_col.a * slope_opacity);
+  }
+
   let lit = base_color * mix(1.0, shade, uniforms.hillshade_opacity);
-  let terrain_color = clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0));
+  var terrain_color = clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0));
 
   // Apply atmospheric scattering
   let result = applyAtmosphere(terrain_color, world_position);

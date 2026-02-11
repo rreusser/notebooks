@@ -10,6 +10,7 @@ export function createSettings(initial = {}) {
     showImagery: true,
     showFeatures: true,
     showRoute: true,
+    slopeAngleOpacity: 0,
     collisionBuffer: 4,
     occlusionBias: 0.03,
     atmosphereDensity: 0.5,
