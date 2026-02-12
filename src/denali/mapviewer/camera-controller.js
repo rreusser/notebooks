@@ -31,6 +31,8 @@ export function createCameraController(element, opts = {}) {
   let lastX = 0, lastY = 0;
   let rotateStartCallback = null;
   let grabAnchor = null; // { point: [x,y,z], altitude: number }
+  let screenPanAnchor = null; // { point: [x,y,z], normal: [nx,ny,nz] }
+  let zoomDragMx = 0, zoomDragMy = 0; // normalized cursor offset for drag-zoom
 
   function recenterOrbit(newCenter) {
     const { phi, theta, distance, center } = state;
@@ -81,6 +83,121 @@ export function createCameraController(element, opts = {}) {
     const t = (h - ray.origin[1]) / ray.direction[1];
     if (t < 0) return null;
     return [ray.origin[0] + t * ray.direction[0], h, ray.origin[2] + t * ray.direction[2]];
+  }
+
+  let rotatePivot = null; // terrain point to orbit around (set on rotate start)
+  let pivotRing = null;
+
+  function showPivotRing(clientX, clientY) {
+    removePivotRing();
+    const parent = element.parentElement;
+    if (!parent) return;
+    const parentRect = parent.getBoundingClientRect();
+    const prevPos = getComputedStyle(parent).position;
+    if (prevPos === 'static') parent.style.position = 'relative';
+    const container = document.createElement('div');
+    const size = 22;
+    const shared = {
+      position: 'absolute',
+      left: '0', top: '0',
+      width: size + 'px',
+      height: size + 'px',
+      borderRadius: '50%',
+      boxSizing: 'border-box',
+      pointerEvents: 'none',
+    };
+    Object.assign(container.style, {
+      position: 'absolute',
+      left: (clientX - parentRect.left - size / 2) + 'px',
+      top: (clientY - parentRect.top - size / 2) + 'px',
+      width: size + 'px',
+      height: size + 'px',
+      pointerEvents: 'none',
+      transform: 'scale(0.5)',
+      opacity: '0',
+      transition: 'transform 0.15s ease-out, opacity 0.15s ease-out',
+    });
+    const outer = document.createElement('div');
+    Object.assign(outer.style, { ...shared, border: '4px solid rgba(255,255,255,0.6)' });
+    const inner = document.createElement('div');
+    Object.assign(inner.style, { ...shared, border: '2.25px solid rgba(0,0,0,0.5)' });
+    container.appendChild(outer);
+    container.appendChild(inner);
+    parent.appendChild(container);
+    container.offsetWidth;
+    container.style.transform = 'scale(1)';
+    container.style.opacity = '1';
+    pivotRing = container;
+  }
+
+  function removePivotRing() {
+    if (!pivotRing) return;
+    const ring = pivotRing;
+    pivotRing = null;
+    ring.style.transform = 'scale(1.5)';
+    ring.style.opacity = '0';
+    ring.addEventListener('transitionend', () => ring.remove(), { once: true });
+  }
+
+  // Rotate the camera by dphi (azimuth) and dtheta (elevation) around rotatePivot.
+  // If no pivot is set, falls back to orbiting around state.center as usual.
+  function applyPivotRotation(dphi, dtheta) {
+    const { phi, theta, distance, center } = state;
+    const newPhi = phi + dphi;
+    const newTheta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, theta + dtheta));
+    const actualDtheta = newTheta - theta;
+
+    if (!rotatePivot) {
+      state.phi = newPhi;
+      state.theta = newTheta;
+      return;
+    }
+
+    // Current eye position
+    const eyeX = center[0] + distance * Math.cos(theta) * Math.cos(phi);
+    const eyeY = center[1] + distance * Math.sin(theta);
+    const eyeZ = center[2] + distance * Math.cos(theta) * Math.sin(phi);
+
+    // Vector from pivot to eye
+    let vx = eyeX - rotatePivot[0];
+    let vy = eyeY - rotatePivot[1];
+    let vz = eyeZ - rotatePivot[2];
+
+    // Step 1: Rotate around Y axis by dphi
+    const cosDp = Math.cos(dphi), sinDp = Math.sin(dphi);
+    const vx1 = vx * cosDp - vz * sinDp;
+    const vy1 = vy;
+    const vz1 = vx * sinDp + vz * cosDp;
+
+    // Step 2: Rotate around the right axis by actualDtheta (Rodrigues' formula)
+    // Right axis at newPhi: k = [-sin(newPhi), 0, cos(newPhi)]
+    const kx = -Math.sin(newPhi), kz = Math.cos(newPhi);
+    const cosDt = Math.cos(actualDtheta), sinDt = Math.sin(actualDtheta);
+    const oneMinusCos = 1 - cosDt;
+    // k cross v1 (ky = 0)
+    const crossX = -kz * vy1;
+    const crossY = kz * vx1 - kx * vz1;
+    const crossZ = kx * vy1;
+    // k dot v1
+    const dot = kx * vx1 + kz * vz1;
+
+    const vx2 = vx1 * cosDt + crossX * sinDt + kx * dot * oneMinusCos;
+    const vy2 = vy1 * cosDt + crossY * sinDt;
+    const vz2 = vz1 * cosDt + crossZ * sinDt + kz * dot * oneMinusCos;
+
+    // New eye = pivot + rotated vector
+    const newEyeX = rotatePivot[0] + vx2;
+    const newEyeY = rotatePivot[1] + vy2;
+    const newEyeZ = rotatePivot[2] + vz2;
+
+    // Update angles
+    state.phi = newPhi;
+    state.theta = newTheta;
+
+    // Derive center from new eye: center = eye - dist * D(newPhi, newTheta)
+    state.center[0] = newEyeX - distance * Math.cos(newTheta) * Math.cos(newPhi);
+    state.center[1] = newEyeY - distance * Math.sin(newTheta);
+    state.center[2] = newEyeZ - distance * Math.cos(newTheta) * Math.sin(newPhi);
   }
 
   let lastTouchDist = 0;
@@ -183,6 +300,45 @@ export function createCameraController(element, opts = {}) {
     }
   }
 
+  function initScreenPan(clientX, clientY) {
+    screenPanAnchor = null;
+    computeMatrices(lastAspect);
+    let point = null;
+    if (rotateStartCallback) {
+      const result = rotateStartCallback(clientX, clientY);
+      if (Array.isArray(result) && result.length === 3) point = result;
+    }
+    if (!point) {
+      const ray = screenRay(clientX, clientY);
+      point = rayPlaneY(ray, state.center[1]);
+    }
+    if (!point) return;
+    const { phi, theta } = state;
+    const nx = -Math.cos(theta) * Math.cos(phi);
+    const ny = -Math.sin(theta);
+    const nz = -Math.cos(theta) * Math.sin(phi);
+    screenPanAnchor = { point: [...point], normal: [nx, ny, nz] };
+  }
+
+  function moveScreenPan(clientX, clientY) {
+    if (!screenPanAnchor) return;
+    computeMatrices(lastAspect);
+    const ray = screenRay(clientX, clientY);
+    const { point, normal } = screenPanAnchor;
+    const denom = normal[0] * ray.direction[0] + normal[1] * ray.direction[1] + normal[2] * ray.direction[2];
+    if (Math.abs(denom) < 1e-10) return;
+    const nDotP = normal[0] * point[0] + normal[1] * point[1] + normal[2] * point[2];
+    const nDotO = normal[0] * ray.origin[0] + normal[1] * ray.origin[1] + normal[2] * ray.origin[2];
+    const t = (nDotP - nDotO) / denom;
+    if (t < 0) return;
+    const hitX = ray.origin[0] + t * ray.direction[0];
+    const hitY = ray.origin[1] + t * ray.direction[1];
+    const hitZ = ray.origin[2] + t * ray.direction[2];
+    state.center[0] += point[0] - hitX;
+    state.center[1] += point[1] - hitY;
+    state.center[2] += point[2] - hitZ;
+  }
+
   function onMouseDown(event) {
     event.preventDefault();
     lastX = event.clientX;
@@ -193,12 +349,40 @@ export function createCameraController(element, opts = {}) {
       : event.metaKey ? 'rotate'
       : event.altKey ? 'zoom'
       : 'grab';
-    if (dragMode === 'rotate' && rotateStartCallback) {
-      const rect = element.getBoundingClientRect();
-      const result = rotateStartCallback(rect.left + rect.width / 2, rect.top + rect.height / 2);
-      if (Array.isArray(result) && result.length === 3) recenterOrbit(result);
+    if (dragMode === 'rotate') {
+      if (rotateStartCallback) {
+        const result = rotateStartCallback(event.clientX, event.clientY);
+        rotatePivot = (Array.isArray(result) && result.length === 3) ? result : null;
+      }
+      showPivotRing(event.clientX, event.clientY);
     }
     if (dragMode === 'grab') initGrab(event.clientX, event.clientY);
+    if (dragMode === 'pan') initScreenPan(event.clientX, event.clientY);
+    if (dragMode === 'zoom') {
+      // Slide orbit center to match terrain distance (same as wheel zoom start)
+      if (rotateStartCallback) {
+        const result = rotateStartCallback(event.clientX, event.clientY);
+        if (Array.isArray(result) && result.length === 3) {
+          const { phi, theta, distance, center } = state;
+          const eyeX = center[0] + distance * Math.cos(theta) * Math.cos(phi);
+          const eyeY = center[1] + distance * Math.sin(theta);
+          const eyeZ = center[2] + distance * Math.cos(theta) * Math.sin(phi);
+          const hx = result[0] - eyeX, hy = result[1] - eyeY, hz = result[2] - eyeZ;
+          const terrainDist = Math.sqrt(hx * hx + hy * hy + hz * hz);
+          const dirX = Math.cos(theta) * Math.cos(phi);
+          const dirY = Math.sin(theta);
+          const dirZ = Math.cos(theta) * Math.sin(phi);
+          state.center[0] += (distance - terrainDist) * dirX;
+          state.center[1] += (distance - terrainDist) * dirY;
+          state.center[2] += (distance - terrainDist) * dirZ;
+          state.distance = terrainDist;
+        }
+      }
+      const rect = element.getBoundingClientRect();
+      zoomDragMx = (event.clientX - rect.left - rect.width / 2) / rect.height;
+      zoomDragMy = (event.clientY - rect.top - rect.height / 2) / rect.height;
+      showPivotRing(event.clientX, event.clientY);
+    }
     isDragging = true;
     element.style.cursor = 'grabbing';
     window.addEventListener('mousemove', onMouseMove);
@@ -215,8 +399,7 @@ export function createCameraController(element, opts = {}) {
     if (dragMode === 'grab') {
       moveGrab(event.clientX, event.clientY);
     } else if (dragMode === 'rotate') {
-      state.phi += dx * rotateSpeed;
-      state.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, state.theta + dy * rotateSpeed));
+      applyPivotRotation(dx * rotateSpeed, dy * rotateSpeed);
     } else if (dragMode === 'pivot') {
       // Keep eye fixed, turn the look direction
       // Speed: dragging full viewport height = FOV rotation (1:1 with scene)
@@ -233,10 +416,14 @@ export function createCameraController(element, opts = {}) {
       state.center[1] = eyeY - distance * Math.sin(state.theta);
       state.center[2] = eyeZ - distance * Math.cos(state.theta) * Math.sin(state.phi);
     } else if (dragMode === 'zoom') {
-      state.distance = Math.max(state.near * 2, state.distance * Math.exp(dy * 0.005));
+      const zoomFactor = Math.exp(-dy * 0.005);
+      const oldDistance = state.distance;
+      state.distance = Math.max(state.near * 2, oldDistance * zoomFactor);
+      const actualZoomFactor = state.distance / oldDistance;
+      const panAmount = (1 / actualZoomFactor - 1) * 2 * Math.tan(state.fov / 2);
+      pan(-zoomDragMx * panAmount, -zoomDragMy * panAmount);
     } else if (dragMode === 'pan') {
-      const rect = element.getBoundingClientRect();
-      pan(dx / rect.height, dy / rect.height);
+      moveScreenPan(event.clientX, event.clientY);
     }
     dirty = true;
   }
@@ -245,6 +432,9 @@ export function createCameraController(element, opts = {}) {
     isDragging = false;
     dragMode = null;
     grabAnchor = null;
+    rotatePivot = null;
+    screenPanAnchor = null;
+    removePivotRing();
     element.style.cursor = 'grab';
     window.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('mouseup', onMouseUp);
@@ -317,11 +507,10 @@ export function createCameraController(element, opts = {}) {
       lastTouchCenterY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
       lastTouchAngle = Math.atan2(dy, dx);
 
-      // Recenter orbit on terrain under viewport center (same as mouse rotate)
+      // Set pivot to terrain under touch midpoint
       if (rotateStartCallback) {
-        const rect = element.getBoundingClientRect();
-        const result = rotateStartCallback(rect.left + rect.width / 2, rect.top + rect.height / 2);
-        if (Array.isArray(result) && result.length === 3) recenterOrbit(result);
+        const result = rotateStartCallback(lastTouchCenterX, lastTouchCenterY);
+        rotatePivot = (Array.isArray(result) && result.length === 3) ? result : null;
       }
     }
   }
@@ -349,14 +538,12 @@ export function createCameraController(element, opts = {}) {
         state.distance = Math.max(state.near * 2, state.distance);
 
         // Two-finger twist → orbit (phi rotation)
+        // Vertical center-point drag → tilt (theta)
         const angle = Math.atan2(dy, dx);
         const angleDelta = angle - lastTouchAngle;
-        state.phi -= angleDelta;
-
-        // Vertical center-point drag → tilt (theta)
         const rect = element.getBoundingClientRect();
         const tiltDelta = (centerY - lastTouchCenterY) / rect.height;
-        state.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, state.theta + tiltDelta * 2));
+        applyPivotRotation(-angleDelta, tiltDelta * 2);
 
         dirty = true;
         lastTouchAngle = angle;
@@ -371,6 +558,7 @@ export function createCameraController(element, opts = {}) {
     isDragging = false;
     dragMode = null;
     grabAnchor = null;
+    rotatePivot = null;
     lastTouchDist = 0;
     lastTouchAngle = 0;
   }

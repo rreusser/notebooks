@@ -50,6 +50,46 @@ export class TileManager {
 
   setBindGroupLayout(layout) {
     this.bindGroupLayout = layout;
+    this._flatTileTexture = null;
+    this._flatTileBindGroup = null;
+    this._flatTileElevations = null;
+  }
+
+  // Shared zero-elevation tile resources, created lazily
+  _ensureFlatTile() {
+    if (this._flatTileTexture) return;
+    this._flatTileElevations = new Float32Array(514 * 514);
+    this._flatTileTexture = this.device.createTexture({
+      size: [514, 514],
+      format: 'r32float',
+      usage: GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.COPY_DST,
+    });
+    const bytesPerRow = 2304;
+    this.device.queue.writeTexture(
+      { texture: this._flatTileTexture },
+      new Uint8Array(bytesPerRow * 514),
+      { bytesPerRow },
+      [514, 514]
+    );
+    this._flatTileBindGroup = this.device.createBindGroup({
+      layout: this.bindGroupLayout,
+      entries: [{ binding: 0, resource: this._flatTileTexture.createView() }],
+    });
+  }
+
+  _cacheFlatTile(key) {
+    this._ensureFlatTile();
+    this.aabbCache.set(key, { minElevation: 0, maxElevation: 0 });
+    this.cache.set(key, {
+      texture: this._flatTileTexture,
+      bindGroup: this._flatTileBindGroup,
+      elevations: this._flatTileElevations,
+      quadtree: null,
+      minElevation: 0,
+      maxElevation: 0,
+      lastUsed: performance.now(),
+      isFlat: true,
+    });
   }
 
   _key(z, x, y) {
@@ -133,7 +173,7 @@ export class TileManager {
       const url = this.tileUrl(z, x, y);
       const response = await fetch(url, { signal });
       if (!response.ok) {
-        this.failed.add(key);
+        this._cacheFlatTile(key);
         if (this.onTileResolved) this.onTileResolved(z, x, y);
         return;
       }
@@ -194,7 +234,7 @@ export class TileManager {
       if (this.onTileResolved) this.onTileResolved(z, x, y);
     } catch (e) {
       if (e.name === 'AbortError') return;
-      this.failed.add(key);
+      this._cacheFlatTile(key);
       if (this.onTileResolved) this.onTileResolved(z, x, y);
     }
   }
@@ -236,7 +276,8 @@ export class TileManager {
         }
       }
       if (!oldestKey) break; // all remaining tiles are wanted
-      this.cache.get(oldestKey).texture.destroy();
+      const entry = this.cache.get(oldestKey);
+      if (!entry.isFlat) entry.texture.destroy();
       this.cache.delete(oldestKey);
     }
   }

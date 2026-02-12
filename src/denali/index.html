@@ -18,7 +18,7 @@
           type: 'terrain',
           tiles: [TILE_URL_TERRAIN],
           minzoom: 4,
-          maxzoom: 14,
+          maxzoom: 13,
           bounds: [-152.9, 62.2, -148.8, 64.0],
           attribution: '<a href="https://www.pgc.umn.edu/data/arcticdem/" target="_blank" rel="noopener">ArcticDEM</a> | <a href="https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface" target="_blank" rel="noopener">SRTM30</a>',
         },
@@ -182,13 +182,6 @@
         viewer.settings.showRoute = v.includes("Route");
       }
     );
-    addControl(controlsContainer,
-      Inputs.range([0, 1], { value: viewer.settings.slopeAngleOpacity, step: 0.01, label: "Slope angle opacity" }),
-      v => {
-        viewer.settings.slopeAngleOpacity = v;
-        viewer._slopeLegend.style.display = v > 0 ? '' : 'none';
-      }
-    );
 
     addControl(controlsContainer,
       Inputs.date({ value: sunState.date, label: "Date" }),
@@ -201,6 +194,13 @@
     addControl(controlsContainer,
       Inputs.range([0, 1], { value: viewer.settings.hillshadeOpacity, step: 0.01, label: "Hillshade opacity" }),
       v => { viewer.settings.hillshadeOpacity = v; }
+    );
+    addControl(controlsContainer,
+      Inputs.range([0, 1], { value: viewer.settings.slopeAngleOpacity, step: 0.01, label: "Slope angle opacity" }),
+      v => {
+        viewer.settings.slopeAngleOpacity = v;
+        viewer._slopeLegend.style.display = v > 0 ? '' : 'none';
+      }
     );
     addControl(controlsContainer,
       Inputs.range([0.05, 1], { value: viewer.settings.atmosphereDensity, step: 0.01, label: "Atmosphere density" }),

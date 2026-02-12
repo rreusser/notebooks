@@ -585,7 +585,8 @@ export class TerrainMap {
         this._currentExaggeration, settings.densityThreshold,
         this._terrainBounds, this._tileManager,
         (z, x, y) => {
-          if (!this._tileManager.hasTile(z, x, y)) return true; // 404'd — don't block
+          const entry = this._tileManager.getTile(z, x, y);
+          if (!entry || entry.isFlat) return true; // missing or 404'd — don't block
           const iz = getImageryZoom(z, this._imageryDeltaZoom, this._maxImageryZoom);
           this._compositor.ensureImagery(z, x, y, iz);
           return this._compositor.hasImagery(z, x, y);
