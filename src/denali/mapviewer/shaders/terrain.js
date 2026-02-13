@@ -14,6 +14,8 @@ struct Uniforms {
   has_imagery: f32,
   hillshade_opacity: f32,
   slope_angle_opacity: f32,
+  contour_opacity: f32,
+  viewport_height: f32,
 };
 
 struct GlobalUniforms {
@@ -46,27 +48,30 @@ fn loadElevation(coord: vec2<i32>) -> f32 {
 fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   var out: VertexOutput;
 
-  // Raw coords [0, 514]. Interior 1-513 map to grid 0-512.
-  // Edge 0 and 514 are border vertices at tile boundaries.
+  // Raw coords [0, 516]. The outer ring (0 and >=515) is a skirt that hangs
+  // below the tile edge to hide gaps between tiles at different LOD levels.
+  // Inner ring (1 and >=514) are boundary vertices at tile edges.
+  // Interior (2-513) are texel centers at u=0.5..511.5.
   let raw_u = i32(grid_pos.x);
   let raw_v = i32(grid_pos.y);
+  let inner_u = raw_u - 1;
+  let inner_v = raw_v - 1;
 
-  // Grid position: edge vertices snap to tile boundary (half-pixel)
-  let u = clamp(f32(raw_u) - 1.0, -0.5, 512.5);
-  let v = clamp(f32(raw_v) - 1.0, -0.5, 512.5);
+  // Grid position: interior texel k at u = k - 0.5; boundaries at 0 and 512
+  let u = clamp(f32(inner_u) - 0.5, 0.0, 512.0);
+  let v = clamp(f32(inner_v) - 0.5, 0.0, 512.0);
 
-  // Texel indices for elevation sampling.
-  // Interior: both indices are the same (single texel).
-  // Edge: two adjacent texels to average (border + first interior).
-  var tex_u_a: i32 = raw_u;
-  var tex_u_b: i32 = raw_u;
-  if (raw_u == 0) { tex_u_a = 0; tex_u_b = 1; }
-  else if (raw_u == 514) { tex_u_a = 512; tex_u_b = 513; }
+  // Texel indices for elevation sampling (using inner coords 0-514).
+  // Interior: single texel. Boundary/skirt (<=0 or >=513): average two texels.
+  var tex_u_a: i32 = inner_u;
+  var tex_u_b: i32 = inner_u;
+  if (inner_u <= 0) { tex_u_a = 0; tex_u_b = 1; }
+  else if (inner_u >= 513) { tex_u_a = 512; tex_u_b = 513; }
 
-  var tex_v_a: i32 = raw_v;
-  var tex_v_b: i32 = raw_v;
-  if (raw_v == 0) { tex_v_a = 0; tex_v_b = 1; }
-  else if (raw_v == 514) { tex_v_a = 512; tex_v_b = 513; }
+  var tex_v_a: i32 = inner_v;
+  var tex_v_b: i32 = inner_v;
+  if (inner_v <= 0) { tex_v_a = 0; tex_v_b = 1; }
+  else if (inner_v >= 513) { tex_v_a = 512; tex_v_b = 513; }
 
   // Average 1, 2, or 4 texels depending on edge/corner
   let elevation = (
@@ -81,20 +86,32 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   out.uv = vec2<f32>((u + 1.0) / 514.0, (v + 1.0) / 514.0);
   out.world_position = (uniforms.model * pos).xyz;
 
+  // Skirt: drop position in model space proportional to camera distance.
+  // Elevation varying is also lowered so contours don't run down the skirt face.
+  let is_skirt = (raw_u == 0) || (raw_u >= 515) || (raw_v == 0) || (raw_v >= 515);
+  var skirt_drop = 0.0;
+  if (is_skirt) {
+    let mpu = globals.sun_direction.w;
+    let cam_dist = length(globals.camera_position.xyz - out.world_position);
+    skirt_drop = cam_dist * mpu * 0.01;
+    let skirt_pos = vec4<f32>(u, elevation - skirt_drop, v, 1.0);
+    out.position = uniforms.mvp * skirt_pos;
+  }
+
   // Hillshade: compute normal from neighbor elevations.
   // At tile borders, extend the stencil so it always spans 2 texels
   // to avoid halving the gradient (which creates visible seams).
-  var lu = raw_u - 1; var ru = raw_u + 1;
+  var lu = inner_u - 1; var ru = inner_u + 1;
   if (lu < 0) { lu = 0; ru = 2; }
   else if (ru > 513) { ru = 513; lu = 511; }
-  var uv_ = raw_v - 1; var dv = raw_v + 1;
+  var uv_ = inner_v - 1; var dv = inner_v + 1;
   if (uv_ < 0) { uv_ = 0; dv = 2; }
   else if (dv > 513) { dv = 513; uv_ = 511; }
 
-  let zL = loadElevation(vec2<i32>(lu, raw_v));
-  let zR = loadElevation(vec2<i32>(ru, raw_v));
-  let zU = loadElevation(vec2<i32>(raw_u, uv_));
-  let zD = loadElevation(vec2<i32>(raw_u, dv));
+  let zL = loadElevation(vec2<i32>(lu, inner_v));
+  let zR = loadElevation(vec2<i32>(ru, inner_v));
+  let zU = loadElevation(vec2<i32>(inner_u, uv_));
+  let zD = loadElevation(vec2<i32>(inner_u, dv));
 
   let cellSize = uniforms.cell_size_meters;
   let dzdx = (zR - zL) / (2.0 * cellSize);
@@ -104,13 +121,10 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   let sun = globals.sun_direction.xyz;
   let sun_horizon = smoothstep(-0.02, 0.02, sun.y);
   out.shade = max(0.0, dot(normal, sun) * inverseSqrt(dot(normal, normal))) * sun_horizon;
-  out.elevation_m = elevation;
+  out.elevation_m = elevation - skirt_drop;
   out.slope_angle = atan(sqrt(dzdx * dzdx + dzdy * dzdy)) * 57.29578;
 
   // Reject sea-level vertices (no terrain data).
-  // NaN in any vertex position causes the rasterizer to discard the entire
-  // triangle, cleanly eliminating partial edge triangles without clipping artifacts.
-  // Use a var to prevent the compiler from constant-folding the bitcast.
   if (elevation <= 0.0) {
     var nan_bits = 0x7FC00000u;
     let nan = bitcast<f32>(nan_bits);
@@ -133,6 +147,8 @@ struct Uniforms {
   has_imagery: f32,
   hillshade_opacity: f32,
   slope_angle_opacity: f32,
+  contour_opacity: f32,
+  viewport_height: f32,
 };
 
 ` + atmosphereCode + /* wgsl */`
@@ -147,21 +163,80 @@ fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
 }
 
 fn slopeAngleColor(deg: f32) -> vec4<f32> {
-  // Colors in sRGB, converted to linear for compositing
-  let green  = pow(vec3<f32>(0.2, 0.8, 0.2), vec3<f32>(2.2));
-  let yellow = pow(vec3<f32>(0.95, 0.85, 0.1), vec3<f32>(2.2));
-  let red    = pow(vec3<f32>(0.9, 0.1, 0.1), vec3<f32>(2.2));
-  let purple = pow(vec3<f32>(0.55, 0.1, 0.75), vec3<f32>(2.2));
+  // Gaia GPS-style discrete slope angle bands (sRGB → linear)
+  let green  = pow(vec3<f32>(0.35, 0.85, 0.1), vec3<f32>(2.2));
+  let yellow = pow(vec3<f32>(1.0, 0.85, 0.0), vec3<f32>(2.2));
+  let orange = pow(vec3<f32>(1.0, 0.5, 0.0), vec3<f32>(2.2));
+  let red    = pow(vec3<f32>(0.75, 0.0, 0.0), vec3<f32>(2.2));
+  let purple = pow(vec3<f32>(0.4, 0.0, 0.6), vec3<f32>(2.2));
+  let blue   = pow(vec3<f32>(0.0, 0.2, 0.8), vec3<f32>(2.2));
+  let black  = vec3<f32>(0.0);
 
-  let t_enter  = smoothstep(23.0, 27.0, deg);
-  let t_yellow = smoothstep(28.0, 32.0, deg);
-  let t_red    = smoothstep(33.0, 37.0, deg);
-  let t_purple = smoothstep(42.0, 48.0, deg);
+  // Uniform color blocks with 1° linear fades at boundaries
+  // 26-29° green | 30-31° yellow | 32-34° orange | 35-45° red
+  // 46-50° purple | 51-59° blue | 60°+ black
+  let t_enter  = smoothstep(24.0, 26.0, deg);
+  let t_yellow = smoothstep(29.0, 30.0, deg);
+  let t_orange = smoothstep(31.0, 32.0, deg);
+  let t_red    = smoothstep(34.0, 35.0, deg);
+  let t_purple = smoothstep(45.0, 46.0, deg);
+  let t_blue   = smoothstep(50.0, 51.0, deg);
+  let t_black  = smoothstep(59.0, 60.0, deg);
 
   var color = mix(green, yellow, t_yellow);
+  color = mix(color, orange, t_orange);
   color = mix(color, red, t_red);
   color = mix(color, purple, t_purple);
+  color = mix(color, blue, t_blue);
+  color = mix(color, black, t_black);
   return vec4<f32>(color, t_enter);
+}
+
+fn contourLinearstep(edge0: f32, edge1: f32, x: f32) -> f32 {
+  return clamp((x - edge0) / (edge1 - edge0), 0.0, 1.0);
+}
+
+fn blendedContours(elevation_ft: f32, tile_uv: vec2<f32>) -> f32 {
+  let divisions = 5.0;       // 40 → 200 → 1000 → 5000
+  let base_spacing = 40.0;   // finest contour spacing in feet
+  let min_spacing = 8.0;     // minimum pixels between contours before octave shift
+  let line_width = 2.0;
+  let antialias = 1.0;
+  let n = 3.0;
+
+  // All derivatives must be computed before any non-uniform control flow
+  let elev_grad = length(vec2<f32>(dpdx(elevation_ft), dpdy(elevation_ft)));
+  let h_feet_pp = 0.5 * (fwidth(tile_uv.x) + fwidth(tile_uv.y))
+    * 514.0 * uniforms.cell_size_meters * 3.28084;
+
+  if (elev_grad < 1e-6) { return 0.0; }
+
+  // Unclamped continuous octave from horizontal screen density.
+  // Negative values mean the screen can resolve finer than base_spacing.
+  let local_octave = log2(h_feet_pp * min_spacing / base_spacing) / log2(divisions);
+  let contour_spacing = base_spacing * pow(divisions, ceil(local_octave));
+
+  var plot_var = elevation_ft / contour_spacing;
+  var width_scale = contour_spacing / elev_grad;
+
+  // Shepard tone: each octave fades in, holds, and fades out
+  var contour_sum = 0.0;
+  for (var i = 0; i < 3; i++) {
+    let t = f32(i) + 1.0 - fract(local_octave);
+    let weight = smoothstep(0.0, 1.0, t) * smoothstep(n, n - 1.0, t);
+
+    let dist_px = (0.5 - abs(fract(plot_var) - 0.5)) * width_scale;
+    contour_sum += weight * contourLinearstep(
+      0.5 * (line_width + antialias),
+      0.5 * (line_width - antialias),
+      dist_px
+    );
+
+    width_scale *= divisions;
+    plot_var /= divisions;
+  }
+
+  return contour_sum / n;
 }
 
 fn applyAtmosphere(color: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
@@ -215,6 +290,11 @@ fn fs_main(
 
   let lit = base_color * mix(1.0, shade, uniforms.hillshade_opacity);
   var terrain_color = clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0));
+
+  // Elevation contours (adaptive Shepard-tone blending across octaves)
+  let elevation_ft = elevation_m * 3.28084;
+  let contour = clamp(blendedContours(elevation_ft, uv) * 2.0, 0.0, 1.0) * uniforms.contour_opacity;
+  terrain_color = mix(terrain_color, vec3<f32>(0.0), contour);
 
   // Apply atmospheric scattering
   let result = applyAtmosphere(terrain_color, world_position);

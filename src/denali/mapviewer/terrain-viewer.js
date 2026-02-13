@@ -198,7 +198,7 @@ export class TerrainMap {
     });
     this._uniformBindGroup = device.createBindGroup({
       layout: uniformBGL,
-      entries: [{ binding: 0, resource: { buffer: this._uniformBuffer, size: 160 } }],
+      entries: [{ binding: 0, resource: { buffer: this._uniformBuffer, size: 176 } }],
     });
 
     this._tileManager = new TileManager(device, { tileUrl: tileUrlFromTemplate(terrain.tiles) });
@@ -239,7 +239,7 @@ export class TerrainMap {
     this._MAX_ELEV_Y = 0.001;
     this._mvpFloat32 = new Float32Array(16);
     this._modelFloat32 = new Float32Array(16);
-    this._uniformData = new Float32Array(40);
+    this._uniformData = new Float32Array(44);
     this._globalUniformData = new Float32Array(24);
 
     this._currentExaggeration = this.settings.verticalExaggeration;
@@ -307,7 +307,7 @@ export class TerrainMap {
           loadedSources[layerConfig.source],
           (mx, my) => this.queryElevationMercator(mx, my),
         );
-        lineLayer.init(device, format, this._globalUniformBuffer, this.camera.state.near, this.camera.state.far, createGPULines);
+        lineLayer.init(device, format, this._globalUniformBuffer, createGPULines);
         this._lineLayers.push(lineLayer);
       }
     }
@@ -373,24 +373,32 @@ export class TerrainMap {
     const device = this._device;
     let tileIndex = 0;
     const draws = [];
+
+    // Use a single global elevation scale (from camera center) for all tiles
+    // so that mesh vertices stitch perfectly at tile boundaries. Per-tile
+    // variation in the mercator scale factor (~0.01% per tile row at 63°N)
+    // otherwise causes visible contour misalignment.
+    const cCenter = camera.state.center;
+    const centerLat = 2 * Math.atan(Math.exp(Math.PI * (1 - 2 * cCenter[2]))) - Math.PI / 2;
+    const globalElevScale = 1 / (40_075_016.686 * Math.cos(centerLat));
+
     for (const tile of this._cachedRenderList) {
       if (tileIndex >= this._MAX_TILES_PER_FRAME) break;
       const entry = this._tileManager.getTile(tile.z, tile.x, tile.y);
       if (!entry) continue;
 
-      const elevScale = getElevationScale(tile.z, tile.y);
       const cellSize = getCellSizeMeters(tile.z, tile.y);
       const imageryZoom = getImageryZoom(tile.z, this._imageryDeltaZoom, this._maxImageryZoom);
       this._compositor.ensureImagery(tile.z, tile.x, tile.y, imageryZoom);
       const hasImagery = this._compositor.hasImagery(tile.z, tile.x, tile.y);
 
-      computeTileMVP(this._mvpFloat32, view, projection, tile.z, tile.x, tile.y, elevScale, this._currentExaggeration);
-      computeTileModel(this._modelFloat32, tile.z, tile.x, tile.y, elevScale, this._currentExaggeration);
+      computeTileMVP(this._mvpFloat32, view, projection, tile.z, tile.x, tile.y, globalElevScale, this._currentExaggeration);
+      computeTileModel(this._modelFloat32, tile.z, tile.x, tile.y, globalElevScale, this._currentExaggeration);
 
       const ud = this._uniformData;
       ud.set(this._mvpFloat32, 0);
       ud.set(this._modelFloat32, 16);
-      ud[32] = elevScale;
+      ud[32] = globalElevScale;
       ud[33] = cellSize;
       ud[34] = this._currentExaggeration;
       ud[35] = 1 / 514;
@@ -398,6 +406,8 @@ export class TerrainMap {
       ud[37] = settings.showImagery ? (hasImagery ? 1.0 : 0.0) : 1.0;
       ud[38] = settings.hillshadeOpacity;
       ud[39] = settings.slopeAngleOpacity;
+      ud[40] = settings.contourOpacity;
+      ud[41] = canvas.height;
 
       let imageryBindGroup;
       if (!settings.showImagery) {
@@ -408,7 +418,7 @@ export class TerrainMap {
         imageryBindGroup = this._fallbackImageryBindGroup;
       }
 
-      device.queue.writeBuffer(this._uniformBuffer, tileIndex * this._UNIFORM_STRIDE, ud.buffer, ud.byteOffset, 160);
+      device.queue.writeBuffer(this._uniformBuffer, tileIndex * this._UNIFORM_STRIDE, ud.buffer, ud.byteOffset, 176);
       draws.push({
         offset: tileIndex * this._UNIFORM_STRIDE,
         bindGroup: entry.bindGroup,
@@ -423,11 +433,8 @@ export class TerrainMap {
     const camY = center[1] + distance * Math.sin(theta);
     const camZ = center[2] + distance * Math.cos(theta) * Math.sin(phi);
 
-    const centerTileZ = 10;
-    const centerTileY = Math.floor(center[2] * (1 << centerTileZ));
-    const elevScaleAvg = getElevationScale(centerTileZ, centerTileY);
-    const metersPerUnit = 1.0 / elevScaleAvg;
-    const camHeightMeters = camY / elevScaleAvg;
+    const metersPerUnit = 1.0 / globalElevScale;
+    const camHeightMeters = camY / globalElevScale;
 
     // Sun direction (computed externally via settings.sunDirection)
     const sd = settings.sunDirection;

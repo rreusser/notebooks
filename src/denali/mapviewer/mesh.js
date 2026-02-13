@@ -1,10 +1,10 @@
-// Shared 515x515 terrain mesh (514x514 grid)
-// Includes a 1-vertex border on each side to extend to tile boundaries.
-// Vertex format: uint16x2 (u, v) in [0, 514]
+// Shared 517x517 terrain mesh (516x516 grid)
+// 512 interior texels + 1 boundary vertex + 1 skirt vertex on each side.
+// Vertex format: uint16x2 (u, v) in [0, 516]
 // Index format: uint32
 
 export function createTerrainMesh(device) {
-  const gridSize = 514;
+  const gridSize = 516;
   const vertCount = (gridSize + 1) * (gridSize + 1); // 515*515 = 265225
 
   // Vertex buffer: uint16x2

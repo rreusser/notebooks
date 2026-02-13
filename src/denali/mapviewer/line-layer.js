@@ -36,12 +36,11 @@ struct Vertex {
 fn getVertex(index: u32) -> Vertex {
   let p = positions[index];
   var clip = line.projectionView * p;
-  // Depth bias: constant world-space offset toward the camera.
-  // depthOffset = far/(far-near) * delta * near, pre-computed on the CPU.
-  // Dividing by clip.w (= eye distance) gives NDC offset = delta*near/d^2,
-  // which matches the depth buffer's precision curve — the line wins a fixed
-  // number of world-space meters of depth at every distance.
-  clip.z -= line.depthOffset / max(clip.w, 1e-5);
+  // Depth bias proportional to camera distance.
+  // A constant clip.z offset gives world-space lift ∝ eye distance, since
+  // NDC z maps as 1/z — the line clears terrain z-fighting at every zoom
+  // level without floating visibly at close range.
+  clip.z -= line.depthOffset;
   return Vertex(clip, line.lineWidth * line.pixelRatio, p.xyz);
 }
 `;
@@ -149,18 +148,14 @@ export class LineLayer {
     this._device = null;
   }
 
-  init(device, format, globalUniformBuffer, near, far, createGPULines) {
+  init(device, format, globalUniformBuffer, createGPULines) {
     this._device = device;
     this._globalUniformBuffer = globalUniformBuffer;
 
-    // Pre-compute depth offset from projection parameters.
-    // P[2][2] = far/(far-near) is the projection's z-axis scale.
-    // worldOffset (~5m in mercator) is the constant depth separation in world
-    // space — enough to overcome terrain mesh interpolation z-fighting without
-    // causing visible depth ordering artifacts at any zoom level.
-    const P22 = far / (far - near);
-    const worldOffset = 1e-5; // ~5 meters in mercator units
-    this._depthOffset = P22 * worldOffset * near;
+    // Depth offset: constant clip.z bias gives world-space lift ∝ eye distance.
+    // With near=1e-5, clip.z ≈ d for nearby geometry, so the value must be
+    // very small to avoid overshooting at close range.
+    this._depthOffset = 4e-7;
 
     this._gpuLines = createGPULines(device, {
       colorTargets: {
@@ -246,17 +241,24 @@ export class LineLayer {
     this._ensureBuffers();
     if (this._polylines.length === 0) return;
 
-    // Requery elevations only when tile coverage changes
+    // Requery elevations only when tile coverage changes.
+    // Only update a vertex's cached elevation when the new query returns a
+    // valid result, so async tile loads never reset good values to zero.
     if (this._elevationsDirty) {
       const elevs = this._cachedElevations;
       for (const polyline of this._polylines) {
         for (let i = 0; i < polyline.count; i++) {
           const coord = polyline.feature.coordinates[i];
-          elevs[polyline.offset + i] = this._queryElevation(coord.mercatorX, coord.mercatorY);
+          const newElev = this._queryElevation(coord.mercatorX, coord.mercatorY);
+          if (newElev != null && newElev > 0) {
+            if (elevs[polyline.offset + i] !== newElev) {
+              elevs[polyline.offset + i] = newElev;
+              this._positionsDirty = true;
+            }
+          }
         }
       }
       this._elevationsDirty = false;
-      this._positionsDirty = true;
     }
 
     // Rebuild world positions when elevations or exaggeration change
@@ -277,7 +279,7 @@ export class LineLayer {
           } else {
             const elevScale = this._estimateElevScale(coord.mercatorY);
             data[idx] = coord.mercatorX;
-            data[idx + 1] = elev * elevScale * exaggeration;
+            data[idx + 1] = (elev + 3) * elevScale * exaggeration;
             data[idx + 2] = coord.mercatorY;
             data[idx + 3] = 1.0;
           }

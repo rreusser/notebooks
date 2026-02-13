@@ -110,18 +110,51 @@
 
     const slopeLegend = html`<div class="slope-legend" style="display: none">
       <div class="slope-legend-title">Slope angle</div>
-      <div class="slope-legend-bar"></div>
+      <div class="slope-legend-blocks">
+        <div style="background: rgb(89, 217, 26)"></div>
+        <div style="background: rgb(255, 217, 0)"></div>
+        <div style="background: rgb(255, 128, 0)"></div>
+        <div style="background: rgb(191, 0, 0)"></div>
+        <div style="background: rgb(102, 0, 153)"></div>
+        <div style="background: rgb(0, 51, 204)"></div>
+        <div style="background: rgb(0, 0, 0)"></div>
+      </div>
       <div class="slope-legend-labels">
-        <span style="left: 0%">25°</span>
-        <span style="left: 25%">30°</span>
-        <span style="left: 50%">35°</span>
-        <span style="left: 100%">45°+</span>
+        <span>26-29°</span>
+        <span>30-31°</span>
+        <span>32-34°</span>
+        <span>35-45°</span>
+        <span>46-50°</span>
+        <span>51-59°</span>
+        <span>60°+</span>
       </div>
     </div>`;
     viewer._slopeLegend = slopeLegend;
 
+    const elevationLabel = html`<div class="elevation-label"></div>`;
+
+    canvas.addEventListener('mousemove', (e) => {
+      const hit = viewer.raycast(e.clientX, e.clientY);
+      if (hit) {
+        const elev = viewer.queryElevationMercator(hit.worldPos[0], hit.worldPos[2]);
+        if (elev != null) {
+          const feet = Math.round(elev * 3.28084);
+          elevationLabel.textContent = `${feet.toLocaleString()} ft`;
+          elevationLabel.style.opacity = '1';
+        } else {
+          elevationLabel.style.opacity = '0';
+        }
+      } else {
+        elevationLabel.style.opacity = '0';
+      }
+    });
+    canvas.addEventListener('mouseleave', () => {
+      elevationLabel.style.opacity = '0';
+    });
+
     const container = html`<div style="position: relative">`;
     container.appendChild(canvas);
+    container.appendChild(elevationLabel);
     container.appendChild(slopeLegend);
     container.appendChild(viewer.attribution);
 
@@ -203,6 +236,10 @@
       }
     );
     addControl(controlsContainer,
+      Inputs.range([0, 1], { value: viewer.settings.contourOpacity, step: 0.01, label: "Contour opacity" }),
+      v => { viewer.settings.contourOpacity = v; }
+    );
+    addControl(controlsContainer,
       Inputs.range([0.05, 1], { value: viewer.settings.atmosphereDensity, step: 0.01, label: "Atmosphere density" }),
       v => { viewer.settings.atmosphereDensity = v; }
     );
@@ -282,12 +319,12 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
 
       .slope-legend {
         position: absolute;
-        bottom: 10px;
-        left: 10px;
+        bottom: 28px;
+        right: 10px;
         background: rgba(255, 255, 255, 0.8);
         backdrop-filter: blur(4px);
         border-radius: 4px;
-        padding: 2px 14px 0px;
+        padding: 4px 8px 4px;
         pointer-events: none;
         font-size: 11px;
         line-height: 1;
@@ -298,27 +335,48 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
         margin-bottom: 6px;
         color: #333;
       }
-      .slope-legend-bar {
-        width: 160px;
-        height: 12px;
-        border-radius: 2px;
-        background: linear-gradient(to right,
-          rgb(51, 204, 51) 0%,
-          rgb(242, 217, 26) 25%,
-          rgb(230, 26, 26) 50%,
-          rgb(140, 26, 191) 100%
-        );
+      .slope-legend-blocks {
+        display: flex;
+        gap: 1px;
+        width: 240px;
+      }
+      .slope-legend-blocks > div {
+        flex: 1;
+        height: 14px;
+      }
+      .slope-legend-blocks > div:first-child {
+        border-radius: 2px 0 0 2px;
+      }
+      .slope-legend-blocks > div:last-child {
+        border-radius: 0 2px 2px 0;
       }
       .slope-legend-labels {
-        position: relative;
-        width: 160px;
-        height: 16px;
+        display: flex;
+        gap: 1px;
+        width: 240px;
         margin-top: 3px;
       }
       .slope-legend-labels span {
-        position: absolute;
-        transform: translateX(-50%);
+        flex: 1;
+        text-align: center;
+        font-size: 9px;
         color: #555;
+        white-space: nowrap;
+      }
+
+      .elevation-label {
+        position: absolute;
+        bottom: 10px;
+        left: 10px;
+        pointer-events: none;
+        font-family: system-ui, sans-serif;
+        font-style: italic;
+        font-weight: 900;
+        font-size: 18px;
+        color: #000;
+        paint-order: stroke fill;
+        -webkit-text-stroke: 3px #fff;
+        opacity: 0;
         white-space: nowrap;
       }
 
