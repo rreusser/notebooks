@@ -16,6 +16,7 @@ import { loadFontAtlas } from './lib/webgpu-text/webgpu-text.ts';
 import BVH from './bvh.js';
 import { screenToRay, raycastTerrain } from './ray-terrain.js';
 import { createSettings, createAttribution } from './settings.js';
+import { cameraStateToHash, hashToCameraState } from './hash-state.js';
 import { FrustumOverlay } from './frustum-overlay.js';
 import { CollisionManager } from './collision-manager.js';
 
@@ -85,6 +86,7 @@ export class TerrainMap {
     this._gpuCtx = canvas.getContext('webgpu');
     this._gpuCtx.configure({ device: this._device, format: this._format, alphaMode: 'opaque' });
 
+    const hashCamera = hashToCameraState(window.location.hash);
     this.camera = createCameraController(canvas, {
       center: [0.0804792012701582, 0.0002040588543435183, 0.27264551318459634],
       distance: 0.0008177139017526437,
@@ -97,7 +99,9 @@ export class TerrainMap {
       zoomSpeed: 0.0008,
       panSpeed: 1,
       ...cameraOptions,
+      ...hashCamera,
     });
+    this._hashUpdateTimer = null;
 
     const device = this._device;
     const format = this._format;
@@ -582,7 +586,14 @@ export class TerrainMap {
 
     const tileProjView = this._frustumOverlay.coverageProjView || projectionView;
 
-    if (cameraMoved) { this._coverageDirty = true; this._renderDirty = true; }
+    if (cameraMoved) {
+      this._coverageDirty = true;
+      this._renderDirty = true;
+      clearTimeout(this._hashUpdateTimer);
+      this._hashUpdateTimer = setTimeout(() => {
+        history.replaceState(null, '', cameraStateToHash(camera.state));
+      }, 300);
+    }
 
     if (this._coverageDirty) {
       const maxElevY = this._MAX_ELEV_Y * this._currentExaggeration;
@@ -780,6 +791,7 @@ export class TerrainMap {
 
   destroy() {
     this._running = false;
+    clearTimeout(this._hashUpdateTimer);
     this._collisionManager.destroy();
     this._frustumOverlay.destroy();
     this._resizeObserver.disconnect();
