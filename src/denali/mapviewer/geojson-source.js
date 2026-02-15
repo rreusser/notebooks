@@ -34,8 +34,21 @@ export class GeoJSONSource {
           lat,
           properties: feature.properties || {},
         });
-      } else if (feature.geometry.type === 'LineString') {
-        let rawCoords = feature.geometry.coordinates;
+      } else if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
+        // Normalize to array-of-rings so LineString and MultiLineString share one path
+        const rings = feature.geometry.type === 'MultiLineString'
+          ? feature.geometry.coordinates
+          : [feature.geometry.coordinates];
+
+        // Flatten rings into a single coordinate array, deduplicating shared endpoints
+        let rawCoords = [];
+        for (const ring of rings) {
+          for (const pt of ring) {
+            const prev = rawCoords[rawCoords.length - 1];
+            if (prev && prev[0] === pt[0] && prev[1] === pt[1]) continue; // skip duplicate
+            rawCoords.push(pt);
+          }
+        }
 
         if (simplifyTolerance != null && simplifyFn) {
           const pts = rawCoords.map(([lon, lat, elev]) => ({ x: lon, y: lat, elev: elev || 0 }));

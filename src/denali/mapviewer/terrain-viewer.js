@@ -250,9 +250,11 @@ export class TerrainMap {
         imageryManager: mgr,
         blend: layer.blend || 'source-over',
         opacity: layer.opacity != null ? layer.opacity : 1,
+        minzoom: src.minzoom,
         maxzoom: src.maxzoom,
       });
     }
+    this._minImageryZoom = layerDescriptors.length > 0 ? Math.min(...layerDescriptors.map(l => l.minzoom)) : Infinity;
     this._maxImageryZoom = layerDescriptors.length > 0 ? Math.max(...layerDescriptors.map(l => l.maxzoom)) : 0;
     this._compositor = new ImageryCompositor(device, layerDescriptors, imageryBGL, this._imagerySampler);
 
@@ -650,17 +652,20 @@ export class TerrainMap {
     if (this._coverageDirty) {
       const maxElevY = this._MAX_ELEV_Y * this._currentExaggeration;
       this._tileManager.beginFrame();
+      const hasImageryLayers = this._compositor.layers.length > 0;
+      const minImageryZoom = this._minImageryZoom;
       this._cachedRenderList = selectTiles(
         tileProjView, canvas.width, canvas.height, maxElevY,
         this._currentExaggeration, settings.densityThreshold,
         this._terrainBounds, this._tileManager,
-        (z, x, y) => {
+        hasImageryLayers ? (z, x, y) => {
           const entry = this._tileManager.getTile(z, x, y);
           if (!entry || entry.isFlat) return true; // missing or 404'd — don't block
+          if (z < minImageryZoom) return true; // no imagery at this zoom — don't block
           const iz = getImageryZoom(z, this._imageryDeltaZoom, this._maxImageryZoom);
           this._compositor.ensureImagery(z, x, y, iz);
           return this._compositor.hasImagery(z, x, y);
-        },
+        } : null,
       );
       // Sort front-to-back for early-z rejection of occluded terrain fragments
       const pv = tileProjView;

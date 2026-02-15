@@ -1,1 +1,0 @@
-const s="https://s3.us-east-1.amazonaws.com/tilesets.rreusser.github.io/denali-arcticdem-srtm30-v1/{z}/{x}/{y}.webp",e="https://s3.us-east-1.amazonaws.com/tilesets.rreusser.github.io/denali-sentinel2-v1/{z}/{x}/{y}.webp";export{e as TILE_URL_SENTINEL,s as TILE_URL_TERRAIN};

@@ -34,6 +34,12 @@ const tileUrls = {
   sentinel: process.env.NODE_ENV === "production"
     ? `${S3_BASE}/denali-sentinel2-v1/{z}/{x}/{y}.webp`
     : "data/tiles/denali-sentinel2-v1/{z}/{x}/{y}.webp",
+  tahoe: process.env.NODE_ENV === "production"
+    ? `${S3_BASE}/tahoe-cop30-1m-v1/{z}/{x}/{y}.webp`
+    : "data/tiles/tahoe-cop30-1m-v1/{z}/{x}/{y}.webp",
+  tahoeSentinel: process.env.NODE_ENV === "production"
+    ? `${S3_BASE}/tahoe-sentinel2-v1/{z}/{x}/{y}.webp`
+    : "data/tiles/tahoe-sentinel2-v1/{z}/{x}/{y}.webp",
 };
 
 // Register Handlebars helpers for index page rendering
@@ -210,6 +216,8 @@ export default defineConfig(({ command }) => {
     define: {
       __TILE_URL_TERRAIN__: JSON.stringify(tileUrls.terrain),
       __TILE_URL_SENTINEL__: JSON.stringify(tileUrls.sentinel),
+      __TILE_URL_TAHOE__: JSON.stringify(tileUrls.tahoe),
+      __TILE_URL_TAHOE_SENTINEL__: JSON.stringify(tileUrls.tahoeSentinel),
     },
   };
 });

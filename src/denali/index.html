@@ -2,109 +2,180 @@
 <notebook theme="air">
   <title>Denali Terrain</title>
 
+  <script id="dataset-selector" type="module">
+    import { TILE_URL_TERRAIN, TILE_URL_SENTINEL, TILE_URL_TAHOE, TILE_URL_TAHOE_SENTINEL } from './tile-urls.js';
+
+    const datasets = {
+      'Denali': {
+        sources: {
+          'arctic-dem': {
+            type: 'terrain',
+            tiles: [TILE_URL_TERRAIN],
+            minzoom: 4,
+            maxzoom: 13,
+            bounds: [-152.9, 62.2, -148.8, 64.0],
+            attribution: '<a href="https://www.pgc.umn.edu/data/arcticdem/" target="_blank" rel="noopener">ArcticDEM</a> | <a href="https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface" target="_blank" rel="noopener">SRTM30</a>',
+          },
+          'sentinel': {
+            type: 'raster',
+            tiles: [TILE_URL_SENTINEL],
+            minzoom: 4,
+            maxzoom: 11,
+            bounds: [-152.9, 62.2, -148.8, 64.0],
+            attribution: '<a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Sentinel-2</a>',
+          },
+          'peaks': {
+            type: 'geojson',
+            data: 'osm/peaks.geojson',
+            attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+          },
+          'fkt': {
+            type: 'geojson',
+            data: 'strava/fkt.geojson',
+            simplify: 0.0001,
+            attribution: '<a href="https://www.strava.com/activities/9223277277" target="_blank" rel="noopener">Strava</a>',
+          },
+        },
+        camera: {
+          center: [0.08005793958567985, 0.00021365516506647512, 0.27291423467021114],
+          distance: 0.0004971889617079275,
+          phi: 2.4972122538258654,
+          theta: 0.13580281526641474,
+        },
+        base: [
+          { id: 'satellite', source: 'sentinel', blend: 'source-over' },
+        ],
+        features: [
+          {
+            id: 'ski-tracks',
+            type: 'line',
+            source: 'fkt',
+            paint: {
+              'line-color': '#ff8800',
+              'line-width': 5,
+              'line-border-color': '#331100',
+              'line-border-width': 2,
+              'atmosphere-opacity': 0.5
+            }
+          },
+          {
+            id: 'peak-circles',
+            type: 'circle',
+            source: 'peaks',
+            paint: {
+              'circle-radius': 3,
+              'circle-color': '#000000',
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-width': 1.5,
+              'atmosphere-opacity': 0.5
+            }
+          },
+          {
+            id: 'peak-labels',
+            type: 'text',
+            source: 'peaks',
+            paint: {
+              'text-field': 'name',
+              'text-size': 16,
+              'text-color': '#000000',
+              'text-halo-color': '#ffffff',
+              'text-halo-width': 1.25,
+              'atmosphere-opacity': 0.5
+            }
+          },
+        ],
+      },
+      'Lake Tahoe': {
+        sources: {
+          'tahoe-terrain': {
+            type: 'terrain',
+            tiles: [TILE_URL_TAHOE],
+            minzoom: 0,
+            maxzoom: 13,
+            bounds: [-120.87, 38.80, -119.68, 39.85],
+            attribution: '<a href="https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model" target="_blank" rel="noopener">Copernicus DEM</a>',
+          },
+          'tahoe-sentinel': {
+            type: 'raster',
+            tiles: [TILE_URL_TAHOE_SENTINEL],
+            minzoom: 8,
+            maxzoom: 12,
+            bounds: [-120.87, 38.80, -119.68, 39.85],
+            attribution: '<a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Sentinel-2</a>',
+          },
+          'tahoe-landmarks': {
+            type: 'geojson',
+            data: 'osm/tahoe-landmarks.geojson',
+            attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+          },
+        },
+        camera: {
+          center: [0.16590, 0.0, 0.38101],
+          distance: 0.0006,
+          phi: Math.PI / 2,
+          theta: 0.4,
+        },
+        base: [
+          { id: 'satellite', source: 'tahoe-sentinel', blend: 'source-over' },
+        ],
+        features: [
+          {
+            id: 'landmark-circles',
+            type: 'circle',
+            source: 'tahoe-landmarks',
+            paint: {
+              'circle-radius': 3,
+              'circle-color': '#000000',
+              'circle-stroke-color': '#ffffff',
+              'circle-stroke-width': 1.5,
+              'atmosphere-opacity': 0.5
+            }
+          },
+          {
+            id: 'landmark-labels',
+            type: 'text',
+            source: 'tahoe-landmarks',
+            paint: {
+              'text-field': 'name',
+              'text-size': 16,
+              'text-color': '#000000',
+              'text-halo-color': '#ffffff',
+              'text-halo-width': 1.25,
+              'atmosphere-opacity': 0.5
+            }
+          },
+        ],
+      },
+    };
+
+    const datasetName = view(Inputs.select(Object.keys(datasets), { label: "Dataset", value: 'Lake Tahoe' }));
+  </script>
+
   <script id="viewer" type="module">
     import { TerrainMap } from './mapviewer/terrain-viewer.js';
-    import { TILE_URL_TERRAIN, TILE_URL_SENTINEL } from './tile-urls.js';
     import { createGPULines } from 'npm:webgpu-instanced-lines';
     import simplify from 'npm:simplify-js';
     import { expandable } from './lib/expandable.js';
     import { ElevationProfile } from './mapviewer/elevation-profile.js';
+    import { gpx as gpxToGeoJSON } from 'npm:@tmcw/togeojson';
+
+    const config = datasets[datasetName];
+
+    // Clear stale camera hash when switching datasets (but not on initial page load)
+    if (window._lastDataset && window._lastDataset !== datasetName) {
+      history.replaceState(null, '', window.location.pathname);
+    }
+    window._lastDataset = datasetName;
 
     const canvas = document.createElement('canvas');
     canvas.className = 'terrain';
 
     const viewer = await TerrainMap.create(canvas, {
-      sources: {
-        'arctic-dem': {
-          type: 'terrain',
-          tiles: [TILE_URL_TERRAIN],
-          minzoom: 4,
-          maxzoom: 13,
-          bounds: [-152.9, 62.2, -148.8, 64.0],
-          attribution: '<a href="https://www.pgc.umn.edu/data/arcticdem/" target="_blank" rel="noopener">ArcticDEM</a> | <a href="https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface" target="_blank" rel="noopener">SRTM30</a>',
-        },
-        'sentinel': {
-          type: 'raster',
-          tiles: [TILE_URL_SENTINEL],
-          minzoom: 4,
-          maxzoom: 11,
-          bounds: [-152.9, 62.2, -148.8, 64.0],
-          attribution: '<a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Sentinel-2</a>',
-        },
-        'peaks': {
-          type: 'geojson',
-          data: 'osm/peaks.geojson',
-          attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-        },
-        'fkt': {
-          type: 'geojson',
-          data: 'strava/fkt.geojson',
-          simplify: 0.0001,
-          attribution: '<a href="https://www.strava.com/activities/9223277277" target="_blank" rel="noopener">Strava</a>',
-        },
-      },
-      camera: {
-        center: [0.08005793958567985, 0.00021365516506647512, 0.27291423467021114],
-        distance: 0.0004971889617079275,
-        phi: 2.4972122538258654,
-        theta: 0.13580281526641474,
-      },
+      ...config,
       font: {
         atlas: './mapviewer/fonts/roboto-regular.png',
         metadata: './mapviewer/fonts/roboto-regular.json',
       },
-      base: [
-        { id: 'satellite', source: 'sentinel', blend: 'source-over' },
-      ],
-      features: [
-        /*{
-          id: 'ski-tracks-casing',
-          type: 'line',
-          source: 'fkt',
-          paint: {
-            'line-color': '#331100',
-            'line-width': 7,
-            'atmosphere-opacity': 0.5
-          }
-        },*/
-        {
-          id: 'ski-tracks',
-          type: 'line',
-          source: 'fkt',
-          paint: {
-            'line-color': '#ff8800',
-            'line-width': 5,
-            'line-border-color': '#331100',
-            'line-border-width': 2,
-            'atmosphere-opacity': 0.5
-          }
-        },
-        {
-          id: 'peak-circles',
-          type: 'circle',
-          source: 'peaks',
-          paint: {
-            'circle-radius': 3,
-            'circle-color': '#000000',
-            'circle-stroke-color': '#ffffff',
-            'circle-stroke-width': 1.5,
-            'atmosphere-opacity': 0.5
-          }
-        },
-        {
-          id: 'peak-labels',
-          type: 'text',
-          source: 'peaks',
-          paint: {
-            'text-field': 'name',
-            'text-size': 16,
-            'text-color': '#000000',
-            'text-halo-color': '#ffffff',
-            'text-halo-width': 1.25,
-            'atmosphere-opacity': 0.5
-          }
-        },
-      ],
       createGPULines,
       simplifyFn: simplify,
     });
@@ -175,6 +246,9 @@
     container.appendChild(viewer.attribution);
     container.appendChild(profilePanel);
 
+    const dropOverlay = html`<div class="drop-overlay" style="display:none">Drop GeoJSON or GPX file</div>`;
+    container.appendChild(dropOverlay);
+
     // Compass rose: shows current bearing, click to orient north
     const compassBtn = html`<button class="compass-rose" title="Orient north">
       <svg viewBox="0 0 28 28" width="24" height="24" style="display:block">
@@ -235,13 +309,19 @@
 
     const controlsContainer = html`<div class="terrain-controls"></div>`;
 
-    const sunState = { date: new Date(), timeOfDay: 14 };
+    const sunState = { date: new Date(), timeOfDay: 14, utcOffset: -8 };
     const location = viewer._location;
+
+    function formatTime(decimal) {
+      const h = Math.floor(decimal) % 24;
+      const m = Math.round((decimal % 1) * 60);
+      return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
 
     function updateSunDirection() {
       const tod = sunState.timeOfDay;
       const d = sunState.date;
-      const sunDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(tod) + 8, (tod % 1) * 60, 0));
+      const sunDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), Math.floor(tod) - sunState.utcOffset, (tod % 1) * 60, 0));
       const sunPos = SunCalc.getPosition(sunDate, location.lat, location.lon);
       const alt = sunPos.altitude;
       const az = sunPos.azimuth;
@@ -331,9 +411,6 @@
         const item = html`<div class="layer-item"></div>`;
         const row = html`<div class="layer-row"></div>`;
 
-        const chevron = html`<span class="layer-chevron">&#9654;</span>`;
-        row.appendChild(chevron);
-
         const eyeBtn = html`<button class="layer-eye" title="Toggle visibility"></button>`;
         eyeBtn.innerHTML = entry.visible ? eyeOpenSVG : eyeClosedSVG;
         eyeBtn.addEventListener('click', () => {
@@ -342,6 +419,9 @@
           eyeBtn.innerHTML = entry.visible ? eyeOpenSVG : eyeClosedSVG;
         });
         row.appendChild(eyeBtn);
+
+        const chevron = html`<span class="layer-chevron">&#9654;</span>`;
+        row.appendChild(chevron);
 
         row.appendChild(html`<span class="layer-name">${entry.id}</span>`);
 
@@ -592,6 +672,52 @@
         }
       }
     });
+    // Drag-and-drop file import
+    let dragCounter = 0;
+    container.addEventListener('dragover', (e) => {
+      e.preventDefault();
+    });
+    container.addEventListener('dragenter', (e) => {
+      e.preventDefault();
+      dragCounter++;
+      dropOverlay.style.display = '';
+    });
+    container.addEventListener('dragleave', (e) => {
+      dragCounter--;
+      if (dragCounter <= 0) {
+        dragCounter = 0;
+        dropOverlay.style.display = 'none';
+      }
+    });
+    container.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      dragCounter = 0;
+      dropOverlay.style.display = 'none';
+      const file = e.dataTransfer.files[0];
+      if (!file) return;
+      const text = await file.text();
+      const name = file.name;
+      const ext = name.split('.').pop().toLowerCase();
+      let geojson;
+      if (ext === 'gpx') {
+        const doc = new DOMParser().parseFromString(text, 'text/xml');
+        geojson = gpxToGeoJSON(doc);
+      } else if (ext === 'geojson' || ext === 'json') {
+        geojson = JSON.parse(text);
+      } else {
+        return;
+      }
+      const id = name.replace(/\.[^.]+$/, '').replace(/[^a-zA-Z0-9_-]/g, '-');
+      await viewer.addLineLayer(id, geojson, {
+        'line-color': '#4CAF50',
+        'line-width': 4,
+        'line-border-color': '#1B5E20',
+        'line-border-width': 1.5,
+        'atmosphere-opacity': 0.5,
+      });
+      rebuildLayerPanel();
+    });
+
     // Analysis section
     const { section: analysis, body: analysisContent } = createSection('Analysis', { open: true });
     controlsContainer.appendChild(analysis);
@@ -623,13 +749,13 @@
     // Slope aspect rose: concentric rings for Above/Near/Below treeline
     {
       const ns = 'http://www.w3.org/2000/svg';
-      const size = 160;
-      const cx = size / 2, cy = size / 2;
+      const size = 180;
+      const cx = size / 2, cy = 80;
       const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
       const rings = [
-        { key: 'slopeAspectMaskAbove', rInner: 0, rOuter: 18 },
-        { key: 'slopeAspectMaskNear', rInner: 18, rOuter: 36 },
-        { key: 'slopeAspectMaskBelow', rInner: 36, rOuter: 54 },
+        { key: 'slopeAspectMaskAbove', label: 'Above', rInner: 0, rOuter: 18 },
+        { key: 'slopeAspectMaskNear', label: 'Near', rInner: 18, rOuter: 36 },
+        { key: 'slopeAspectMaskBelow', label: 'Below', rInner: 36, rOuter: 54 },
       ];
       const labelR = 68;
       const masks = { slopeAspectMaskAbove: 0, slopeAspectMaskNear: 0, slopeAspectMaskBelow: 0 };
@@ -639,7 +765,7 @@
       svg.setAttribute('width', size);
       svg.setAttribute('height', size);
       svg.style.display = 'block';
-      svg.style.margin = '4px auto 0';
+      svg.style.margin = '0 auto';
 
       for (const ring of rings) {
         for (let i = 0; i < 8; i++) {
@@ -702,24 +828,45 @@
         svg.appendChild(text);
       }
 
-      const wrapper = html`<div class="aspect-rose" style="max-width: 240px;">
-        <label style="font-size: 12px; font-weight: 500; font-family: system-ui, sans-serif; color: #333;">Slope aspect</label>
-      </div>`;
+      // Legend below the rose, inside the SVG
+      const legendY = 168;
+      const legendItems = rings.map(r => r.label);
+      const legendSpacing = 60;
+      const legendStartX = cx - (legendItems.length - 1) * legendSpacing / 2;
+      for (let i = 0; i < legendItems.length; i++) {
+        const lx = legendStartX + i * legendSpacing;
+        const rect = document.createElementNS(ns, 'rect');
+        rect.setAttribute('x', lx - 16);
+        rect.setAttribute('y', legendY - 4);
+        rect.setAttribute('width', 8);
+        rect.setAttribute('height', 8);
+        rect.setAttribute('fill', '#fff');
+        rect.setAttribute('stroke', '#333');
+        rect.setAttribute('stroke-width', '0.5');
+        svg.appendChild(rect);
+        const text = document.createElementNS(ns, 'text');
+        text.setAttribute('x', lx - 4);
+        text.setAttribute('y', legendY);
+        text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('font-size', '9');
+        text.setAttribute('font-family', 'system-ui, sans-serif');
+        text.setAttribute('fill', '#555');
+        text.textContent = legendItems[i];
+        svg.appendChild(text);
+      }
+
+      const wrapper = html`<div class="aspect-rose"></div>`;
+      const label = html`<label style="font-size: 12px; font-weight: 500; font-family: system-ui, sans-serif; color: #555;">Slope aspect</label>`;
+      wrapper.appendChild(label);
       wrapper.appendChild(svg);
-      const legend = html`<div style="display: flex; justify-content: center; gap: 12px; font-size: 10px; font-family: system-ui, sans-serif; color: #333; margin-top: 2px;">
-        <span>Inner: Above</span>
-        <span>Middle: Near</span>
-        <span>Outer: Below treeline</span>
-      </div>`;
-      wrapper.appendChild(legend);
       analysisContent.appendChild(wrapper);
     }
     addControl(analysisContent,
-      Inputs.range([0, 10000], { value: viewer.settings.treelineLower, step: 50, label: "Lower treeline (ft)" }),
+      Inputs.range([0, 13000], { value: viewer.settings.treelineLower, step: 50, label: "Lower treeline (ft)" }),
       v => { viewer.settings.treelineLower = v; }
     );
     addControl(analysisContent,
-      Inputs.range([0, 10000], { value: viewer.settings.treelineUpper, step: 50, label: "Upper treeline (ft)" }),
+      Inputs.range([0, 13000], { value: viewer.settings.treelineUpper, step: 50, label: "Upper treeline (ft)" }),
       v => { viewer.settings.treelineUpper = v; }
     );
 
@@ -728,17 +875,83 @@
     controlsContainer.appendChild(environment);
 
     addControl(envContent,
-      Inputs.range([10, 90], { value: Math.round(viewer.camera.state.fov * 180 / Math.PI), step: 1, label: "FOV (degrees)" }),
-      v => { viewer.camera.state.fov = v * Math.PI / 180; viewer.camera.taint(); }
-    );
-    addControl(envContent,
       Inputs.date({ value: sunState.date, label: "Date" }),
       v => { if (v) { sunState.date = v; updateSunDirection(); } }
     );
-    addControl(envContent,
-      Inputs.range([0, 24], { value: sunState.timeOfDay, step: 0.01, label: "Time of day (AKDT)" }),
-      v => { sunState.timeOfDay = v; updateSunDirection(); }
-    );
+
+    const timeInput = Inputs.range([0, 24], { value: sunState.timeOfDay, step: 1 / 60, label: "Time of day" });
+    const timeOutput = timeInput.querySelector('output');
+    if (timeOutput) timeOutput.textContent = formatTime(sunState.timeOfDay);
+    addControl(envContent, timeInput, v => {
+      sunState.timeOfDay = v;
+      if (timeOutput) timeOutput.textContent = formatTime(v);
+      updateSunDirection();
+    });
+
+    const tzOptions = [
+      { label: 'AKST (UTC−9)', offset: -9 },
+      { label: 'AKDT (UTC−8)', offset: -8 },
+      { label: 'PST (UTC−8)', offset: -8 },
+      { label: 'PDT (UTC−7)', offset: -7 },
+      { label: 'MST (UTC−7)', offset: -7 },
+      { label: 'MDT (UTC−6)', offset: -6 },
+      { label: 'CST (UTC−6)', offset: -6 },
+      { label: 'CDT (UTC−5)', offset: -5 },
+      { label: 'EST (UTC−5)', offset: -5 },
+      { label: 'EDT (UTC−4)', offset: -4 },
+    ];
+    const defaultTz = location.lat > 55 ? 'AKDT (UTC−8)' : 'PDT (UTC−7)';
+    const tzSelect = Inputs.select(tzOptions.map(t => t.label), { value: defaultTz, label: "Time zone" });
+    addControl(envContent, tzSelect, v => {
+      const tz = tzOptions.find(t => t.label === v);
+      if (tz) sunState.utcOffset = tz.offset;
+      updateSunDirection();
+    });
+    // Apply default
+    const defaultTzEntry = tzOptions.find(t => t.label === defaultTz);
+    if (defaultTzEntry) sunState.utcOffset = defaultTzEntry.offset;
+    updateSunDirection();
+
+    // Astronomical times display
+    const sunTimesEl = html`<div class="sun-times"></div>`;
+    envContent.appendChild(sunTimesEl);
+
+    function utcToLocal(date) {
+      return date.getTime() / 3600000 + sunState.utcOffset;
+    }
+
+    function updateSunTimes() {
+      const d = sunState.date;
+      const utcDate = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12, 0, 0));
+      const times = SunCalc.getTimes(utcDate, location.lat, location.lon);
+      const events = [
+        ['Sunrise', times.sunrise],
+        ['AM golden', times.goldenHourEnd],
+        ['Noon', times.solarNoon],
+        ['PM golden', times.goldenHour],
+        ['Sunset', times.sunset],
+      ];
+      sunTimesEl.innerHTML = '';
+      for (const [label, date] of events) {
+        const localHrs = utcToLocal(date);
+        const hrs = ((localHrs % 24) + 24) % 24;
+        const btn = html`<button class="sun-time-btn"><span class="sun-time-label">${label}</span><span class="sun-time-value">${formatTime(hrs)}</span></button>`;
+        btn.addEventListener('click', () => {
+          sunState.timeOfDay = hrs;
+          timeInput.value = hrs;
+          timeInput.dispatchEvent(new Event('input', { bubbles: true }));
+        });
+        sunTimesEl.appendChild(btn);
+      }
+    }
+    updateSunTimes();
+
+    // Re-derive sun times when date or timezone changes
+    const origDateHandler = sunState._onDateChange;
+    const dateInput = envContent.querySelector('input[type="date"]');
+    if (dateInput) dateInput.addEventListener('input', () => setTimeout(updateSunTimes, 0));
+    tzSelect.addEventListener('input', () => setTimeout(updateSunTimes, 0));
+
     addControl(envContent,
       Inputs.range([0.05, 1], { value: viewer.settings.atmosphereDensity, step: 0.01, label: "Atmosphere density" }),
       v => { viewer.settings.atmosphereDensity = v; }
@@ -747,6 +960,10 @@
     const { section: debug, body: debugContent } = createSection('Debug');
     controlsContainer.appendChild(debug);
 
+    addControl(debugContent,
+      Inputs.range([10, 90], { value: Math.round(viewer.camera.state.fov * 180 / Math.PI), step: 1, label: "FOV (degrees)" }),
+      v => { viewer.camera.state.fov = v * Math.PI / 180; viewer.camera.taint(); }
+    );
     addControl(debugContent,
       Inputs.range([1, 5], { value: viewer.settings.densityThreshold, step: 0.1, label: "Tile scale", transform: Math.log }),
       v => { viewer.settings.densityThreshold = v; }
@@ -803,7 +1020,7 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
         cursor: grab;
       }
       .expandable-controls-panel {
-        width: 380px;
+        width: 340px;
       }
       .status {
         font-family: monospace;
@@ -1108,6 +1325,58 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
       .draw-done-btn {
         color: #2e7d32;
       }
+      /* Sun times */
+      .sun-times {
+        display: flex;
+        gap: 4px;
+        padding: 4px 0;
+        justify-content: space-between;
+      }
+      .sun-time-btn {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: #f5f5f5;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        padding: 3px 5px;
+        cursor: pointer;
+        font-family: system-ui, sans-serif;
+        line-height: 1.3;
+        flex: 1;
+      }
+      .sun-time-btn:hover {
+        background: #e8e8e8;
+      }
+      .sun-time-label {
+        font-size: 9px;
+        color: #888;
+        white-space: nowrap;
+      }
+      .sun-time-value {
+        font-size: 12px;
+        font-weight: 600;
+        color: #333;
+        font-variant-numeric: tabular-nums;
+      }
+
+      .drop-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(33, 150, 243, 0.15);
+        border: 2px dashed rgba(33, 150, 243, 0.6);
+        border-radius: 4px;
+        font-family: system-ui, sans-serif;
+        font-size: 16px;
+        font-weight: 600;
+        color: #1565C0;
+        pointer-events: none;
+        z-index: 10;
+      }
+
       .draw-overlay {
         position: absolute;
         top: 10px;
