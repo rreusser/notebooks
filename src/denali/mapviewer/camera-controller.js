@@ -210,6 +210,7 @@ export function createCameraController(element, opts = {}) {
   let lastTouchCenterX = 0;
   let lastTouchCenterY = 0;
   let lastTouchAngle = 0;
+  let touchZoomMx = 0, touchZoomMy = 0;
 
   function computeMatrices(aspectRatio) {
     const { phi, theta, distance, center, fov, near, far } = state;
@@ -513,11 +514,33 @@ export function createCameraController(element, opts = {}) {
       lastTouchCenterY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
       lastTouchAngle = Math.atan2(dy, dx);
 
-      // Set pivot to terrain under touch midpoint
+      // Set pivot to terrain under touch midpoint and recenter orbit distance
       if (rotateStartCallback) {
+        computeMatrices(lastAspect);
         const result = rotateStartCallback(lastTouchCenterX, lastTouchCenterY);
         rotatePivot = (Array.isArray(result) && result.length === 3) ? result : null;
+        if (rotatePivot) {
+          const { phi, theta, distance, center } = state;
+          const eyeX = center[0] + distance * Math.cos(theta) * Math.cos(phi);
+          const eyeY = center[1] + distance * Math.sin(theta);
+          const eyeZ = center[2] + distance * Math.cos(theta) * Math.sin(phi);
+          const hx = rotatePivot[0] - eyeX, hy = rotatePivot[1] - eyeY, hz = rotatePivot[2] - eyeZ;
+          const terrainDist = Math.sqrt(hx * hx + hy * hy + hz * hz);
+          const dirX = Math.cos(theta) * Math.cos(phi);
+          const dirY = Math.sin(theta);
+          const dirZ = Math.cos(theta) * Math.sin(phi);
+          state.center[0] += (distance - terrainDist) * dirX;
+          state.center[1] += (distance - terrainDist) * dirY;
+          state.center[2] += (distance - terrainDist) * dirZ;
+          state.distance = terrainDist;
+        }
       }
+      showPivotRing(lastTouchCenterX, lastTouchCenterY);
+
+      // Store normalized midpoint offset for zoom-toward-midpoint pan correction
+      const rect = element.getBoundingClientRect();
+      touchZoomMx = (lastTouchCenterX - rect.left - rect.width / 2) / rect.height;
+      touchZoomMy = (lastTouchCenterY - rect.top - rect.height / 2) / rect.height;
     }
   }
 
@@ -538,10 +561,14 @@ export function createCameraController(element, opts = {}) {
       const centerY = (event.touches[0].clientY + event.touches[1].clientY) / 2;
 
       if (lastTouchDist > 0) {
-        // Pinch-to-zoom
+        // Pinch-to-zoom with pan correction toward midpoint
         const scale = lastTouchDist / dist;
+        const oldDistance = state.distance;
         state.distance *= scale;
         state.distance = Math.max(state.near * 2, state.distance);
+        const actualZoomFactor = state.distance / oldDistance;
+        const panAmount = (1 / actualZoomFactor - 1) * 2 * Math.tan(state.fov / 2);
+        pan(-touchZoomMx * panAmount, -touchZoomMy * panAmount);
 
         // Two-finger twist → orbit (phi rotation)
         // Vertical center-point drag → tilt (theta)
@@ -565,6 +592,7 @@ export function createCameraController(element, opts = {}) {
     dragMode = null;
     grabAnchor = null;
     rotatePivot = null;
+    removePivotRing();
     lastTouchDist = 0;
     lastTouchAngle = 0;
   }
