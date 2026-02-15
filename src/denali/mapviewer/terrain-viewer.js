@@ -2,7 +2,7 @@ import { createCameraController } from './camera-controller.js';
 import { createTerrainMesh } from './mesh.js';
 import { terrainVertexShader, terrainFragmentShader } from './shaders/terrain.js';
 import { skyVertexShader, skyFragmentShader } from './shaders/sky.js';
-import { computeTileMVP, computeTileModel, getElevationScale, getCellSizeMeters, tilesetToMercatorBounds, tileUrlFromTemplate, getImageryZoom, lonToMercatorX, latToMercatorY } from './tile-math.js';
+import { computeTileMVP, computeTileModel, getElevationScale, getCellSizeMeters, tilesetToMercatorBounds, tileUrlFromTemplate, getImageryZoom, lonToMercatorX, latToMercatorY, mercatorXToLon, mercatorYToLat } from './tile-math.js';
 import { invertMat4 } from './math.js';
 import { selectTiles, screenDensity, extractEyePosition } from './quadtree.js';
 import { TileManager } from './tile-manager.js';
@@ -11,7 +11,7 @@ import { ImageryCompositor } from './imagery-compositor.js';
 import { GeoJSONSource } from './geojson-source.js';
 import { CircleLayer } from './circle-layer.js';
 import { TextLayer } from './text-layer.js';
-import { LineLayer } from './line-layer.js';
+import { LineLayer, parseColor } from './line-layer.js';
 import { loadFontAtlas } from './lib/webgpu-text/webgpu-text.ts';
 import BVH from './bvh.js';
 import { screenToRay, raycastTerrain } from './ray-terrain.js';
@@ -19,6 +19,27 @@ import { createSettings, createAttribution, estimateTreeline } from './settings.
 import { cameraStateToHash, hashToCameraState } from './hash-state.js';
 import { FrustumOverlay } from './frustum-overlay.js';
 import { CollisionManager } from './collision-manager.js';
+
+// Collect subdivision midpoints for a single segment. Only inserts midpoints
+// where terrain elevation data is available and positive, so segments over
+// unloaded tiles or at zero elevation are left unsubdivided.
+function collectSubdivisions(a, b, result, queryElev, tolerance, maxDepth, depth) {
+  if (depth >= maxDepth) return;
+  const midMx = (a.mercatorX + b.mercatorX) / 2;
+  const midMy = (a.mercatorY + b.mercatorY) / 2;
+  const elevA = queryElev(a.mercatorX, a.mercatorY);
+  const elevB = queryElev(b.mercatorX, b.mercatorY);
+  const elevMid = queryElev(midMx, midMy);
+  if (elevA == null || elevB == null || elevMid == null) return;
+  if (elevA <= 0 || elevB <= 0 || elevMid <= 0) return;
+  const linearElev = (elevA + elevB) / 2;
+  if (Math.abs(elevMid - linearElev) > tolerance) {
+    const mid = { mercatorX: midMx, mercatorY: midMy };
+    collectSubdivisions(a, mid, result, queryElev, tolerance, maxDepth, depth + 1);
+    result.push(mid);
+    collectSubdivisions(mid, b, result, queryElev, tolerance, maxDepth, depth + 1);
+  }
+}
 
 export class TerrainMap {
   /**
@@ -89,6 +110,7 @@ export class TerrainMap {
     const adapter = await navigator.gpu.requestAdapter();
     this._device = await adapter.requestDevice();
     this._format = navigator.gpu.getPreferredCanvasFormat();
+    this._createGPULines = createGPULines;
     this._gpuCtx = canvas.getContext('webgpu');
     this._gpuCtx.configure({ device: this._device, format: this._format, alphaMode: 'opaque' });
 
@@ -240,8 +262,9 @@ export class TerrainMap {
     this._tileManager.onTileResolved = () => {
       this._coverageDirty = true;
       this._renderDirty = true;
+      this._refinementDirty = true;
       this._collisionManager.markStale();
-      for (const ll of this._lineLayers) ll.invalidateElevations();
+      for (const entry of this._lineLayers) entry.layer.invalidateElevations();
     };
     this._compositor.onUpdate = () => { this._coverageDirty = true; this._renderDirty = true; };
 
@@ -255,6 +278,8 @@ export class TerrainMap {
     this._currentExaggeration = this.settings.verticalExaggeration;
     this._currentDensityThreshold = this.settings.densityThreshold;
     this._currentFreezeCoverage = false;
+    this._refinementDirty = false;
+    this._lastRefinementTime = 0;
 
     // Raycast infrastructure
     this._bvh = null;
@@ -301,7 +326,7 @@ export class TerrainMap {
         circleLayer.init(device, globalUniformBGL, format);
         circleLayer._collision = collision;
         circleLayer._sourceId = layerConfig.source;
-        this._circleLayers.push(circleLayer);
+        this._circleLayers.push({ id: layerConfig.id, layer: circleLayer, config: layerConfig, visible: true, userCreated: false });
       } else if (layerConfig.type === 'text') {
         const textLayer = new TextLayer(
           layerConfig,
@@ -310,7 +335,7 @@ export class TerrainMap {
         );
         textLayer._collision = collision;
         textLayer._sourceId = layerConfig.source;
-        this._textLayers.push({ layer: textLayer, config: layerConfig });
+        this._textLayers.push({ id: layerConfig.id, layer: textLayer, config: layerConfig, visible: true, userCreated: false });
       } else if (layerConfig.type === 'line') {
         const lineLayer = new LineLayer(
           layerConfig,
@@ -318,7 +343,7 @@ export class TerrainMap {
           (mx, my) => this.queryElevationMercator(mx, my),
         );
         lineLayer.init(device, format, this._globalUniformBuffer, createGPULines);
-        this._lineLayers.push(lineLayer);
+        this._lineLayers.push({ id: layerConfig.id, layer: lineLayer, config: layerConfig, visible: true, userCreated: false, _sourceRef: loadedSources[layerConfig.source] });
       }
     }
     await Promise.all(geojsonLoads);
@@ -329,8 +354,8 @@ export class TerrainMap {
         atlasUrl: options.font.atlas,
         metadataUrl: options.font.metadata,
       });
-      for (const { layer } of this._textLayers) {
-        layer.init(device, fontAtlas, format, 'depth24plus', this._globalUniformBuffer);
+      for (const entry of this._textLayers) {
+        entry.layer.init(device, fontAtlas, format, 'depth24plus', this._globalUniformBuffer);
       }
     }
 
@@ -365,11 +390,13 @@ export class TerrainMap {
 
   _buildCollisionLayers() {
     const layers = [];
-    for (const cl of this._circleLayers) {
-      layers.push({ layer: cl, collision: cl._collision, sourceId: cl._sourceId });
+    for (const entry of this._circleLayers) {
+      if (!entry.visible) continue;
+      layers.push({ layer: entry.layer, collision: entry.layer._collision, sourceId: entry.layer._sourceId });
     }
-    for (const { layer } of this._textLayers) {
-      layers.push({ layer, collision: layer._collision, sourceId: layer._sourceId });
+    for (const entry of this._textLayers) {
+      if (!entry.visible) continue;
+      layers.push({ layer: entry.layer, collision: entry.layer._collision, sourceId: entry.layer._sourceId });
     }
     return layers;
   }
@@ -507,22 +534,18 @@ export class TerrainMap {
     this._frustumOverlay.draw(pass, projectionView, canvas.width, canvas.height);
 
     // Line feature layers (drawn after terrain, before circles/text)
-    if (settings.showRoute) {
-      for (const ll of this._lineLayers) {
-        ll.draw(pass);
-      }
+    for (const entry of this._lineLayers) {
+      if (entry.visible) entry.layer.draw(pass);
     }
 
     // Circle feature layers
-    if (settings.showFeatures) {
-      for (const cl of this._circleLayers) {
-        cl.draw(pass, this._globalUniformBindGroup, false);
-      }
+    for (const entry of this._circleLayers) {
+      if (entry.visible) entry.layer.draw(pass, this._globalUniformBindGroup, false);
+    }
 
-      // Text feature layers (drawn after circles)
-      for (const { layer } of this._textLayers) {
-        layer.draw(pass);
-      }
+    // Text feature layers (drawn after circles)
+    for (const entry of this._textLayers) {
+      if (entry.visible) entry.layer.draw(pass);
     }
 
     // Collision debug bounding boxes
@@ -567,6 +590,18 @@ export class TerrainMap {
     if (settings.dirty) {
       this._renderDirty = true;
       settings.dirty = false;
+    }
+
+    // Debounced path refinement (at most once per second)
+    if (this._refinementDirty) {
+      const now = performance.now();
+      if (now - this._lastRefinementTime > 1000) {
+        this._refineLineLayers();
+        this._lastRefinementTime = now;
+        this._refinementDirty = false;
+        this._renderDirty = true;
+        if (this.onElevationRefine) this.onElevationRefine();
+      }
     }
 
     if (!this._coverageDirty && !this._renderDirty && !camera.dirty) return;
@@ -667,21 +702,19 @@ export class TerrainMap {
     }
 
     // Prepare circle and text layers with current projectionView
-    if (settings.showFeatures) {
-      for (const cl of this._circleLayers) {
-        cl.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
-      }
-      for (const { layer } of this._textLayers) {
-        layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
-      }
+    for (const entry of this._circleLayers) {
+      if (entry.visible) entry.layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
+    }
+    for (const entry of this._textLayers) {
+      if (entry.visible) entry.layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
     }
 
     // Prepare line layers
-    if (settings.showRoute) {
-      for (const ll of this._lineLayers) {
-        ll.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
-      }
+    for (const entry of this._lineLayers) {
+      if (entry.visible) entry.layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
     }
+
+    if (this.onElevationRefine) this.onElevationRefine();
 
     this.paint();
   }
@@ -840,6 +873,212 @@ export class TerrainMap {
     };
   }
 
+  async addLineLayer(id, geojson, paint = {}) {
+    const src = new GeoJSONSource();
+    await src.load(geojson);
+    const config = { id, type: 'line', paint };
+    const layer = new LineLayer(config, src, (mx, my) => this.queryElevationMercator(mx, my));
+    layer.init(this._device, this._format, this._globalUniformBuffer, this._createGPULines);
+    const entry = { id, layer, config, visible: true, userCreated: true, _sourceRef: src, sourceGeoJSON: geojson };
+    this._lineLayers.push(entry);
+    this._refinementDirty = true;
+    this._renderDirty = true;
+    return entry;
+  }
+
+  removeLayer(id) {
+    for (const arr of [this._lineLayers, this._circleLayers, this._textLayers]) {
+      const idx = arr.findIndex(e => e.id === id);
+      if (idx === -1) continue;
+      if (arr[idx].layer.destroy) arr[idx].layer.destroy();
+      arr.splice(idx, 1);
+      this._renderDirty = true;
+      return;
+    }
+  }
+
+  removeLineLayer(id) {
+    this.removeLayer(id);
+  }
+
+  setLayerVisibility(id, visible) {
+    for (const arr of [this._lineLayers, this._circleLayers, this._textLayers]) {
+      const entry = arr.find(e => e.id === id);
+      if (entry) {
+        entry.visible = visible;
+        this._renderDirty = true;
+        return;
+      }
+    }
+  }
+
+  setLineLayerColor(id, hex) {
+    const entry = this._lineLayers.find(e => e.id === id);
+    if (!entry) return;
+    entry.layer._lineColor = parseColor(hex);
+    this._renderDirty = true;
+  }
+
+  setLayerPaint(id, property, value) {
+    const color = typeof value === 'string' ? parseColor(value) : null;
+    for (const entry of this._lineLayers) {
+      if (entry.id !== id) continue;
+      const l = entry.layer;
+      if (property === 'line-color') l._lineColor = color;
+      else if (property === 'line-border-color') l._borderColor = color;
+      else if (property === 'line-width') l._lineWidth = value;
+      else if (property === 'line-border-width') l._borderWidth = value;
+      this._renderDirty = true;
+      return;
+    }
+    for (const entry of this._circleLayers) {
+      if (entry.id !== id) continue;
+      const l = entry.layer;
+      if (property === 'circle-color') l._fillColor = color;
+      else if (property === 'circle-stroke-color') l._strokeColor = color;
+      else if (property === 'circle-radius') l._radius = value;
+      else if (property === 'circle-stroke-width') l._strokeWidth = value;
+      this._renderDirty = true;
+      return;
+    }
+    for (const entry of this._textLayers) {
+      if (entry.id !== id) continue;
+      const l = entry.layer;
+      if (property === 'text-color') {
+        l._color = color;
+        if (l._spans) for (const { span } of l._spans) span.setColor(color);
+      } else if (property === 'text-halo-color') {
+        l._strokeColor = color;
+        if (l._spans) for (const { span } of l._spans) span.setStrokeColor(color);
+      } else if (property === 'text-halo-width') {
+        l._strokeWidth = value;
+        l._lastScaledStrokeWidth = null;
+      }
+      this._renderDirty = true;
+      return;
+    }
+  }
+
+  _refineLineLayers() {
+    const queryElev = (mx, my) => this.queryElevationMercator(mx, my);
+    for (const entry of this._lineLayers) {
+      if (!entry._sourceRef) continue;
+      const originalFeatures = entry._sourceRef.lineFeatures;
+      if (!originalFeatures || originalFeatures.length === 0) continue;
+
+      // Initialize per-feature segment midpoint tracking
+      if (!entry._segmentMidpoints) {
+        entry._segmentMidpoints = originalFeatures.map(f =>
+          new Array(Math.max(0, f.coordinates.length - 1)).fill(null).map(() => [])
+        );
+      }
+
+      let changed = false;
+      const refinedFeatures = [];
+
+      for (let fi = 0; fi < originalFeatures.length; fi++) {
+        const feature = originalFeatures[fi];
+        const coords = feature.coordinates;
+        const segMids = entry._segmentMidpoints[fi];
+
+        // Collect subdivisions per segment. Accept updates when the new pass
+        // produces at least as many midpoints AND the positions differ (higher-res
+        // terrain may reshape the binary tree without increasing count). Never
+        // shrink — if tiles are evicted, the old midpoints are preserved.
+        for (let si = 0; si < coords.length - 1; si++) {
+          const newMids = [];
+          collectSubdivisions(coords[si], coords[si + 1], newMids, queryElev, 1.0, 8, 0);
+          if (newMids.length < segMids[si].length) continue;
+          if (newMids.length > segMids[si].length) {
+            segMids[si] = newMids;
+            changed = true;
+          } else if (newMids.length > 0) {
+            // Same count — check if positions actually differ (better terrain data
+            // may produce different tree shapes with the same midpoint count)
+            let differs = false;
+            for (let mi = 0; mi < newMids.length; mi++) {
+              if (newMids[mi].mercatorX !== segMids[si][mi].mercatorX ||
+                  newMids[mi].mercatorY !== segMids[si][mi].mercatorY) {
+                differs = true;
+                break;
+              }
+            }
+            if (differs) {
+              segMids[si] = newMids;
+              changed = true;
+            }
+          }
+        }
+
+        // Build refined coordinates: original vertices interleaved with midpoints
+        const refined = [coords[0]];
+        for (let si = 0; si < coords.length - 1; si++) {
+          for (const mid of segMids[si]) {
+            refined.push(mid);
+          }
+          refined.push(coords[si + 1]);
+        }
+        refinedFeatures.push({ coordinates: refined, properties: feature.properties });
+      }
+
+      if (changed) {
+        // Snapshot old elevation cache so vertices outside viewport keep their
+        // elevations across the source replacement
+        const layer = entry.layer;
+        const elevCarryover = new Map();
+        if (layer._cachedElevations && layer._polylines) {
+          for (const polyline of layer._polylines) {
+            for (let i = 0; i < polyline.count; i++) {
+              const c = polyline.feature.coordinates[i];
+              const elev = layer._cachedElevations[polyline.offset + i];
+              if (elev > 0) {
+                elevCarryover.set(c.mercatorX + ',' + c.mercatorY, elev);
+              }
+            }
+          }
+        }
+        layer.replaceSource({ lineFeatures: refinedFeatures, features: [] }, elevCarryover);
+      }
+    }
+  }
+
+  getLayerElevationProfile(id) {
+    const entry = this._lineLayers.find(e => e.id === id);
+    if (!entry) return null;
+    const layer = entry.layer;
+    if (!layer._polylines || layer._polylines.length === 0) return null;
+    return layer._polylines.map(polyline => {
+      const coords = [];
+      const elevations = [];
+      for (let i = 0; i < polyline.count; i++) {
+        const c = polyline.feature.coordinates[i];
+        coords.push({ mercatorX: c.mercatorX, mercatorY: c.mercatorY });
+        elevations.push(layer._cachedElevations[polyline.offset + i]);
+      }
+      return { coords, elevations };
+    });
+  }
+
+  getLayerGeoJSON(id) {
+    const entry = this._lineLayers.find(e => e.id === id);
+    if (!entry) return null;
+    // Use stored sourceGeoJSON if available (user-drawn paths)
+    if (entry.sourceGeoJSON) return entry.sourceGeoJSON;
+    // Reconstruct from original source features
+    if (!entry._sourceRef) return null;
+    return {
+      type: 'FeatureCollection',
+      features: entry._sourceRef.lineFeatures.map(f => ({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: f.coordinates.map(c => [c.lon, c.lat, c.elevation || 0]),
+        },
+        properties: f.properties || {},
+      })),
+    };
+  }
+
   destroy() {
     this._running = false;
     clearTimeout(this._hashUpdateTimer);
@@ -854,7 +1093,9 @@ export class TerrainMap {
     this._globalUniformBuffer.destroy();
     this._fallbackImageryTexture.destroy();
     this._whiteImageryTexture.destroy();
-    for (const ll of this._lineLayers) ll.destroy();
+    for (const entry of this._lineLayers) entry.layer.destroy();
+    for (const entry of this._circleLayers) if (entry.layer.destroy) entry.layer.destroy();
+    for (const entry of this._textLayers) if (entry.layer.destroy) entry.layer.destroy();
     this._device.destroy();
   }
 }

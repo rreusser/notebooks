@@ -8,6 +8,7 @@
     import { createGPULines } from 'npm:webgpu-instanced-lines';
     import simplify from 'npm:simplify-js';
     import { expandable } from './lib/expandable.js';
+    import { ElevationProfile } from './mapviewer/elevation-profile.js';
 
     const canvas = document.createElement('canvas');
     canvas.className = 'terrain';
@@ -152,11 +153,27 @@
       elevationLabel.style.opacity = '0';
     });
 
+    const elevationProfile = new ElevationProfile();
+    const profilePanel = elevationProfile.createDOM();
+
+    viewer.onElevationRefine = () => {
+      const activeId = elevationProfile.activeLayerId;
+      if (!activeId) return;
+      // Auto-close if layer was removed
+      if (!viewer._lineLayers.find(e => e.id === activeId)) {
+        elevationProfile.hide();
+        return;
+      }
+      const data = viewer.getLayerElevationProfile(activeId);
+      if (data) elevationProfile.update(data);
+    };
+
     const container = html`<div style="position: relative">`;
     container.appendChild(canvas);
     container.appendChild(elevationLabel);
     container.appendChild(slopeLegend);
     container.appendChild(viewer.attribution);
+    container.appendChild(profilePanel);
 
     // Compass rose: shows current bearing, click to orient north
     const compassBtn = html`<button class="compass-rose" title="Orient north">
@@ -210,7 +227,7 @@
       }
     }));
 
-    invalidation.then(() => viewer.destroy());
+    invalidation.then(() => { elevationProfile.destroy(); viewer.destroy(); });
   </script>
 
   <script id="controls" type="module">
@@ -241,19 +258,348 @@
       input.addEventListener('input', () => onInput(input.value));
     }
 
-    addControl(controlsContainer,
-      Inputs.checkbox(["Imagery", "Features", "Route"], { value: ["Imagery", "Features", "Route"], label: "Layers" }),
-      v => {
-        viewer.settings.showImagery = v.includes("Imagery");
-        viewer.settings.showFeatures = v.includes("Features");
-        viewer.settings.showRoute = v.includes("Route");
+    function createSection(title, { open = false, trailing = null } = {}) {
+      const section = html`<div class="ctrl-section"></div>`;
+      const header = html`<div class="ctrl-section-header"></div>`;
+      const chevron = html`<span class="ctrl-chevron">&#9654;</span>`;
+      header.appendChild(chevron);
+      header.appendChild(html`<span class="ctrl-section-title">${title}</span>`);
+      if (trailing) header.appendChild(trailing);
+      section.appendChild(header);
+      const body = html`<div class="ctrl-section-body"></div>`;
+      if (!open) body.style.display = 'none';
+      else section.classList.add('open');
+      section.appendChild(body);
+      header.addEventListener('click', (e) => {
+        if (e.target.closest('button')) return;
+        const isOpen = section.classList.toggle('open');
+        body.style.display = isOpen ? '' : 'none';
+      });
+      return { section, body };
+    }
+
+    // Layer panel
+    const drawBtn = html`<button class="draw-path-btn" title="Draw a path on the terrain">Draw path</button>`;
+    const { section: layerPanel, body: layerList } = createSection('Layers', { open: true, trailing: drawBtn });
+    controlsContainer.appendChild(layerPanel);
+
+    const eyeOpenSVG = `<svg viewBox="0 0 20 20" width="16" height="16" style="display:block"><path d="M10 4C4.5 4 1 10 1 10s3.5 6 9 6 9-6 9-6-3.5-6-9-6z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
+    const eyeClosedSVG = `<svg viewBox="0 0 20 20" width="16" height="16" style="display:block"><path d="M10 4C4.5 4 1 10 1 10s3.5 6 9 6 9-6 9-6-3.5-6-9-6z" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"/><circle cx="10" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.5" opacity="0.35"/><line x1="4" y1="16" x2="16" y2="4" stroke="currentColor" stroke-width="1.5"/></svg>`;
+
+    function hexFromColor(rgba) {
+      if (!rgba) return '#ff8800';
+      return '#' + [rgba[0], rgba[1], rgba[2]].map(c => Math.round(c * 255).toString(16).padStart(2, '0')).join('');
+    }
+
+    function addColorProp(container, label, currentColor, onChange) {
+      const row = html`<div class="layer-prop"><label>${label}</label><input type="color" class="layer-color" value="${hexFromColor(currentColor)}"></div>`;
+      row.querySelector('input').addEventListener('input', (e) => onChange(e.target.value));
+      container.appendChild(row);
+    }
+
+    function addRangeProp(container, label, value, min, max, step, onChange) {
+      const row = html`<div class="layer-prop"><label>${label}</label><input type="range" min="${min}" max="${max}" step="${step}" value="${value}"><span class="layer-prop-value">${value}</span></div>`;
+      const input = row.querySelector('input');
+      const span = row.querySelector('.layer-prop-value');
+      input.addEventListener('input', () => { span.textContent = input.value; onChange(Number(input.value)); });
+      container.appendChild(row);
+    }
+
+    function rebuildLayerPanel() {
+      layerList.innerHTML = '';
+
+      // Imagery row (no expandable props, just eye toggle)
+      const imgRow = html`<div class="layer-row">
+        <button class="layer-eye" title="Toggle visibility"></button>
+        <span class="layer-name">Imagery</span>
+      </div>`;
+      const imgEye = imgRow.querySelector('.layer-eye');
+      imgEye.innerHTML = viewer.settings.showImagery ? eyeOpenSVG : eyeClosedSVG;
+      imgEye.addEventListener('click', function() {
+        viewer.settings.showImagery = !viewer.settings.showImagery;
+        this.innerHTML = viewer.settings.showImagery ? eyeOpenSVG : eyeClosedSVG;
+      });
+      layerList.appendChild(imgRow);
+
+      // Feature layers
+      const allEntries = [
+        ...viewer._lineLayers.map(e => ({ ...e, kind: 'line' })),
+        ...viewer._circleLayers.map(e => ({ ...e, kind: 'circle' })),
+        ...viewer._textLayers.map(e => ({ ...e, kind: 'text' })),
+      ];
+      for (const entry of allEntries) {
+        const item = html`<div class="layer-item"></div>`;
+        const row = html`<div class="layer-row"></div>`;
+
+        const chevron = html`<span class="layer-chevron">&#9654;</span>`;
+        row.appendChild(chevron);
+
+        const eyeBtn = html`<button class="layer-eye" title="Toggle visibility"></button>`;
+        eyeBtn.innerHTML = entry.visible ? eyeOpenSVG : eyeClosedSVG;
+        eyeBtn.addEventListener('click', () => {
+          entry.visible = !entry.visible;
+          viewer.setLayerVisibility(entry.id, entry.visible);
+          eyeBtn.innerHTML = entry.visible ? eyeOpenSVG : eyeClosedSVG;
+        });
+        row.appendChild(eyeBtn);
+
+        row.appendChild(html`<span class="layer-name">${entry.id}</span>`);
+
+        const del = html`<button class="layer-delete" title="Remove layer">&times;</button>`;
+        del.addEventListener('click', () => {
+          viewer.removeLayer(entry.id);
+          rebuildLayerPanel();
+        });
+        row.appendChild(del);
+        item.appendChild(row);
+
+        // Expandable properties
+        const props = html`<div class="layer-props" style="display:none"></div>`;
+        const id = entry.id;
+
+        if (entry.kind === 'line') {
+          addColorProp(props, 'Color', entry.layer._lineColor, v => viewer.setLayerPaint(id, 'line-color', v));
+          addColorProp(props, 'Border', entry.layer._borderColor, v => viewer.setLayerPaint(id, 'line-border-color', v));
+          addRangeProp(props, 'Width', entry.layer._lineWidth, 1, 12, 0.5, v => viewer.setLayerPaint(id, 'line-width', v));
+          addRangeProp(props, 'Border width', entry.layer._borderWidth, 0, 6, 0.5, v => viewer.setLayerPaint(id, 'line-border-width', v));
+          const dlBtn = html`<button class="layer-download-btn">Download GeoJSON</button>`;
+          dlBtn.addEventListener('click', () => {
+            const geojson = viewer.getLayerGeoJSON(id);
+            if (!geojson) return;
+            const blob = new Blob([JSON.stringify(geojson, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${id}.geojson`;
+            a.click();
+            URL.revokeObjectURL(url);
+          });
+          props.appendChild(dlBtn);
+          const profBtn = html`<button class="layer-download-btn">Elevation profile</button>`;
+          profBtn.addEventListener('click', () => {
+            const data = viewer.getLayerElevationProfile(id);
+            if (!data) return;
+            elevationProfile.show(id, entry.id, data, entry.layer._lineColor);
+          });
+          props.appendChild(profBtn);
+        } else if (entry.kind === 'circle') {
+          addColorProp(props, 'Fill', entry.layer._fillColor, v => viewer.setLayerPaint(id, 'circle-color', v));
+          addColorProp(props, 'Stroke', entry.layer._strokeColor, v => viewer.setLayerPaint(id, 'circle-stroke-color', v));
+          addRangeProp(props, 'Radius', entry.layer._radius, 1, 12, 0.5, v => viewer.setLayerPaint(id, 'circle-radius', v));
+          addRangeProp(props, 'Stroke width', entry.layer._strokeWidth, 0, 6, 0.5, v => viewer.setLayerPaint(id, 'circle-stroke-width', v));
+        } else if (entry.kind === 'text') {
+          addColorProp(props, 'Color', entry.layer._color, v => viewer.setLayerPaint(id, 'text-color', v));
+          addColorProp(props, 'Halo', entry.layer._strokeColor, v => viewer.setLayerPaint(id, 'text-halo-color', v));
+          addRangeProp(props, 'Halo width', entry.layer._strokeWidth, 0, 4, 0.25, v => viewer.setLayerPaint(id, 'text-halo-width', v));
+        }
+
+        item.appendChild(props);
+
+        // Toggle expand/collapse on chevron or name click
+        chevron.addEventListener('click', () => {
+          const open = item.classList.toggle('open');
+          props.style.display = open ? '' : 'none';
+        });
+        row.querySelector('.layer-name').addEventListener('click', () => {
+          const open = item.classList.toggle('open');
+          props.style.display = open ? '' : 'none';
+        });
+        row.querySelector('.layer-name').style.cursor = 'pointer';
+
+        layerList.appendChild(item);
       }
-    );
+
+    }
+    rebuildLayerPanel();
+    drawBtn.addEventListener('click', () => enterDrawMode());
+
+    // Pen drawing tool
+    const drawState = { active: false, points: [], previewEntry: null, nextLayerId: 1, drawItem: null, pointCount: null };
+
+    const drawOverlay = html`<div class="draw-overlay" style="display:none">Click to add points. Double-click or Enter to finish. Esc to cancel. ⌘Z to undo.</div>`;
+    viewer.canvas.parentElement.appendChild(drawOverlay);
+
+    function enterDrawMode() {
+      const pendingId = `drawn-path-${drawState.nextLayerId}`;
+      drawState.active = true;
+      drawState.points = [];
+      drawState.previewEntry = null;
+      viewer.canvas.classList.add('drawing');
+      drawOverlay.style.display = '';
+
+      // Add in-progress layer item to the panel
+      const item = html`<div class="layer-item draw-active"></div>`;
+      const row = html`<div class="layer-row"></div>`;
+      row.appendChild(html`<span class="layer-name" style="flex:1">${pendingId}</span>`);
+      drawState.pointCount = html`<span class="draw-point-count">0 pts</span>`;
+      row.appendChild(drawState.pointCount);
+      const undoBtn = html`<button class="draw-action-btn" title="Undo last point"></button>`;
+      undoBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7h7a3 3 0 0 1 0 6H8"/><path d="M6 10L3 7l3-3"/></svg>`;
+      undoBtn.addEventListener('click', async () => {
+        if (drawState.points.length > 0) {
+          drawState.points.pop();
+          updateDrawItemCount();
+          await updatePreview();
+        }
+      });
+      row.appendChild(undoBtn);
+      const doneBtn = html`<button class="draw-action-btn draw-done-btn" title="Finish path"></button>`;
+      doneBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5l3.5 3.5 6.5-8"/></svg>`;
+      doneBtn.addEventListener('click', () => finishDrawing());
+      row.appendChild(doneBtn);
+      const cancelBtn = html`<button class="draw-action-btn" title="Cancel"></button>`;
+      cancelBtn.innerHTML = `<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4l8 8M12 4l-8 8"/></svg>`;
+      cancelBtn.addEventListener('click', () => cancelDrawing());
+      row.appendChild(cancelBtn);
+      item.appendChild(row);
+      drawState.drawItem = item;
+
+      // Insert before the draw button (last child of layerList)
+      layerList.appendChild(item);
+    }
+
+    function updateDrawItemCount() {
+      if (drawState.pointCount) {
+        drawState.pointCount.textContent = `${drawState.points.length} pts`;
+      }
+    }
+
+    function exitDrawMode() {
+      drawState.active = false;
+      drawState.points = [];
+      viewer.canvas.classList.remove('drawing');
+      drawOverlay.style.display = 'none';
+      if (drawState.drawItem) {
+        drawState.drawItem.remove();
+        drawState.drawItem = null;
+        drawState.pointCount = null;
+      }
+    }
+
+    async function updatePreview() {
+      if (drawState.previewEntry) {
+        viewer.removeLineLayer(drawState.previewEntry.id);
+        drawState.previewEntry = null;
+      }
+      if (drawState.points.length >= 2) {
+        const geojson = {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: drawState.points.map(p => [p.lon, p.lat, p.elev]),
+            },
+            properties: {},
+          }],
+        };
+        drawState.previewEntry = await viewer.addLineLayer('__draw_preview', geojson, {
+          'line-color': '#2196F3',
+          'line-width': 4,
+          'line-border-color': '#0D47A1',
+          'line-border-width': 1.5,
+          'atmosphere-opacity': 0.5,
+        });
+      }
+    }
+
+    async function finishDrawing() {
+      if (drawState.previewEntry) {
+        viewer.removeLineLayer('__draw_preview');
+        drawState.previewEntry = null;
+      }
+      if (drawState.points.length >= 2) {
+        const id = `drawn-path-${drawState.nextLayerId++}`;
+        const geojson = {
+          type: 'FeatureCollection',
+          features: [{
+            type: 'Feature',
+            geometry: {
+              type: 'LineString',
+              coordinates: drawState.points.map(p => [p.lon, p.lat, p.elev]),
+            },
+            properties: {},
+          }],
+        };
+        await viewer.addLineLayer(id, geojson, {
+          'line-color': '#2196F3',
+          'line-width': 4,
+          'line-border-color': '#0D47A1',
+          'line-border-width': 1.5,
+          'atmosphere-opacity': 0.5,
+        });
+        rebuildLayerPanel();
+      }
+      exitDrawMode();
+    }
+
+    function cancelDrawing() {
+      if (drawState.previewEntry) {
+        viewer.removeLineLayer('__draw_preview');
+        drawState.previewEntry = null;
+      }
+      exitDrawMode();
+    }
+
+    // Point placement via pointer events
+    let pointerDownPos = null;
+    viewer.canvas.addEventListener('pointerdown', (e) => {
+      if (!drawState.active) return;
+      pointerDownPos = { x: e.clientX, y: e.clientY };
+    });
+
+    viewer.canvas.addEventListener('pointerup', async (e) => {
+      if (!drawState.active || !pointerDownPos) return;
+      const dx = e.clientX - pointerDownPos.x;
+      const dy = e.clientY - pointerDownPos.y;
+      pointerDownPos = null;
+      if (Math.sqrt(dx * dx + dy * dy) > 5) return; // was a drag
+
+      const hit = viewer.raycast(e.clientX, e.clientY);
+      if (!hit) return;
+
+      const mx = hit.worldPos[0];
+      const mz = hit.worldPos[2];
+      // Convert Mercator back to lon/lat
+      const lon = (mx - 0.5) * 360;
+      const lat = (2 * Math.atan(Math.exp(Math.PI * (1 - 2 * mz))) - Math.PI / 2) * 180 / Math.PI;
+      const elev = viewer.queryElevationMercator(mx, mz) || 0;
+
+      drawState.points.push({ lon, lat, elev, mx, mz });
+      updateDrawItemCount();
+      await updatePreview();
+    });
+
+    viewer.canvas.addEventListener('dblclick', async (e) => {
+      if (!drawState.active) return;
+      e.preventDefault();
+      // The dblclick fires after two pointerup events, so we have a duplicate last point
+      if (drawState.points.length > 1) drawState.points.pop();
+      await finishDrawing();
+    });
+
+    document.addEventListener('keydown', async (e) => {
+      if (!drawState.active) return;
+      if (e.key === 'Escape') {
+        cancelDrawing();
+      } else if (e.key === 'Enter') {
+        await finishDrawing();
+      } else if (e.key === 'z' && (e.metaKey || e.ctrlKey)) {
+        e.preventDefault();
+        if (drawState.points.length > 0) {
+          drawState.points.pop();
+          await updatePreview();
+        }
+      }
+    });
     // Analysis section
-    const analysis = html`<details open><summary style="cursor: pointer;">Analysis</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
-    const analysisContent = analysis.querySelector('div');
+    const { section: analysis, body: analysisContent } = createSection('Analysis', { open: true });
     controlsContainer.appendChild(analysis);
 
+    addControl(analysisContent,
+      Inputs.range([0.0, 2], { value: viewer.settings.verticalExaggeration, step: 0.01, label: "Vertical exaggeration" }),
+      v => { viewer.settings.verticalExaggeration = v; }
+    );
     addControl(analysisContent,
       Inputs.range([0, 1], { value: viewer.settings.hillshadeOpacity, step: 0.01, label: "Hillshade opacity" }),
       v => { viewer.settings.hillshadeOpacity = v; }
@@ -378,14 +724,9 @@
     );
 
     // Environment section
-    const environment = html`<details><summary style="cursor: pointer;">Environment</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
-    const envContent = environment.querySelector('div');
+    const { section: environment, body: envContent } = createSection('Environment');
     controlsContainer.appendChild(environment);
 
-    addControl(envContent,
-      Inputs.range([0.0, 2], { value: viewer.settings.verticalExaggeration, step: 0.01, label: "Vertical exaggeration" }),
-      v => { viewer.settings.verticalExaggeration = v; }
-    );
     addControl(envContent,
       Inputs.range([10, 90], { value: Math.round(viewer.camera.state.fov * 180 / Math.PI), step: 1, label: "FOV (degrees)" }),
       v => { viewer.camera.state.fov = v * Math.PI / 180; viewer.camera.taint(); }
@@ -403,8 +744,7 @@
       v => { viewer.settings.atmosphereDensity = v; }
     );
 
-    const debug = html`<details><summary style="cursor: pointer;">Debug</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
-    const debugContent = debug.querySelector('div');
+    const { section: debug, body: debugContent } = createSection('Debug');
     controlsContainer.appendChild(debug);
 
     addControl(debugContent,
@@ -462,6 +802,9 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
         border-radius: 4px;
         cursor: grab;
       }
+      .expandable-controls-panel {
+        width: 380px;
+      }
       .status {
         font-family: monospace;
         font-size: 12px;
@@ -470,8 +813,8 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
 
       .compass-rose {
         position: absolute;
-        top: 10px;
-        left: 10px;
+        top: 50px;
+        right: 10px;
         width: 36px;
         height: 36px;
         background: rgba(255, 255, 255, 0.85);
@@ -570,6 +913,269 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
       }
       .terrain-attribution a:hover {
         text-decoration: underline;
+      }
+
+      /* Section headers */
+      .ctrl-section-header {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        cursor: pointer;
+        user-select: none;
+        padding: 4px 0;
+        font-family: system-ui, sans-serif;
+      }
+      .ctrl-chevron {
+        display: inline-block;
+        width: 12px;
+        text-align: center;
+        font-size: 12px;
+        color: #666;
+        transition: transform 0.15s;
+        flex-shrink: 0;
+      }
+      .ctrl-section.open > .ctrl-section-header > .ctrl-chevron {
+        transform: rotate(90deg);
+      }
+      .ctrl-section-title {
+        font-weight: 600;
+        font-size: 14px;
+        flex: 1;
+      }
+      .ctrl-section-body {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 0 0 4px 0;
+      }
+
+      /* Layer panel */
+      .layer-item.open {
+        background: #f8f8f8;
+        border-radius: 4px;
+      }
+      .layer-row {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 2px 0;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+        cursor: default;
+      }
+      .layer-chevron {
+        display: inline-block;
+        width: 10px;
+        text-align: center;
+        font-size: 10px;
+        color: #999;
+        transition: transform 0.15s;
+        flex-shrink: 0;
+        cursor: pointer;
+        user-select: none;
+      }
+      .layer-item.open > .layer-row > .layer-chevron {
+        transform: rotate(90deg);
+      }
+      .layer-eye {
+        background: none;
+        border: none;
+        padding: 2px;
+        cursor: pointer;
+        color: #555;
+        border-radius: 3px;
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+      }
+      .layer-eye:hover {
+        background: #eee;
+      }
+      .layer-name {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .layer-delete {
+        background: none;
+        border: none;
+        cursor: pointer;
+        font-size: 16px;
+        line-height: 1;
+        color: #999;
+        padding: 0 4px;
+        flex-shrink: 0;
+      }
+      .layer-delete:hover {
+        color: #d32f2f;
+      }
+      .layer-props {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 4px 4px 6px 26px;
+      }
+      .layer-prop {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-family: system-ui, sans-serif;
+        font-size: 12px;
+        color: #555;
+      }
+      .layer-prop label {
+        width: 72px;
+        flex-shrink: 0;
+      }
+      .layer-prop input[type="range"] {
+        flex: 1;
+        min-width: 0;
+      }
+      .layer-prop .layer-prop-value {
+        width: 24px;
+        text-align: right;
+        font-size: 11px;
+        font-variant-numeric: tabular-nums;
+      }
+      .layer-color {
+        width: 24px;
+        height: 20px;
+        padding: 0;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+      }
+      .layer-download-btn {
+        padding: 2px 8px;
+        font-size: 11px;
+        font-family: system-ui, sans-serif;
+        background: #f5f5f5;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+        align-self: flex-start;
+        margin-top: 2px;
+      }
+      .layer-download-btn:hover {
+        background: #e8e8e8;
+      }
+      .draw-path-btn {
+        padding: 2px 8px;
+        font-size: 11px;
+        font-family: system-ui, sans-serif;
+        background: #f5f5f5;
+        border: 1px solid #ccc;
+        border-radius: 4px;
+        cursor: pointer;
+        flex-shrink: 0;
+      }
+      .draw-path-btn:hover {
+        background: #e8e8e8;
+      }
+
+      /* Pen drawing tool */
+      canvas.terrain.drawing {
+        cursor: crosshair !important;
+      }
+      .draw-active {
+        background: #e3f2fd;
+        border-radius: 4px;
+        padding: 2px 4px;
+      }
+      .draw-point-count {
+        font-size: 11px;
+        color: #666;
+        font-variant-numeric: tabular-nums;
+        flex-shrink: 0;
+      }
+      .draw-action-btn {
+        background: none;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+        color: #555;
+        padding: 3px 4px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .draw-action-btn:hover {
+        background: #e0e0e0;
+      }
+      .draw-done-btn {
+        color: #2e7d32;
+      }
+      .draw-overlay {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        padding: 6px 14px;
+        border-radius: 6px;
+        font-family: system-ui, sans-serif;
+        font-size: 13px;
+        pointer-events: none;
+        z-index: 10;
+        white-space: nowrap;
+      }
+
+      /* Elevation profile panel */
+      .elevation-profile-panel {
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 20%;
+        min-height: 120px;
+        max-height: 300px;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(8px);
+        border-radius: 4px 4px 0 0;
+        display: none;
+        flex-direction: column;
+        z-index: 5;
+        box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.1);
+      }
+      .elevation-profile-panel.visible { display: flex; }
+      .elevation-profile-header {
+        display: flex;
+        align-items: center;
+        padding: 4px 8px;
+        gap: 8px;
+        flex-shrink: 0;
+      }
+      .elevation-profile-title {
+        flex: 1;
+        font-family: system-ui, sans-serif;
+        font-size: 12px;
+        font-weight: 600;
+        color: #333;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .elevation-profile-close {
+        background: none;
+        border: 1px solid #ccc;
+        border-radius: 3px;
+        cursor: pointer;
+        color: #555;
+        padding: 3px 4px;
+        flex-shrink: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .elevation-profile-close:hover {
+        background: #e0e0e0;
+      }
+      .elevation-profile-canvas {
+        flex: 1;
+        width: 100%;
+        min-height: 0;
       }
     </style>
   </script>

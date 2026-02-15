@@ -3,7 +3,7 @@
 
 import { atmosphereCode } from './shaders/atmosphere.js';
 
-function parseColor(hex) {
+export function parseColor(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
   if (!m) return [1, 0, 0, 1];
   return [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255, 1];
@@ -154,7 +154,7 @@ export class LineLayer {
     // Depth offset: constant clip.z bias gives world-space lift ∝ eye distance.
     // With near=1e-5, clip.z ≈ d for nearby geometry, so the value must be
     // very small to avoid overshooting at close range.
-    this._depthOffset = 4e-7;
+    this._depthOffset = 2e-7;
 
     this._gpuLines = createGPULines(device, {
       colorTargets: {
@@ -240,6 +240,19 @@ export class LineLayer {
     this._ensureBuffers();
     if (this._polylines.length === 0) return;
 
+    // Apply carried-over elevations from a previous source replacement
+    if (this._elevationCarryover) {
+      for (const polyline of this._polylines) {
+        for (let i = 0; i < polyline.count; i++) {
+          const c = polyline.feature.coordinates[i];
+          const elev = this._elevationCarryover.get(c.mercatorX + ',' + c.mercatorY);
+          if (elev > 0) this._cachedElevations[polyline.offset + i] = elev;
+        }
+      }
+      this._elevationCarryover = null;
+      this._positionsDirty = true;
+    }
+
     // Requery elevations only when tile coverage changes.
     // Only update a vertex's cached elevation when the new query returns a
     // valid result, so async tile loads never reset good values to zero.
@@ -321,6 +334,21 @@ export class LineLayer {
         resolution: [this._canvasW, this._canvasH],
       }, [polyline.dataBindGroup, this._sharedBindGroup]);
     }
+  }
+
+  replaceSource(newSource, elevationCarryover) {
+    if (this._positionBuffer) this._positionBuffer.destroy();
+    if (this._uniformBuffer) this._uniformBuffer.destroy();
+    this._source = newSource;
+    this._positionBuffer = null;
+    this._uniformBuffer = null;
+    this._sharedBindGroup = null;
+    this._polylines = [];
+    this._positionData = null;
+    this._cachedElevations = null;
+    this._elevationCarryover = elevationCarryover || null;
+    this._elevationsDirty = true;
+    this._positionsDirty = true;
   }
 
   destroy() {

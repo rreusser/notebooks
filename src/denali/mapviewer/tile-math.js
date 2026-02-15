@@ -9,6 +9,14 @@ export function latToMercatorY(lat) {
   return (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2;
 }
 
+export function mercatorXToLon(mx) {
+  return mx * 360 - 180;
+}
+
+export function mercatorYToLat(my) {
+  return Math.atan(Math.sinh(Math.PI * (1 - 2 * my))) * 180 / Math.PI;
+}
+
 export function tilesetToMercatorBounds(tileset) {
   const [minLon, minLat, maxLon, maxLat] = tileset.bounds;
   return {

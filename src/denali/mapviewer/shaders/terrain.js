@@ -131,14 +131,14 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   let sun_horizon = smoothstep(-0.02, 0.02, sun.y);
   out.shade = max(0.0, dot(normal, sun) * inverseSqrt(dot(normal, normal))) * sun_horizon;
   out.elevation_m = elevation - skirt_drop;
-  out.slope_angle = atan(sqrt(dzdx * dzdx + dzdy * dzdy)) * 57.29578;
+  let gradient_mag = sqrt(dzdx * dzdx + dzdy * dzdy);
+  out.slope_angle = atan(gradient_mag) * 57.29578;
 
   // Slope aspect: compass bearing of the downhill direction.
-  // dzdx = east gradient, dzdy = south gradient.
-  // atan2(-east, south) gives compass bearing (0=N, π/2=E, ±π=S, -π/2=W).
-  let aspect = atan2(-dzdx, dzdy);
-  out.slope_aspect_sin = sin(aspect);
-  out.slope_aspect_cos = cos(aspect);
+  // sin/cos of atan2(-dzdx, dzdy) = -dzdx/mag, dzdy/mag — just normalize.
+  let safe_mag = max(gradient_mag, 1e-10);
+  out.slope_aspect_sin = -dzdx / safe_mag;
+  out.slope_aspect_cos = dzdy / safe_mag;
 
   // Reject sea-level vertices (no terrain data).
   if (elevation <= 0.0) {

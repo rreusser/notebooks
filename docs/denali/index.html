@@ -1893,7 +1893,7 @@ a.index__tag:active {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Denali Terrain</title>  <script type="module" crossorigin src="/notebooks/assets/index-_YkbkJQl.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Denali Terrain</title>  <script type="module" crossorigin src="/notebooks/assets/index-DbK6gM5V.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1967,6 +1967,9 @@ a.index__tag:active {
     border-radius: 4px;
     cursor: grab;
   }
+  .expandable-controls-panel {
+    width: 380px;
+  }
   .status {
     font-family: monospace;
     font-size: 12px;
@@ -1975,8 +1978,8 @@ a.index__tag:active {
 
   .compass-rose {
     position: absolute;
-    top: 10px;
-    left: 10px;
+    top: 50px;
+    right: 10px;
     width: 36px;
     height: 36px;
     background: rgba(255, 255, 255, 0.85);
@@ -2075,6 +2078,269 @@ a.index__tag:active {
   }
   .terrain-attribution a:hover {
     text-decoration: underline;
+  }
+
+  /* Section headers */
+  .ctrl-section-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    cursor: pointer;
+    user-select: none;
+    padding: 4px 0;
+    font-family: system-ui, sans-serif;
+  }
+  .ctrl-chevron {
+    display: inline-block;
+    width: 12px;
+    text-align: center;
+    font-size: 12px;
+    color: #666;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+  }
+  .ctrl-section.open > .ctrl-section-header > .ctrl-chevron {
+    transform: rotate(90deg);
+  }
+  .ctrl-section-title {
+    font-weight: 600;
+    font-size: 14px;
+    flex: 1;
+  }
+  .ctrl-section-body {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 0 0 4px 0;
+  }
+
+  /* Layer panel */
+  .layer-item.open {
+    background: #f8f8f8;
+    border-radius: 4px;
+  }
+  .layer-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 2px 0;
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+    cursor: default;
+  }
+  .layer-chevron {
+    display: inline-block;
+    width: 10px;
+    text-align: center;
+    font-size: 10px;
+    color: #999;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+    cursor: pointer;
+    user-select: none;
+  }
+  .layer-item.open > .layer-row > .layer-chevron {
+    transform: rotate(90deg);
+  }
+  .layer-eye {
+    background: none;
+    border: none;
+    padding: 2px;
+    cursor: pointer;
+    color: #555;
+    border-radius: 3px;
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  .layer-eye:hover {
+    background: #eee;
+  }
+  .layer-name {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .layer-delete {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    line-height: 1;
+    color: #999;
+    padding: 0 4px;
+    flex-shrink: 0;
+  }
+  .layer-delete:hover {
+    color: #d32f2f;
+  }
+  .layer-props {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    padding: 4px 4px 6px 26px;
+  }
+  .layer-prop {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    color: #555;
+  }
+  .layer-prop label {
+    width: 72px;
+    flex-shrink: 0;
+  }
+  .layer-prop input[type="range"] {
+    flex: 1;
+    min-width: 0;
+  }
+  .layer-prop .layer-prop-value {
+    width: 24px;
+    text-align: right;
+    font-size: 11px;
+    font-variant-numeric: tabular-nums;
+  }
+  .layer-color {
+    width: 24px;
+    height: 20px;
+    padding: 0;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+  }
+  .layer-download-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: system-ui, sans-serif;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    align-self: flex-start;
+    margin-top: 2px;
+  }
+  .layer-download-btn:hover {
+    background: #e8e8e8;
+  }
+  .draw-path-btn {
+    padding: 2px 8px;
+    font-size: 11px;
+    font-family: system-ui, sans-serif;
+    background: #f5f5f5;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .draw-path-btn:hover {
+    background: #e8e8e8;
+  }
+
+  /* Pen drawing tool */
+  canvas.terrain.drawing {
+    cursor: crosshair !important;
+  }
+  .draw-active {
+    background: #e3f2fd;
+    border-radius: 4px;
+    padding: 2px 4px;
+  }
+  .draw-point-count {
+    font-size: 11px;
+    color: #666;
+    font-variant-numeric: tabular-nums;
+    flex-shrink: 0;
+  }
+  .draw-action-btn {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    color: #555;
+    padding: 3px 4px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .draw-action-btn:hover {
+    background: #e0e0e0;
+  }
+  .draw-done-btn {
+    color: #2e7d32;
+  }
+  .draw-overlay {
+    position: absolute;
+    top: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0, 0, 0, 0.7);
+    color: #fff;
+    padding: 6px 14px;
+    border-radius: 6px;
+    font-family: system-ui, sans-serif;
+    font-size: 13px;
+    pointer-events: none;
+    z-index: 10;
+    white-space: nowrap;
+  }
+
+  /* Elevation profile panel */
+  .elevation-profile-panel {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 20%;
+    min-height: 120px;
+    max-height: 300px;
+    background: rgba(255, 255, 255, 0.85);
+    backdrop-filter: blur(8px);
+    border-radius: 4px 4px 0 0;
+    display: none;
+    flex-direction: column;
+    z-index: 5;
+    box-shadow: 0 -1px 4px rgba(0, 0, 0, 0.1);
+  }
+  .elevation-profile-panel.visible { display: flex; }
+  .elevation-profile-header {
+    display: flex;
+    align-items: center;
+    padding: 4px 8px;
+    gap: 8px;
+    flex-shrink: 0;
+  }
+  .elevation-profile-title {
+    flex: 1;
+    font-family: system-ui, sans-serif;
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .elevation-profile-close {
+    background: none;
+    border: 1px solid #ccc;
+    border-radius: 3px;
+    cursor: pointer;
+    color: #555;
+    padding: 3px 4px;
+    flex-shrink: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .elevation-profile-close:hover {
+    background: #e0e0e0;
+  }
+  .elevation-profile-canvas {
+    flex: 1;
+    width: 100%;
+    min-height: 0;
   }
 </style></div></main>
   </div>
