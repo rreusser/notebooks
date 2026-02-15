@@ -1,7 +1,6 @@
 // Instanced circle rendering for GeoJSON point features on terrain
 
 import { circleVertexShader, circleFragmentShader } from './shaders/circle.js';
-import { getElevationScale } from './tile-math.js';
 
 const MAX_INSTANCES = 10000;
 
@@ -110,7 +109,7 @@ export class CircleLayer {
     });
   }
 
-  prepare(projectionView, canvasW, canvasH, pixelRatio, exaggeration) {
+  prepare(projectionView, canvasW, canvasH, pixelRatio, exaggeration, globalElevScale) {
     const features = this._source.features;
     const data = this._instanceData;
     let count = 0;
@@ -121,9 +120,8 @@ export class CircleLayer {
       if (elev == null || elev <= 0) continue;
       if (this._visibleFeatures && !this._visibleFeatures.has(i)) continue;
 
-      const elevScale = this._estimateElevScale(f.mercatorY);
       const wx = f.mercatorX;
-      const wy = elev * elevScale * exaggeration;
+      const wy = elev * globalElevScale * exaggeration;
       const wz = f.mercatorY;
 
       // Frustum cull: project to clip space and check
@@ -182,7 +180,7 @@ export class CircleLayer {
     pass.draw(6, this._visibleCount);
   }
 
-  getCollisionItems(projectionView, canvasW, canvasH, pixelRatio, exaggeration) {
+  getCollisionItems(projectionView, canvasW, canvasH, pixelRatio, exaggeration, globalElevScale) {
     const features = this._source.features;
     const cssW = canvasW / pixelRatio;
     const cssH = canvasH / pixelRatio;
@@ -194,9 +192,8 @@ export class CircleLayer {
       const elev = this._queryElevation(f.mercatorX, f.mercatorY);
       if (elev == null || elev <= 0) continue;
 
-      const elevScale = this._estimateElevScale(f.mercatorY);
       const wx = f.mercatorX;
-      const wy = elev * elevScale * exaggeration;
+      const wy = elev * globalElevScale * exaggeration;
       const wz = f.mercatorY;
 
       const cx = projectionView[0] * wx + projectionView[4] * wy + projectionView[8] * wz + projectionView[12];
@@ -228,9 +225,4 @@ export class CircleLayer {
     this._visibleFeatures = visibleSet;
   }
 
-  _estimateElevScale(mercatorY) {
-    const z = 10;
-    const ty = Math.floor(mercatorY * (1 << z));
-    return getElevationScale(z, ty);
-  }
 }

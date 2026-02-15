@@ -2,7 +2,6 @@
 // Uses webgpu-instanced-lines library for high-quality line rendering
 
 import { atmosphereCode } from './shaders/atmosphere.js';
-import { getElevationScale } from './tile-math.js';
 
 function parseColor(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
@@ -236,7 +235,7 @@ export class LineLayer {
     this._elevationsDirty = true;
   }
 
-  prepare(projectionView, canvasW, canvasH, pixelRatio, exaggeration) {
+  prepare(projectionView, canvasW, canvasH, pixelRatio, exaggeration, globalElevScale) {
     if (!this._gpuLines) return;
     this._ensureBuffers();
     if (this._polylines.length === 0) return;
@@ -261,8 +260,8 @@ export class LineLayer {
       this._elevationsDirty = false;
     }
 
-    // Rebuild world positions when elevations or exaggeration change
-    if (this._positionsDirty || exaggeration !== this._lastExaggeration) {
+    // Rebuild world positions when elevations, exaggeration, or global scale change
+    if (this._positionsDirty || exaggeration !== this._lastExaggeration || globalElevScale !== this._lastGlobalElevScale) {
       const data = this._positionData;
       const elevs = this._cachedElevations;
       for (const polyline of this._polylines) {
@@ -277,9 +276,8 @@ export class LineLayer {
             data[idx + 2] = coord.mercatorY;
             data[idx + 3] = 1.0;
           } else {
-            const elevScale = this._estimateElevScale(coord.mercatorY);
             data[idx] = coord.mercatorX;
-            data[idx + 1] = (elev + 3) * elevScale * exaggeration;
+            data[idx + 1] = (elev + 3) * globalElevScale * exaggeration;
             data[idx + 2] = coord.mercatorY;
             data[idx + 3] = 1.0;
           }
@@ -287,6 +285,7 @@ export class LineLayer {
       }
       this._device.queue.writeBuffer(this._positionBuffer, 0, data);
       this._lastExaggeration = exaggeration;
+      this._lastGlobalElevScale = globalElevScale;
       this._positionsDirty = false;
     }
 
@@ -322,12 +321,6 @@ export class LineLayer {
         resolution: [this._canvasW, this._canvasH],
       }, [polyline.dataBindGroup, this._sharedBindGroup]);
     }
-  }
-
-  _estimateElevScale(mercatorY) {
-    const z = 10;
-    const ty = Math.floor(mercatorY * (1 << z));
-    return getElevationScale(z, ty);
   }
 
   destroy() {

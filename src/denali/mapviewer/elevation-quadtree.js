@@ -129,7 +129,7 @@ function rayTriangle(ox, oy, oz, dx, dy, dz, v0x, v0y, v0z, v1x, v1y, v1z, v2x, 
   const pz = dx * e2y - dy * e2x;
 
   const det = e1x * px + e1y * py + e1z * pz;
-  if (det > -1e-10 && det < 1e-10) return -1;
+  if (det < 1e-10) return -1; // skip backfaces and degenerate triangles
 
   const invDet = 1 / det;
   const tx = ox - v0x, ty = oy - v0y, tz = oz - v0z;

@@ -50,64 +50,47 @@ function testAABBFrustum(planes, minX, minY, minZ, maxX, maxY, maxZ) {
   return allInside ? 1 : 0;
 }
 
-// Compute the maximum screen-space density (screen pixels per tile pixel) across
-// control points on the tile surface. A 3x3 grid of points is projected to screen
-// space, and adjacent pairs are compared to determine the local magnification ratio.
-// This gives a much more accurate subdivision signal than measuring the AABB bounding
-// box, which over-estimates for tiles viewed at steep angles or with large elevation range.
-function screenDensity(projView, z, x, y, width, height) {
+// Extract camera world position from a projection-view matrix.
+// The eye is where clip x, y, and w are all zero — a 3x3 system
+// solved via Cramer's rule. Purely derived from the matrix.
+function extractEyePosition(m) {
+  // A * eye = b where rows of A are the x, y, w rows of projView
+  const a00 = m[0], a01 = m[4], a02 = m[8],  b0 = -m[12];
+  const a10 = m[1], a11 = m[5], a12 = m[9],  b1 = -m[13];
+  const a20 = m[3], a21 = m[7], a22 = m[11], b2 = -m[15];
+
+  const det = a00*(a11*a22 - a12*a21) - a01*(a10*a22 - a12*a20) + a02*(a10*a21 - a11*a20);
+  const invDet = 1 / det;
+
+  return [
+    (b0*(a11*a22 - a12*a21) - a01*(b1*a22 - a12*b2) + a02*(b1*a21 - a11*b2)) * invDet,
+    (a00*(b1*a22 - a12*b2) - b0*(a10*a22 - a12*a20) + a02*(a10*b2 - b1*a20)) * invDet,
+    (a00*(a11*b2 - b1*a21) - a01*(a10*b2 - b1*a20) + b0*(a10*a21 - a11*a20)) * invDet,
+  ];
+}
+
+// Compute screen-space density (screen pixels per tile pixel) as the
+// projected size of a texel-sized sphere. Uses Euclidean distance from the
+// camera to the tile center, which is isotropic (same projected size
+// regardless of viewing direction). Camera position and focal length are
+// extracted from the projection-view matrix — no external parameters needed
+// beyond the matrix and viewport size.
+function screenDensity(m, z, x, y, screenHeight, eyeX, eyeY, eyeZ) {
   const s = 1 / (1 << z);
-  const tileMinX = x * s;
-  const tileMinZ = y * s;
+  const texelSize = s / 512;
 
-  const N = 3; // 3x3 grid of control points
-  const step = s / (N - 1);
-  const tilePixelsBetween = 512 / (N - 1); // tile pixels between adjacent control points
+  const dx = eyeX - (x + 0.5) * s;
+  const dy = eyeY;
+  const dz = eyeZ - (y + 0.5) * s;
+  const dist = Math.sqrt(dx * dx + dy * dy + dz * dz);
+  if (dist < 1e-10) return Infinity;
 
-  // Project control points to screen space
-  const sx = new Float64Array(N * N);
-  const sy = new Float64Array(N * N);
-
-  for (let j = 0; j < N; j++) {
-    for (let i = 0; i < N; i++) {
-      const wx = tileMinX + i * step;
-      const wz = tileMinZ + j * step;
-
-      const cx = projView[0]*wx + projView[8]*wz + projView[12];
-      const cy = projView[1]*wx + projView[9]*wz + projView[13];
-      const cw = projView[3]*wx + projView[11]*wz + projView[15];
-
-      if (cw <= 0) return Infinity; // behind camera, force subdivide
-
-      const idx = j * N + i;
-      sx[idx] = (cx / cw * 0.5 + 0.5) * width;
-      sy[idx] = (0.5 - cy / cw * 0.5) * height;
-    }
-  }
-
-  // Compute max density from adjacent control point pairs
-  let maxDensity = 0;
-  for (let j = 0; j < N; j++) {
-    for (let i = 0; i < N; i++) {
-      const idx = j * N + i;
-      // Horizontal neighbor
-      if (i < N - 1) {
-        const nidx = idx + 1;
-        const dx = sx[nidx] - sx[idx];
-        const dy = sy[nidx] - sy[idx];
-        maxDensity = Math.max(maxDensity, Math.sqrt(dx * dx + dy * dy) / tilePixelsBetween);
-      }
-      // Vertical neighbor
-      if (j < N - 1) {
-        const nidx = idx + N;
-        const dx = sx[nidx] - sx[idx];
-        const dy = sy[nidx] - sy[idx];
-        maxDensity = Math.max(maxDensity, Math.sqrt(dx * dx + dy * dy) / tilePixelsBetween);
-      }
-    }
-  }
-
-  return maxDensity;
+  // The focal length f = 1/tan(fov/2) is encoded in the projView matrix as
+  // the norm of the second row's spatial components: M row 1 = f * V row 1,
+  // and V row 1 is the camera's up vector (unit length). So f = ||M[1],M[5],M[9]||.
+  // Using m[5] alone would give f*up_y, which goes to zero when looking down.
+  const f = Math.sqrt(m[1] * m[1] + m[5] * m[5] + m[9] * m[9]);
+  return texelSize * f * screenHeight * 0.5 / dist;
 }
 
 // Tile AABB in world space — uses per-tile elevation bounds when available
@@ -139,6 +122,7 @@ const MAX_TILES = 200;
 // Missing tiles are requested from tileManager for progressive loading.
 export function selectTiles(projView, canvasWidth, canvasHeight, maxElevY, verticalExaggeration, densityThreshold, sourceBounds, tileManager, ensureImagery) {
   const planes = extractFrustumPlanes(projView);
+  const [eyeX, eyeY, eyeZ] = extractEyePosition(projView);
   const result = [];
 
   const minDataZoom = (sourceBounds && sourceBounds.minZoom != null) ? sourceBounds.minZoom : MIN_DATA_ZOOM;
@@ -177,9 +161,9 @@ export function selectTiles(projView, canvasWidth, canvasHeight, maxElevY, verti
       return;
     }
 
-    // Check if we should subdivide based on screen density of tile surface
+    // Subdivide based on projected size of a texel-sized sphere
     const shouldSubdivide = z < maxZoom &&
-      screenDensity(projView, z, x, y, canvasWidth, canvasHeight) > densityThreshold;
+      screenDensity(projView, z, x, y, canvasHeight, eyeX, eyeY, eyeZ) > densityThreshold;
 
     if (shouldSubdivide) {
       const cz = z + 1;
@@ -231,3 +215,6 @@ export function selectTiles(projView, canvasWidth, canvasHeight, maxElevY, verti
 export function resolveRenderList(tiles) {
   return tiles;
 }
+
+// Exposed for debugging
+export { screenDensity, extractEyePosition };

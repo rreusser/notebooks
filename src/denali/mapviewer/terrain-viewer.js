@@ -4,7 +4,7 @@ import { terrainVertexShader, terrainFragmentShader } from './shaders/terrain.js
 import { skyVertexShader, skyFragmentShader } from './shaders/sky.js';
 import { computeTileMVP, computeTileModel, getElevationScale, getCellSizeMeters, tilesetToMercatorBounds, tileUrlFromTemplate, getImageryZoom, lonToMercatorX, latToMercatorY } from './tile-math.js';
 import { invertMat4 } from './math.js';
-import { selectTiles } from './quadtree.js';
+import { selectTiles, screenDensity, extractEyePosition } from './quadtree.js';
 import { TileManager } from './tile-manager.js';
 import { ImageryManager } from './imagery-manager.js';
 import { ImageryCompositor } from './imagery-compositor.js';
@@ -15,7 +15,7 @@ import { LineLayer } from './line-layer.js';
 import { loadFontAtlas } from './lib/webgpu-text/webgpu-text.ts';
 import BVH from './bvh.js';
 import { screenToRay, raycastTerrain } from './ray-terrain.js';
-import { createSettings, createAttribution } from './settings.js';
+import { createSettings, createAttribution, estimateTreeline } from './settings.js';
 import { cameraStateToHash, hashToCameraState } from './hash-state.js';
 import { FrustumOverlay } from './frustum-overlay.js';
 import { CollisionManager } from './collision-manager.js';
@@ -77,7 +77,13 @@ export class TerrainMap {
     };
 
     this.attribution = createAttribution(allSources.filter(s => s.attribution));
-    this.settings = createSettings(initialSettings);
+
+    const treelineFt = Math.round(estimateTreeline(this._location.lat) * 3.28084);
+    this.settings = createSettings({
+      treelineLower: Math.max(0, treelineFt - 500),
+      treelineUpper: treelineFt + 500,
+      ...initialSettings,
+    });
 
     // WebGPU initialization
     const adapter = await navigator.gpu.requestAdapter();
@@ -202,7 +208,7 @@ export class TerrainMap {
     });
     this._uniformBindGroup = device.createBindGroup({
       layout: uniformBGL,
-      entries: [{ binding: 0, resource: { buffer: this._uniformBuffer, size: 176 } }],
+      entries: [{ binding: 0, resource: { buffer: this._uniformBuffer, size: 208 } }],
     });
 
     this._tileManager = new TileManager(device, { tileUrl: tileUrlFromTemplate(terrain.tiles) });
@@ -243,7 +249,7 @@ export class TerrainMap {
     this._MAX_ELEV_Y = 0.001;
     this._mvpFloat32 = new Float32Array(16);
     this._modelFloat32 = new Float32Array(16);
-    this._uniformData = new Float32Array(44);
+    this._uniformData = new Float32Array(52);
     this._globalUniformData = new Float32Array(24);
 
     this._currentExaggeration = this.settings.verticalExaggeration;
@@ -378,13 +384,7 @@ export class TerrainMap {
     let tileIndex = 0;
     const draws = [];
 
-    // Use a single global elevation scale (from camera center) for all tiles
-    // so that mesh vertices stitch perfectly at tile boundaries. Per-tile
-    // variation in the mercator scale factor (~0.01% per tile row at 63°N)
-    // otherwise causes visible contour misalignment.
-    const cCenter = camera.state.center;
-    const centerLat = 2 * Math.atan(Math.exp(Math.PI * (1 - 2 * cCenter[2]))) - Math.PI / 2;
-    const globalElevScale = 1 / (40_075_016.686 * Math.cos(centerLat));
+    const globalElevScale = this._globalElevScale;
 
     for (const tile of this._cachedRenderList) {
       if (tileIndex >= this._MAX_TILES_PER_FRAME) break;
@@ -412,6 +412,13 @@ export class TerrainMap {
       ud[39] = settings.slopeAngleOpacity;
       ud[40] = settings.contourOpacity;
       ud[41] = canvas.height;
+      ud[42] = settings.showWireframe ? 1.0 : 0.0;
+      ud[43] = settings.slopeAspectMaskAbove;
+      ud[44] = settings.slopeAspectMaskNear;
+      ud[45] = settings.slopeAspectMaskBelow;
+      ud[46] = settings.slopeAspectOpacity;
+      ud[47] = settings.treelineLower * 0.3048;
+      ud[48] = settings.treelineUpper * 0.3048;
 
       let imageryBindGroup;
       if (!settings.showImagery) {
@@ -422,7 +429,7 @@ export class TerrainMap {
         imageryBindGroup = this._fallbackImageryBindGroup;
       }
 
-      device.queue.writeBuffer(this._uniformBuffer, tileIndex * this._UNIFORM_STRIDE, ud.buffer, ud.byteOffset, 176);
+      device.queue.writeBuffer(this._uniformBuffer, tileIndex * this._UNIFORM_STRIDE, ud.buffer, ud.byteOffset, 208);
       draws.push({
         offset: tileIndex * this._UNIFORM_STRIDE,
         bindGroup: entry.bindGroup,
@@ -509,7 +516,7 @@ export class TerrainMap {
     // Circle feature layers
     if (settings.showFeatures) {
       for (const cl of this._circleLayers) {
-        cl.draw(pass, this._globalUniformBindGroup, settings.featureDepthTest);
+        cl.draw(pass, this._globalUniformBindGroup, false);
       }
 
       // Text feature layers (drawn after circles)
@@ -580,6 +587,16 @@ export class TerrainMap {
     const { view, projection, projectionView, dirty: cameraMoved } = camera.update(aspect);
     this._lastProjView.set(projectionView);
 
+    // Use a single global elevation scale for all tiles and feature layers so
+    // that everything scales consistently. Derived from the camera *eye*
+    // position rather than the orbit center because zoom-about-cursor can jump
+    // the orbit center far away while the eye stays nearly fixed, giving much
+    // more stable LOD and elevation scaling.
+    const { center, distance, theta, phi } = camera.state;
+    const eyeMercatorZ = center[2] + distance * Math.cos(theta) * Math.sin(phi);
+    const eyeLat = 2 * Math.atan(Math.exp(Math.PI * (1 - 2 * eyeMercatorZ))) - Math.PI / 2;
+    this._globalElevScale = 1 / (40_075_016.686 * Math.cos(eyeLat));
+
     if (this._currentFreezeCoverage && !this._frustumOverlay.isFrozen) {
       this._frustumOverlay.freeze(projectionView);
     }
@@ -644,6 +661,7 @@ export class TerrainMap {
       bvh: this._bvh,
       tileManager: this._tileManager,
       bvhTileList: this._bvhTileList,
+      globalElevScale: this._globalElevScale,
     })) {
       this._renderDirty = true;
     }
@@ -651,17 +669,17 @@ export class TerrainMap {
     // Prepare circle and text layers with current projectionView
     if (settings.showFeatures) {
       for (const cl of this._circleLayers) {
-        cl.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+        cl.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
       }
       for (const { layer } of this._textLayers) {
-        layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+        layer.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
       }
     }
 
     // Prepare line layers
     if (settings.showRoute) {
       for (const ll of this._lineLayers) {
-        ll.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration);
+        ll.prepare(projectionView, canvas.width, canvas.height, this._pixelRatio, this._currentExaggeration, this._globalElevScale);
       }
     }
 
@@ -787,6 +805,39 @@ export class TerrainMap {
 
     return e00 * (1 - fx) * (1 - fy) + e10 * fx * (1 - fy) +
            e01 * (1 - fx) * fy + e11 * fx * fy;
+  }
+
+  debugTileCoverage() {
+    const { canvas, camera, settings } = this;
+    const aspect = canvas.width / canvas.height;
+    const { projectionView } = camera.update(aspect);
+    const state = camera.state;
+    const maxElevY = this._MAX_ELEV_Y * this._currentExaggeration;
+
+    // Re-run selectTiles with the current projView
+    const freshTiles = selectTiles(
+      projectionView, canvas.width, canvas.height, maxElevY,
+      this._currentExaggeration, settings.densityThreshold,
+      this._terrainBounds, this._tileManager, null,
+    );
+
+    return {
+      camera: {
+        center: [...state.center],
+        distance: state.distance,
+        phi: state.phi,
+        theta: state.theta,
+        thetaDeg: state.theta * 180 / Math.PI,
+        fov: state.fov,
+      },
+      canvas: { width: canvas.width, height: canvas.height },
+      densityThreshold: settings.densityThreshold,
+      tiles: freshTiles.map(t => {
+        const [ex, ey, ez] = extractEyePosition(projectionView);
+        return { z: t.z, x: t.x, y: t.y, density: screenDensity(projectionView, t.z, t.x, t.y, canvas.height, ex, ey, ez) };
+      }),
+      projectionView: Array.from(projectionView),
+    };
   }
 
   destroy() {

@@ -4,7 +4,7 @@
 import { invertMat4 } from './math.js';
 
 export function createCameraController(element, opts = {}) {
-  const state = {
+  const state = new Proxy({
     center: opts.center ? [...opts.center] : [0, 0, 0],
     distance: opts.distance || 10,
     phi: opts.phi || 0,
@@ -12,7 +12,13 @@ export function createCameraController(element, opts = {}) {
     fov: opts.fov || Math.PI / 4,
     near: opts.near || 0.1,
     far: opts.far || 1
-  };
+  }, {
+    set(target, prop, value) {
+      target[prop] = value;
+      dirty = true;
+      return true;
+    }
+  });
 
   const rotateSpeed = opts.rotateSpeed || 0.01;
   const zoomSpeed = opts.zoomSpeed || 0.001;

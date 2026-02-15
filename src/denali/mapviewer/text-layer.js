@@ -3,7 +3,6 @@
 
 import { createGPUTextContext } from './lib/webgpu-text/webgpu-text.ts';
 import { atmosphereCode } from './shaders/atmosphere.js';
-import { getElevationScale } from './tile-math.js';
 
 function parseColor(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
@@ -188,7 +187,7 @@ export class TextLayer {
     this._ready = true;
   }
 
-  prepare(projectionView, canvasW, canvasH, pixelRatio, exaggeration) {
+  prepare(projectionView, canvasW, canvasH, pixelRatio, exaggeration, globalElevScale) {
     if (!this._ready) return;
 
     // Scale stroke width by pixel ratio for consistent CSS-pixel appearance
@@ -215,9 +214,8 @@ export class TextLayer {
         continue;
       }
 
-      const elevScale = this._estimateElevScale(f.mercatorY);
       const wx = f.mercatorX;
-      const wy = elev * elevScale * exaggeration;
+      const wy = elev * globalElevScale * exaggeration;
       const wz = f.mercatorY;
 
       // Frustum cull using clip-space projection
@@ -257,7 +255,7 @@ export class TextLayer {
     }, [this._atmosphereBindGroup]);
   }
 
-  getCollisionItems(projectionView, canvasW, canvasH, pixelRatio, exaggeration) {
+  getCollisionItems(projectionView, canvasW, canvasH, pixelRatio, exaggeration, globalElevScale) {
     if (!this._ready) return [];
     const cssW = canvasW / pixelRatio;
     const cssH = canvasH / pixelRatio;
@@ -269,9 +267,8 @@ export class TextLayer {
       const elev = this._queryElevation(f.mercatorX, f.mercatorY);
       if (elev == null || elev <= 0) continue;
 
-      const elevScale = this._estimateElevScale(f.mercatorY);
       const wx = f.mercatorX;
-      const wy = elev * elevScale * exaggeration;
+      const wy = elev * globalElevScale * exaggeration;
       const wz = f.mercatorY;
 
       const cx = projectionView[0] * wx + projectionView[4] * wy + projectionView[8] * wz + projectionView[12];
@@ -315,12 +312,6 @@ export class TextLayer {
 
   setVisibleFeatures(visibleSet) {
     this._visibleFeatures = visibleSet;
-  }
-
-  _estimateElevScale(mercatorY) {
-    const z = 10;
-    const ty = Math.floor(mercatorY * (1 << z));
-    return getElevationScale(z, ty);
   }
 
   destroy() {

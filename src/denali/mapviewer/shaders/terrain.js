@@ -16,6 +16,13 @@ struct Uniforms {
   slope_angle_opacity: f32,
   contour_opacity: f32,
   viewport_height: f32,
+  show_wireframe: f32,
+  slope_aspect_mask_above: f32,
+  slope_aspect_mask_near: f32,
+  slope_aspect_mask_below: f32,
+  slope_aspect_opacity: f32,
+  treeline_lower: f32,
+  treeline_upper: f32,
 };
 
 struct GlobalUniforms {
@@ -38,6 +45,8 @@ struct VertexOutput {
   @location(2) shade: f32,
   @location(3) elevation_m: f32,
   @location(4) slope_angle: f32,
+  @location(5) slope_aspect_sin: f32,
+  @location(6) slope_aspect_cos: f32,
 };
 
 fn loadElevation(coord: vec2<i32>) -> f32 {
@@ -124,6 +133,13 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   out.elevation_m = elevation - skirt_drop;
   out.slope_angle = atan(sqrt(dzdx * dzdx + dzdy * dzdy)) * 57.29578;
 
+  // Slope aspect: compass bearing of the downhill direction.
+  // dzdx = east gradient, dzdy = south gradient.
+  // atan2(-east, south) gives compass bearing (0=N, π/2=E, ±π=S, -π/2=W).
+  let aspect = atan2(-dzdx, dzdy);
+  out.slope_aspect_sin = sin(aspect);
+  out.slope_aspect_cos = cos(aspect);
+
   // Reject sea-level vertices (no terrain data).
   if (elevation <= 0.0) {
     var nan_bits = 0x7FC00000u;
@@ -149,6 +165,13 @@ struct Uniforms {
   slope_angle_opacity: f32,
   contour_opacity: f32,
   viewport_height: f32,
+  show_wireframe: f32,
+  slope_aspect_mask_above: f32,
+  slope_aspect_mask_near: f32,
+  slope_aspect_mask_below: f32,
+  slope_aspect_opacity: f32,
+  treeline_lower: f32,
+  treeline_upper: f32,
 };
 
 ` + atmosphereCode + /* wgsl */`
@@ -164,9 +187,9 @@ fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
 
 fn slopeAngleColor(deg: f32) -> vec4<f32> {
   // Gaia GPS-style discrete slope angle bands (sRGB → linear)
-  let green  = pow(vec3<f32>(0.35, 0.85, 0.1), vec3<f32>(2.2));
-  let yellow = pow(vec3<f32>(1.0, 0.85, 0.0), vec3<f32>(2.2));
-  let orange = pow(vec3<f32>(1.0, 0.5, 0.0), vec3<f32>(2.2));
+  let gold   = pow(vec3<f32>(1.0, 0.78, 0.0), vec3<f32>(2.2));
+  let yellow = pow(vec3<f32>(1.0, 0.55, 0.0), vec3<f32>(2.2));
+  let orange = pow(vec3<f32>(1.0, 0.30, 0.0), vec3<f32>(2.2));
   let red    = pow(vec3<f32>(0.75, 0.0, 0.0), vec3<f32>(2.2));
   let purple = pow(vec3<f32>(0.4, 0.0, 0.6), vec3<f32>(2.2));
   let blue   = pow(vec3<f32>(0.0, 0.2, 0.8), vec3<f32>(2.2));
@@ -183,13 +206,42 @@ fn slopeAngleColor(deg: f32) -> vec4<f32> {
   let t_blue   = smoothstep(50.0, 51.0, deg);
   let t_black  = smoothstep(59.0, 60.0, deg);
 
-  var color = mix(green, yellow, t_yellow);
+  var color = mix(gold, yellow, t_yellow);
   color = mix(color, orange, t_orange);
   color = mix(color, red, t_red);
   color = mix(color, purple, t_purple);
   color = mix(color, blue, t_blue);
   color = mix(color, black, t_black);
   return vec4<f32>(color, t_enter);
+}
+
+// Quadratic B-spline basis function (partition of unity with uniform knots).
+// Input s is the normalized distance from the basis center in units of knot
+// spacing. Support spans [-1.5, 1.5].
+fn quadBSpline(s: f32) -> f32 {
+  let a = abs(s);
+  if (a >= 1.5) { return 0.0; }
+  if (a >= 0.5) { let t = 1.5 - a; return 0.5 * t * t; }
+  return 0.75 - a * a;
+}
+
+// Compute the total B-spline weight for selected slope aspect directions.
+// aspect: compass bearing in radians (0=N, π/2=E, ±π=S, -π/2=W)
+// mask: bitmask with bits 0-7 for N, NE, E, SE, S, SW, W, NW
+// Returns 0..1 where 1 = full coverage (all 8 selected sum to exactly 1.0).
+fn slopeAspectWeight(aspect: f32, mask: u32) -> f32 {
+  var weight = 0.0;
+  let TWO_PI = 6.2831853;
+  let h = 0.7853982; // π/4 = 45° knot spacing
+  for (var i = 0u; i < 8u; i++) {
+    if ((mask & (1u << i)) != 0u) {
+      let center = f32(i) * h;
+      var d = aspect - center;
+      d = d - round(d / TWO_PI) * TWO_PI;
+      weight += quadBSpline(d / h);
+    }
+  }
+  return weight;
 }
 
 fn contourLinearstep(edge0: f32, edge1: f32, x: f32) -> f32 {
@@ -265,6 +317,8 @@ fn fs_main(
   @location(2) shade: f32,
   @location(3) elevation_m: f32,
   @location(4) slope_angle: f32,
+  @location(5) slope_aspect_sin: f32,
+  @location(6) slope_aspect_cos: f32,
 ) -> @location(0) vec4<f32> {
   // Base color: satellite imagery or elevation-based fallback
   var base_color: vec3<f32>;
@@ -288,6 +342,28 @@ fn fs_main(
     base_color = mix(base_color, slope_col.rgb, slope_col.a * slope_opacity);
   }
 
+  // Slope aspect overlay: highlight selected compass directions within 30-45°
+  // Select mask based on elevation relative to treeline boundaries
+  var aspect_mask = 0u;
+  if (elevation_m > uniforms.treeline_upper) {
+    aspect_mask = u32(uniforms.slope_aspect_mask_above);
+  } else if (elevation_m > uniforms.treeline_lower) {
+    aspect_mask = u32(uniforms.slope_aspect_mask_near);
+  } else {
+    aspect_mask = u32(uniforms.slope_aspect_mask_below);
+  }
+  if (aspect_mask != 0u && slope_angle > 29.0) {
+    let aspect = atan2(slope_aspect_sin, slope_aspect_cos);
+    let aspect_weight = slopeAspectWeight(aspect, aspect_mask);
+    let aspect_fade = smoothstep(30.0, 35.0, slope_angle) * (1.0 - smoothstep(40.0, 45.0, slope_angle));
+    let aspect_alpha = aspect_weight * aspect_fade * uniforms.slope_aspect_opacity;
+    // Blend in sRGB (perceptual) space so the tint is equally visible
+    // on both bright snow and dark rock.
+    let base_srgb = pow(base_color, vec3<f32>(1.0 / 2.2));
+    let blended_srgb = mix(base_srgb, vec3<f32>(0.1, 0.55, 0.05), aspect_alpha);
+    base_color = pow(blended_srgb, vec3<f32>(2.2));
+  }
+
   let lit = base_color * mix(1.0, shade, uniforms.hillshade_opacity);
   var terrain_color = clamp(lit, vec3<f32>(0.0), vec3<f32>(1.0));
 
@@ -297,7 +373,27 @@ fn fs_main(
   terrain_color = mix(terrain_color, vec3<f32>(0.0), contour);
 
   // Apply atmospheric scattering
-  let result = applyAtmosphere(terrain_color, world_position);
+  var result = applyAtmosphere(terrain_color, world_position);
+
+  // Wireframe overlay
+  if (uniforms.show_wireframe > 0.5) {
+    let grid_wu = uv.x * 514.0 - 1.0;
+    let grid_wv = uv.y * 514.0 - 1.0;
+    let fu = fract(grid_wu + 0.5);
+    let fv = fract(grid_wv + 0.5);
+    let dist_u = min(fu, 1.0 - fu);
+    let dist_v = min(fv, 1.0 - fv);
+    let dist_diag = abs(fu + fv - 1.0) * 0.7071;
+    let dfu = fwidth(grid_wu);
+    let dfv = fwidth(grid_wv);
+    let dfd = fwidth(fu + fv) * 0.7071;
+    let w = 1.0;
+    let wire_u = 1.0 - smoothstep(dfu * (w - 0.5), dfu * (w + 0.5), dist_u);
+    let wire_v = 1.0 - smoothstep(dfv * (w - 0.5), dfv * (w + 0.5), dist_v);
+    let wire_d = 1.0 - smoothstep(dfd * (w - 0.5), dfd * (w + 0.5), dist_diag);
+    let wire = max(max(wire_u, wire_v), wire_d);
+    result = mix(result, vec3<f32>(0.0), wire * 0.8);
+  }
 
   // Tile border overlay
   if (uniforms.show_tile_borders > 0.5) {

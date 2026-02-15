@@ -111,9 +111,9 @@
     const slopeLegend = html`<div class="slope-legend" style="display: none">
       <div class="slope-legend-title">Slope angle</div>
       <div class="slope-legend-blocks">
-        <div style="background: rgb(89, 217, 26)"></div>
-        <div style="background: rgb(255, 217, 0)"></div>
-        <div style="background: rgb(255, 128, 0)"></div>
+        <div style="background: rgb(255, 199, 0)"></div>
+        <div style="background: rgb(255, 140, 0)"></div>
+        <div style="background: rgb(255, 77, 0)"></div>
         <div style="background: rgb(191, 0, 0)"></div>
         <div style="background: rgb(102, 0, 153)"></div>
         <div style="background: rgb(0, 51, 204)"></div>
@@ -157,6 +157,40 @@
     container.appendChild(elevationLabel);
     container.appendChild(slopeLegend);
     container.appendChild(viewer.attribution);
+
+    // Compass rose: shows current bearing, click to orient north
+    const compassBtn = html`<button class="compass-rose" title="Orient north">
+      <svg viewBox="0 0 28 28" width="24" height="24" style="display:block">
+        <path d="M14 4L17.5 14L14 12L10.5 14Z" fill="#D32F2F"/>
+        <path d="M14 24L10.5 14L14 16L17.5 14Z" fill="#9E9E9E"/>
+      </svg>
+    </button>`;
+    container.appendChild(compassBtn);
+
+    const compassSvg = compassBtn.querySelector('svg');
+    function updateCompass() {
+      if (!compassBtn.isConnected) return;
+      const deg = 90 - viewer.camera.state.phi * 180 / Math.PI;
+      compassSvg.style.transform = `rotate(${deg}deg)`;
+      requestAnimationFrame(updateCompass);
+    }
+    requestAnimationFrame(updateCompass);
+
+    compassBtn.addEventListener('click', () => {
+      const target = Math.PI / 2;
+      const start = viewer.camera.state.phi;
+      let diff = target - start;
+      diff -= Math.round(diff / (2 * Math.PI)) * 2 * Math.PI;
+      const t0 = performance.now();
+      function animate(now) {
+        const t = Math.min(1, (now - t0) / 300);
+        const ease = t * t * (3 - 2 * t);
+        viewer.camera.state.phi = start + diff * ease;
+        viewer.camera.taint();
+        if (t < 1) requestAnimationFrame(animate);
+      }
+      requestAnimationFrame(animate);
+    });
 
     display(expandable(container, {
       wide: true,
@@ -215,41 +249,158 @@
         viewer.settings.showRoute = v.includes("Route");
       }
     );
+    // Analysis section
+    const analysis = html`<details open><summary style="cursor: pointer;">Analysis</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
+    const analysisContent = analysis.querySelector('div');
+    controlsContainer.appendChild(analysis);
 
-    addControl(controlsContainer,
-      Inputs.date({ value: sunState.date, label: "Date" }),
-      v => { if (v) { sunState.date = v; updateSunDirection(); } }
-    );
-    addControl(controlsContainer,
-      Inputs.range([0, 24], { value: sunState.timeOfDay, step: 0.01, label: "Time of day (AKDT)" }),
-      v => { sunState.timeOfDay = v; updateSunDirection(); }
-    );
-    addControl(controlsContainer,
+    addControl(analysisContent,
       Inputs.range([0, 1], { value: viewer.settings.hillshadeOpacity, step: 0.01, label: "Hillshade opacity" }),
       v => { viewer.settings.hillshadeOpacity = v; }
     );
-    addControl(controlsContainer,
+    addControl(analysisContent,
+      Inputs.range([0, 1], { value: viewer.settings.contourOpacity, step: 0.01, label: "Contour opacity" }),
+      v => { viewer.settings.contourOpacity = v; }
+    );
+    addControl(analysisContent,
       Inputs.range([0, 1], { value: viewer.settings.slopeAngleOpacity, step: 0.01, label: "Slope angle opacity" }),
       v => {
         viewer.settings.slopeAngleOpacity = v;
         viewer._slopeLegend.style.display = v > 0 ? '' : 'none';
       }
     );
-    addControl(controlsContainer,
-      Inputs.range([0, 1], { value: viewer.settings.contourOpacity, step: 0.01, label: "Contour opacity" }),
-      v => { viewer.settings.contourOpacity = v; }
+    addControl(analysisContent,
+      Inputs.range([0, 1], { value: viewer.settings.slopeAspectOpacity, step: 0.01, label: "Slope aspect opacity" }),
+      v => { viewer.settings.slopeAspectOpacity = v; }
     );
-    addControl(controlsContainer,
-      Inputs.range([0.05, 1], { value: viewer.settings.atmosphereDensity, step: 0.01, label: "Atmosphere density" }),
-      v => { viewer.settings.atmosphereDensity = v; }
+
+    // Slope aspect rose: concentric rings for Above/Near/Below treeline
+    {
+      const ns = 'http://www.w3.org/2000/svg';
+      const size = 160;
+      const cx = size / 2, cy = size / 2;
+      const dirs = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+      const rings = [
+        { key: 'slopeAspectMaskAbove', rInner: 0, rOuter: 18 },
+        { key: 'slopeAspectMaskNear', rInner: 18, rOuter: 36 },
+        { key: 'slopeAspectMaskBelow', rInner: 36, rOuter: 54 },
+      ];
+      const labelR = 68;
+      const masks = { slopeAspectMaskAbove: 0, slopeAspectMaskNear: 0, slopeAspectMaskBelow: 0 };
+
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('viewBox', `0 0 ${size} ${size}`);
+      svg.setAttribute('width', size);
+      svg.setAttribute('height', size);
+      svg.style.display = 'block';
+      svg.style.margin = '4px auto 0';
+
+      for (const ring of rings) {
+        for (let i = 0; i < 8; i++) {
+          const a0 = (i * 45 - 22.5 - 90) * Math.PI / 180;
+          const a1 = (i * 45 + 22.5 - 90) * Math.PI / 180;
+
+          const path = document.createElementNS(ns, 'path');
+          let d;
+          if (ring.rInner === 0) {
+            const x0 = cx + ring.rOuter * Math.cos(a0);
+            const y0 = cy + ring.rOuter * Math.sin(a0);
+            const x1 = cx + ring.rOuter * Math.cos(a1);
+            const y1 = cy + ring.rOuter * Math.sin(a1);
+            d = `M${cx},${cy}L${x0.toFixed(1)},${y0.toFixed(1)}L${x1.toFixed(1)},${y1.toFixed(1)}Z`;
+          } else {
+            const ix0 = cx + ring.rInner * Math.cos(a0), iy0 = cy + ring.rInner * Math.sin(a0);
+            const ox0 = cx + ring.rOuter * Math.cos(a0), oy0 = cy + ring.rOuter * Math.sin(a0);
+            const ix1 = cx + ring.rInner * Math.cos(a1), iy1 = cy + ring.rInner * Math.sin(a1);
+            const ox1 = cx + ring.rOuter * Math.cos(a1), oy1 = cy + ring.rOuter * Math.sin(a1);
+            d = `M${ix0.toFixed(1)},${iy0.toFixed(1)}L${ox0.toFixed(1)},${oy0.toFixed(1)}L${ox1.toFixed(1)},${oy1.toFixed(1)}L${ix1.toFixed(1)},${iy1.toFixed(1)}Z`;
+          }
+
+          path.setAttribute('d', d);
+          path.setAttribute('fill', '#fff');
+          path.setAttribute('stroke', '#333');
+          path.setAttribute('stroke-width', '0.5');
+          path.style.cursor = 'pointer';
+          path.style.transition = 'fill 0.1s';
+
+          const ringKey = ring.key;
+          const bit = i;
+          path.addEventListener('click', () => {
+            masks[ringKey] ^= (1 << bit);
+            path.setAttribute('fill', (masks[ringKey] & (1 << bit)) ? '#59D91A' : '#fff');
+            viewer.settings[ringKey] = masks[ringKey];
+          });
+          path.addEventListener('mouseenter', () => {
+            if (!(masks[ringKey] & (1 << bit))) path.setAttribute('fill', '#eee');
+          });
+          path.addEventListener('mouseleave', () => {
+            if (!(masks[ringKey] & (1 << bit))) path.setAttribute('fill', '#fff');
+          });
+
+          svg.appendChild(path);
+        }
+      }
+
+      for (let i = 0; i < 8; i++) {
+        const la = (i * 45 - 90) * Math.PI / 180;
+        const text = document.createElementNS(ns, 'text');
+        text.setAttribute('x', (cx + labelR * Math.cos(la)).toFixed(1));
+        text.setAttribute('y', (cy + labelR * Math.sin(la)).toFixed(1));
+        text.setAttribute('text-anchor', 'middle');
+        text.setAttribute('dominant-baseline', 'central');
+        text.setAttribute('font-size', '10');
+        text.setAttribute('font-family', 'system-ui, sans-serif');
+        text.setAttribute('fill', '#333');
+        text.setAttribute('pointer-events', 'none');
+        text.textContent = dirs[i];
+        svg.appendChild(text);
+      }
+
+      const wrapper = html`<div class="aspect-rose" style="max-width: 240px;">
+        <label style="font-size: 12px; font-weight: 500; font-family: system-ui, sans-serif; color: #333;">Slope aspect</label>
+      </div>`;
+      wrapper.appendChild(svg);
+      const legend = html`<div style="display: flex; justify-content: center; gap: 12px; font-size: 10px; font-family: system-ui, sans-serif; color: #333; margin-top: 2px;">
+        <span>Inner: Above</span>
+        <span>Middle: Near</span>
+        <span>Outer: Below treeline</span>
+      </div>`;
+      wrapper.appendChild(legend);
+      analysisContent.appendChild(wrapper);
+    }
+    addControl(analysisContent,
+      Inputs.range([0, 10000], { value: viewer.settings.treelineLower, step: 50, label: "Lower treeline (ft)" }),
+      v => { viewer.settings.treelineLower = v; }
     );
-    addControl(controlsContainer,
+    addControl(analysisContent,
+      Inputs.range([0, 10000], { value: viewer.settings.treelineUpper, step: 50, label: "Upper treeline (ft)" }),
+      v => { viewer.settings.treelineUpper = v; }
+    );
+
+    // Environment section
+    const environment = html`<details><summary style="cursor: pointer;">Environment</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
+    const envContent = environment.querySelector('div');
+    controlsContainer.appendChild(environment);
+
+    addControl(envContent,
       Inputs.range([0.0, 2], { value: viewer.settings.verticalExaggeration, step: 0.01, label: "Vertical exaggeration" }),
       v => { viewer.settings.verticalExaggeration = v; }
     );
-    addControl(controlsContainer,
+    addControl(envContent,
       Inputs.range([10, 90], { value: Math.round(viewer.camera.state.fov * 180 / Math.PI), step: 1, label: "FOV (degrees)" }),
       v => { viewer.camera.state.fov = v * Math.PI / 180; viewer.camera.taint(); }
+    );
+    addControl(envContent,
+      Inputs.date({ value: sunState.date, label: "Date" }),
+      v => { if (v) { sunState.date = v; updateSunDirection(); } }
+    );
+    addControl(envContent,
+      Inputs.range([0, 24], { value: sunState.timeOfDay, step: 0.01, label: "Time of day (AKDT)" }),
+      v => { sunState.timeOfDay = v; updateSunDirection(); }
+    );
+    addControl(envContent,
+      Inputs.range([0.05, 1], { value: viewer.settings.atmosphereDensity, step: 0.01, label: "Atmosphere density" }),
+      v => { viewer.settings.atmosphereDensity = v; }
     );
 
     const debug = html`<details><summary style="cursor: pointer;">Debug</summary><div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px"></div></details>`;
@@ -257,7 +408,7 @@
     controlsContainer.appendChild(debug);
 
     addControl(debugContent,
-      Inputs.range([1, 4], { value: viewer.settings.densityThreshold, step: 0.1, label: "Tile scale" }),
+      Inputs.range([1, 5], { value: viewer.settings.densityThreshold, step: 0.1, label: "Tile scale", transform: Math.log }),
       v => { viewer.settings.densityThreshold = v; }
     );
     addControl(debugContent,
@@ -265,12 +416,12 @@
       v => { viewer.settings.showTileBorders = v; }
     );
     addControl(debugContent,
-      Inputs.toggle({ label: "Freeze coverage" }),
-      v => { viewer.settings.freezeCoverage = v; }
+      Inputs.toggle({ label: "Show wireframe" }),
+      v => { viewer.settings.showWireframe = v; }
     );
     addControl(debugContent,
-      Inputs.toggle({ label: "Feature depth test" }),
-      v => { viewer.settings.featureDepthTest = v; }
+      Inputs.toggle({ label: "Freeze coverage" }),
+      v => { viewer.settings.freezeCoverage = v; }
     );
     addControl(debugContent,
       Inputs.toggle({ label: "Show collision boxes" }),
@@ -315,6 +466,28 @@ I mean, let's be clear. This is a totally half-baked one-off ad hoc renderer. It
         font-family: monospace;
         font-size: 12px;
         color: #666;
+      }
+
+      .compass-rose {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        width: 36px;
+        height: 36px;
+        background: rgba(255, 255, 255, 0.85);
+        backdrop-filter: blur(4px);
+        border: none;
+        border-radius: 50%;
+        cursor: pointer;
+        padding: 0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        z-index: 2;
+      }
+      .compass-rose:hover {
+        background: rgba(255, 255, 255, 1);
       }
 
       .slope-legend {

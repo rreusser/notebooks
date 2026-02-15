@@ -73,7 +73,7 @@ export class CollisionManager {
    * Returns true if collision ran and render needs update.
    */
   update({ enabled, layers, projectionView, canvasW, canvasH, pixelRatio,
-           exaggeration, collisionBuffer, occlusionBias, bvh, tileManager, bvhTileList }) {
+           exaggeration, collisionBuffer, occlusionBias, bvh, tileManager, bvhTileList, globalElevScale }) {
     const now = performance.now();
 
     if (!enabled) {
@@ -92,7 +92,7 @@ export class CollisionManager {
     const elapsed = now - this._lastCollisionTime;
     if (elapsed >= COLLISION_RATE || this._collisionStale) {
       this._doCollision(layers, projectionView, canvasW, canvasH, pixelRatio,
-                        exaggeration, collisionBuffer, occlusionBias, bvh, tileManager, bvhTileList);
+                        exaggeration, collisionBuffer, occlusionBias, bvh, tileManager, bvhTileList, globalElevScale);
       this._lastCollisionTime = now;
       this._collisionStale = false;
       if (this._collisionScheduled) {
@@ -119,12 +119,12 @@ export class CollisionManager {
   set onWake(fn) { this._wakeCallback = fn; }
 
   _doCollision(layers, projectionView, canvasW, canvasH, pixelRatio,
-               exaggeration, collisionBuffer, occlusionBias, bvh, tileManager, bvhTileList) {
+               exaggeration, collisionBuffer, occlusionBias, bvh, tileManager, bvhTileList, globalElevScale) {
     const allItems = [];
     let layerIdx = 0;
     for (const { layer, collision, sourceId } of layers) {
       if (collision) {
-        const items = layer.getCollisionItems(projectionView, canvasW, canvasH, pixelRatio, exaggeration);
+        const items = layer.getCollisionItems(projectionView, canvasW, canvasH, pixelRatio, exaggeration, globalElevScale);
         for (const item of items) { item.layerIndex = layerIdx; item.sourceId = sourceId; }
         allItems.push(...items);
       }
