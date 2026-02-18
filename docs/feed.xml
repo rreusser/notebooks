@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Sun, 15 Feb 2026 15:37:37 GMT</lastBuildDate>
+    <lastBuildDate>Wed, 18 Feb 2026 01:56:43 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Denali Terrain</title>
@@ -102,14 +102,6 @@
       <pubDate>Sat, 27 Dec 2025 08:00:00 GMT</pubDate>
       <description>A personal reflection on consistent yoga practice with attendance visualizations over two years.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/reflecting-on-two-years-of-yoga.jpg" medium="image" />
-    </item>
-    <item>
-      <title>Of Noise and Neighbors</title>
-      <link>https://rreusser.github.io/notebooks/of-noise-and-neighbors/</link>
-      <guid isPermaLink="true">https://rreusser.github.io/notebooks/of-noise-and-neighbors/</guid>
-      <pubDate>Mon, 29 Sep 2025 07:00:00 GMT</pubDate>
-      <description>A personal narrative about a two-year conflict with a neighbor over noise complaints and restraining orders.</description>
-      <media:content url="https://rreusser.github.io/notebooks/meta/of-noise-and-neighbors.jpg" medium="image" />
     </item>
     <item>
       <title>REGL in Observable Notebooks 2.0</title>
