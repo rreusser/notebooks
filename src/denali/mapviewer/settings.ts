@@ -1,7 +1,7 @@
-// Approximate treeline elevation (meters) from latitude, based on
-// Körner & Paulsen (2004) global treeline data.
-export function estimateTreeline(lat) {
-  const pts = [
+import type { Settings } from './core/types.ts';
+
+export function estimateTreeline(lat: number): number {
+  const pts: [number, number][] = [
     [-60, 0], [-45, 1500], [-30, 2800], [-15, 3800],
     [0, 4000], [15, 4100], [30, 4200], [40, 3500],
     [50, 2300], [60, 1000], [65, 500], [70, 0],
@@ -17,7 +17,7 @@ export function estimateTreeline(lat) {
   return 0;
 }
 
-export function createSettings(initial = {}) {
+export function createSettings(initial: Partial<Settings> = {}): Settings {
   return new Proxy({
     verticalExaggeration: 1.0,
     densityThreshold: 3.0,
@@ -41,19 +41,19 @@ export function createSettings(initial = {}) {
     occlusionBias: 0.03,
     atmosphereDensity: 0.35,
     hillshadeOpacity: 0.95,
-    sunDirection: [0.5, 0.7, 0.5],
+    sunDirection: [0.5, 0.7, 0.5] as [number, number, number],
     dirty: true,
     ...initial,
-  }, {
-    set(target, prop, value) {
-      if (prop !== 'dirty' && target[prop] !== value) target.dirty = true;
-      target[prop] = value;
+  } as Settings, {
+    set(target: Settings, prop: string, value: any) {
+      if (prop !== 'dirty' && (target as any)[prop] !== value) target.dirty = true;
+      (target as any)[prop] = value;
       return true;
     }
-  });
+  }) as Settings;
 }
 
-export function createAttribution(sources) {
+export function createAttribution(sources: { attribution?: string }[]): HTMLDivElement {
   const el = document.createElement('div');
   el.className = 'terrain-attribution';
   el.innerHTML = sources

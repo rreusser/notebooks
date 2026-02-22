@@ -1,9 +1,11 @@
-// Shared 517x517 terrain mesh (516x516 grid)
-// 512 interior texels + 1 boundary vertex + 1 skirt vertex on each side.
-// Vertex format: uint16x2 (u, v) in [0, 516]
-// Index format: uint32
+export interface TerrainMesh {
+  vertexBuffer: GPUBuffer;
+  indexBuffer: GPUBuffer;
+  indexCount: number;
+  vertexCount: number;
+}
 
-export function createTerrainMesh(device) {
+export function createTerrainMesh(device: GPUDevice): TerrainMesh {
   const gridSize = 516;
   const vertCount = (gridSize + 1) * (gridSize + 1); // 515*515 = 265225
 

@@ -1,7 +1,7 @@
 // Camera controller for interactive 3D views
 // Adapted from rreusser/notebooks — modified for WebGPU z-clip [0,1]
 
-import { invertMat4 } from './math.js';
+import { invertMat4 } from '../math/mat4.ts';
 
 export function createCameraController(element, opts = {}) {
   const state = new Proxy({
@@ -10,8 +10,6 @@ export function createCameraController(element, opts = {}) {
     phi: opts.phi || 0,
     theta: opts.theta || 0.3,
     fov: opts.fov || Math.PI / 4,
-    near: opts.near || 0.1,
-    far: opts.far || 1
   }, {
     set(target, prop, value) {
       target[prop] = value;
@@ -23,6 +21,7 @@ export function createCameraController(element, opts = {}) {
   const rotateSpeed = opts.rotateSpeed || 0.01;
   const zoomSpeed = opts.zoomSpeed || 0.001;
   const panSpeed = opts.panSpeed || 1;
+  const MIN_DISTANCE = 1e-6;
 
   const _view = new Float64Array(16);
   const _proj = new Float64Array(16);
@@ -75,11 +74,13 @@ export function createCameraController(element, opts = {}) {
       const w = m[3]*nx + m[7]*ny + m[11]*nz + m[15];
       return [x/w, y/w, z/w];
     }
-    const near = unp(ndcX, ndcY, 0);
-    const far = unp(ndcX, ndcY, 1);
+    // Reversed-z: NDC z=1 is near, z=0 is far (infinite).
+    // Use z=0.5 instead of z=0 to avoid the degenerate w=0 point at infinity.
+    const near = unp(ndcX, ndcY, 1);
+    const mid = unp(ndcX, ndcY, 0.5);
     return {
       origin: near,
-      direction: [far[0] - near[0], far[1] - near[1], far[2] - near[2]]
+      direction: [mid[0] - near[0], mid[1] - near[1], mid[2] - near[2]]
     };
   }
 
@@ -213,7 +214,7 @@ export function createCameraController(element, opts = {}) {
   let touchZoomMx = 0, touchZoomMy = 0;
 
   function computeMatrices(aspectRatio) {
-    const { phi, theta, distance, center, fov, near, far } = state;
+    const { phi, theta, distance, center, fov } = state;
 
     const x = center[0] + distance * Math.cos(theta) * Math.cos(phi);
     const y = center[1] + distance * Math.sin(theta);
@@ -243,13 +244,15 @@ export function createCameraController(element, opts = {}) {
     _view[14] = (fwdX*x + fwdY*y + fwdZ*z);
     _view[15] = 1;
 
-    // WebGPU projection: z maps to [0, 1] instead of OpenGL [-1, 1]
+    // Reversed-z infinite far projection (WebGPU z in [0,1]).
+    // NDC z = near / clip.w, mapping near plane to 1 and infinity to 0.
+    // Combined with depth32float, this gives excellent precision at all depths.
     const f = 1.0 / Math.tan(fov / 2);
-    const rangeInv = 1 / (near - far);
+    const projNear = Math.max(distance * 0.001, 1e-10);
     _proj[0] = f / aspectRatio; _proj[1] = 0; _proj[2] = 0; _proj[3] = 0;
     _proj[4] = 0; _proj[5] = f; _proj[6] = 0; _proj[7] = 0;
-    _proj[8] = 0; _proj[9] = 0; _proj[10] = far * rangeInv; _proj[11] = -1;
-    _proj[12] = 0; _proj[13] = 0; _proj[14] = near * far * rangeInv; _proj[15] = 0;
+    _proj[8] = 0; _proj[9] = 0; _proj[10] = 0; _proj[11] = -1;
+    _proj[12] = 0; _proj[13] = 0; _proj[14] = projNear; _proj[15] = 0;
 
     for (let i = 0; i < 4; i++) {
       for (let j = 0; j < 4; j++) {
@@ -425,7 +428,7 @@ export function createCameraController(element, opts = {}) {
     } else if (dragMode === 'zoom') {
       const zoomFactor = Math.exp(-dy * 0.005);
       const oldDistance = state.distance;
-      state.distance = Math.max(state.near * 2, oldDistance * zoomFactor);
+      state.distance = Math.max(MIN_DISTANCE, oldDistance * zoomFactor);
       const actualZoomFactor = state.distance / oldDistance;
       const panAmount = (1 / actualZoomFactor - 1) * 2 * Math.tan(state.fov / 2);
       pan(-zoomDragMx * panAmount, -zoomDragMy * panAmount);
@@ -490,7 +493,7 @@ export function createCameraController(element, opts = {}) {
 
     const zoomFactor = 1 + event.deltaY * zoomSpeed;
     const oldDistance = state.distance;
-    state.distance = Math.max(state.near * 2, oldDistance * zoomFactor);
+    state.distance = Math.max(MIN_DISTANCE, oldDistance * zoomFactor);
     const actualZoomFactor = state.distance / oldDistance;
 
     const panAmount = (1 / actualZoomFactor - 1) * 2 * Math.tan(state.fov / 2);
@@ -565,7 +568,7 @@ export function createCameraController(element, opts = {}) {
         const scale = lastTouchDist / dist;
         const oldDistance = state.distance;
         state.distance *= scale;
-        state.distance = Math.max(state.near * 2, state.distance);
+        state.distance = Math.max(MIN_DISTANCE, state.distance);
         const actualZoomFactor = state.distance / oldDistance;
         const panAmount = (1 / actualZoomFactor - 1) * 2 * Math.tan(state.fov / 2);
         pan(-touchZoomMx * panAmount, -touchZoomMy * panAmount);

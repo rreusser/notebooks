@@ -1,8 +1,8 @@
 // Text label rendering for GeoJSON point features on terrain
 // Uses webgpu-text library for MSDF-based text rendering
 
-import { createGPUTextContext } from './lib/webgpu-text/webgpu-text.ts';
-import { atmosphereCode } from './shaders/atmosphere.js';
+import { createGPUTextContext } from '../lib/webgpu-text/webgpu-text.ts';
+import { atmosphereCode } from '../shaders/atmosphere.js';
 
 function parseColor(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);

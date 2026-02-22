@@ -112,6 +112,24 @@ export class ImageryCompositor {
   }
 
   /**
+   * Returns true if a terrain tile spatially overlaps any imagery layer's bounds.
+   * Tiles outside all imagery coverage should not block terrain subdivision.
+   */
+  overlapsAnyLayer(tz, tx, ty) {
+    const s = 1 / (1 << tz);
+    const tMinX = tx * s, tMaxX = (tx + 1) * s;
+    const tMinY = ty * s, tMaxY = (ty + 1) * s;
+    for (const layer of this.layers) {
+      const b = layer.imageryManager.bounds;
+      if (!b) return true;
+      if (tMaxX >= b.minX && tMinX <= b.maxX && tMaxY >= b.minY && tMinY <= b.maxY) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
    * Release entries for terrain tiles not in the active set.
    * @param {Set<string>} activeKeys - tile keys to keep (e.g. tileManager.wantedKeys)
    */

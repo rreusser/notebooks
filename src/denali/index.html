@@ -8,13 +8,14 @@
     const datasets = {
       'Denali': {
         sources: {
-          'arctic-dem': {
+          'mapterhorn': {
             type: 'terrain',
-            tiles: [TILE_URL_TERRAIN],
-            minzoom: 4,
-            maxzoom: 13,
-            bounds: [-152.9, 62.2, -148.8, 64.0],
-            attribution: '<a href="https://www.pgc.umn.edu/data/arcticdem/" target="_blank" rel="noopener">ArcticDEM</a> | <a href="https://catalog.data.gov/dataset/srtm30-global-1-km-digital-elevation-model-dem-version-11-land-surface" target="_blank" rel="noopener">SRTM30</a>',
+            encoding: 'terrarium',
+            tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+            minzoom: 0,
+            maxzoom: 14,
+            bounds: [-180, -85.05, 180, 85.05],
+            attribution: '<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a>',
           },
           'sentinel': {
             type: 'raster',
@@ -156,7 +157,7 @@
     import { createGPULines } from 'npm:webgpu-instanced-lines';
     import simplify from 'npm:simplify-js';
     import { expandable } from './lib/expandable.js';
-    import { ElevationProfile } from './mapviewer/elevation-profile.js';
+    import { ElevationProfile } from './elevation-profile.js';
     import { gpx as gpxToGeoJSON } from 'npm:@tmcw/togeojson';
 
     const config = datasets[datasetName];
@@ -201,8 +202,6 @@
         <span>60°+</span>
       </div>
     </div>`;
-    viewer._slopeLegend = slopeLegend;
-
     const elevationLabel = html`<div class="elevation-label"></div>`;
 
     canvas.addEventListener('mousemove', (e) => {
@@ -227,17 +226,17 @@
     const elevationProfile = new ElevationProfile();
     const profilePanel = elevationProfile.createDOM();
 
-    viewer.onElevationRefine = () => {
+    viewer.on('elevationrefine', () => {
       const activeId = elevationProfile.activeLayerId;
       if (!activeId) return;
       // Auto-close if layer was removed
-      if (!viewer._lineLayers.find(e => e.id === activeId)) {
+      if (!viewer.getLayer(activeId)) {
         elevationProfile.hide();
         return;
       }
       const data = viewer.getLayerElevationProfile(activeId);
       if (data) elevationProfile.update(data);
-    };
+    });
 
     const container = html`<div style="position: relative">`;
     container.appendChild(canvas);
@@ -261,23 +260,21 @@
     const compassSvg = compassBtn.querySelector('svg');
     function updateCompass() {
       if (!compassBtn.isConnected) return;
-      const deg = 90 - viewer.camera.state.phi * 180 / Math.PI;
-      compassSvg.style.transform = `rotate(${deg}deg)`;
+      compassSvg.style.transform = `rotate(${viewer.bearing}deg)`;
       requestAnimationFrame(updateCompass);
     }
     requestAnimationFrame(updateCompass);
 
     compassBtn.addEventListener('click', () => {
-      const target = Math.PI / 2;
-      const start = viewer.camera.state.phi;
-      let diff = target - start;
-      diff -= Math.round(diff / (2 * Math.PI)) * 2 * Math.PI;
+      const startBearing = viewer.bearing;
+      let diff = -startBearing;
+      // Normalize to [-180, 180] for shortest rotation
+      diff = ((diff + 180) % 360 + 360) % 360 - 180;
       const t0 = performance.now();
       function animate(now) {
         const t = Math.min(1, (now - t0) / 300);
         const ease = t * t * (3 - 2 * t);
-        viewer.camera.state.phi = start + diff * ease;
-        viewer.camera.taint();
+        viewer.bearing = startBearing + diff * ease;
         if (t < 1) requestAnimationFrame(animate);
       }
       requestAnimationFrame(animate);
@@ -297,7 +294,7 @@
           canvas.style.width = '';
           canvas.style.height = '';
         }
-        viewer.camera.taint();
+        viewer.triggerRedraw();
       }
     }));
 
@@ -309,8 +306,8 @@
 
     const controlsContainer = html`<div class="terrain-controls"></div>`;
 
-    const sunState = { date: new Date(), timeOfDay: 14, utcOffset: -8 };
-    const location = viewer._location;
+    const sunState = { date: new Date(), timeOfDay: 10, utcOffset: -8 };
+    const location = viewer.location;
 
     function formatTime(decimal) {
       const h = Math.floor(decimal) % 24;
@@ -402,21 +399,17 @@
       layerList.appendChild(imgRow);
 
       // Feature layers
-      const allEntries = [
-        ...viewer._lineLayers.map(e => ({ ...e, kind: 'line' })),
-        ...viewer._circleLayers.map(e => ({ ...e, kind: 'circle' })),
-        ...viewer._textLayers.map(e => ({ ...e, kind: 'text' })),
-      ];
-      for (const entry of allEntries) {
+      for (const entry of viewer.getLayers()) {
         const item = html`<div class="layer-item"></div>`;
         const row = html`<div class="layer-row"></div>`;
 
+        let layerVisible = entry.visible;
         const eyeBtn = html`<button class="layer-eye" title="Toggle visibility"></button>`;
-        eyeBtn.innerHTML = entry.visible ? eyeOpenSVG : eyeClosedSVG;
+        eyeBtn.innerHTML = layerVisible ? eyeOpenSVG : eyeClosedSVG;
         eyeBtn.addEventListener('click', () => {
-          entry.visible = !entry.visible;
-          viewer.setLayerVisibility(entry.id, entry.visible);
-          eyeBtn.innerHTML = entry.visible ? eyeOpenSVG : eyeClosedSVG;
+          layerVisible = !layerVisible;
+          viewer.setLayerVisibility(entry.id, layerVisible);
+          eyeBtn.innerHTML = layerVisible ? eyeOpenSVG : eyeClosedSVG;
         });
         row.appendChild(eyeBtn);
 
@@ -436,12 +429,13 @@
         // Expandable properties
         const props = html`<div class="layer-props" style="display:none"></div>`;
         const id = entry.id;
+        const paint = entry.paint;
 
-        if (entry.kind === 'line') {
-          addColorProp(props, 'Color', entry.layer._lineColor, v => viewer.setLayerPaint(id, 'line-color', v));
-          addColorProp(props, 'Border', entry.layer._borderColor, v => viewer.setLayerPaint(id, 'line-border-color', v));
-          addRangeProp(props, 'Width', entry.layer._lineWidth, 1, 12, 0.5, v => viewer.setLayerPaint(id, 'line-width', v));
-          addRangeProp(props, 'Border width', entry.layer._borderWidth, 0, 6, 0.5, v => viewer.setLayerPaint(id, 'line-border-width', v));
+        if (entry.type === 'line') {
+          addColorProp(props, 'Color', paint['line-color'], v => viewer.setLayerPaint(id, 'line-color', v));
+          addColorProp(props, 'Border', paint['line-border-color'], v => viewer.setLayerPaint(id, 'line-border-color', v));
+          addRangeProp(props, 'Width', paint['line-width'], 1, 12, 0.5, v => viewer.setLayerPaint(id, 'line-width', v));
+          addRangeProp(props, 'Border width', paint['line-border-width'], 0, 6, 0.5, v => viewer.setLayerPaint(id, 'line-border-width', v));
           const dlBtn = html`<button class="layer-download-btn">Download GeoJSON</button>`;
           dlBtn.addEventListener('click', () => {
             const geojson = viewer.getLayerGeoJSON(id);
@@ -459,18 +453,18 @@
           profBtn.addEventListener('click', () => {
             const data = viewer.getLayerElevationProfile(id);
             if (!data) return;
-            elevationProfile.show(id, entry.id, data, entry.layer._lineColor);
+            elevationProfile.show(id, entry.id, data, paint['line-color']);
           });
           props.appendChild(profBtn);
-        } else if (entry.kind === 'circle') {
-          addColorProp(props, 'Fill', entry.layer._fillColor, v => viewer.setLayerPaint(id, 'circle-color', v));
-          addColorProp(props, 'Stroke', entry.layer._strokeColor, v => viewer.setLayerPaint(id, 'circle-stroke-color', v));
-          addRangeProp(props, 'Radius', entry.layer._radius, 1, 12, 0.5, v => viewer.setLayerPaint(id, 'circle-radius', v));
-          addRangeProp(props, 'Stroke width', entry.layer._strokeWidth, 0, 6, 0.5, v => viewer.setLayerPaint(id, 'circle-stroke-width', v));
-        } else if (entry.kind === 'text') {
-          addColorProp(props, 'Color', entry.layer._color, v => viewer.setLayerPaint(id, 'text-color', v));
-          addColorProp(props, 'Halo', entry.layer._strokeColor, v => viewer.setLayerPaint(id, 'text-halo-color', v));
-          addRangeProp(props, 'Halo width', entry.layer._strokeWidth, 0, 4, 0.25, v => viewer.setLayerPaint(id, 'text-halo-width', v));
+        } else if (entry.type === 'circle') {
+          addColorProp(props, 'Fill', paint['circle-color'], v => viewer.setLayerPaint(id, 'circle-color', v));
+          addColorProp(props, 'Stroke', paint['circle-stroke-color'], v => viewer.setLayerPaint(id, 'circle-stroke-color', v));
+          addRangeProp(props, 'Radius', paint['circle-radius'], 1, 12, 0.5, v => viewer.setLayerPaint(id, 'circle-radius', v));
+          addRangeProp(props, 'Stroke width', paint['circle-stroke-width'], 0, 6, 0.5, v => viewer.setLayerPaint(id, 'circle-stroke-width', v));
+        } else if (entry.type === 'text') {
+          addColorProp(props, 'Color', paint['text-color'], v => viewer.setLayerPaint(id, 'text-color', v));
+          addColorProp(props, 'Halo', paint['text-halo-color'], v => viewer.setLayerPaint(id, 'text-halo-color', v));
+          addRangeProp(props, 'Halo width', paint['text-halo-width'], 0, 4, 0.25, v => viewer.setLayerPaint(id, 'text-halo-width', v));
         }
 
         item.appendChild(props);
@@ -738,7 +732,7 @@
       Inputs.range([0, 1], { value: viewer.settings.slopeAngleOpacity, step: 0.01, label: "Slope angle opacity" }),
       v => {
         viewer.settings.slopeAngleOpacity = v;
-        viewer._slopeLegend.style.display = v > 0 ? '' : 'none';
+        slopeLegend.style.display = v > 0 ? '' : 'none';
       }
     );
     addControl(analysisContent,
@@ -961,8 +955,8 @@
     controlsContainer.appendChild(debug);
 
     addControl(debugContent,
-      Inputs.range([10, 90], { value: Math.round(viewer.camera.state.fov * 180 / Math.PI), step: 1, label: "FOV (degrees)" }),
-      v => { viewer.camera.state.fov = v * Math.PI / 180; viewer.camera.taint(); }
+      Inputs.range([10, 90], { value: Math.round(viewer.fov), step: 1, label: "FOV (degrees)" }),
+      v => { viewer.fov = v; }
     );
     addControl(debugContent,
       Inputs.range([1, 5], { value: viewer.settings.densityThreshold, step: 0.1, label: "Tile scale", transform: Math.log }),

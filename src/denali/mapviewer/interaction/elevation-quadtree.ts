@@ -1,14 +1,6 @@
-// Per-tile min/max quadtree over the 512×512 patch grid.
-// Each patch is a bilinear cell between 4 elevation samples.
-//
-// Storage: Two Float32Array(349525) — minElev and maxElev.
-// 10 levels (0=root through 9=leaf 512×512).
-// Level k starts at offset (4^k - 1) / 3, has (2^k)² nodes.
+const LEVELS = 10;
+const TOTAL_NODES = 349525;
 
-const LEVELS = 10; // 0=root (1×1) through 9=leaf (512×512)
-const TOTAL_NODES = 349525; // (4^10 - 1) / 3
-
-// Precompute level offsets: offset[k] = (4^k - 1) / 3
 const levelOffset = new Uint32Array(LEVELS);
 {
   let pow4 = 1;
@@ -18,25 +10,17 @@ const levelOffset = new Uint32Array(LEVELS);
   }
 }
 
-/**
- * Build a min/max elevation quadtree from a 514×514 elevation array.
- *
- * @param {Float32Array} elevations - 514×514 raw elevation values from tile decode
- * @returns {{ minElev: Float32Array, maxElev: Float32Array }}
- */
-export function buildElevationQuadtree(elevations) {
+export function buildElevationQuadtree(elevations: Float32Array): { minElev: Float32Array; maxElev: Float32Array } {
   const minElev = new Float32Array(TOTAL_NODES);
   const maxElev = new Float32Array(TOTAL_NODES);
 
-  // Fill leaves (level 9 = 512×512 patches)
   const leafLevel = LEVELS - 1;
   const leafOff = levelOffset[leafLevel];
-  const leafSize = 512; // 2^9
+  const leafSize = 512;
   const stride = 514;
 
   for (let row = 0; row < leafSize; row++) {
     for (let col = 0; col < leafSize; col++) {
-      // Patch (row, col) uses corners at data indices (row+1, col+1), etc.
       const r = row + 1;
       const c = col + 1;
       const tl = elevations[r * stride + c];
@@ -50,7 +34,6 @@ export function buildElevationQuadtree(elevations) {
     }
   }
 
-  // Build bottom-up: parents = min/max of 4 children
   for (let k = leafLevel - 1; k >= 0; k--) {
     const off = levelOffset[k];
     const childOff = levelOffset[k + 1];
@@ -76,9 +59,13 @@ export function buildElevationQuadtree(elevations) {
   return { minElev, maxElev };
 }
 
-// Ray-AABB slab test. Returns [tNear, tFar] or null if no hit.
-function rayAABB(ox, oy, oz, dx, dy, dz, xmin, ymin, zmin, xmax, ymax, zmax) {
-  let tmin, tmax;
+function rayAABB(
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number,
+  xmin: number, ymin: number, zmin: number,
+  xmax: number, ymax: number, zmax: number
+): [number, number] | null {
+  let tmin: number, tmax: number;
 
   if (dx !== 0) {
     let t1 = (xmin - ox) / dx;
@@ -102,25 +89,29 @@ function rayAABB(ox, oy, oz, dx, dy, dz, xmin, ymin, zmin, xmax, ymax, zmax) {
     if (oy < ymin || oy > ymax) return null;
   }
 
-  if (tmin > tmax) return null;
+  if (tmin! > tmax!) return null;
 
   if (dz !== 0) {
     let t1 = (zmin - oz) / dz;
     let t2 = (zmax - oz) / dz;
     if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-    if (t1 > tmin) tmin = t1;
-    if (t2 < tmax) tmax = t2;
+    if (t1 > tmin!) tmin = t1;
+    if (t2 < tmax!) tmax = t2;
   } else {
     if (oz < zmin || oz > zmax) return null;
   }
 
-  if (tmin > tmax || tmax < 0) return null;
-  return [tmin, tmax];
+  if (tmin! > tmax! || tmax! < 0) return null;
+  return [tmin!, tmax!];
 }
 
-// Moller-Trumbore ray-triangle intersection
-// Returns t or -1 if no hit
-function rayTriangle(ox, oy, oz, dx, dy, dz, v0x, v0y, v0z, v1x, v1y, v1z, v2x, v2y, v2z) {
+function rayTriangle(
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number,
+  v0x: number, v0y: number, v0z: number,
+  v1x: number, v1y: number, v1z: number,
+  v2x: number, v2y: number, v2z: number
+): number {
   const e1x = v1x - v0x, e1y = v1y - v0y, e1z = v1z - v0z;
   const e2x = v2x - v0x, e2y = v2y - v0y, e2z = v2z - v0z;
 
@@ -129,7 +120,7 @@ function rayTriangle(ox, oy, oz, dx, dy, dz, v0x, v0y, v0z, v1x, v1y, v1z, v2x, 
   const pz = dx * e2y - dy * e2x;
 
   const det = e1x * px + e1y * py + e1z * pz;
-  if (det < 1e-10) return -1; // skip backfaces and degenerate triangles
+  if (det < 1e-10) return -1;
 
   const invDet = 1 / det;
   const tx = ox - v0x, ty = oy - v0y, tz = oz - v0z;
@@ -146,32 +137,21 @@ function rayTriangle(ox, oy, oz, dx, dy, dz, v0x, v0y, v0z, v1x, v1y, v1z, v2x, 
   return t > 0 ? t : -1;
 }
 
-/**
- * Ray-quadtree intersection for a single tile.
- *
- * Ray is in tile-local patch coordinates:
- *   X, Z ∈ [0, 512], Y = raw elevation meters.
- *
- * @param {Float32Array} minE - minElev quadtree array
- * @param {Float32Array} maxE - maxElev quadtree array
- * @param {Float32Array} elevations - 514×514 raw elevation data
- * @param {number} ox, oy, oz - ray origin
- * @param {number} dx, dy, dz - ray direction (need not be normalized)
- * @returns {{ t: number, patchRow: number, patchCol: number } | null}
- */
-export function rayIntersectQuadtree(minE, maxE, elevations, ox, oy, oz, dx, dy, dz) {
+export function rayIntersectQuadtree(
+  minE: Float32Array, maxE: Float32Array, elevations: Float32Array,
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number
+): { t: number; patchRow: number; patchCol: number } | null {
   let bestT = Infinity;
   let bestRow = -1;
   let bestCol = -1;
 
-  // Stack entries: [level, row, col]
-  const stack = new Int32Array(LEVELS * 4 * 3); // generous size
+  const stack = new Int32Array(LEVELS * 4 * 3);
   let sp = 0;
 
-  // Push root
-  stack[sp++] = 0; // level
-  stack[sp++] = 0; // row
-  stack[sp++] = 0; // col
+  stack[sp++] = 0;
+  stack[sp++] = 0;
+  stack[sp++] = 0;
 
   const stride = 514;
 
@@ -184,8 +164,7 @@ export function rayIntersectQuadtree(minE, maxE, elevations, ox, oy, oz, dx, dy,
     const size = 1 << level;
     const idx = off + row * size + col;
 
-    // Node AABB in patch coordinates
-    const cellsPerNode = 512 >>> level; // 512 / 2^level
+    const cellsPerNode = 512 >>> level;
     const xmin = col * cellsPerNode;
     const xmax = xmin + cellsPerNode;
     const zmin = row * cellsPerNode;
@@ -193,15 +172,11 @@ export function rayIntersectQuadtree(minE, maxE, elevations, ox, oy, oz, dx, dy,
     const ymin = minE[idx];
     const ymax = maxE[idx];
 
-    // Ray-AABB test
     const hit = rayAABB(ox, oy, oz, dx, dy, dz, xmin, ymin, zmin, xmax, ymax, zmax);
     if (!hit) continue;
-    if (hit[0] >= bestT) continue; // entire node is beyond current best
+    if (hit[0] >= bestT) continue;
 
     if (level === LEVELS - 1) {
-      // Leaf: test 2 triangles for this patch
-      // Corners in patch coords: (col, row) to (col+1, row+1)
-      // Elevations from the 514-wide array at (row+1, col+1) offset
       const r = row + 1;
       const c = col + 1;
       const tlElev = elevations[r * stride + c];
@@ -209,7 +184,6 @@ export function rayIntersectQuadtree(minE, maxE, elevations, ox, oy, oz, dx, dy,
       const blElev = elevations[(r + 1) * stride + c];
       const brElev = elevations[(r + 1) * stride + c + 1];
 
-      // Triangle 1: tl, bl, tr (same winding as mesh.js)
       let t = rayTriangle(
         ox, oy, oz, dx, dy, dz,
         col, tlElev, row,
@@ -222,7 +196,6 @@ export function rayIntersectQuadtree(minE, maxE, elevations, ox, oy, oz, dx, dy,
         bestCol = col;
       }
 
-      // Triangle 2: tr, bl, br
       t = rayTriangle(
         ox, oy, oz, dx, dy, dz,
         col + 1, trElev, row,
@@ -235,7 +208,6 @@ export function rayIntersectQuadtree(minE, maxE, elevations, ox, oy, oz, dx, dy,
         bestCol = col;
       }
     } else {
-      // Push 4 children
       const childLevel = level + 1;
       const cr = row * 2;
       const cc = col * 2;

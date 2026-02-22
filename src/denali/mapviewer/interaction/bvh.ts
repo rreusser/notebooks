@@ -1,26 +1,30 @@
-/**
- * A node in the BVH structure
- */
-function BVHNode(startIndex, endIndex, ctor) {
-  this.aabb = new ctor(6);
-  this.startIndex = startIndex;
-  this.endIndex = endIndex;
-  this.node0 = null;
-  this.node1 = null;
+class BVHNode {
+  aabb: Float64Array;
+  startIndex: number;
+  endIndex: number;
+  node0: BVHNode | null;
+  node1: BVHNode | null;
+
+  constructor(startIndex: number, endIndex: number, ctor: typeof Float64Array) {
+    this.aabb = new ctor(6);
+    this.startIndex = startIndex;
+    this.endIndex = endIndex;
+    this.node0 = null;
+    this.node1 = null;
+  }
 }
 
-/**
- * Constructor of a BVH tree.
- * 3D AABBs: [xmin, ymin, zmin, xmax, ymax, zmax] — stride 6
- */
-const nodeStack = [];
-const failed = [];
-const extentCenters = [];
-const nodesToIntersect = [];
+const nodeStack: BVHNode[] = [];
+const failed: boolean[] = [];
+const extentCenters: number[] = [];
+const nodesToIntersect: BVHNode[] = [];
 
-// Ray-AABB slab test for 3D box. Returns [tNear, tFar] or null.
-function rayAABB(ox, oy, oz, dx, dy, dz, aabb) {
-  let tmin, tmax;
+function rayAABB(
+  ox: number, oy: number, oz: number,
+  dx: number, dy: number, dz: number,
+  aabb: Float64Array
+): [number, number] | null {
+  let tmin: number, tmax: number;
 
   if (dx !== 0) {
     let t1 = (aabb[0] - ox) / dx;
@@ -44,24 +48,32 @@ function rayAABB(ox, oy, oz, dx, dy, dz, aabb) {
     if (oy < aabb[1] || oy > aabb[4]) return null;
   }
 
-  if (tmin > tmax) return null;
+  if (tmin! > tmax!) return null;
 
   if (dz !== 0) {
     let t1 = (aabb[2] - oz) / dz;
     let t2 = (aabb[5] - oz) / dz;
     if (t1 > t2) { const tmp = t1; t1 = t2; t2 = tmp; }
-    if (t1 > tmin) tmin = t1;
-    if (t2 < tmax) tmax = t2;
+    if (t1 > tmin!) tmin = t1;
+    if (t2 < tmax!) tmax = t2;
   } else {
     if (oz < aabb[2] || oz > aabb[5]) return null;
   }
 
-  if (tmin > tmax || tmax < 0) return null;
-  return [tmin, tmax];
+  if (tmin! > tmax! || tmax! < 0) return null;
+  return [tmin!, tmax!];
 }
 
 export default class BVH {
-  constructor(aabbs, { epsilon = 1e-6, maxItemsPerNode = 10 } = {}) {
+  _aabbs: Float64Array;
+  _epsilon: number;
+  _maxItemsPerNode: number;
+  _aabbTypeCtor: typeof Float64Array;
+  _idArray: Uint32Array;
+  _nodeSplitPtr: number;
+  root: BVHNode;
+
+  constructor(aabbs: Float64Array, { epsilon = 1e-6, maxItemsPerNode = 10 } = {}) {
     this._aabbs = aabbs;
     const count = this._aabbs.length / 6;
 
@@ -71,12 +83,10 @@ export default class BVH {
     this._aabbTypeCtor = Float64Array;
     const indexTypeCtor = Uint32Array;
 
-    // Initialize the ids to a plain sequence
     this._idArray = new indexTypeCtor(count);
     for (var i = 0; i < count; i++) {
       this._idArray[i] = i;
     }
-    // compute the box root node box (includes all the triangles)
     this.root = new BVHNode(0, count, this._aabbTypeCtor);
     this.computeExtents(this.root);
 
@@ -95,10 +105,7 @@ export default class BVH {
     nodeStack.length = 0;
   }
 
-  /**
-   * Calculates the extents (i.e the min and max coordinates) of a list of bounding boxes in the bboxArray
-   */
-  computeExtents(node) {
+  computeExtents(node: BVHNode): void {
     const aabb = node.aabb;
 
     let xmin = Infinity;
@@ -139,15 +146,11 @@ export default class BVH {
     aabb[5] = zcen + zrng;
   }
 
-  /**
-   * Split the given node in 2 distinct nodes along the longest non-degenerate axis.
-   */
-  splitNode(node) {
-    let j, ptr, ptr2, endPtr, tmp;
+  splitNode(node: BVHNode): void {
+    let j: number, ptr: number, ptr2: number, endPtr: number, tmp: number;
     const startIndex = node.startIndex;
     const endIndex = node.endIndex;
 
-    // Return early if we shouldn't split
     const elementCount = endIndex - startIndex;
     if (elementCount <= this._maxItemsPerNode || elementCount === 0) {
       return;
@@ -155,7 +158,6 @@ export default class BVH {
     const aabbs = this._aabbs;
     const ids = this._idArray;
 
-    // Compute twice the center in each dimension
     extentCenters[0] = node.aabb[0] + node.aabb[3];
     extentCenters[1] = node.aabb[1] + node.aabb[4];
     extentCenters[2] = node.aabb[2] + node.aabb[5];
@@ -163,7 +165,6 @@ export default class BVH {
     let leftCnt0 = 0, leftCnt1 = 0, leftCnt2 = 0;
     let rightCnt0 = 0, rightCnt1 = 0, rightCnt2 = 0;
 
-    // Count up the number of leaf nodes on each side of each split
     for (
       ptr = startIndex * 6, endPtr = endIndex * 6;
       ptr < endPtr;
@@ -183,8 +184,7 @@ export default class BVH {
     const extentsLength1 = node.aabb[4] - node.aabb[1];
     const extentsLength2 = node.aabb[5] - node.aabb[2];
 
-    // Select the longest non-degenerate axis
-    let splitDim;
+    let splitDim: number;
     if (extentsLength0 >= extentsLength1 && extentsLength0 >= extentsLength2) {
       splitDim = 0;
     } else if (extentsLength1 >= extentsLength2) {
@@ -193,20 +193,16 @@ export default class BVH {
       splitDim = 2;
     }
     if (failed[splitDim]) {
-      // Try the next longest
       if (splitDim === 0) splitDim = extentsLength1 >= extentsLength2 ? 1 : 2;
       else if (splitDim === 1) splitDim = extentsLength0 >= extentsLength2 ? 0 : 2;
       else splitDim = extentsLength0 >= extentsLength1 ? 0 : 1;
       if (failed[splitDim]) {
-        // Last remaining
         splitDim = 3 - splitDim - (splitDim === 0 ? 1 : splitDim === 2 ? 1 : 0);
-        // Just find the one that isn't failed
         for (let d = 0; d < 3; d++) { if (!failed[d]) { splitDim = d; break; } }
       }
     }
 
-    // In-place partition with 6-float swap
-    let bboxPtr, idPtr, bboxPtr2, idPtr2;
+    let bboxPtr: number, idPtr: number, bboxPtr2: number, idPtr2: number;
     let lmin0 = Infinity, lmin1 = Infinity, lmin2 = Infinity;
     let lmax0 = -Infinity, lmax1 = -Infinity, lmax2 = -Infinity;
     let rmin0 = Infinity, rmin1 = Infinity, rmin2 = Infinity;
@@ -224,12 +220,10 @@ export default class BVH {
         aabbs[bboxPtr + splitDim] + aabbs[bboxPtr + splitDim + 3] >=
         extentCenter
       ) {
-        // Swap the id
         tmp = ids[idPtr];
         ids[idPtr] = ids[idPtr2];
         ids[idPtr2] = tmp;
 
-        // Swap all 6 floats and accumulate right-side bounds
         tmp = aabbs[bboxPtr];
         rmin0 = Math.min(rmin0, tmp);
         aabbs[bboxPtr] = aabbs[bboxPtr2];
@@ -274,7 +268,6 @@ export default class BVH {
       }
     }
 
-    // Create two new nodes and set the index range and extents
     node.startIndex = node.endIndex = -1;
     const node0 = (node.node0 = new BVHNode(
       startIndex,
@@ -287,7 +280,7 @@ export default class BVH {
       this._aabbTypeCtor
     ));
 
-    let cen0, cen1, cen2, rng0, rng1, rng2;
+    let cen0: number, cen1: number, cen2: number, rng0: number, rng1: number, rng2: number;
     const eps = this._epsilon;
     cen0 = (lmax0 + lmin0) * 0.5;
     cen1 = (lmax1 + lmin1) * 0.5;
@@ -317,7 +310,6 @@ export default class BVH {
     node1.aabb[4] = cen1 + rng1;
     node1.aabb[5] = cen2 + rng2;
 
-    // Queue the new nodes for splitting
     if (idPtr - startIndex > this._maxItemsPerNode) {
       nodeStack[++this._nodeSplitPtr] = node.node0;
     }
@@ -327,10 +319,7 @@ export default class BVH {
     }
   }
 
-  /**
-   * Generic intersection between the BVH and a shape.
-   */
-  test(bboxIntersectionTest, leafTest) {
+  test(bboxIntersectionTest: (aabb: Float64Array) => boolean, leafTest: (index: number) => void): void {
     nodesToIntersect.length = 0;
     var nodesToIntersectPtr = 0;
     nodesToIntersect[0] = this.root;
@@ -349,39 +338,31 @@ export default class BVH {
     nodesToIntersect.length = 0;
   }
 
-  /**
-   * Ray intersection against leaf AABBs.
-   * Returns candidate leaf indices sorted nearest-first by entry distance.
-   *
-   * @param {number} ox, oy, oz - ray origin
-   * @param {number} dx, dy, dz - ray direction
-   * @returns {Array<{ index: number, tNear: number }>}
-   */
-  rayIntersect(ox, oy, oz, dx, dy, dz) {
-    const results = [];
-    const stack = [];
+  rayIntersect(
+    ox: number, oy: number, oz: number,
+    dx: number, dy: number, dz: number
+  ): { index: number; tNear: number }[] {
+    const results: { index: number; tNear: number }[] = [];
+    const stack: BVHNode[] = [];
     let sp = 0;
     stack[sp++] = this.root;
 
     while (sp > 0) {
       const node = stack[--sp];
 
-      // Test node AABB
       const hit = rayAABB(ox, oy, oz, dx, dy, dz, node.aabb);
       if (!hit) continue;
 
-      // If internal node, push children
       if (node.node0) stack[sp++] = node.node0;
       if (node.node1) stack[sp++] = node.node1;
 
-      // Test leaf AABBs
       for (let i = node.startIndex; i < node.endIndex; i++) {
         const leafIdx = this._idArray[i];
-        const base = i * 6; // aabbs are rearranged in tandem with _idArray by splitNode
-        const leafAABB = [
+        const base = i * 6;
+        const leafAABB = new Float64Array([
           this._aabbs[base], this._aabbs[base + 1], this._aabbs[base + 2],
           this._aabbs[base + 3], this._aabbs[base + 4], this._aabbs[base + 5],
-        ];
+        ]);
         const leafHit = rayAABB(ox, oy, oz, dx, dy, dz, leafAABB);
         if (leafHit) {
           results.push({ index: leafIdx, tNear: Math.max(leafHit[0], 0) });
@@ -389,29 +370,26 @@ export default class BVH {
       }
     }
 
-    // Sort nearest-first
     results.sort((a, b) => a.tNear - b.tNear);
     return results;
   }
 
-  traversePreorder(visitor) {
-    const stack = [];
-    let cur = this.root;
-    let i = 0;
+  traversePreorder(visitor: (node: BVHNode) => boolean | void): void {
+    const stack: BVHNode[] = [];
+    let cur: BVHNode | null = this.root;
     while (stack.length || cur) {
       while (cur) {
         const descend = visitor(cur) !== false;
         if (descend && cur.node1) stack.push(cur.node1);
-        cur = descend && cur.node0;
+        cur = descend ? cur.node0 : null;
       }
-      if (stack.length) cur = stack.pop();
+      if (stack.length) cur = stack.pop()!;
     }
   }
 
-  traverseInorder(visitor) {
-    const stack = [];
-    let cur = this.root;
-    let i = 0;
+  traverseInorder(visitor: (node: BVHNode) => void): void {
+    const stack: BVHNode[] = [];
+    let cur: BVHNode | null = this.root;
     while (cur || stack.length) {
       while (cur) {
         stack.push(cur);
@@ -424,9 +402,9 @@ export default class BVH {
     }
   }
 
-  traversePostorder(visitor) {
-    const stack = [this.root];
-    let prev = null;
+  traversePostorder(visitor: (node: BVHNode) => void): void {
+    const stack: BVHNode[] = [this.root];
+    let prev: BVHNode | null = null;
     while (stack.length) {
       const cur = stack[stack.length - 1];
       if (!prev || prev.node0 === cur || prev.node1 === cur) {
@@ -437,7 +415,7 @@ export default class BVH {
           visitor(cur);
         }
       } else if (cur.node0 === prev) {
-        if (cur.node0) {
+        if (cur.node1) {
           stack.push(cur.node1);
         } else {
           stack.pop();

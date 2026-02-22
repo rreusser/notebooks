@@ -1,6 +1,6 @@
 // Instanced circle rendering for GeoJSON point features on terrain
 
-import { circleVertexShader, circleFragmentShader } from './shaders/circle.js';
+import { circleVertexShader, circleFragmentShader } from '../shaders/circle.js';
 
 const MAX_INSTANCES = 10000;
 
@@ -97,7 +97,7 @@ export class CircleLayer {
       vertex: vertexState,
       fragment: fragmentState,
       primitive: { topology: 'triangle-list' },
-      depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'greater' },
     });
 
     this._pipelineNoDepthTest = device.createRenderPipeline({
@@ -105,7 +105,7 @@ export class CircleLayer {
       vertex: vertexState,
       fragment: fragmentState,
       primitive: { topology: 'triangle-list' },
-      depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'always' },
     });
   }
 

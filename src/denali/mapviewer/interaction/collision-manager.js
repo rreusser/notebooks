@@ -1,7 +1,7 @@
-import { runCollision } from './collision.js';
-import { coloredLineShader } from './shaders/lines.js';
-import { invertMat4 } from './math.js';
-import { screenToRay, raycastTerrain } from './ray-terrain.js';
+import { runCollision } from './collision.ts';
+import { coloredLineShader } from '../shaders/lines.js';
+import { invertMat4 } from '../math/mat4.ts';
+import { screenToRay, raycastTerrain } from './raycast.js';
 
 const MAX_DEBUG_BBOXES = 10000;
 const VERTS_PER_BBOX = 8;
@@ -58,7 +58,7 @@ export class CollisionManager {
         }],
       },
       primitive: { topology: 'line-list' },
-      depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'always' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'always' },
     });
 
     this._invProjView = new Float32Array(16);

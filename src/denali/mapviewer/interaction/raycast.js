@@ -1,9 +1,9 @@
 // Ray-terrain intersection orchestration layer.
 // Connects the 3D BVH (tile-level) with per-tile elevation quadtrees.
 
-import { invertMat4 } from './math.js';
-import { getElevationScale } from './tile-math.js';
-import { rayIntersectQuadtree } from './elevation-quadtree.js';
+import { invertMat4 } from '../math/mat4.ts';
+import { getElevationScale } from '../tiles/tile-math.js';
+import { rayIntersectQuadtree } from './elevation-quadtree.ts';
 
 /**
  * Unproject a screen point (NDC) to a world-space ray.
@@ -16,7 +16,8 @@ import { rayIntersectQuadtree } from './elevation-quadtree.js';
 export function screenToRay(ndcX, ndcY, invProjView) {
   const m = invProjView;
 
-  // Unproject near (z=0) and far (z=1) in WebGPU clip space
+  // Reversed-z: NDC z=1 is near, z=0 is far (infinite).
+  // Use z=0.5 instead of z=0 to avoid the degenerate w=0 point at infinity.
   function unproject(nx, ny, nz) {
     const x = m[0]*nx + m[4]*ny + m[8]*nz + m[12];
     const y = m[1]*nx + m[5]*ny + m[9]*nz + m[13];
@@ -25,13 +26,13 @@ export function screenToRay(ndcX, ndcY, invProjView) {
     return [x/w, y/w, z/w];
   }
 
-  const near = unproject(ndcX, ndcY, 0);
-  const far = unproject(ndcX, ndcY, 1);
+  const near = unproject(ndcX, ndcY, 1);
+  const mid = unproject(ndcX, ndcY, 0.5);
 
   const origin = new Float64Array(near);
-  const dx = far[0] - near[0];
-  const dy = far[1] - near[1];
-  const dz = far[2] - near[2];
+  const dx = mid[0] - near[0];
+  const dy = mid[1] - near[1];
+  const dz = mid[2] - near[2];
   const len = Math.sqrt(dx*dx + dy*dy + dz*dz);
   const direction = new Float64Array([dx/len, dy/len, dz/len]);
 

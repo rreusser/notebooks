@@ -1,4 +1,4 @@
-import { invertMat4, computeFrustumCorners } from './math.js';
+import { invertMat4, computeFrustumCorners } from '../math/mat4.ts';
 
 export class FrustumOverlay {
   constructor(device, format, pixelRatio, createGPULines) {
@@ -41,7 +41,7 @@ fn getColor(lineCoord: vec2f, anchor: vec3f) -> vec4f {
       },
       join: 'bevel',
       cap: 'round',
-      depthStencil: { format: 'depth24plus', depthWriteEnabled: false, depthCompare: 'less' },
+      depthStencil: { format: 'depth32float', depthWriteEnabled: false, depthCompare: 'greater' },
       vertexShaderBody: frustumVS,
       fragmentShaderBody: frustumFS,
     });

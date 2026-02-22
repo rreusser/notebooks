@@ -1,33 +1,25 @@
-// Mapbox-style URL hash encoding for 3D camera state
-//
-// Format: #lon/lat/bearing/pitch/distance/elevation
-//   lon, lat    – geographic degrees of the orbit center
-//   bearing     – degrees clockwise from north (0 = north)
-//   pitch       – degrees above horizontal
-//   distance    – orbit distance (Mercator world units)
-//   elevation   – orbit center altitude (Mercator world units)
+import { lonToMercatorX, latToMercatorY } from '../tiles/tile-math.js';
+import type { CameraState } from '../core/types.ts';
 
-import { lonToMercatorX, latToMercatorY } from './tile-math.js';
-
-function mercatorXToLon(x) {
+function mercatorXToLon(x: number): number {
   return x * 360 - 180;
 }
 
-function mercatorYToLat(y) {
+function mercatorYToLat(y: number): number {
   return Math.atan(Math.sinh(Math.PI * (1 - 2 * y))) * 180 / Math.PI;
 }
 
-function phiToBearing(phi) {
+function phiToBearing(phi: number): number {
   const deg = Math.atan2(-Math.cos(phi), Math.sin(phi)) * 180 / Math.PI;
   return ((deg % 360) + 360) % 360;
 }
 
-function bearingToPhi(bearing) {
+function bearingToPhi(bearing: number): number {
   const rad = bearing * Math.PI / 180;
   return Math.atan2(Math.cos(rad), -Math.sin(rad));
 }
 
-export function cameraStateToHash(state) {
+export function cameraStateToHash(state: CameraState): string {
   const { center, distance, phi, theta } = state;
   const lon = mercatorXToLon(center[0]);
   const lat = mercatorYToLat(center[2]);
@@ -37,7 +29,7 @@ export function cameraStateToHash(state) {
   return `#${lon.toFixed(5)}/${lat.toFixed(5)}/${bearing.toFixed(1)}/${pitch.toFixed(1)}/${distance.toPrecision(6)}/${center[1].toPrecision(6)}`;
 }
 
-export function hashToCameraState(hash) {
+export function hashToCameraState(hash: string): CameraState | null {
   if (!hash || hash.length < 2) return null;
   const parts = hash.slice(1).split('/').map(Number);
   if (parts.length < 5 || parts.some(isNaN)) return null;

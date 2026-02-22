@@ -1,7 +1,7 @@
 // Line rendering for GeoJSON LineString features on terrain
 // Uses webgpu-instanced-lines library for high-quality line rendering
 
-import { atmosphereCode } from './shaders/atmosphere.js';
+import { atmosphereCode } from '../shaders/atmosphere.js';
 
 export function parseColor(hex) {
   const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(hex);
@@ -35,11 +35,10 @@ struct Vertex {
 fn getVertex(index: u32) -> Vertex {
   let p = positions[index];
   var clip = line.projectionView * p;
-  // Depth bias proportional to camera distance.
-  // A constant clip.z offset gives world-space lift ∝ eye distance, since
-  // NDC z maps as 1/z — the line clears terrain z-fighting at every zoom
-  // level without floating visibly at close range.
-  clip.z -= line.depthOffset;
+  // Reversed-z depth bias: add a fraction of clip.w so the NDC offset is
+  // constant (distance-independent), lifting lines above terrain at all
+  // zoom levels without floating visibly at close range.
+  clip.z += line.depthOffset * clip.w;
   return Vertex(clip, line.lineWidth * line.pixelRatio, p.xyz);
 }
 `;
@@ -151,10 +150,11 @@ export class LineLayer {
     this._device = device;
     this._globalUniformBuffer = globalUniformBuffer;
 
-    // Depth offset: constant clip.z bias gives world-space lift ∝ eye distance.
-    // With near=1e-5, clip.z ≈ d for nearby geometry, so the value must be
-    // very small to avoid overshooting at close range.
-    this._depthOffset = 2e-7;
+    // Reversed-z depth bias: multiplied by clip.w in the shader, giving a
+    // constant NDC-z offset that lifts lines above terrain uniformly.
+    // With reversed-z infinite far, NDC z = near/distance ≈ 0.001, so this
+    // must be small to avoid defeating terrain occlusion.
+    this._depthOffset = 1e-5;
 
     this._gpuLines = createGPULines(device, {
       colorTargets: {
@@ -167,9 +167,9 @@ export class LineLayer {
       join: 'bevel',
       cap: 'square',
       depthStencil: {
-        format: 'depth24plus',
+        format: 'depth32float',
         depthWriteEnabled: false,
-        depthCompare: 'less',
+        depthCompare: 'greater',
       },
       vertexShaderBody: lineVertexShaderBody,
       fragmentShaderBody: lineFragmentShaderBody,

@@ -1,4 +1,5 @@
-import { mercatorXToLon, mercatorYToLat } from './tile-math.js';
+function mercatorXToLon(mx) { return mx * 360 - 180; }
+function mercatorYToLat(my) { return Math.atan(Math.sinh(Math.PI * (1 - 2 * my))) * 180 / Math.PI; }
 
 const EARTH_RADIUS_M = 6371000;
 const M_TO_FT = 3.28084;

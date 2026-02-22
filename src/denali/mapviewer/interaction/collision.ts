@@ -1,19 +1,32 @@
-// Collision detection for feature layers
-// Greedy front-to-back AABB overlap test in screen space
+export interface CollisionItem {
+  layerIndex: number;
+  featureIndex: number;
+  screenX: number;
+  screenY: number;
+  halfW: number;
+  halfH: number;
+  depth: number;
+  visible?: boolean;
+}
 
-/**
- * Run collision detection on an array of screen-space items.
- *
- * @param {Array<{layerIndex: number, featureIndex: number, screenX: number, screenY: number, halfW: number, halfH: number, depth: number}>} items
- *   All coordinates in CSS pixels. depth = NDC z/w (smaller = closer).
- * @returns {{ items: Array<{...item, visible: boolean}>, hiddenByLayer: Map<number, Set<number>> }}
- */
-export function runCollision(items, buffer = 0, screenW = Infinity, screenH = Infinity) {
-  // Sort front-to-back (smaller depth = closer)
-  items.sort((a, b) => a.depth - b.depth);
+interface PlacedBox {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+}
 
-  const placed = [];
-  const hiddenByLayer = new Map();
+export function runCollision(
+  items: CollisionItem[],
+  buffer: number = 0,
+  screenW: number = Infinity,
+  screenH: number = Infinity
+): { items: CollisionItem[]; hiddenByLayer: Map<number, Set<number>> } {
+  // Sort front-to-back (reversed-z: larger depth = closer)
+  items.sort((a, b) => b.depth - a.depth);
+
+  const placed: PlacedBox[] = [];
+  const hiddenByLayer = new Map<number, Set<number>>();
 
   for (const item of items) {
     // Expand test bounds by buffer so boxes maintain minimum spacing

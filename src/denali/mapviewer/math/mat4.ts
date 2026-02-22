@@ -1,4 +1,6 @@
-export function invertMat4(out, m) {
+type Mat4 = Float64Array | number[];
+
+export function invertMat4(out: Mat4, m: Mat4): boolean {
   const [m0,m1,m2,m3,m4,m5,m6,m7,m8,m9,m10,m11,m12,m13,m14,m15] = m;
   const b0=m0*m5-m1*m4, b1=m0*m6-m2*m4, b2=m0*m7-m3*m4, b3=m1*m6-m2*m5;
   const b4=m1*m7-m3*m5, b5=m2*m7-m3*m6, b6=m8*m13-m9*m12, b7=m8*m14-m10*m12;
@@ -17,17 +19,20 @@ export function invertMat4(out, m) {
   return true;
 }
 
-export function computeFrustumCorners(invPV) {
-  function unp(nx, ny, nz) {
+export function computeFrustumCorners(invPV: Mat4): Float32Array {
+  function unp(nx: number, ny: number, nz: number): [number, number, number] {
     const x=invPV[0]*nx+invPV[4]*ny+invPV[8]*nz+invPV[12];
     const y=invPV[1]*nx+invPV[5]*ny+invPV[9]*nz+invPV[13];
     const z=invPV[2]*nx+invPV[6]*ny+invPV[10]*nz+invPV[14];
     const w=invPV[3]*nx+invPV[7]*ny+invPV[11]*nz+invPV[15];
     return [x/w, y/w, z/w];
   }
-  const zNear = 0.3, zFar = 0.99;
+  // Reversed-z infinite far: NDC z = projNear / distance, so z=1 is the near
+  // plane and z→0 is infinity.  Use z=1 for near and a small z for far to
+  // visualize the frustum out to ~100× camera distance.
+  const zNear = 1.0, zFar = 1e-5;
   const corners = new Float32Array(24);
-  const ndcXY = [[-1,-1],[1,-1],[1,1],[-1,1]];
+  const ndcXY: [number, number][] = [[-1,-1],[1,-1],[1,1],[-1,1]];
   for (let i = 0; i < 4; i++) {
     const [nx, ny] = ndcXY[i];
     const pNear = unp(nx, ny, zNear);

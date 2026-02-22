@@ -1,16 +1,48 @@
-// GeoJSON point data source
-// Loads GeoJSON, projects Point coordinates to Mercator, stores flat array
+import { lonToMercatorX, latToMercatorY } from '../tiles/tile-math.js';
 
-import { lonToMercatorX, latToMercatorY } from './tile-math.js';
+export interface PointFeature {
+  mercatorX: number;
+  mercatorY: number;
+  lon: number;
+  lat: number;
+  properties: Record<string, any>;
+}
+
+export interface LineCoordinate {
+  mercatorX: number;
+  mercatorY: number;
+  elevation: number;
+  lon: number;
+  lat: number;
+}
+
+export interface LineFeature {
+  coordinates: LineCoordinate[];
+  properties: Record<string, any>;
+}
+
+interface SimplifyPoint {
+  x: number;
+  y: number;
+  elev: number;
+}
+
+interface LoadOptions {
+  simplify?: number;
+  simplifyFn?: (pts: SimplifyPoint[], tolerance: number, highQuality: boolean) => SimplifyPoint[];
+}
 
 export class GeoJSONSource {
+  features: PointFeature[];
+  lineFeatures: LineFeature[];
+
   constructor() {
-    this.features = [];     // Point features: { mercatorX, mercatorY, lon, lat, properties }
-    this.lineFeatures = []; // LineString features: { coordinates: [{mercatorX, mercatorY, elevation, lon, lat}], properties }
+    this.features = [];
+    this.lineFeatures = [];
   }
 
-  async load(urlOrData, options = {}) {
-    let geojson;
+  async load(urlOrData: string | any, options: LoadOptions = {}): Promise<this> {
+    let geojson: any;
     if (typeof urlOrData === 'string') {
       const res = await fetch(urlOrData);
       geojson = await res.json();
@@ -35,17 +67,15 @@ export class GeoJSONSource {
           properties: feature.properties || {},
         });
       } else if (feature.geometry.type === 'LineString' || feature.geometry.type === 'MultiLineString') {
-        // Normalize to array-of-rings so LineString and MultiLineString share one path
-        const rings = feature.geometry.type === 'MultiLineString'
+        const rings: number[][] = feature.geometry.type === 'MultiLineString'
           ? feature.geometry.coordinates
           : [feature.geometry.coordinates];
 
-        // Flatten rings into a single coordinate array, deduplicating shared endpoints
-        let rawCoords = [];
+        let rawCoords: number[][] = [];
         for (const ring of rings) {
           for (const pt of ring) {
             const prev = rawCoords[rawCoords.length - 1];
-            if (prev && prev[0] === pt[0] && prev[1] === pt[1]) continue; // skip duplicate
+            if (prev && prev[0] === pt[0] && prev[1] === pt[1]) continue;
             rawCoords.push(pt);
           }
         }
@@ -56,7 +86,7 @@ export class GeoJSONSource {
           rawCoords = simplified.map(p => [p.x, p.y, p.elev]);
         }
 
-        const coords = rawCoords.map(([lon, lat, elev]) => ({
+        const coords: LineCoordinate[] = rawCoords.map(([lon, lat, elev]) => ({
           mercatorX: lonToMercatorX(lon),
           mercatorY: latToMercatorY(lat),
           elevation: elev || 0,
