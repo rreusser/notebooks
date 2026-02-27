@@ -494,10 +494,9 @@ invalidation.then(() => gpuLines.destroy());
   </script>
 
   <script id="camera-setup" type="module">
-// Simple orbital camera using mouse drag
-// phi = azimuthal angle (rotation around Y axis)
-// theta = polar angle (elevation from horizontal plane, positive = looking down)
-const cameraState = {
+import { createCameraController } from './lib/camera-controller.js';
+
+const camera = createCameraController(stack.elements.svg, {
   phi: 0.8,
   theta: 0.3,
   distance: 7,
@@ -505,157 +504,9 @@ const cameraState = {
   fov: Math.PI / 4,
   near: 0.01,
   far: 100
-};
-
-// Pre-allocate matrices to avoid per-frame allocations
-const _view = new Float32Array(16);
-const _proj = new Float32Array(16);
-const _projView = new Float32Array(16);
-
-function getProjectionViewMatrix(aspectRatio) {
-  const { phi, theta, distance, center, fov, near, far } = cameraState;
-
-  // Camera position in spherical coordinates
-  const x = center[0] + distance * Math.cos(theta) * Math.cos(phi);
-  const y = center[1] + distance * Math.sin(theta);
-  const z = center[2] + distance * Math.cos(theta) * Math.sin(phi);
-
-  // View matrix (lookAt)
-  const eyeX = x, eyeY = y, eyeZ = z;
-  let fwdX = center[0] - x, fwdY = center[1] - y, fwdZ = center[2] - z;
-  const len = Math.sqrt(fwdX*fwdX + fwdY*fwdY + fwdZ*fwdZ);
-  fwdX /= len; fwdY /= len; fwdZ /= len;
-
-  // right = forward × up (up = 0,1,0)
-  let rightX = fwdY * 0 - fwdZ * 1;
-  let rightY = fwdZ * 0 - fwdX * 0;
-  let rightZ = fwdX * 1 - fwdY * 0;
-  const rlen = Math.sqrt(rightX*rightX + rightY*rightY + rightZ*rightZ);
-  rightX /= rlen; rightY /= rlen; rightZ /= rlen;
-
-  // newUp = right × forward
-  const upX = rightY * fwdZ - rightZ * fwdY;
-  const upY = rightZ * fwdX - rightX * fwdZ;
-  const upZ = rightX * fwdY - rightY * fwdX;
-
-  // View matrix (reuse pre-allocated array)
-  _view[0] = rightX; _view[1] = upX; _view[2] = -fwdX; _view[3] = 0;
-  _view[4] = rightY; _view[5] = upY; _view[6] = -fwdY; _view[7] = 0;
-  _view[8] = rightZ; _view[9] = upZ; _view[10] = -fwdZ; _view[11] = 0;
-  _view[12] = -(rightX*eyeX + rightY*eyeY + rightZ*eyeZ);
-  _view[13] = -(upX*eyeX + upY*eyeY + upZ*eyeZ);
-  _view[14] = (fwdX*eyeX + fwdY*eyeY + fwdZ*eyeZ);
-  _view[15] = 1;
-
-  // Projection matrix (perspective, reuse pre-allocated array)
-  const f = 1.0 / Math.tan(fov / 2);
-  const rangeInv = 1 / (near - far);
-  _proj[0] = f / aspectRatio; _proj[1] = 0; _proj[2] = 0; _proj[3] = 0;
-  _proj[4] = 0; _proj[5] = f; _proj[6] = 0; _proj[7] = 0;
-  _proj[8] = 0; _proj[9] = 0; _proj[10] = (near + far) * rangeInv; _proj[11] = -1;
-  _proj[12] = 0; _proj[13] = 0; _proj[14] = near * far * rangeInv * 2; _proj[15] = 0;
-
-  // Multiply proj * view (reuse pre-allocated result)
-  for (let i = 0; i < 4; i++) {
-    for (let j = 0; j < 4; j++) {
-      let sum = 0;
-      for (let k = 0; k < 4; k++) {
-        sum += _proj[i + k*4] * _view[k + j*4];
-      }
-      _projView[i + j*4] = sum;
-    }
-  }
-
-  return _projView;
-}
-
-// Wire up mouse/touch drag for camera rotation
-const svg = d3.select(stack.elements.svg);
-let isDragging = false;
-let lastX = 0, lastY = 0;
-
-function onMouseMove(event) {
-  if (!isDragging) return;
-  const dx = event.clientX - lastX;
-  const dy = event.clientY - lastY;
-  cameraState.phi += dx * 0.01;
-  cameraState.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, cameraState.theta + dy * 0.01));
-  lastX = event.clientX;
-  lastY = event.clientY;
-  renderState.dirty = true;
-}
-
-function onMouseUp() {
-  if (!isDragging) return;
-  isDragging = false;
-  svg.style('cursor', 'grab');
-  window.removeEventListener('mousemove', onMouseMove);
-  window.removeEventListener('mouseup', onMouseUp);
-}
-
-svg.on('mousedown', (event) => {
-  event.preventDefault();
-  isDragging = true;
-  lastX = event.clientX;
-  lastY = event.clientY;
-  svg.style('cursor', 'grabbing');
-  window.addEventListener('mousemove', onMouseMove);
-  window.addEventListener('mouseup', onMouseUp);
 });
 
-svg.on('wheel', (event) => {
-  event.preventDefault();
-  cameraState.distance *= 1 + event.deltaY * 0.001;
-  cameraState.distance = Math.max(1, Math.min(50, cameraState.distance));
-  renderState.dirty = true;
-});
-
-// Touch support: single finger to rotate, pinch to zoom
-let lastTouchDist = 0;
-
-svg.on('touchstart', (event) => {
-  event.preventDefault();
-  if (event.touches.length === 1) {
-    isDragging = true;
-    lastX = event.touches[0].clientX;
-    lastY = event.touches[0].clientY;
-  } else if (event.touches.length === 2) {
-    // Pinch-to-zoom: record initial distance between fingers
-    const dx = event.touches[1].clientX - event.touches[0].clientX;
-    const dy = event.touches[1].clientY - event.touches[0].clientY;
-    lastTouchDist = Math.sqrt(dx * dx + dy * dy);
-  }
-});
-
-svg.on('touchmove', (event) => {
-  event.preventDefault();
-  if (event.touches.length === 1 && isDragging) {
-    const dx = event.touches[0].clientX - lastX;
-    const dy = event.touches[0].clientY - lastY;
-    cameraState.phi += dx * 0.01;
-    cameraState.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, cameraState.theta + dy * 0.01));
-    lastX = event.touches[0].clientX;
-    lastY = event.touches[0].clientY;
-    renderState.dirty = true;
-  } else if (event.touches.length === 2) {
-    // Pinch-to-zoom
-    const dx = event.touches[1].clientX - event.touches[0].clientX;
-    const dy = event.touches[1].clientY - event.touches[0].clientY;
-    const dist = Math.sqrt(dx * dx + dy * dy);
-    if (lastTouchDist > 0) {
-      const scale = lastTouchDist / dist;
-      cameraState.distance *= scale;
-      cameraState.distance = Math.max(1, Math.min(50, cameraState.distance));
-      renderState.dirty = true;
-    }
-    lastTouchDist = dist;
-  }
-});
-
-svg.on('touchend', (event) => {
-  isDragging = false;
-  lastTouchDist = 0;
-});
+invalidation.then(() => camera.destroy());
   </script>
   <script id="line-rendering" type="module">
 // Vertex shader that loads from the state buffer
@@ -856,9 +707,9 @@ const loop = createFrameLoop(() => {
   }
 
   // Render
-  if (renderState.dirty) {
-    const aspectRatio = canvas.width / canvas.height;
-    const projView = getProjectionViewMatrix(aspectRatio);
+  const aspectRatio = canvas.width / canvas.height;
+  const { projectionView: projView, dirty: cameraDirty } = camera.update(aspectRatio);
+  if (renderState.dirty || cameraDirty) {
     device.queue.writeBuffer(projViewBuffer, 0, projView);
 
     // Update line uniforms (stepOffset, stepCount, particleCount, width)

@@ -1,4 +1,5 @@
-import { createTerrainMesh } from '../tiles/mesh.ts';
+import { createTerrainMeshPool } from '../tiles/mesh.ts';
+import type { TerrainMeshPool } from '../tiles/mesh.ts';
 
 export class GPUContext {
   device!: GPUDevice;
@@ -28,8 +29,8 @@ export class GPUContext {
   uniformBuffer!: GPUBuffer;
   uniformBindGroup!: GPUBindGroup;
 
-  // Terrain mesh
-  mesh: any;
+  // Terrain mesh pool
+  meshPool!: TerrainMeshPool;
 
   // Depth texture
   _depthTexture: GPUTexture | null = null;
@@ -43,7 +44,7 @@ export class GPUContext {
 
     const device = this.device;
 
-    this.mesh = createTerrainMesh(device);
+    this.meshPool = createTerrainMeshPool(device);
 
     this.imagerySampler = device.createSampler({
       magFilter: 'linear', minFilter: 'linear', mipmapFilter: 'nearest',
@@ -112,8 +113,12 @@ export class GPUContext {
     });
     this.uniformBindGroup = device.createBindGroup({
       layout: this.uniformBGL,
-      entries: [{ binding: 0, resource: { buffer: this.uniformBuffer, size: 208 } }],
+      entries: [{ binding: 0, resource: { buffer: this.uniformBuffer, size: 224 } }],
     });
+  }
+
+  get mesh() {
+    return this.meshPool.getMesh(512);
   }
 
   ensureDepthTexture(w: number, h: number) {
@@ -130,8 +135,7 @@ export class GPUContext {
 
   destroy() {
     if (this._depthTexture) this._depthTexture.destroy();
-    this.mesh.vertexBuffer.destroy();
-    this.mesh.indexBuffer.destroy();
+    this.meshPool.destroy();
     this.uniformBuffer.destroy();
     this.globalUniformBuffer.destroy();
     this.fallbackImageryTexture.destroy();

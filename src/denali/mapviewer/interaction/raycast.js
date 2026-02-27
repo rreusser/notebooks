@@ -59,15 +59,13 @@ export function raycastTerrain({ origin, direction, bvh, tileCache, tileList, ve
   const candidates = bvh.rayIntersect(ox, oy, oz, dx, dy, dz);
   if (candidates.length === 0) return null;
 
-  let bestT = Infinity;
-  let bestWorldPos = null;
-  let bestTile = null;
+  // Collect all hits — don't early-terminate, because the BVH may contain
+  // overlapping tiles at different zoom levels (coarse + fine). We need all
+  // hits to prefer the fine tile's intersection over the coarse tile's.
+  const hits = [];
 
   for (let i = 0; i < candidates.length; i++) {
-    const { index, tNear } = candidates[i];
-
-    // Early termination: if this candidate's entry distance is beyond our best hit, stop
-    if (tNear >= bestT) break;
+    const { index } = candidates[i];
 
     const tile = tileList[index];
     if (!tile) continue;
@@ -80,15 +78,6 @@ export function raycastTerrain({ origin, direction, bvh, tileCache, tileList, ve
     const vertExag = verticalExaggeration;
     const scale = elevScale * vertExag;
     const tileScale = 512 * (1 << tile.z);
-
-    // Transform ray to tile-local patch coordinates:
-    // World model matrix: x_world = col / (512 * 2^z) + tileX / 2^z
-    //                     y_world = elev * elevScale * vertExag
-    //                     z_world = row / (512 * 2^z) + tileY / 2^z
-    //
-    // Inverse: col = (x_world - tileX / 2^z) * 512 * 2^z
-    //          elev = y_world / (elevScale * vertExag)
-    //          row = (z_world - tileY / 2^z) * 512 * 2^z
 
     const tileOriginX = tile.x / (1 << tile.z);
     const tileOriginZ = tile.y / (1 << tile.z);
@@ -109,7 +98,6 @@ export function raycastTerrain({ origin, direction, bvh, tileCache, tileList, ve
 
     if (!hit) continue;
 
-    // Transform hit point back to world space
     const localHitX = localOx + localDx * hit.t;
     const localHitY = localOy + localDy * hit.t;
     const localHitZ = localOz + localDz * hit.t;
@@ -118,8 +106,6 @@ export function raycastTerrain({ origin, direction, bvh, tileCache, tileList, ve
     const worldHitY = localHitY * scale;
     const worldHitZ = localHitZ / tileScale + tileOriginZ;
 
-    // Compute world-space t from the original ray
-    // Pick the component with largest direction magnitude for numerical stability
     let worldT;
     const absDx = Math.abs(dx), absDy = Math.abs(dy), absDz = Math.abs(dz);
     if (absDx >= absDy && absDx >= absDz) {
@@ -130,13 +116,38 @@ export function raycastTerrain({ origin, direction, bvh, tileCache, tileList, ve
       worldT = (worldHitZ - oz) / dz;
     }
 
-    if (worldT > 0 && worldT < bestT) {
-      bestT = worldT;
-      bestWorldPos = [worldHitX, worldHitY, worldHitZ];
-      bestTile = tile;
+    if (worldT > 0) {
+      hits.push({ worldPos: [worldHitX, worldHitY, worldHitZ], t: worldT, tile });
     }
   }
 
-  if (!bestWorldPos) return null;
-  return { worldPos: bestWorldPos, t: bestT, tile: bestTile };
+  if (hits.length === 0) return null;
+
+  // Among overlapping tiles (ancestor-descendant pairs), prefer the descendant's
+  // hit. A hit is "dominated" if another hit comes from a more detailed tile
+  // covering the same area.
+  let bestT = Infinity;
+  let bestResult = null;
+  for (let i = 0; i < hits.length; i++) {
+    const h = hits[i];
+    let dominated = false;
+    for (let j = 0; j < hits.length; j++) {
+      if (i === j) continue;
+      const other = hits[j];
+      if (other.tile.z > h.tile.z) {
+        const d = other.tile.z - h.tile.z;
+        if ((other.tile.x >> d) === h.tile.x && (other.tile.y >> d) === h.tile.y) {
+          dominated = true;
+          break;
+        }
+      }
+    }
+    if (!dominated && h.t < bestT) {
+      bestT = h.t;
+      bestResult = h;
+    }
+  }
+
+  if (!bestResult) return null;
+  return { worldPos: bestResult.worldPos, t: bestResult.t, tile: bestResult.tile };
 }

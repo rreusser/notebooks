@@ -99,7 +99,7 @@ This demo shows how to create plot axes with:
   </script>
 
   <script id="3" type="module">
-    import { createGPUTextContext, loadFontAtlas } from './webgpu-text.ts';
+    import { createGPUText, loadFontAtlas } from './webgpu-text.ts';
 
     const fontAtlas = await loadFontAtlas(device, {
       atlasUrl: './roboto-regular.png',
@@ -108,7 +108,7 @@ This demo shows how to create plot axes with:
 
     invalidation.then(() => fontAtlas.texture.destroy());
 
-    const textContext = createGPUTextContext(device, {
+    const textContext = createGPUText(device, {
       fontAtlas,
       colorTargets: {
         format: canvasFormat,

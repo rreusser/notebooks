@@ -126,7 +126,7 @@ This notebook demonstrates instanced text rendering using WebGPU. Text spans are
   </script>
 
   <script id="4" type="module">
-    import { createGPUTextContext, loadFontAtlas } from './webgpu-text.ts';
+    import { createGPUText, loadFontAtlas } from './webgpu-text.ts';
 
     // Load pre-generated MSDF font atlas (generated via Docker msdf-atlas-gen)
     const fontAtlas = await loadFontAtlas(device, {
@@ -137,7 +137,7 @@ This notebook demonstrates instanced text rendering using WebGPU. Text spans are
     invalidation.then(() => fontAtlas.texture.destroy());
 
     // Create text context with alpha blending
-    const textContext = createGPUTextContext(device, {
+    const textContext = createGPUText(device, {
       fontAtlas,
       colorTargets: {
         format: canvasFormat,
@@ -431,7 +431,7 @@ Click the button to add and remove text spans dynamically.
 ## API Usage
 
 ```javascript
-import { createGPUTextContext, loadFontAtlas } from './webgpu-text.ts';
+import { createGPUText, loadFontAtlas } from './webgpu-text.ts';
 
 // Load a pre-generated font atlas (via Docker msdf-atlas-gen)
 const fontAtlas = await loadFontAtlas(device, {
@@ -440,7 +440,7 @@ const fontAtlas = await loadFontAtlas(device, {
 });
 
 // Create the text context
-const textContext = createGPUTextContext(device, {
+const textContext = createGPUText(device, {
   fontAtlas,
   colorTargets: { format: canvasFormat },
 });
@@ -483,7 +483,7 @@ You can provide a custom WGSL function to transform vertices after text shaping.
 This is useful for placing text on 3D planes, curves, or other surfaces.
 
 ```javascript
-const textContext = createGPUTextContext(device, {
+const textContext = createGPUText(device, {
   fontAtlas,
   colorTargets: { format: canvasFormat },
   vertexProjection: /* wgsl */`

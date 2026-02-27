@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Wed, 18 Feb 2026 01:56:43 GMT</lastBuildDate>
+    <lastBuildDate>Fri, 27 Feb 2026 06:06:44 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Denali Terrain</title>
@@ -262,6 +262,14 @@
       <pubDate>Mon, 29 Jun 2020 07:00:00 GMT</pubDate>
       <description>An interactive visualization of the Bednorz and Bednorz analytic sphere eversion using scroll-driven animation</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/sphere-eversion.jpg" medium="image" />
+    </item>
+    <item>
+      <title>Transparency for 3D Surfaces</title>
+      <link>https://rreusser.github.io/notebooks/transparency-for-3d-surfaces/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/transparency-for-3d-surfaces/</guid>
+      <pubDate>Sat, 13 Jun 2020 07:00:00 GMT</pubDate>
+      <description>A comparison of three approaches to rendering transparent 3D surfaces in WebGPU, including a simple two-pass hack that draws gridlines and edges through solid geometry, weighted blended order-independent transparency, and depth peeling.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/transparency-for-3d-surfaces.jpg" medium="image" />
     </item>
     <item>
       <title>Toiletpaperfullerenes and Charmin Nanotubes</title>

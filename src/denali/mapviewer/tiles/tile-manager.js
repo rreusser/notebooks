@@ -328,6 +328,20 @@ export class TileManager {
     }
   }
 
+  getFlatTileEntry() {
+    this._ensureFlatTile();
+    return {
+      texture: this._flatTileTexture,
+      bindGroup: this._flatTileBindGroup,
+      elevations: this._flatTileElevations,
+      quadtree: null,
+      minElevation: 0,
+      maxElevation: 0,
+      lastUsed: performance.now(),
+      isFlat: true,
+    };
+  }
+
   ensureQuadtree(z, x, y) {
     const entry = this.cache.get(this._key(z, x, y));
     if (!entry) return null;
@@ -355,10 +369,18 @@ export class TileManager {
   }
 
   evict() {
-    while (this.cache.size > MAX_CACHE) {
+    // Count only non-flat tiles toward the cache limit. Flat tiles share a
+    // single GPU texture and are essentially free — evicting them causes
+    // tiles at maxTerrainZoom to disappear with no recovery path.
+    let realCount = 0;
+    for (const entry of this.cache.values()) {
+      if (!entry.isFlat) realCount++;
+    }
+    while (realCount > MAX_CACHE) {
       let oldestKey = null, oldestTime = Infinity;
       for (const [key, entry] of this.cache) {
         if (this.wantedKeys.has(key)) continue;
+        if (entry.isFlat) continue;
         if (entry.lastUsed < oldestTime) {
           oldestTime = entry.lastUsed;
           oldestKey = key;
@@ -366,8 +388,9 @@ export class TileManager {
       }
       if (!oldestKey) break; // all remaining tiles are wanted
       const entry = this.cache.get(oldestKey);
-      if (!entry.isFlat) entry.texture.destroy();
+      entry.texture.destroy();
       this.cache.delete(oldestKey);
+      realCount--;
     }
   }
 

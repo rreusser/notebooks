@@ -55,6 +55,7 @@ export interface CameraState {
 export interface Settings {
   verticalExaggeration: number;
   densityThreshold: number;
+  imageryDensityThreshold: number;
   showTileBorders: boolean;
   freezeCoverage: boolean;
   enableCollision: boolean;

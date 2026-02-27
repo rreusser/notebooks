@@ -1,7 +1,7 @@
 // Text label rendering for GeoJSON point features on terrain
 // Uses webgpu-text library for MSDF-based text rendering
 
-import { createGPUTextContext } from '../lib/webgpu-text/webgpu-text.ts';
+import { createGPUText } from '../lib/webgpu-text/webgpu-text.ts';
 import { atmosphereCode } from '../shaders/atmosphere.js';
 
 function parseColor(hex) {
@@ -10,7 +10,8 @@ function parseColor(hex) {
   return [parseInt(m[1], 16) / 255, parseInt(m[2], 16) / 255, parseInt(m[3], 16) / 255, 1];
 }
 
-// Custom fragment shader body that applies atmosphere scattering to text
+// Custom fragment shader body that applies atmosphere scattering to text.
+// msdfMedian3, msdfScreenPxRange, and msdfComposite are injected by the library.
 const textFragmentShaderBody = /* wgsl */`
 ${atmosphereCode}
 
@@ -46,44 +47,14 @@ fn applyAtmosphereText(color: vec3<f32>, world_pos: vec3<f32>) -> vec3<f32> {
   return color * T + inscatter * (vec3<f32>(1.0) - T);
 }
 
-fn median3(r: f32, g: f32, b: f32) -> f32 {
-  return max(min(r, g), min(max(r, g), b));
-}
-
-fn screenPxRange(uv: vec2f) -> f32 {
-  let unitRange = uniforms.fieldRange / uniforms.atlasSize;
-  let screenTexSize = 1.0 / fwidth(uv);
-  return max(0.5 * dot(unitRange, screenTexSize), 1.0);
-}
-
 fn getColor(uv: vec2f, color: vec4f, strokeColor: vec4f, strokeWidth: f32, msdf: vec4f, anchor: vec4f) -> vec4f {
-  let sd = median3(msdf.r, msdf.g, msdf.b);
-  let pxRange = screenPxRange(uv);
-  let screenDist = pxRange * (sd - 0.5);
-  let fillAlpha = clamp(screenDist + 0.5, 0.0, 1.0);
+  let base = msdfComposite(uv, color, strokeColor, strokeWidth, msdf);
+  if (base.a <= 0.0) { return vec4f(0.0); }
 
-  var finalRgb = color.rgb;
-  var finalAlpha = fillAlpha * color.a;
-
-  let hasStroke = strokeWidth > 0.0 && strokeColor.a > 0.0;
-  if (hasStroke) {
-    let strokeOuterDist = screenDist + strokeWidth;
-    let strokeAlpha = clamp(strokeOuterDist + 0.5, 0.0, 1.0);
-    finalAlpha = fillAlpha * color.a + strokeAlpha * strokeColor.a * (1.0 - fillAlpha * color.a);
-    if (finalAlpha > 0.0) {
-      finalRgb = (color.rgb * color.a * fillAlpha + strokeColor.rgb * strokeColor.a * strokeAlpha * (1.0 - fillAlpha * color.a)) / finalAlpha;
-    }
-  }
-
-  if (finalAlpha <= 0.0) {
-    return vec4f(0.0);
-  }
-
-  // Apply atmosphere scattering
-  let linear_c = srgbToLinear(finalRgb);
+  let linear_c = srgbToLinear(base.rgb);
   let atmos_c = applyAtmosphereText(linear_c, anchor.xyz);
   let mixed = mix(linear_c, atmos_c, textAtmos.atmosphere_opacity);
-  return vec4f(linearToSrgb(acesTonemap(mixed)), finalAlpha);
+  return vec4f(linearToSrgb(acesTonemap(mixed)), base.a);
 }
 `;
 
@@ -118,7 +89,7 @@ export class TextLayer {
     this._device = device;
     this._fontAtlas = fontAtlas;
 
-    this._textContext = createGPUTextContext(device, {
+    this._textContext = createGPUText(device, {
       fontAtlas,
       fragmentShaderBody: textFragmentShaderBody,
       colorTargets: {
@@ -147,8 +118,6 @@ export class TextLayer {
       ],
     });
 
-    const scale = this._fontSize / fontAtlas.fontSize;
-
     // Create a span for each feature with a text field
     for (let si = 0; si < this._source.features.length; si++) {
       const f = this._source.features[si];
@@ -167,21 +136,8 @@ export class TextLayer {
       });
 
       // Cache text metrics for collision detection
-      const str = String(text);
-      let textWidth = 0;
-      let ascent = 0;
-      let descent = 0;
-      for (const ch of str) {
-        const glyph = fontAtlas.glyphs.get(ch);
-        if (!glyph) continue;
-        textWidth += glyph.xAdvance * scale;
-        const glyphTop = -glyph.yOffset * scale;
-        const glyphBottom = glyph.height * scale - glyphTop;
-        if (glyphTop > ascent) ascent = glyphTop;
-        if (glyphBottom > descent) descent = glyphBottom;
-      }
-
-      this._spans.push({ span, feature: f, sourceIndex: si, textWidth, ascent, descent });
+      const metrics = this._textContext.measureText(String(text), this._fontSize);
+      this._spans.push({ span, feature: f, sourceIndex: si, textWidth: metrics.width, ascent: metrics.ascent, descent: metrics.descent });
     }
 
     this._ready = true;

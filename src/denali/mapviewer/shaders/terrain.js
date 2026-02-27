@@ -2,7 +2,7 @@
 
 import { atmosphereCode } from './atmosphere.js';
 
-export const terrainVertexShader = /* wgsl */`
+const uniformStruct = /* wgsl */`
 struct Uniforms {
   mvp: mat4x4<f32>,
   model: mat4x4<f32>,
@@ -23,7 +23,14 @@ struct Uniforms {
   slope_aspect_opacity: f32,
   treeline_lower: f32,
   treeline_upper: f32,
+  grid_data_size: f32,
+  terrain_uv_offset: vec2<f32>,
+  terrain_uv_scale: vec2<f32>,
+  terrain_cell_size: f32,
 };
+`;
+
+export const terrainVertexShader = uniformStruct + /* wgsl */`
 
 struct GlobalUniforms {
   camera_position: vec4<f32>,
@@ -57,30 +64,41 @@ fn loadElevation(coord: vec2<i32>) -> f32 {
 fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   var out: VertexOutput;
 
-  // Raw coords [0, 516]. The outer ring (0 and >=515) is a skirt that hangs
+  let D = uniforms.grid_data_size;
+
+  // Raw coords [0, D+4]. The outer ring (0 and >= D+3) is a skirt that hangs
   // below the tile edge to hide gaps between tiles at different LOD levels.
-  // Inner ring (1 and >=514) are boundary vertices at tile edges.
-  // Interior (2-513) are texel centers at u=0.5..511.5.
+  // Inner ring (1 and D+2) are boundary vertices at tile edges.
+  // Interior (2 to D+1) are texel centers.
   let raw_u = i32(grid_pos.x);
   let raw_v = i32(grid_pos.y);
   let inner_u = raw_u - 1;
   let inner_v = raw_v - 1;
 
-  // Grid position: interior texel k at u = k - 0.5; boundaries at 0 and 512
-  let u = clamp(f32(inner_u) - 0.5, 0.0, 512.0);
-  let v = clamp(f32(inner_v) - 0.5, 0.0, 512.0);
+  // Grid position: interior texel k at u = k - 0.5; boundaries at 0 and D
+  let u = clamp(f32(inner_u) - 0.5, 0.0, D);
+  let v = clamp(f32(inner_v) - 0.5, 0.0, D);
 
-  // Texel indices for elevation sampling (using inner coords 0-514).
+  // Terrain texel coordinates: offset local inner coords into the parent
+  // elevation texture. When rendering a sub-tile of a coarser terrain tile,
+  // terrain_texel_offset shifts sampling into the correct sub-region of the
+  // 514x514 elevation texture. Each mesh vertex maps 1:1 onto a terrain texel.
+  let terrain_texel_offset_u = i32(round(uniforms.terrain_uv_offset.x * 512.0));
+  let terrain_texel_offset_v = i32(round(uniforms.terrain_uv_offset.y * 512.0));
+  let t_inner_u = inner_u + terrain_texel_offset_u;
+  let t_inner_v = inner_v + terrain_texel_offset_v;
+
+  // Texel indices for elevation sampling (using terrain-space inner coords).
   // Interior: single texel. Boundary/skirt (<=0 or >=513): average two texels.
-  var tex_u_a: i32 = inner_u;
-  var tex_u_b: i32 = inner_u;
-  if (inner_u <= 0) { tex_u_a = 0; tex_u_b = 1; }
-  else if (inner_u >= 513) { tex_u_a = 512; tex_u_b = 513; }
+  var tex_u_a: i32 = t_inner_u;
+  var tex_u_b: i32 = t_inner_u;
+  if (t_inner_u <= 0) { tex_u_a = 0; tex_u_b = 1; }
+  else if (t_inner_u >= 513) { tex_u_a = 512; tex_u_b = 513; }
 
-  var tex_v_a: i32 = inner_v;
-  var tex_v_b: i32 = inner_v;
-  if (inner_v <= 0) { tex_v_a = 0; tex_v_b = 1; }
-  else if (inner_v >= 513) { tex_v_a = 512; tex_v_b = 513; }
+  var tex_v_a: i32 = t_inner_v;
+  var tex_v_b: i32 = t_inner_v;
+  if (t_inner_v <= 0) { tex_v_a = 0; tex_v_b = 1; }
+  else if (t_inner_v >= 513) { tex_v_a = 512; tex_v_b = 513; }
 
   // Average 1, 2, or 4 texels depending on edge/corner
   let elevation = (
@@ -92,12 +110,13 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
 
   let pos = vec4<f32>(u, elevation, v, 1.0);
   out.position = uniforms.mvp * pos;
-  out.uv = vec2<f32>((u + 1.0) / 514.0, (v + 1.0) / 514.0);
+  out.uv = vec2<f32>((u + 1.0) / (D + 2.0), (v + 1.0) / (D + 2.0));
   out.world_position = (uniforms.model * pos).xyz;
 
   // Skirt: drop position in model space proportional to camera distance.
   // Elevation varying is also lowered so contours don't run down the skirt face.
-  let is_skirt = (raw_u == 0) || (raw_u >= 515) || (raw_v == 0) || (raw_v >= 515);
+  let Di = i32(D);
+  let is_skirt = (raw_u == 0) || (raw_u >= Di + 3) || (raw_v == 0) || (raw_v >= Di + 3);
   var skirt_drop = 0.0;
   if (is_skirt) {
     let mpu = globals.sun_direction.w;
@@ -107,22 +126,22 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
     out.position = uniforms.mvp * skirt_pos;
   }
 
-  // Hillshade: compute normal from neighbor elevations.
+  // Hillshade: compute normal from neighbor elevations in terrain texel space.
   // At tile borders, extend the stencil so it always spans 2 texels
   // to avoid halving the gradient (which creates visible seams).
-  var lu = inner_u - 1; var ru = inner_u + 1;
+  var lu = t_inner_u - 1; var ru = t_inner_u + 1;
   if (lu < 0) { lu = 0; ru = 2; }
   else if (ru > 513) { ru = 513; lu = 511; }
-  var uv_ = inner_v - 1; var dv = inner_v + 1;
+  var uv_ = t_inner_v - 1; var dv = t_inner_v + 1;
   if (uv_ < 0) { uv_ = 0; dv = 2; }
   else if (dv > 513) { dv = 513; uv_ = 511; }
 
-  let zL = loadElevation(vec2<i32>(lu, inner_v));
-  let zR = loadElevation(vec2<i32>(ru, inner_v));
-  let zU = loadElevation(vec2<i32>(inner_u, uv_));
-  let zD = loadElevation(vec2<i32>(inner_u, dv));
+  let zL = loadElevation(vec2<i32>(lu, t_inner_v));
+  let zR = loadElevation(vec2<i32>(ru, t_inner_v));
+  let zU = loadElevation(vec2<i32>(t_inner_u, uv_));
+  let zD = loadElevation(vec2<i32>(t_inner_u, dv));
 
-  let cellSize = uniforms.cell_size_meters;
+  let cellSize = uniforms.terrain_cell_size;
   let dzdx = (zR - zL) / (2.0 * cellSize);
   let dzdy = (zD - zU) / (2.0 * cellSize);
 
@@ -140,40 +159,11 @@ fn vs_main(@location(0) grid_pos: vec2<u32>) -> VertexOutput {
   out.slope_aspect_sin = -dzdx / safe_mag;
   out.slope_aspect_cos = dzdy / safe_mag;
 
-  // Reject sea-level vertices (no terrain data).
-  if (elevation <= 0.0) {
-    var nan_bits = 0x7FC00000u;
-    let nan = bitcast<f32>(nan_bits);
-    out.position = vec4<f32>(nan, nan, nan, nan);
-  }
-
   return out;
 }
 `;
 
-export const terrainFragmentShader = /* wgsl */`
-struct Uniforms {
-  mvp: mat4x4<f32>,
-  model: mat4x4<f32>,
-  elevation_scale: f32,
-  cell_size_meters: f32,
-  vertical_exaggeration: f32,
-  texel_size: f32,
-  show_tile_borders: f32,
-  has_imagery: f32,
-  hillshade_opacity: f32,
-  slope_angle_opacity: f32,
-  contour_opacity: f32,
-  viewport_height: f32,
-  show_wireframe: f32,
-  slope_aspect_mask_above: f32,
-  slope_aspect_mask_near: f32,
-  slope_aspect_mask_below: f32,
-  slope_aspect_opacity: f32,
-  treeline_lower: f32,
-  treeline_upper: f32,
-};
-
+export const terrainFragmentShader = uniformStruct + `
 ` + atmosphereCode + /* wgsl */`
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -186,7 +176,7 @@ fn srgbToLinear(c: vec3<f32>) -> vec3<f32> {
 }
 
 fn slopeAngleColor(deg: f32) -> vec4<f32> {
-  // Gaia GPS-style discrete slope angle bands (sRGB → linear)
+  // Gaia GPS-style discrete slope angle bands (sRGB -> linear)
   let gold   = pow(vec3<f32>(1.0, 0.78, 0.0), vec3<f32>(2.2));
   let yellow = pow(vec3<f32>(1.0, 0.55, 0.0), vec3<f32>(2.2));
   let orange = pow(vec3<f32>(1.0, 0.30, 0.0), vec3<f32>(2.2));
@@ -195,9 +185,9 @@ fn slopeAngleColor(deg: f32) -> vec4<f32> {
   let blue   = pow(vec3<f32>(0.0, 0.2, 0.8), vec3<f32>(2.2));
   let black  = vec3<f32>(0.0);
 
-  // Uniform color blocks with 1° linear fades at boundaries
-  // 26-29° green | 30-31° yellow | 32-34° orange | 35-45° red
-  // 46-50° purple | 51-59° blue | 60°+ black
+  // Uniform color blocks with 1 degree linear fades at boundaries
+  // 26-29 green | 30-31 yellow | 32-34 orange | 35-45 red
+  // 46-50 purple | 51-59 blue | 60+ black
   let t_enter  = smoothstep(24.0, 26.0, deg);
   let t_yellow = smoothstep(29.0, 30.0, deg);
   let t_orange = smoothstep(31.0, 32.0, deg);
@@ -226,13 +216,13 @@ fn quadBSpline(s: f32) -> f32 {
 }
 
 // Compute the total B-spline weight for selected slope aspect directions.
-// aspect: compass bearing in radians (0=N, π/2=E, ±π=S, -π/2=W)
+// aspect: compass bearing in radians (0=N, pi/2=E, +/-pi=S, -pi/2=W)
 // mask: bitmask with bits 0-7 for N, NE, E, SE, S, SW, W, NW
 // Returns 0..1 where 1 = full coverage (all 8 selected sum to exactly 1.0).
 fn slopeAspectWeight(aspect: f32, mask: u32) -> f32 {
   var weight = 0.0;
   let TWO_PI = 6.2831853;
-  let h = 0.7853982; // π/4 = 45° knot spacing
+  let h = 0.7853982; // pi/4 = 45 degree knot spacing
   for (var i = 0u; i < 8u; i++) {
     if ((mask & (1u << i)) != 0u) {
       let center = f32(i) * h;
@@ -249,7 +239,8 @@ fn contourLinearstep(edge0: f32, edge1: f32, x: f32) -> f32 {
 }
 
 fn blendedContours(elevation_ft: f32, tile_uv: vec2<f32>) -> f32 {
-  let divisions = 5.0;       // 40 → 200 → 1000 → 5000
+  let D = uniforms.grid_data_size;
+  let divisions = 5.0;       // 40 -> 200 -> 1000 -> 5000
   let base_spacing = 40.0;   // finest contour spacing in feet
   let min_spacing = 8.0;     // minimum pixels between contours before octave shift
   let line_width = 2.0;
@@ -259,7 +250,7 @@ fn blendedContours(elevation_ft: f32, tile_uv: vec2<f32>) -> f32 {
   // All derivatives must be computed before any non-uniform control flow
   let elev_grad = length(vec2<f32>(dpdx(elevation_ft), dpdy(elevation_ft)));
   let h_feet_pp = 0.5 * (fwidth(tile_uv.x) + fwidth(tile_uv.y))
-    * 514.0 * uniforms.cell_size_meters * 3.28084;
+    * (D + 2.0) * uniforms.terrain_cell_size * 3.28084;
 
   if (elev_grad < 1e-6) { return 0.0; }
 
@@ -320,11 +311,13 @@ fn fs_main(
   @location(5) slope_aspect_sin: f32,
   @location(6) slope_aspect_cos: f32,
 ) -> @location(0) vec4<f32> {
+  let D = uniforms.grid_data_size;
+
   // Base color: satellite imagery or elevation-based fallback
   var base_color: vec3<f32>;
   if (uniforms.has_imagery > 0.5) {
-    // Map from 514-texel elevation UV to 512-texel imagery UV
-    let imagery_uv = (uv * 514.0 - 1.0) / 512.0;
+    // Map from (D+2)-texel elevation UV to imagery UV [0,1]
+    let imagery_uv = (uv * (D + 2.0) - 1.0) / D;
     let imagery = textureSampleLevel(imageryTexture, imagerySampler, imagery_uv, 0.0).rgb;
     base_color = srgbToLinear(imagery);
   } else {
@@ -342,7 +335,7 @@ fn fs_main(
     base_color = mix(base_color, slope_col.rgb, slope_col.a * slope_opacity);
   }
 
-  // Slope aspect overlay: highlight selected compass directions within 30-45°
+  // Slope aspect overlay: highlight selected compass directions within 30-45 degrees
   // Select mask based on elevation relative to treeline boundaries
   var aspect_mask = 0u;
   if (elevation_m > uniforms.treeline_upper) {
@@ -377,8 +370,8 @@ fn fs_main(
 
   // Wireframe overlay
   if (uniforms.show_wireframe > 0.5) {
-    let grid_wu = uv.x * 514.0 - 1.0;
-    let grid_wv = uv.y * 514.0 - 1.0;
+    let grid_wu = uv.x * (D + 2.0) - 1.0;
+    let grid_wv = uv.y * (D + 2.0) - 1.0;
     let fu = fract(grid_wu + 0.5);
     let fv = fract(grid_wv + 0.5);
     let dist_u = min(fu, 1.0 - fu);
@@ -387,21 +380,21 @@ fn fs_main(
     let dfu = fwidth(grid_wu);
     let dfv = fwidth(grid_wv);
     let dfd = fwidth(fu + fv) * 0.7071;
-    let w = 1.0;
+    let w = 0.6;
     let wire_u = 1.0 - smoothstep(dfu * (w - 0.5), dfu * (w + 0.5), dist_u);
     let wire_v = 1.0 - smoothstep(dfv * (w - 0.5), dfv * (w + 0.5), dist_v);
     let wire_d = 1.0 - smoothstep(dfd * (w - 0.5), dfd * (w + 0.5), dist_diag);
     let wire = max(max(wire_u, wire_v), wire_d);
-    result = mix(result, vec3<f32>(0.0), wire * 0.8);
+    result = mix(result, vec3<f32>(0.0, 0.6, 0.0), wire * 0.8);
   }
 
   // Tile border overlay
   if (uniforms.show_tile_borders > 0.5) {
-    let grid_u = uv.x * 514.0 - 1.0;
-    let grid_v = uv.y * 514.0 - 1.0;
+    let grid_u = uv.x * (D + 2.0) - 1.0;
+    let grid_v = uv.y * (D + 2.0) - 1.0;
     let border_u = 1.5 * fwidth(grid_u);
     let border_v = 1.5 * fwidth(grid_v);
-    if (grid_u < border_u || grid_u > 512.0 - border_u || grid_v < border_v || grid_v > 512.0 - border_v) {
+    if (grid_u < border_u || grid_u > D - border_u || grid_v < border_v || grid_v > D - border_v) {
       return vec4<f32>(1.0, 0.0, 0.0, 1.0);
     }
   }

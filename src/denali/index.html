@@ -2,154 +2,87 @@
 <notebook theme="air">
   <title>Denali Terrain</title>
 
-  <script id="dataset-selector" type="module">
-    import { TILE_URL_TERRAIN, TILE_URL_SENTINEL, TILE_URL_TAHOE, TILE_URL_TAHOE_SENTINEL } from './tile-urls.js';
-
-    const datasets = {
-      'Denali': {
-        sources: {
-          'mapterhorn': {
-            type: 'terrain',
-            encoding: 'terrarium',
-            tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
-            minzoom: 0,
-            maxzoom: 14,
-            bounds: [-180, -85.05, 180, 85.05],
-            attribution: '<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a>',
-          },
-          'sentinel': {
-            type: 'raster',
-            tiles: [TILE_URL_SENTINEL],
-            minzoom: 4,
-            maxzoom: 11,
-            bounds: [-152.9, 62.2, -148.8, 64.0],
-            attribution: '<a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Sentinel-2</a>',
-          },
-          'peaks': {
-            type: 'geojson',
-            data: 'osm/peaks.geojson',
-            attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-          },
-          'fkt': {
-            type: 'geojson',
-            data: 'strava/fkt.geojson',
-            simplify: 0.0001,
-            attribution: '<a href="https://www.strava.com/activities/9223277277" target="_blank" rel="noopener">Strava</a>',
-          },
+  <script id="config" type="module">
+    const config = {
+      sources: {
+        'mapterhorn': {
+          type: 'terrain',
+          encoding: 'terrarium',
+          tiles: ['https://tiles.mapterhorn.com/{z}/{x}/{y}.webp'],
+          minzoom: 0,
+          maxzoom: 14,
+          bounds: [-180, -85.05, 180, 85.05],
+          attribution: '<a href="https://mapterhorn.com/attribution" target="_blank" rel="noopener">© Mapterhorn</a>',
         },
-        camera: {
-          center: [0.08005793958567985, 0.00021365516506647512, 0.27291423467021114],
-          distance: 0.0004971889617079275,
-          phi: 2.4972122538258654,
-          theta: 0.13580281526641474,
+        's2cloudless': {
+          type: 'raster',
+          tiles: ['https://tiles.maps.eox.at/wmts/1.0.0/s2cloudless-2021_3857/default/GoogleMapsCompatible/{z}/{y}/{x}.jpg'],
+          minzoom: 0,
+          maxzoom: 14,
+          bounds: [-180, -85.05, 180, 85.05],
+          attribution: '<a href="https://s2maps.eu/" target="_blank" rel="noopener">Sentinel-2 cloudless by EOX</a>',
         },
-        base: [
-          { id: 'satellite', source: 'sentinel', blend: 'source-over' },
-        ],
-        features: [
-          {
-            id: 'ski-tracks',
-            type: 'line',
-            source: 'fkt',
-            paint: {
-              'line-color': '#ff8800',
-              'line-width': 5,
-              'line-border-color': '#331100',
-              'line-border-width': 2,
-              'atmosphere-opacity': 0.5
-            }
-          },
-          {
-            id: 'peak-circles',
-            type: 'circle',
-            source: 'peaks',
-            paint: {
-              'circle-radius': 3,
-              'circle-color': '#000000',
-              'circle-stroke-color': '#ffffff',
-              'circle-stroke-width': 1.5,
-              'atmosphere-opacity': 0.5
-            }
-          },
-          {
-            id: 'peak-labels',
-            type: 'text',
-            source: 'peaks',
-            paint: {
-              'text-field': 'name',
-              'text-size': 16,
-              'text-color': '#000000',
-              'text-halo-color': '#ffffff',
-              'text-halo-width': 1.25,
-              'atmosphere-opacity': 0.5
-            }
-          },
-        ],
+        'peaks': {
+          type: 'geojson',
+          data: 'osm/peaks.geojson',
+          attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+        },
+        'fkt': {
+          type: 'geojson',
+          data: 'strava/fkt.geojson',
+          simplify: 0.0001,
+          attribution: '<a href="https://www.strava.com/activities/9223277277" target="_blank" rel="noopener">Strava</a>',
+        },
       },
-      'Lake Tahoe': {
-        sources: {
-          'tahoe-terrain': {
-            type: 'terrain',
-            tiles: [TILE_URL_TAHOE],
-            minzoom: 0,
-            maxzoom: 13,
-            bounds: [-120.87, 38.80, -119.68, 39.85],
-            attribution: '<a href="https://spacedata.copernicus.eu/collections/copernicus-digital-elevation-model" target="_blank" rel="noopener">Copernicus DEM</a>',
-          },
-          'tahoe-sentinel': {
-            type: 'raster',
-            tiles: [TILE_URL_TAHOE_SENTINEL],
-            minzoom: 8,
-            maxzoom: 12,
-            bounds: [-120.87, 38.80, -119.68, 39.85],
-            attribution: '<a href="https://dataspace.copernicus.eu/" target="_blank" rel="noopener">Copernicus Sentinel-2</a>',
-          },
-          'tahoe-landmarks': {
-            type: 'geojson',
-            data: 'osm/tahoe-landmarks.geojson',
-            attribution: '<a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
-          },
-        },
-        camera: {
-          center: [0.16590, 0.0, 0.38101],
-          distance: 0.0006,
-          phi: Math.PI / 2,
-          theta: 0.4,
-        },
-        base: [
-          { id: 'satellite', source: 'tahoe-sentinel', blend: 'source-over' },
-        ],
-        features: [
-          {
-            id: 'landmark-circles',
-            type: 'circle',
-            source: 'tahoe-landmarks',
-            paint: {
-              'circle-radius': 3,
-              'circle-color': '#000000',
-              'circle-stroke-color': '#ffffff',
-              'circle-stroke-width': 1.5,
-              'atmosphere-opacity': 0.5
-            }
-          },
-          {
-            id: 'landmark-labels',
-            type: 'text',
-            source: 'tahoe-landmarks',
-            paint: {
-              'text-field': 'name',
-              'text-size': 16,
-              'text-color': '#000000',
-              'text-halo-color': '#ffffff',
-              'text-halo-width': 1.25,
-              'atmosphere-opacity': 0.5
-            }
-          },
-        ],
+      camera: {
+        center: [0.08005793958567985, 0.00021365516506647512, 0.27291423467021114],
+        distance: 0.0004971889617079275,
+        phi: 2.4972122538258654,
+        theta: 0.13580281526641474,
       },
+      base: [
+        { id: 's2-imagery', source: 's2cloudless', blend: 'source-over' },
+      ],
+      features: [
+        {
+          id: 'ski-tracks',
+          type: 'line',
+          source: 'fkt',
+          paint: {
+            'line-color': '#ff8800',
+            'line-width': 5,
+            'line-border-color': '#331100',
+            'line-border-width': 2,
+            'atmosphere-opacity': 0.5
+          }
+        },
+        {
+          id: 'peak-circles',
+          type: 'circle',
+          source: 'peaks',
+          paint: {
+            'circle-radius': 3,
+            'circle-color': '#000000',
+            'circle-stroke-color': '#ffffff',
+            'circle-stroke-width': 1.5,
+            'atmosphere-opacity': 0.5
+          }
+        },
+        {
+          id: 'peak-labels',
+          type: 'text',
+          source: 'peaks',
+          paint: {
+            'text-field': 'name',
+            'text-size': 16,
+            'text-color': '#000000',
+            'text-halo-color': '#ffffff',
+            'text-halo-width': 1.25,
+            'atmosphere-opacity': 0.5
+          }
+        },
+      ],
     };
-
-    const datasetName = view(Inputs.select(Object.keys(datasets), { label: "Dataset"}));
   </script>
 
   <script id="viewer" type="module">
@@ -159,14 +92,6 @@
     import { expandable } from './lib/expandable.js';
     import { ElevationProfile } from './elevation-profile.js';
     import { gpx as gpxToGeoJSON } from 'npm:@tmcw/togeojson';
-
-    const config = datasets[datasetName];
-
-    // Clear stale camera hash when switching datasets (but not on initial page load)
-    if (window._lastDataset && window._lastDataset !== datasetName) {
-      history.replaceState(null, '', window.location.pathname);
-    }
-    window._lastDataset = datasetName;
 
     const canvas = document.createElement('canvas');
     canvas.className = 'terrain';
@@ -306,7 +231,7 @@
 
     const controlsContainer = html`<div class="terrain-controls"></div>`;
 
-    const sunState = { date: new Date(), timeOfDay: 10, utcOffset: -8 };
+    const sunState = { date: new Date(), timeOfDay: 1, utcOffset: -8 };
     const location = viewer.location;
 
     function formatTime(decimal) {
@@ -357,7 +282,7 @@
 
     // Layer panel
     const drawBtn = html`<button class="draw-path-btn" title="Draw a path on the terrain">Draw path</button>`;
-    const { section: layerPanel, body: layerList } = createSection('Layers', { open: true, trailing: drawBtn });
+    const { section: layerPanel, body: layerList } = createSection('Layers', { open: false, trailing: drawBtn });
     controlsContainer.appendChild(layerPanel);
 
     const eyeOpenSVG = `<svg viewBox="0 0 20 20" width="16" height="16" style="display:block"><path d="M10 4C4.5 4 1 10 1 10s3.5 6 9 6 9-6 9-6-3.5-6-9-6z" fill="none" stroke="currentColor" stroke-width="1.5"/><circle cx="10" cy="10" r="3" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>`;
@@ -713,7 +638,7 @@
     });
 
     // Analysis section
-    const { section: analysis, body: analysisContent } = createSection('Analysis', { open: true });
+    const { section: analysis, body: analysisContent } = createSection('Analysis', { open: false });
     controlsContainer.appendChild(analysis);
 
     addControl(analysisContent,
@@ -894,7 +819,7 @@
       { label: 'EST (UTC−5)', offset: -5 },
       { label: 'EDT (UTC−4)', offset: -4 },
     ];
-    const defaultTz = location.lat > 55 ? 'AKDT (UTC−8)' : 'PDT (UTC−7)';
+    const defaultTz = 'AKDT (UTC-8)'; //location.lat > 55 ? 'AKDT (UTC−8)' : 'PDT (UTC−7)';
     const tzSelect = Inputs.select(tzOptions.map(t => t.label), { value: defaultTz, label: "Time zone" });
     addControl(envContent, tzSelect, v => {
       const tz = tzOptions.find(t => t.label === v);
@@ -959,8 +884,12 @@
       v => { viewer.fov = v; }
     );
     addControl(debugContent,
-      Inputs.range([1, 5], { value: viewer.settings.densityThreshold, step: 0.1, label: "Tile scale", transform: Math.log }),
-      v => { viewer.settings.densityThreshold = v; }
+      Inputs.range([0.2, 2], { value: 1 / viewer.settings.densityThreshold, step: 0.01, label: "Terrain detail" }),
+      v => { viewer.settings.densityThreshold = 1 / v; }
+    );
+    addControl(debugContent,
+      Inputs.range([0.2, 2], { value: 1 / viewer.settings.imageryDensityThreshold, step: 0.01, label: "Imagery detail" }),
+      v => { viewer.settings.imageryDensityThreshold = 1 / v; }
     );
     addControl(debugContent,
       Inputs.toggle({ label: "Show tile borders" }),

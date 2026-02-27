@@ -221,15 +221,15 @@ export interface TextSpan {
 }
 
 /** GPU text context for managing multiple text spans */
-export interface GPUTextContext {
+export interface GPUText {
   /** Create a new text span */
   createSpan(options: TextSpanOptions): TextSpan;
   /** Get bind group layout for additional user data (group 2+) */
   getBindGroupLayout(index: number): GPUBindGroupLayout;
+  /** Measure text dimensions at a given font size (defaults to atlas base font size) */
+  measureText(text: string, fontSize?: number): { width: number; ascent: number; descent: number };
   /** Update uniforms before the render pass */
   updateUniforms(props: UpdateUniformsProps): void;
-  /** Compact storage (remove destroyed spans) - called automatically before draw if needed */
-  compact(): void;
   /** Draw all text spans */
   draw(pass: GPURenderPassEncoder, props: DrawProps, bindGroups?: GPUBindGroup[]): void;
   /** Get total character count across all active spans */
@@ -237,6 +237,9 @@ export interface GPUTextContext {
   /** Destroy all GPU resources */
   destroy(): void;
 }
+
+/** @deprecated Use GPUText instead */
+export type GPUTextContext = GPUText;
 
 /** Internal span state */
 interface InternalSpan {
@@ -285,7 +288,7 @@ const FLOATS_PER_CHARACTER = BYTES_PER_CHARACTER / 4;
 /**
  * Create a GPU text rendering context
  */
-export function createGPUTextContext(device: GPUDevice, options: GPUTextContextOptions): GPUTextContext {
+export function createGPUText(device: GPUDevice, options: GPUTextContextOptions): GPUText {
   const {
     fontAtlas,
     vertexTransform = defaultVertexTransform,
@@ -643,6 +646,15 @@ export function createGPUTextContext(device: GPUDevice, options: GPUTextContextO
     }
   }
 
+  // Flush all dirty spans to the GPU
+  function flushDirtySpans(): void {
+    for (const span of spans) {
+      if (!span.destroyed && span.dirty) {
+        writeSpanCharacters(span);
+      }
+    }
+  }
+
   return {
     createSpan(opts: TextSpanOptions): TextSpan {
       const charCount = getCharacterCount(opts.text);
@@ -670,9 +682,6 @@ export function createGPUTextContext(device: GPUDevice, options: GPUTextContextO
       spans.push(span);
       totalCharacterCount += charCount;
 
-      // Write character data
-      writeSpanCharacters(span);
-
       return {
         setText(text: string): void {
           if (span.destroyed) return;
@@ -680,7 +689,6 @@ export function createGPUTextContext(device: GPUDevice, options: GPUTextContextO
 
           if (newCharCount !== span.characterCount) {
             // Character count changed - need to reallocate
-            // Mark old position as needing compaction
             span.destroyed = true;
             needsCompaction = true;
 
@@ -700,64 +708,54 @@ export function createGPUTextContext(device: GPUDevice, options: GPUTextContextO
             span.text = text;
             span.dirty = true;
           }
-
-          writeSpanCharacters(span);
         },
 
         setPosition(position: Position): void {
           if (span.destroyed) return;
           span.anchor = padPosition(position);
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         setOffset(offset: [number, number]): void {
           if (span.destroyed) return;
           span.offset = [...offset] as [number, number];
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         setFontSize(fontSize: number): void {
           if (span.destroyed) return;
           span.fontSize = fontSize;
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         setColor(color: [number, number, number, number]): void {
           if (span.destroyed) return;
           span.color = [...color] as [number, number, number, number];
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         setStrokeColor(color: [number, number, number, number]): void {
           if (span.destroyed) return;
           span.strokeColor = [...color] as [number, number, number, number];
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         setStrokeWidth(width: number): void {
           if (span.destroyed) return;
           span.strokeWidth = width;
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         setAlign(align: TextAlign): void {
           if (span.destroyed) return;
           span.align = align;
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         setBaseline(baseline: TextBaseline): void {
           if (span.destroyed) return;
           span.baseline = baseline;
           span.dirty = true;
-          writeSpanCharacters(span);
         },
 
         getText(): string {
@@ -782,6 +780,11 @@ export function createGPUTextContext(device: GPUDevice, options: GPUTextContextO
 
     getBindGroupLayout(index: number): GPUBindGroupLayout {
       return pipeline.getBindGroupLayout(index);
+    },
+
+    measureText(text: string, fontSize?: number): { width: number; ascent: number; descent: number } {
+      const scale = (fontSize ?? fontAtlas.fontSize) / fontAtlas.fontSize;
+      return measureText(text, scale);
     },
 
     updateUniforms(props: UpdateUniformsProps): void {
@@ -834,13 +837,14 @@ export function createGPUTextContext(device: GPUDevice, options: GPUTextContextO
       }
     },
 
-    compact,
-
     draw(pass: GPURenderPassEncoder, props: DrawProps, bindGroups: GPUBindGroup[] = []): void {
       // Compact if needed
       if (needsCompaction) {
         compact();
       }
+
+      // Flush all dirty spans to the GPU
+      flushDirtySpans();
 
       if (!props.skipUniformUpdate) {
         this.updateUniforms(props);
@@ -872,6 +876,9 @@ export function createGPUTextContext(device: GPUDevice, options: GPUTextContextO
   };
 }
 
+/** @deprecated Use createGPUText instead */
+export const createGPUTextContext = createGPUText;
+
 /**
  * Default vertex transform - applies viewMatrix to convert anchor to clip space
  */
@@ -894,63 +901,39 @@ fn projectVertex(position: vec3f, uv: vec2f, color: vec4f) -> vec4f {
 `;
 
 /**
- * Default fragment shader body - MSDF/MTSDF rendering with antialiasing and stroke support
- * Uses median-of-three technique for sharp corners and screen-space derivatives for antialiasing
- *
- * For best stroke quality, use MTSDF atlas (msdf-atlas-gen -type mtsdf):
- * - RGB channels: Multi-channel SDF for sharp fill edges
- * - Alpha channel: True SDF for smooth strokes
- *
- * Reference: https://github.com/Chlumsky/msdfgen
+ * MSDF utility functions injected into every fragment shader.
+ * Custom shaders can call these to avoid copy-pasting the MSDF pipeline.
  */
-const defaultFragmentShaderBody = /* wgsl */`
-// Median of three values - core of MSDF technique
-// The median preserves sharp corners that single-channel SDF would round off
-fn median3(r: f32, g: f32, b: f32) -> f32 {
+const msdfUtilities = /* wgsl */`
+// Median of three values - core of MSDF technique.
+// The median preserves sharp corners that single-channel SDF would round off.
+fn msdfMedian3(r: f32, g: f32, b: f32) -> f32 {
   return max(min(r, g), min(max(r, g), b));
 }
 
-// Compute screen pixel range - how many screen pixels the SDF field range spans
-// This is the proper way to determine antialiasing width for SDF rendering
-fn screenPxRange(uv: vec2f) -> f32 {
-  // fieldRange is in atlas pixels, atlasSize converts UV to atlas pixels
-  // fwidth(uv) tells us UV change per screen pixel
-  // So: fieldRange / (fwidth(uv) * atlasSize) = screen pixels per field range
+// Compute screen pixel range - how many screen pixels the SDF field range spans.
+// This is the proper way to determine antialiasing width for SDF rendering.
+fn msdfScreenPxRange(uv: vec2f) -> f32 {
   let unitRange = uniforms.fieldRange / uniforms.atlasSize;
   let screenTexSize = 1.0 / fwidth(uv);
   return max(0.5 * dot(unitRange, screenTexSize), 1.0);
 }
 
-fn getColor(uv: vec2f, color: vec4f, strokeColor: vec4f, strokeWidth: f32, msdf: vec4f, anchor: vec4f) -> vec4f {
-  // Use median of RGB (MSDF technique) for both fill and stroke
-  // This preserves sharp corners; works for stroke now that we use fwidth(uv) not fwidth(sdf)
-  let sd = median3(msdf.r, msdf.g, msdf.b);
-
-  // Compute screen pixel range for proper antialiasing
-  let pxRange = screenPxRange(uv);
-
-  // Convert SDF distance to screen pixels (recommended MSDF approach)
-  // SDF is 0-1 where 0.5 is edge; distance from edge = (sd - 0.5)
-  // Multiply by pxRange to get screen pixel distance
+// Full MSDF composite: fill + optional stroke, with antialiasing.
+// Returns premultiplied-alpha RGBA.
+fn msdfComposite(uv: vec2f, color: vec4f, strokeColor: vec4f, strokeWidth: f32, msdf: vec4f) -> vec4f {
+  let sd = msdfMedian3(msdf.r, msdf.g, msdf.b);
+  let pxRange = msdfScreenPxRange(uv);
   let screenDist = pxRange * (sd - 0.5);
-
-  // Fill opacity - the standard MSDF formula
   let fillAlpha = clamp(screenDist + 0.5, 0.0, 1.0);
 
-  // If no stroke, just render fill
   let hasStroke = strokeWidth > 0.0 && strokeColor.a > 0.0;
   if (!hasStroke) {
     return vec4f(color.rgb, color.a * fillAlpha);
   }
 
-  // Stroke extends strokeWidth pixels outside the glyph edge
-  // screenDist is positive inside glyph, negative outside
-  // Stroke outer edge is at -strokeWidth pixels from glyph edge
   let strokeOuterDist = screenDist + strokeWidth;
   let strokeAlpha = clamp(strokeOuterDist + 0.5, 0.0, 1.0);
-
-  // Composite: fill over stroke
-  // Where fill is opaque, show fill; where fill is transparent but stroke is opaque, show stroke
   let finalAlpha = fillAlpha * color.a + strokeAlpha * strokeColor.a * (1.0 - fillAlpha * color.a);
 
   if (finalAlpha <= 0.0) {
@@ -958,8 +941,16 @@ fn getColor(uv: vec2f, color: vec4f, strokeColor: vec4f, strokeWidth: f32, msdf:
   }
 
   let finalRgb = (color.rgb * color.a * fillAlpha + strokeColor.rgb * strokeColor.a * strokeAlpha * (1.0 - fillAlpha * color.a)) / finalAlpha;
-
   return vec4f(finalRgb, finalAlpha);
+}
+`;
+
+/**
+ * Default fragment shader body - calls msdfComposite for standard MSDF rendering
+ */
+const defaultFragmentShaderBody = /* wgsl */`
+fn getColor(uv: vec2f, color: vec4f, strokeColor: vec4f, strokeWidth: f32, msdf: vec4f, anchor: vec4f) -> vec4f {
+  return msdfComposite(uv, color, strokeColor, strokeWidth, msdf);
 }
 `;
 
@@ -1111,15 +1102,15 @@ struct FragmentInput {
   @location(4) anchor: vec4f,
 }
 
+// MSDF utility functions (always available)
+${msdfUtilities}
+
+// User-defined or default fragment shader body
 ${userCode}
 
 @fragment
 fn fragmentMain(input: FragmentInput) -> @location(0) vec4f {
-  // Sample the MSDF/MTSDF texture (all four channels)
-  // RGB: multi-channel SDF for sharp fill edges
-  // A: true SDF for strokes (in MTSDF format) or 1.0 (in plain MSDF)
   let msdf = textureSample(fontAtlas, fontSampler, input.uv);
-
   return getColor(input.uv, input.color, input.strokeColor, input.strokeWidth, msdf, input.anchor);
 }
 `;

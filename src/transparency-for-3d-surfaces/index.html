@@ -1,0 +1,343 @@
+<!doctype html>
+<notebook theme="air">
+  <title>Transparency for 3D Surfaces</title>
+
+  <script id="title" type="text/markdown">
+# Transparency for 3D Surfaces
+  </script>
+
+  <script id="imports" type="text/x-typescript">
+import { createWebGPUContext } from './lib/webgpu-canvas.js';
+import { createCameraController } from './lib/camera-controller.js';
+import { expandable } from './lib/expandable.js';
+import { createFrameLoop } from './lib/frame-loop.js';
+import { meshFromFunction } from './mesh.js';
+import {
+  surfaceShaderCode, oitShaderCode, oitCompositeShaderCode,
+  peelShaderCode, peelCompositeShaderCode, dualPeelShaderCode
+} from './shaders.js';
+import { createRenderer } from './renderer.js';
+import { createOITDiagram, createPeelDiagram, createDualPeelDiagram } from './diagrams.js';
+  </script>
+
+  <script id="intro" type="text/markdown">
+GPUs do many things well, but drawing transparent 3D objects is not one of them. Opacity doesn't commute so that the order in which you draw surfaces makes a big difference. 
+
+The simplest way to draw transparent objects is from back to front via the [painter's algorithm](https://en.wikipedia.org/wiki/Painter%27s_algorithm). In this approach we sort geometry and draw only from back to front. This requires sorting triangles, which, in addition to the possibility of ambiguous overlapping, is a pretty big pain to do whenever the view angle changes.
+
+[Order independent transparency](https://en.wikipedia.org/wiki/Order-independent_transparency) includes a number of more sophisticated approaches which avoid the need to sort geometry. Some approaches sort individual fragments (pixels) by depth so that the layering can be computed correctly. Some do this in a more approximate sense.
+
+This notebook explores a few approaches to transparent rendering, from a practical two-pass hack through more principled order-independent techniques. "Fake transparency" uses a solid surface pass followed by a wireframe-only pass without depth occlusion, giving the impression of transparency without actually sorting or blending layers. Weighted blended OIT approximates correct layering in a single pass using depth-based weights. Front-to-back depth peeling captures exact layers one at a time, and dual depth peeling extends this by capturing two layers per pass.
+  </script>
+
+  <script id="gpu-context" type="text/x-typescript">
+const { device, canvasFormat } = await createWebGPUContext();
+  </script>
+
+  <script id="controls" type="text/x-typescript">
+const controlsContainer = html`<div id="surface-controls" class="controls-panel"></div>`;
+
+function ctrl(input: HTMLElement) {
+  controlsContainer.appendChild(input);
+  return Generators.input(input);
+}
+
+const methodInput = Inputs.select(['Fake transparency', 'Weighted blended OIT', 'Depth peeling', 'Dual depth peeling'], { label: "Method", value: 'Dual depth peeling' });
+const method = ctrl(methodInput);
+
+const opacity = ctrl(Inputs.range([0, 1], { label: "Surface opacity", value: 0.85, step: 0.01 }));
+const gridOpacity = ctrl(Inputs.range([0, 1], { label: "Grid opacity", value: 0.4, step: 0.01 }));
+const cartoonEdgeOpacity = ctrl(Inputs.range([0, 1], { label: "Cartoon edge opacity", value: 1, step: 0.01 }));
+// const gridWidth = ctrl(Inputs.range([0.5, 2], { label: "Grid width", value: 0.5, step: 0.05 }));
+// const cartoonEdgeWidth = ctrl(Inputs.range([0, 5], { label: "Cartoon edge width", value: 2.5, step: 0.05 }));
+const gridWidth = 0.5;
+const cartoonEdgeWidth = 2.5;
+
+const passesInput = Inputs.checkbox(
+  ['Solid surface pass', 'Fake transparency pass'],
+  { value: ['Solid surface pass', 'Fake transparency pass'] }
+);
+const passesWrapper = html`<div>${passesInput}</div>`;
+controlsContainer.appendChild(passesWrapper);
+const passes = Generators.input(passesInput);
+
+const peelLayersInput = Inputs.range([1, 8], { label: "Peel layers", value: 4, step: 1 });
+const peelLayersWrapper = html`<div>${peelLayersInput}</div>`;
+controlsContainer.appendChild(peelLayersWrapper);
+const peelLayers = Generators.input(peelLayersInput);
+
+const animate = ctrl(Inputs.toggle({ label: "Animate", value: false }));
+
+function updateDisabled() {
+  const m = methodInput.value;
+  for (const el of passesWrapper.querySelectorAll('input')) el.disabled = m !== 'Fake transparency';
+  passesWrapper.style.opacity = m === 'Fake transparency' ? '' : '0.5';
+  const peelDisabled = m !== 'Depth peeling' && m !== 'Dual depth peeling';
+  for (const el of peelLayersWrapper.querySelectorAll('input')) el.disabled = peelDisabled;
+  peelLayersWrapper.style.opacity = peelDisabled ? '0.5' : '';
+}
+methodInput.addEventListener('input', updateDisabled);
+updateDisabled();
+
+display(controlsContainer);
+  </script>
+
+  <script id="state" type="text/x-typescript">
+const state = {
+  initialized: false,
+  canvas: null as HTMLCanvasElement | null,
+  gpuContext: null as GPUCanvasContext | null,
+  camera: null as ReturnType<typeof createCameraController> | null,
+  frame: null as { cancel: () => void } | null,
+  dirty: true,
+  expandedState: { expanded: false },
+  renderer: null as ReturnType<typeof createRenderer> | null,
+  renderParams: {
+    method: 'Fake transparency',
+    opacity: 0.85,
+    passes: ['Solid surface pass', 'Fake transparency pass'],
+    peelLayers: 4,
+    gridOpacity: 0.4,
+    gridWidth: 0.5,
+    cartoonEdgeWidth: 2.5,
+    cartoonEdgeOpacity: 1,
+    animate: false
+  }
+};
+  </script>
+
+  <script id="update-params" type="text/x-typescript">
+state.renderParams.method = method;
+state.renderParams.opacity = opacity;
+state.renderParams.passes = passes;
+state.renderParams.peelLayers = peelLayers;
+state.renderParams.gridOpacity = gridOpacity;
+state.renderParams.gridWidth = gridWidth;
+state.renderParams.cartoonEdgeWidth = cartoonEdgeWidth;
+state.renderParams.cartoonEdgeOpacity = cartoonEdgeOpacity;
+state.renderParams.animate = animate;
+state.dirty = true;
+  </script>
+
+  <script id="main" type="text/x-typescript">
+const mesh = meshFromFunction((u, v) => [u, v], {
+  resolution: [151, 151],
+  uDomain: [0, 1.5],
+  vDomain: [-Math.PI, Math.PI],
+  uPeriodic: false,
+  vPeriodic: true
+});
+
+if (!state.initialized) {
+  const canvas = document.createElement('canvas');
+  canvas.id = 'surface-canvas';
+  canvas.style.width = '100%';
+  canvas.style.height = '100%';
+
+  const gpuContext = canvas.getContext('webgpu')!;
+  gpuContext.configure({ device, format: canvasFormat, alphaMode: 'opaque' });
+
+  state.canvas = canvas;
+  state.gpuContext = gpuContext;
+  state.camera = createCameraController(canvas, {
+    distance: 4,
+    phi: 0.4,
+    theta: 0.2
+  });
+
+  state.renderer = createRenderer(device, canvasFormat, {
+    surface: surfaceShaderCode,
+    oit: oitShaderCode,
+    oitComposite: oitCompositeShaderCode,
+    peel: peelShaderCode,
+    peelComposite: peelCompositeShaderCode,
+    dualPeel: dualPeelShaderCode
+  });
+  state.renderer.initMesh(mesh);
+
+  state.initialized = true;
+}
+
+const canvas = state.canvas!;
+const gpuContext = state.gpuContext!;
+const camera = state.camera!;
+const renderer = state.renderer!;
+const container = html`<div id="surface-container" style="position: relative; width: 100%; height: 100%;"></div>`;
+container.appendChild(canvas);
+
+const figcaption = html`<figcaption>${state.renderParams.method}</figcaption>`;
+
+const resizeCanvas = () => {
+  const rect = container.getBoundingClientRect();
+  if (rect.width === 0 || rect.height === 0) return;
+  const dpr = devicePixelRatio;
+  const newWidth = Math.floor(rect.width * dpr);
+  const newHeight = Math.floor(rect.height * dpr);
+  if (canvas.width !== newWidth || canvas.height !== newHeight) {
+    canvas.width = newWidth;
+    canvas.height = newHeight;
+    gpuContext.configure({ device, format: canvasFormat, alphaMode: 'opaque' });
+    state.dirty = true;
+    camera.taint();
+  }
+};
+
+const resizeObserver = new ResizeObserver(resizeCanvas);
+resizeObserver.observe(container);
+
+let visible = true;
+const intersectionObserver = new IntersectionObserver(entries => {
+  visible = entries[0].intersectionRatio > 0;
+});
+intersectionObserver.observe(container);
+
+if (state.frame) {
+  state.frame.cancel();
+  state.frame = null;
+}
+camera.taint();
+
+const startTime = performance.now();
+state.frame = createFrameLoop((timestamp) => {
+  if (!visible) return;
+
+  const w = canvas.width;
+  const h = canvas.height;
+  if (w === 0 || h === 0) return;
+
+  const rendered = renderer.render(gpuContext, state.renderParams, camera, w, h, timestamp, startTime, state.dirty);
+  if (rendered) {
+    figcaption.textContent = state.renderParams.method;
+    state.dirty = false;
+  }
+});
+
+invalidation.then(() => {
+  if (state.frame) {
+    state.frame.cancel();
+    state.frame = null;
+  }
+  resizeObserver.disconnect();
+  intersectionObserver.disconnect();
+});
+
+const figure = html`
+  <figure id="main-figure" style="max-width: 100%; margin: 0; height: 100%;">
+    ${container}
+    ${figcaption}
+  </figure>
+`;
+
+const figureWidth = Math.min(width, 640);
+const figureHeight = Math.round(Math.max(500, figureWidth * 0.7));
+
+display(expandable(figure, {
+  wide: true,
+  width: figureWidth,
+  height: figureHeight,
+  controls: '#surface-controls',
+  state: state.expandedState,
+  onResize: (content, w, h, expanded) => {
+    container.style.width = `${w}px`;
+    container.style.height = `${h}px`;
+    figcaption.style.display = expanded ? 'none' : 'block';
+    resizeCanvas();
+  }
+}));
+  </script>
+
+  <script id="fake-intro" type="text/markdown">
+## Fake Transparency
+
+The constant-width gridlines are adapted from [glsl-solid-wireframe](https://github.com/rreusser/glsl-solid-wireframe). You can use the approach to draw any sort of gridlines on any sort of surface. Or [to draw 2D contours in a fragment shader](https://observablehq.com/@rreusser/contour-plots-with-d3-regl-and-observable?collection=@rreusser/webgl).
+
+The cartoon edges use the same underlying trick as the gridlines. The quantity ${tex`|\mathbf{n} \cdot \mathbf{v}|`}, the absolute dot product of the surface normal with the view direction, goes to zero at silhouette edges where the surface turns away from the camera. Near such a zero-crossing any smooth scalar field is approximately linear, so dividing by its screen-space gradient magnitude (via `fwidth`) yields a first-order estimate of the distance to the zero-crossing measured in pixels. Applying a `smoothstep` threshold to this ratio produces a band of constant pixel width, regardless of depth, perspective, or how sharply the surface curves. The silhouette line stays the same number of pixels wide everywhere on the surface. One downside is that it requires a moderately high-resolution mesh since the derivative is evaluated per-triangle and can't smooth over abrupt normal changes.
+
+At a strictly subjective level, I find this pretty tolerable for illustrating mathematical surfaces, where the goal is not so much physically accurate representation of objects but instead the communication of structure.
+  </script>
+
+  <script id="oit-intro" type="text/markdown">
+## Weighted Blended Order-Independent Transparency
+
+The fake transparency approach above is a practical hack, but it isn't true transparency. For a more principled approach, we can use *weighted blended order-independent transparency* (WBOIT), as described by [McGuire and Bavoil (2013)](http://jcgt.org/published/0002/02/09/).
+
+The idea is to render all transparent geometry in a single pass to two render targets. The first target accumulates premultiplied color weighted by a depth-dependent function. The second target tracks the total transmittance (the product of all ${tex`(1 - \alpha)`} terms). A final compositing pass combines these two buffers to produce the blended result.
+
+The weighting function is the key ingredient. Surfaces closer to the camera receive higher weight so that nearer geometry contributes more to the final color, roughly approximating correct depth ordering without actually sorting anything. The function used here is ${tex`w(z, \alpha) = \alpha \cdot \max(10^{-2},\; 3 \times 10^{3} \cdot (1 - z_{\mathrm{ndc}})^3)`}, where ${tex`z_{\mathrm{ndc}}`} is the normalized device coordinate depth.
+
+The blend modes for the two targets are additive accumulation for color/weight and multiplicative accumulation for revealage. Then the compositing pass reconstructs the final pixel color as
+
+${tex.block`C_{\text{final}} = \frac{C_{\text{accum}}.\text{rgb}}{\max(C_{\text{accum}}.a,\; 10^{-4})} \cdot (1 - R) + C_{\text{bg}} \cdot R`}
+
+where ${tex`R`} is the revealage value.
+  </script>
+
+  <script id="oit-diagram-controls" type="text/x-typescript">
+const oitDiagramInput = Inputs.range([0, 1], { label: "Opacity", value: 0.85, step: 0.01 });
+const oitDepthSpreadInput = Inputs.range([0, 1], { label: "Depth spread", value: 1, step: 0.01 });
+display(oitDiagramInput);
+display(oitDepthSpreadInput);
+const oitDiagramOpacity = Generators.input(oitDiagramInput);
+const oitDepthSpread = Generators.input(oitDepthSpreadInput);
+  </script>
+
+  <script id="oit-diagram" type="text/x-typescript">
+display(html`<figure style="max-width: 640px;">
+  ${createOITDiagram(oitDiagramOpacity, oitDepthSpread)}
+  <figcaption>Five sample fragments processed by OIT. Nearer fragments receive higher depth-based weights, substituting for explicit sorting.</figcaption>
+</figure>`);
+  </script>
+
+  <script id="peel-intro" type="text/markdown">
+## Front-to-Back Depth Peeling
+
+Depth peeling is an exact order-independent transparency technique. It renders the scene multiple times, each time "peeling" away the nearest unpainted layer from front to back. On the first pass, standard depth testing captures the nearest surface. On each subsequent pass, a fragment is discarded if its depth is less than or equal to the previous layer's depth, revealing the next-nearest surface. After all layers have been captured, they are composited back to front with standard alpha blending.
+
+The number of peel passes controls the maximum number of transparent layers that can be resolved. For most scenes, four to six passes are sufficient to capture the visible layering. Each additional pass requires re-rendering all geometry, so there is a direct tradeoff between quality and performance. This cost motivates dual depth peeling, which captures two layers per pass instead of one.
+  </script>
+
+  <script id="peel-diagram-controls" type="text/x-typescript">
+const peelDiagramInput = Inputs.range([0, 5], { label: "Peel layers", value: 4, step: 1 });
+const peelOpacityInput = Inputs.range([0, 1], { label: "Surface opacity", value: 0.85, step: 0.01 });
+display(peelDiagramInput);
+display(peelOpacityInput);
+const peelDiagramLayers = Generators.input(peelDiagramInput);
+const peelDiagramOpacity = Generators.input(peelOpacityInput);
+  </script>
+
+  <script id="peel-diagram" type="text/x-typescript">
+display(html`<figure style="max-width: 640px;">
+  ${createPeelDiagram(peelDiagramOpacity, peelDiagramLayers)}
+  <figcaption>Each pass captures the nearest remaining fragment. Layers are then composited back to front with alpha blending. Swatch opacity in the blend column reflects each layer's effective contribution to the final result.</figcaption>
+</figure>`);
+  </script>
+
+  <script id="dual-peel-intro" type="text/markdown">
+## Dual Depth Peeling
+
+Standard front-to-back depth peeling captures one layer per pass, so rendering N layers requires N full geometry passes. Dual depth peeling, introduced by [Bavoil and Myers (2008)](https://developer.download.nvidia.com/SDK/10/opengl/src/dual_depth_peeling/doc/DualDepthPeeling.pdf), halves the number of geometry passes by capturing both the nearest and farthest surviving fragments in each pass.
+
+The technique works by maintaining a "dual depth" buffer that stores two depth values per pixel. Through MAX blending of ${tex`(-z, z)`}, the buffer simultaneously captures the minimum depth (nearest fragment) in one channel and the maximum depth (farthest fragment) in the other. Each pass renders to three targets: the dual depth buffer, a front color buffer that accumulates the nearest fragment's contribution via under (front-to-back) blending, and a back color buffer that accumulates the farthest fragment's contribution via over (back-to-front) blending.
+
+The first pass operates over all fragments. Each subsequent pass reads the previous dual depth buffer and discards any fragment whose depth falls at or outside the previous near/far boundaries, peeling inward from both sides simultaneously. After N passes, up to 2N layers have been captured. Compositing proceeds from back to front: back layers from the outermost pass through the innermost, then front layers from the innermost pass through the outermost.
+
+Within each pass, the front and back colors are approximations since hardware blending processes fragments in arbitrary order rather than strict depth order. The approximation converges to exact results as the number of passes increases and fewer fragments compete within each peeling interval.
+  </script>
+
+  <script id="dual-peel-diagram-controls" type="text/x-typescript">
+const dualPeelDiagramInput = Inputs.range([0, 5], { label: "Peel layers", value: 4, step: 1 });
+const dualPeelOpacityInput = Inputs.range([0, 1], { label: "Surface opacity", value: 0.85, step: 0.01 });
+display(dualPeelDiagramInput);
+display(dualPeelOpacityInput);
+const dualPeelDiagramLayers = Generators.input(dualPeelDiagramInput);
+const dualPeelDiagramOpacity = Generators.input(dualPeelOpacityInput);
+  </script>
+
+  <script id="dual-peel-diagram" type="text/x-typescript">
+display(html`<figure style="max-width: 640px;">
+  ${createDualPeelDiagram(dualPeelDiagramOpacity, dualPeelDiagramLayers)}
+  <figcaption>Each pass captures the nearest and farthest remaining fragments simultaneously, peeling inward from both sides. Swatch opacity in the blend column reflects each layer's effective contribution.</figcaption>
+</figure>`);
+  </script>
+
+</notebook>

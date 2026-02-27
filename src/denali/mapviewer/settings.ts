@@ -20,7 +20,8 @@ export function estimateTreeline(lat: number): number {
 export function createSettings(initial: Partial<Settings> = {}): Settings {
   return new Proxy({
     verticalExaggeration: 1.0,
-    densityThreshold: 3.0,
+    densityThreshold: 1.0,
+    imageryDensityThreshold: 1.0,
     showTileBorders: false,
     freezeCoverage: false,
     enableCollision: true,
@@ -36,7 +37,7 @@ export function createSettings(initial: Partial<Settings> = {}): Settings {
     slopeAspectOpacity: 0.95,
     treelineLower: 2000,
     treelineUpper: 2500,
-    contourOpacity: 1.0,
+    contourOpacity: 0.5,
     collisionBuffer: 4,
     occlusionBias: 0.03,
     atmosphereDensity: 0.35,

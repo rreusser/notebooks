@@ -59,8 +59,8 @@ const _view64 = new Float64Array(16);
 const _proj64 = new Float64Array(16);
 const _model64 = new Float64Array(16);
 
-function modelMatrix(out, z, x, y, elevationScale, verticalExaggeration) {
-  const s = 1 / (512 * (1 << z));
+function modelMatrix(out, z, x, y, elevationScale, verticalExaggeration, dataResolution) {
+  const s = 1 / ((dataResolution || 512) * (1 << z));
   const tx = x / (1 << z);
   const ty = y / (1 << z);
   out[0] = s;   out[1] = 0;  out[2] = 0;   out[3] = 0;
@@ -81,12 +81,12 @@ function mul64(out, a, b) {
   }
 }
 
-export function computeTileMVP(out32, view, proj, z, x, y, elevationScale, verticalExaggeration) {
+export function computeTileMVP(out32, view, proj, z, x, y, elevationScale, verticalExaggeration, dataResolution) {
   for (let i = 0; i < 16; i++) {
     _view64[i] = view[i];
     _proj64[i] = proj[i];
   }
-  modelMatrix(_m, z, x, y, elevationScale, verticalExaggeration);
+  modelMatrix(_m, z, x, y, elevationScale, verticalExaggeration, dataResolution);
   mul64(_mv, _view64, _m);
   mul64(_mvp, _proj64, _mv);
   for (let i = 0; i < 16; i++) {
@@ -94,8 +94,8 @@ export function computeTileMVP(out32, view, proj, z, x, y, elevationScale, verti
   }
 }
 
-export function computeTileModel(out32, z, x, y, elevationScale, verticalExaggeration) {
-  modelMatrix(_model64, z, x, y, elevationScale, verticalExaggeration);
+export function computeTileModel(out32, z, x, y, elevationScale, verticalExaggeration, dataResolution) {
+  modelMatrix(_model64, z, x, y, elevationScale, verticalExaggeration, dataResolution);
   for (let i = 0; i < 16; i++) {
     out32[i] = _model64[i];
   }

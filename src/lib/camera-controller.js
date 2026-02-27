@@ -54,6 +54,12 @@ export function createCameraController(element, opts = {}) {
   let dragMode = null;
   let lastX = 0, lastY = 0;
 
+  // Drag-start snapshot for path-independent modes
+  let dragStartX = 0, dragStartY = 0;
+  let dragStartPhi = 0, dragStartTheta = 0;
+  let dragStartDistance = 0;
+  let dragStartCenter = [0, 0, 0];
+
   // Touch state
   let lastTouchDist = 0;
   let lastTouchCenterX = 0;
@@ -145,7 +151,18 @@ export function createCameraController(element, opts = {}) {
     lastX = event.clientX;
     lastY = event.clientY;
 
-    dragMode = (event.shiftKey || event.button === 2) ? 'pan' : 'rotate';
+    dragMode = event.altKey ? 'zoom'
+      : (event.ctrlKey || event.metaKey) ? 'pivot'
+      : (event.shiftKey || event.button === 2) ? 'pan'
+      : 'rotate';
+
+    dragStartX = event.clientX;
+    dragStartY = event.clientY;
+    dragStartPhi = state.phi;
+    dragStartTheta = state.theta;
+    dragStartDistance = state.distance;
+    dragStartCenter = [...state.center];
+
     isDragging = true;
     element.style.cursor = 'grabbing';
 
@@ -169,6 +186,53 @@ export function createCameraController(element, opts = {}) {
       // Normalize both by height so pan speed is consistent across aspect ratios
       const rect = element.getBoundingClientRect();
       pan(dx / rect.height, dy / rect.height);
+    } else if (dragMode === 'zoom') {
+      const totalDy = event.clientY - dragStartY;
+      state.distance = Math.max(state.near * 10, dragStartDistance * Math.exp(-totalDy * zoomSpeed * 5));
+
+      // Pan to keep the clicked point stationary (same logic as wheel zoom)
+      const rect = element.getBoundingClientRect();
+      const mx = (dragStartX - rect.left - rect.width / 2) / rect.height;
+      const my = (dragStartY - rect.top - rect.height / 2) / rect.height;
+
+      const totalZoomFactor = state.distance / dragStartDistance;
+      const c = (1 - totalZoomFactor) * dragStartDistance * panSpeed;
+
+      const rightX = Math.sin(dragStartPhi);
+      const rightZ = -Math.cos(dragStartPhi);
+      const upX = -Math.sin(dragStartTheta) * Math.cos(dragStartPhi);
+      const upY = Math.cos(dragStartTheta);
+      const upZ = -Math.sin(dragStartTheta) * Math.sin(dragStartPhi);
+
+      state.center[0] = dragStartCenter[0] + c * (mx * rightX - my * upX);
+      state.center[1] = dragStartCenter[1] + c * (-my * upY);
+      state.center[2] = dragStartCenter[2] + c * (mx * rightZ - my * upZ);
+    } else if (dragMode === 'pivot') {
+      // Rotate the view direction while keeping the eye position fixed.
+      // Computed from drag-start state for path-independence.
+      const { distance, fov } = state;
+
+      const eyeX = dragStartCenter[0] + distance * Math.cos(dragStartTheta) * Math.cos(dragStartPhi);
+      const eyeY = dragStartCenter[1] + distance * Math.sin(dragStartTheta);
+      const eyeZ = dragStartCenter[2] + distance * Math.cos(dragStartTheta) * Math.sin(dragStartPhi);
+
+      const rect = element.getBoundingClientRect();
+      const tanHalfFov = Math.tan(fov / 2);
+      const halfH = rect.height / 2;
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top + rect.height / 2;
+
+      const totalAngleH = Math.atan((event.clientX - cx) * tanHalfFov / halfH)
+                         - Math.atan((dragStartX - cx) * tanHalfFov / halfH);
+      const totalAngleV = Math.atan((cy - event.clientY) * tanHalfFov / halfH)
+                         - Math.atan((cy - dragStartY) * tanHalfFov / halfH);
+
+      state.phi = dragStartPhi - totalAngleH / Math.cos(dragStartTheta);
+      state.theta = Math.max(-Math.PI/2 + 0.01, Math.min(Math.PI/2 - 0.01, dragStartTheta + totalAngleV));
+
+      state.center[0] = eyeX - distance * Math.cos(state.theta) * Math.cos(state.phi);
+      state.center[1] = eyeY - distance * Math.sin(state.theta);
+      state.center[2] = eyeZ - distance * Math.cos(state.theta) * Math.sin(state.phi);
     }
 
     dirty = true;

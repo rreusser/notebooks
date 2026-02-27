@@ -3,15 +3,15 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="author" content="Ricky Reusser">
   <meta property="article:author" content="Ricky Reusser">
-  <meta name="twitter:title" content="Strange Attractors in WebGPU">
-  <meta property="og:title" content="Strange Attractors in WebGPU">
-  <meta name="twitter:description" content="Integrating strange attractors in WebGPU">
-  <meta name="subject" content="Integrating strange attractors in WebGPU">
-  <meta name="description" content="Integrating strange attractors in WebGPU">
-  <meta property="og:description" content="Integrating strange attractors in WebGPU">
-  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/strange-attractors-in-webgpu.jpg">
+  <meta name="twitter:title" content="Transparency for 3D Surfaces">
+  <meta property="og:title" content="Transparency for 3D Surfaces">
+  <meta name="twitter:description" content="A comparison of three approaches to rendering transparent 3D surfaces in WebGPU, including a simple two-pass hack that draws gridlines and edges through solid geometry, weighted blended order-independent transparency, and depth peeling.">
+  <meta name="subject" content="A comparison of three approaches to rendering transparent 3D surfaces in WebGPU, including a simple two-pass hack that draws gridlines and edges through solid geometry, weighted blended order-independent transparency, and depth peeling.">
+  <meta name="description" content="A comparison of three approaches to rendering transparent 3D surfaces in WebGPU, including a simple two-pass hack that draws gridlines and edges through solid geometry, weighted blended order-independent transparency, and depth peeling.">
+  <meta property="og:description" content="A comparison of three approaches to rendering transparent 3D surfaces in WebGPU, including a simple two-pass hack that draws gridlines and edges through solid geometry, weighted blended order-independent transparency, and depth peeling.">
+  <meta name="twitter:image" content="https://rreusser.github.io/notebooks/meta/transparency-for-3d-surfaces.jpg">
   <meta name="twitter:card" content="summary_large_image">
-  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/strange-attractors-in-webgpu.jpg">
+  <meta property="og:image" content="https://rreusser.github.io/notebooks/meta/transparency-for-3d-surfaces.jpg">
   <link rel="alternate" type="application/rss+xml" title="Ricky Reusser's Notebooks" href="/notebooks/feed.xml">
   <style type="text/css">@import url("https://fonts.googleapis.com/css?family=Open+Sans:300,400,400i,700");
     /* Copyright 2025 Observable, Inc. */
@@ -1893,7 +1893,7 @@ a.index__tag:active {
 }
   </style>
   <style> main { max-width: 640px; }</style>
-<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Strange Attractors in WebGPU</title>  <script type="module" crossorigin src="/notebooks/assets/index-F9QPuWvj.js"></script>
+<meta name="generator" content="Observable Notebook Kit v1.5.0"><title>Transparency for 3D Surfaces</title>  <script type="module" crossorigin src="/notebooks/assets/index-B5LZ2Vlp.js"></script>
   <link rel="modulepreload" crossorigin href="/notebooks/assets/index-ByB2dbry.js">
 </head>
 <body>
@@ -1904,20 +1904,20 @@ a.index__tag:active {
     <a class="menu__item" href="/trains-and-trails/">running</a>
   </nav>
   <header>
-    <h1>Strange Attractors in WebGPU</h1>
+    <h1>Transparency for 3D Surfaces</h1>
     <div class="byline">
       <address class="author"><a rel="author" href="https://rreusser.github.io">Ricky Reusser</a></address>
-      <time pubdate="" datetime="20260117">January 17, 2026</time>
+      <time pubdate="" datetime="20200613">June 13, 2020</time>
     </div>
     <div class="resource-links">
-        <a href="https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1" class="resource-link">
+        <a href="https://observablehq.com/@rreusser/faking-transparency-for-3d-surfaces" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <circle cx="12" cy="12" r="10" fill="white"></circle>
             <path d="M9 7 l 8 5 -8 5 V10z" fill="#c44"></path>
           </svg>
           Live notebook
         </a>
-        <a href="https://github.com/rreusser/notebooks/tree/main/src/strange-attractors-in-webgpu/index.html" class="resource-link">
+        <a href="https://github.com/rreusser/notebooks/tree/main/src/transparency-for-3d-surfaces/index.html" class="resource-link">
           <svg class="icon" viewBox="0 0 24 24" fill="currentColor">
             <path d="M12 .5C5.65.5.5 5.65.5 12a11.5 11.5 0 0 0 7.84 10.93c.57.11.78-.25.78-.56v-2.1c-3.19.7-3.86-1.54-3.86-1.54-.52-1.34-1.26-1.7-1.26-1.7-1.03-.7.08-.69.08-.69 1.14.08 1.74 1.17 1.74 1.17 1.02 1.75 2.67 1.24 3.32.95.1-.74.4-1.24.72-1.53-2.55-.29-5.23-1.28-5.23-5.72 0-1.26.45-2.29 1.17-3.09-.12-.29-.51-1.46.11-3.05 0 0 .96-.31 3.14 1.18a10.92 10.92 0 0 1 2.86-.38c.97 0 1.94.13 2.86.38 2.18-1.49 3.14-1.18 3.14-1.18.62 1.59.23 2.76.11 3.05.73.8 1.17 1.83 1.17 3.09 0 4.45-2.68 5.43-5.23 5.72.41.35.78 1.05.78 2.12v3.14c0 .31.21.67.79.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"></path>
           </svg>
@@ -1927,84 +1927,29 @@ a.index__tag:active {
   </header>
   <div class="container">
 
-    <main><div id="cell-1" class="observablehq observablehq--cell"><div><p><em>This notebook is a 2026 WebGPU update of my 2021 post, <a href="https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1">Strange Attractors on the GPU, Part 1: Implementation</a>.</em></p>
-<p>This notebook walks through simulating a strange attractor on the GPU and then rendering particle tracks as lines. The essential feature of this notebook is that it accomplishes both particle updates and rendering to the screen without data ever touching the CPU.</p>
-</div></div><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"><div><h3 id="the-attractor" tabindex="-1"><a href="#the-attractor">The Attractor</a></h3>
-<p>A strange attractor is a set of states toward which a dynamical system evolves over time. The <a href="https://en.wikipedia.org/wiki/Lorenz_system">Lorenz System</a> is the canonical example. The particular attractor we’re simulating here is the <em>Bouali Attractor</em>, described by Safieddine Bouali in <a href="https://arxiv.org/abs/1311.6128">A 3D Strange Attractor with a Distinctive Silhouette. The Butterfly Effect Revisited</a>. It is defined by the system of ordinary differential equations:</p>
-<p>with parameters , , , . These equations exhibit chaotic behavior; nearby trajectories diverge exponentially but remain bounded within the attractor’s basin.</p>
-</div></div><div id="cell-6" class="observablehq observablehq--cell"><div><h2 id="from-web-gl-to-web-gpu" tabindex="-1"><a href="#from-web-gl-to-web-gpu">From WebGL to WebGPU</a></h2>
-<p><a href="https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1">The original WebGL version of this simulation</a> stored particle state in a floating-point texture. Each row represented a particle’s history as a ring buffer. The simulation was designed around the limitations of WebGL, in particular the lack of compute shaders and inability to read and write to the same texture (WebGL 2’s <a href="https://webgl2fundamentals.org/webgl/lessons/webgl-gpgpu.html#now-lets-do-it-with-transform-feedback">transform feedback</a> notwithstanding).</p>
-<p>A naive WebGPU port would preserve this texture-based approach, replacing fragment shader hacks with proper compute shaders. That would require <strong>three GPU operations per frame</strong>:</p>
-<ol>
-<li><strong>Integrate</strong>: Read from the state texture, write new positions to a temporary texture</li>
-<li><strong>Copy</strong>: Transfer the temporary column back into the main state texture</li>
-<li><strong>Draw</strong>: Render lines by sampling the state texture in a vertex shader</li>
-</ol>
-<p>I tried this texture-based approach, but when I didn’t see much performance improvement over the buffer approach, I switched back to storage buffers with <code>read_write</code> access. This is a natural fit for the embarrassingly parallel task of integrating independent particles with no mutual interaction, and it eliminates the copy step entirely.</p>
-<p>With storage buffers, each frame requires just two GPU operations:</p>
-<ol>
-<li><strong>Integrate</strong> the differential equation, reading the current state and writing one new state value for each particle.</li>
-<li><strong>Draw</strong> all line segments, joins, and caps using instanced triangle strip geometry.</li>
-</ol>
-<p>For line rendering, we use the <a href="https://github.com/rreusser/webgpu-instanced-lines">webgpu-instanced-lines</a> module. Lines are difficult to render well. The built-in line primitive in graphics APIs is typically limited to single-pixel width. To get smooth, variable-width lines with proper joins and caps, we build geometry from triangles in the vertex shader. The module handles this complexity, requiring only that we provide a function to compute vertex positions from our data.</p>
-</div></div><div id="cell-7" class="observablehq observablehq--cell"><div><p><strong>A note on performance</strong>: For reasons I don’t understand, this WebGPU implementation performs slightly worse than the <a href="https://observablehq.com/@rreusser/strange-attractors-on-the-gpu-part-1">original WebGL 1 version</a> despite using almost identically the same logic and line rendering implementation. It’s relatively unclear to me why that is, though I take it as a lesson that new technology can unlock new techniques, algorithms, and capabilities, but just blindly throwing it at the stuff you’re already doing isn’t necessarily going to lead to magic improvements.</p>
-</div></div><div id="cell-8" class="observablehq observablehq--cell"><div><h2 id="state-layout" tabindex="-1"><a href="#state-layout">State Layout</a></h2>
-<p>The state of our ordinary differential equation (ODE) is represented by the three-component vector . We store these in a flat storage buffer as <code>vec3f</code> elements. The  time step of the  particle is represented by the vector:</p>
-<p>We use <strong>particle-major ordering</strong>: all time steps for particle 0 come first, then all time steps for particle 1, and so on. The buffer index for a given particle and step is <code>particle * stepCount + step</code>.</p>
-<p>As we step the ODE, we compute one new history point for each particle track. To avoid shifting the entire history on every iteration, we treat each particle’s slice as a <strong>ring buffer</strong>. At each time step , we use the previous position, , to compute the next, . When we reach the end of the slice, we loop back to the start, overwriting the oldest time step with the newest.</p>
-</div></div><div id="cell-9" class="observablehq observablehq--cell"></div><div id="cell-10" class="observablehq observablehq--cell"><div><h2 id="computation" tabindex="-1"><a href="#computation">Computation</a></h2>
-<p>Unlike fragment shaders which operate on pixels being rasterized, <strong>compute shaders</strong> dispatch a grid of threads which can read from and write to arbitrary locations in GPU resources.</p>
-<h3 id="initialization" tabindex="-1"><a href="#initialization">Initialization</a></h3>
-<p>For historical reasons which I didn’t see it necessary to change, we initialize particles with a compute shader, although we could write data from the CPU to a buffer just fine.</p>
-<p>We start by initializing particle positions within a sphere centered near the attractor. Generating good pseudorandom numbers on a GPU is tricky, so we use a low-discrepancy quasirandom number generator described by Martin Roberts in <em><a href="http://extremelearning.com.au/unreasonable-effectiveness-of-quasirandom-sequences/">The Unreasonable Effectiveness of Quasirandom Sequences</a></em>.</p>
-</div></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"><div><h3 id="integration" tabindex="-1"><a href="#integration">Integration</a></h3>
-<p>To step the ODE, we use the <a href="https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta_methods#The_Runge%E2%80%93Kutta_method">fourth-order Runge-Kutta</a> (RK4) method. The integration shader reads from index <code>particle * stepCount + srcColumn</code> and writes to <code>particle * stepCount + dstColumn</code>. Since these are different indices (no particle reads what another particle writes), there are no data races.</p>
-</div></div><div id="cell-13" class="observablehq observablehq--cell"></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"><div><h2 id="line-rendering" tabindex="-1"><a href="#line-rendering">Line Rendering</a></h2>
-<p>In the timeless words of Matt DesLauriers, <em><a href="https://mattdesl.svbtle.com/drawing-lines-is-hard">Drawing Lines is Hard</a></em>. Browsers limit the built-in line primitive to a single pixel width, so for any reasonably well-rendered lines, we need to build our own geometry.</p>
-<p>The <a href="https://github.com/rreusser/webgpu-instanced-lines">webgpu-instanced-lines</a> module renders lines as instanced triangle strips, with one instance per line segment. Each instance draws the segment itself plus half of the adjacent joins. A four-point sliding window (previous, start, end, next) provides the context needed to compute join geometry.</p>
-<p>We don’t pass vertex positions directly. Instead, we provide a vertex function which uses the integer vertex ID to read particle buffer data. To handle the ring buffer, we add an offset to the step index that shifts based on which column was most recently written. The oldest data is always at the “start” of the rendered line, and the newest at the end.</p>
-</div></div><div id="cell-16" class="observablehq observablehq--cell"><div><h3 id="line-breaks" tabindex="-1"><a href="#line-breaks">Line Breaks</a></h3>
-<p>Multiple particle tracks are rendered in a single draw call. We separate them using sentinel values of <code>w = 0</code> in clip space. When the vertex function returns a position with <code>w = 0</code>, the line renderer interprets this as a break, skipping one instance and reworking adjacent joins into end caps.</p>
-<h3 id="code" tabindex="-1"><a href="#code">Code</a></h3>
-<p>A selection of the code is presented below. We import <a href="https://www.npmjs.com/package/webgpu-instanced-lines">webgpu-instanced-lines</a> from NPM and instantiate a line renderer. The main call and vertex shader are printed below, but for a comprehensive, straightforward example with all the pieces in place, see <a href="https://rreusser.github.io/webgpu-instanced-lines/lorenz.html">this example</a> from the module.</p>
-</div></div><div id="cell-17" class="observablehq observablehq--cell"></div><pre data-language="js"><code class="language-js"><span class="tok-keyword">import</span> { <span class="tok-definition">createGPULines</span> } <span class="tok-keyword">from</span> <span class="tok-string">'npm:webgpu-instanced-lines'</span>;
-
-<span class="tok-keyword">const</span> <span class="tok-definition">gpuLines</span> = <span class="tok-variable">createGPULines</span>(<span class="tok-variable">device</span>, {
-  <span class="tok-definition">colorTargets</span>: [{
-<span class="tok-definition">format</span>: <span class="tok-variable">canvasFormat</span>,
-<span class="tok-definition">blend</span>: {
-  <span class="tok-definition">color</span>: {
-    <span class="tok-definition">srcFactor</span>: <span class="tok-string">'src-alpha'</span>,
-    <span class="tok-definition">dstFactor</span>: <span class="tok-string">'one-minus-src-alpha'</span>,
-    <span class="tok-definition">operation</span>: <span class="tok-string">'add'</span>
-  },
-  <span class="tok-definition">alpha</span>: {
-    <span class="tok-definition">srcFactor</span>: <span class="tok-string">'one'</span>,
-    <span class="tok-definition">dstFactor</span>: <span class="tok-string">'one-minus-src-alpha'</span>,
-    <span class="tok-definition">operation</span>: <span class="tok-string">'add'</span>
-  }
-}
-  }],
-  <span class="tok-definition">depthStencil</span>: { <span class="tok-definition">format</span>: <span class="tok-string">'depth24plus'</span>, <span class="tok-definition">depthWriteEnabled</span>: <span class="tok-literal">true</span>, <span class="tok-definition">depthCompare</span>: <span class="tok-string">'less'</span> },
-  <span class="tok-definition">multisample</span>: { <span class="tok-definition">count</span>: <span class="tok-variable">renderState</span>.<span class="tok-definition">sampleCount</span>, <span class="tok-definition">alphaToCoverageEnabled</span>: <span class="tok-literal">false</span> },
-  <span class="tok-definition">join</span>: <span class="tok-string">'bevel'</span>,
-  <span class="tok-definition">cap</span>: <span class="tok-string">'square'</span>,
-  <span class="tok-definition">vertexShaderBody</span>,
-  <span class="tok-definition">fragmentShaderBody</span>,
-});
-
-<span class="tok-variable">invalidation</span>.<span class="tok-definition">then</span>(() =&gt; <span class="tok-variable">gpuLines</span>.<span class="tok-definition">destroy</span>());</code></pre><div id="cell-18" class="observablehq observablehq--cell"></div><div id="cell-19" class="observablehq observablehq--cell"></div><div id="cell-20" class="observablehq observablehq--cell"></div><div id="cell-21" class="observablehq observablehq--cell"></div><div id="cell-22" class="observablehq observablehq--cell"><div><h2 id="draw-loop" tabindex="-1"><a href="#draw-loop">Draw Loop</a></h2>
-<p>Finally, we put it all together into a frame loop. For each frame:</p>
-<ol>
-<li>dispatch the integrate compute shader to compute new particle positions</li>
-<li>Update the buffer offset uniform so lines render from oldest to newest</li>
-<li>Draw lines by calling into the webgpu-lines module</li>
-</ol>
-</div></div><div id="cell-23" class="observablehq observablehq--cell"></div><div id="cell-24" class="observablehq observablehq--cell"></div><div id="cell-25" class="observablehq observablehq--cell"><div><h2 id="summary" tabindex="-1"><a href="#summary">Summary</a></h2>
-<p>I’m thrilled that my new WebGPU line rendering module worked out so well. It fills a big gap in what I need WebGPU for, and I’m eager to keep using it.</p>
-<p>The switch from hacky WebGL workarounds to proper WebGPU primitives turned out well. I haven’t done the full timing analysis I should have, but we went from three passes (integrate, copy, render) to just two (integrate, render).</p>
-<p>And of course, the techniques here generalize beyond our strange attractors test case. Any particle system where you want to visualize trails—fluid simulations, n-body systems, gradient flows—can use this same ring buffer approach for efficient GPU-based track rendering.</p>
-</div></div></main>
+    <main><div id="cell-2" class="observablehq observablehq--cell"></div><div id="cell-3" class="observablehq observablehq--cell"><div><p>GPUs do many things well, but drawing transparent 3D objects is not one of them. Opacity doesn’t commute so that the order in which you draw surfaces makes a big difference.</p>
+<p>The simplest way to draw transparent objects is from back to front via the <a href="https://en.wikipedia.org/wiki/Painter%27s_algorithm">painter’s algorithm</a>. In this approach we sort geometry and draw only from back to front. This requires sorting triangles, which, in addition to the possibility of ambiguous overlapping, is a pretty big pain to do whenever the view angle changes.</p>
+<p><a href="https://en.wikipedia.org/wiki/Order-independent_transparency">Order independent transparency</a> includes a number of more sophisticated approaches which avoid the need to sort geometry. Some approaches sort individual fragments (pixels) by depth so that the layering can be computed correctly. Some do this in a more approximate sense.</p>
+<p>This notebook explores a few approaches to transparent rendering, from a practical two-pass hack through more principled order-independent techniques. “Fake transparency” uses a solid surface pass followed by a wireframe-only pass without depth occlusion, giving the impression of transparency without actually sorting or blending layers. Weighted blended OIT approximates correct layering in a single pass using depth-based weights. Front-to-back depth peeling captures exact layers one at a time, and dual depth peeling extends this by capturing two layers per pass.</p>
+</div></div><div id="cell-4" class="observablehq observablehq--cell"></div><div id="cell-5" class="observablehq observablehq--cell"></div><div id="cell-6" class="observablehq observablehq--cell"></div><div id="cell-7" class="observablehq observablehq--cell"></div><div id="cell-8" class="observablehq observablehq--cell"></div><div id="cell-9" class="observablehq observablehq--cell"><div><h2 id="fake-transparency" tabindex="-1"><a href="#fake-transparency">Fake Transparency</a></h2>
+<p>The constant-width gridlines are adapted from <a href="https://github.com/rreusser/glsl-solid-wireframe">glsl-solid-wireframe</a>. You can use the approach to draw any sort of gridlines on any sort of surface. Or <a href="https://observablehq.com/@rreusser/contour-plots-with-d3-regl-and-observable?collection=@rreusser/webgl">to draw 2D contours in a fragment shader</a>.</p>
+<p>The cartoon edges use the same underlying trick as the gridlines. The quantity , the absolute dot product of the surface normal with the view direction, goes to zero at silhouette edges where the surface turns away from the camera. Near such a zero-crossing any smooth scalar field is approximately linear, so dividing by its screen-space gradient magnitude (via <code>fwidth</code>) yields a first-order estimate of the distance to the zero-crossing measured in pixels. Applying a <code>smoothstep</code> threshold to this ratio produces a band of constant pixel width, regardless of depth, perspective, or how sharply the surface curves. The silhouette line stays the same number of pixels wide everywhere on the surface. One downside is that it requires a moderately high-resolution mesh since the derivative is evaluated per-triangle and can’t smooth over abrupt normal changes.</p>
+<p>At a strictly subjective level, I find this pretty tolerable for illustrating mathematical surfaces, where the goal is not so much physically accurate representation of objects but instead the communication of structure.</p>
+</div></div><div id="cell-10" class="observablehq observablehq--cell"><div><h2 id="weighted-blended-order-independent-transparency" tabindex="-1"><a href="#weighted-blended-order-independent-transparency">Weighted Blended Order-Independent Transparency</a></h2>
+<p>The fake transparency approach above is a practical hack, but it isn’t true transparency. For a more principled approach, we can use <em>weighted blended order-independent transparency</em> (WBOIT), as described by <a href="http://jcgt.org/published/0002/02/09/">McGuire and Bavoil (2013)</a>.</p>
+<p>The idea is to render all transparent geometry in a single pass to two render targets. The first target accumulates premultiplied color weighted by a depth-dependent function. The second target tracks the total transmittance (the product of all  terms). A final compositing pass combines these two buffers to produce the blended result.</p>
+<p>The weighting function is the key ingredient. Surfaces closer to the camera receive higher weight so that nearer geometry contributes more to the final color, roughly approximating correct depth ordering without actually sorting anything. The function used here is , where  is the normalized device coordinate depth.</p>
+<p>The blend modes for the two targets are additive accumulation for color/weight and multiplicative accumulation for revealage. Then the compositing pass reconstructs the final pixel color as</p>
+<p>where  is the revealage value.</p>
+</div></div><div id="cell-11" class="observablehq observablehq--cell"></div><div id="cell-12" class="observablehq observablehq--cell"></div><div id="cell-13" class="observablehq observablehq--cell"><div><h2 id="front-to-back-depth-peeling" tabindex="-1"><a href="#front-to-back-depth-peeling">Front-to-Back Depth Peeling</a></h2>
+<p>Depth peeling is an exact order-independent transparency technique. It renders the scene multiple times, each time “peeling” away the nearest unpainted layer from front to back. On the first pass, standard depth testing captures the nearest surface. On each subsequent pass, a fragment is discarded if its depth is less than or equal to the previous layer’s depth, revealing the next-nearest surface. After all layers have been captured, they are composited back to front with standard alpha blending.</p>
+<p>The number of peel passes controls the maximum number of transparent layers that can be resolved. For most scenes, four to six passes are sufficient to capture the visible layering. Each additional pass requires re-rendering all geometry, so there is a direct tradeoff between quality and performance. This cost motivates dual depth peeling, which captures two layers per pass instead of one.</p>
+</div></div><div id="cell-14" class="observablehq observablehq--cell"></div><div id="cell-15" class="observablehq observablehq--cell"></div><div id="cell-16" class="observablehq observablehq--cell"><div><h2 id="dual-depth-peeling" tabindex="-1"><a href="#dual-depth-peeling">Dual Depth Peeling</a></h2>
+<p>Standard front-to-back depth peeling captures one layer per pass, so rendering N layers requires N full geometry passes. Dual depth peeling, introduced by <a href="https://developer.download.nvidia.com/SDK/10/opengl/src/dual_depth_peeling/doc/DualDepthPeeling.pdf">Bavoil and Myers (2008)</a>, halves the number of geometry passes by capturing both the nearest and farthest surviving fragments in each pass.</p>
+<p>The technique works by maintaining a “dual depth” buffer that stores two depth values per pixel. Through MAX blending of , the buffer simultaneously captures the minimum depth (nearest fragment) in one channel and the maximum depth (farthest fragment) in the other. Each pass renders to three targets: the dual depth buffer, a front color buffer that accumulates the nearest fragment’s contribution via under (front-to-back) blending, and a back color buffer that accumulates the farthest fragment’s contribution via over (back-to-front) blending.</p>
+<p>The first pass operates over all fragments. Each subsequent pass reads the previous dual depth buffer and discards any fragment whose depth falls at or outside the previous near/far boundaries, peeling inward from both sides simultaneously. After N passes, up to 2N layers have been captured. Compositing proceeds from back to front: back layers from the outermost pass through the innermost, then front layers from the innermost pass through the outermost.</p>
+<p>Within each pass, the front and back colors are approximations since hardware blending processes fragments in arbitrary order rather than strict depth order. The approximation converges to exact results as the number of passes increases and fewer fragments compete within each peeling interval.</p>
+</div></div><div id="cell-17" class="observablehq observablehq--cell"></div><div id="cell-18" class="observablehq observablehq--cell"></div></main>
   </div>
   <footer>
     <div class="footer__attrib">© 2026 Ricky Reusser</div>

@@ -1,7 +1,8 @@
 import { terrainVertexShader, terrainFragmentShader } from '../shaders/terrain.js';
-import { computeTileMVP, computeTileModel, getCellSizeMeters, getImageryZoom } from '../tiles/tile-math.js';
+import { computeTileMVP, computeTileModel, getCellSizeMeters } from '../tiles/tile-math.js';
 import type { GPUContext } from './gpu-context.ts';
 import type { SkyRenderer } from './sky-renderer.ts';
+import type { TerrainMesh } from '../tiles/mesh.ts';
 
 export class TerrainRenderer {
   _gpu: GPUContext;
@@ -34,7 +35,7 @@ export class TerrainRenderer {
 
     this._mvpFloat32 = new Float32Array(16);
     this._modelFloat32 = new Float32Array(16);
-    this._uniformData = new Float32Array(52);
+    this._uniformData = new Float32Array(56);
     this._globalUniformData = new Float32Array(24);
   }
 
@@ -44,9 +45,7 @@ export class TerrainRenderer {
     settings: any;
     renderList: any[];
     tileManager: any;
-    compositor: any;
-    imageryDeltaZoom: number;
-    maxImageryZoom: number;
+    imageryTileCache: any;
     exaggeration: number;
     globalElevScale: number;
     lineLayers: any[];
@@ -57,34 +56,42 @@ export class TerrainRenderer {
     pixelRatio: number;
   }) {
     const {
-      canvas, camera, settings, renderList, tileManager, compositor,
-      imageryDeltaZoom, maxImageryZoom, exaggeration, globalElevScale,
+      canvas, camera, settings, renderList, tileManager, imageryTileCache,
+      exaggeration, globalElevScale,
       lineLayers, circleLayers, textLayers,
       frustumOverlay, collisionManager, pixelRatio,
     } = params;
 
     const gpu = this._gpu;
-    const { device, mesh } = gpu;
+    const { device } = gpu;
 
     const aspect = canvas.width / canvas.height;
     if (aspect === 0 || !isFinite(aspect)) return;
     const { view, projection, projectionView } = camera.update(aspect);
 
     let tileIndex = 0;
-    const draws: { offset: number; bindGroup: GPUBindGroup; imageryBindGroup: GPUBindGroup }[] = [];
+    const draws: { offset: number; bindGroup: GPUBindGroup; imageryBindGroup: GPUBindGroup; mesh: TerrainMesh }[] = [];
 
     for (const tile of renderList) {
       if (tileIndex >= gpu.MAX_TILES_PER_FRAME) break;
-      const entry = tileManager.getTile(tile.z, tile.x, tile.y);
-      if (!entry) continue;
 
+      // Elevation bind group from the terrain tile
+      const terrainEntry = tileManager.getTile(tile.terrainZ, tile.terrainX, tile.terrainY) ?? tileManager.getFlatTileEntry();
+
+      const D = tile.meshDataResolution;
+
+      // Cell size of the terrain tile (physical distance between terrain texels)
+      const terrainCellSize = getCellSizeMeters(tile.terrainZ, tile.terrainY);
+
+      // Cell size of the imagery tile (for the mesh vertex spacing in model space)
       const cellSize = getCellSizeMeters(tile.z, tile.y);
-      const imageryZoom = getImageryZoom(tile.z, imageryDeltaZoom, maxImageryZoom);
-      compositor.ensureImagery(tile.z, tile.x, tile.y, imageryZoom);
-      const hasImagery = compositor.hasImagery(tile.z, tile.x, tile.y);
 
-      computeTileMVP(this._mvpFloat32, view, projection, tile.z, tile.x, tile.y, globalElevScale, exaggeration);
-      computeTileModel(this._modelFloat32, tile.z, tile.x, tile.y, globalElevScale, exaggeration);
+      // Imagery bind group
+      const hasImagery = imageryTileCache && imageryTileCache.hasImagery(tile.z, tile.x, tile.y);
+
+      // Model matrix uses imagery tile coords + mesh data resolution
+      computeTileMVP(this._mvpFloat32, view, projection, tile.z, tile.x, tile.y, globalElevScale, exaggeration, D);
+      computeTileModel(this._modelFloat32, tile.z, tile.x, tile.y, globalElevScale, exaggeration, D);
 
       const ud = this._uniformData;
       ud.set(this._mvpFloat32, 0);
@@ -92,7 +99,7 @@ export class TerrainRenderer {
       ud[32] = globalElevScale;
       ud[33] = cellSize;
       ud[34] = exaggeration;
-      ud[35] = 1 / 514;
+      ud[35] = 1 / (D + 2);
       ud[36] = settings.showTileBorders ? 1.0 : 0.0;
       ud[37] = settings.showImagery ? (hasImagery ? 1.0 : 0.0) : 1.0;
       ud[38] = settings.hillshadeOpacity;
@@ -106,21 +113,30 @@ export class TerrainRenderer {
       ud[46] = settings.slopeAspectOpacity;
       ud[47] = settings.treelineLower * 0.3048;
       ud[48] = settings.treelineUpper * 0.3048;
+      ud[49] = D;                          // grid_data_size
+      ud[50] = tile.terrainUvOffsetU;      // terrain_uv_offset.x
+      ud[51] = tile.terrainUvOffsetV;      // terrain_uv_offset.y
+      ud[52] = tile.terrainUvScaleU;       // terrain_uv_scale.x
+      ud[53] = tile.terrainUvScaleV;       // terrain_uv_scale.y
+      ud[54] = terrainCellSize;            // terrain_cell_size
 
       let imageryBindGroup;
       if (!settings.showImagery) {
         imageryBindGroup = gpu.whiteImageryBindGroup;
       } else if (hasImagery) {
-        imageryBindGroup = compositor.getBindGroup(tile.z, tile.x, tile.y);
+        imageryBindGroup = imageryTileCache.getBindGroup(tile.z, tile.x, tile.y);
       } else {
         imageryBindGroup = gpu.fallbackImageryBindGroup;
       }
 
-      device.queue.writeBuffer(gpu.uniformBuffer, tileIndex * gpu.UNIFORM_STRIDE, ud.buffer, ud.byteOffset, 208);
+      const mesh = gpu.meshPool.getMesh(D);
+
+      device.queue.writeBuffer(gpu.uniformBuffer, tileIndex * gpu.UNIFORM_STRIDE, ud.buffer, ud.byteOffset, 224);
       draws.push({
         offset: tileIndex * gpu.UNIFORM_STRIDE,
-        bindGroup: entry.bindGroup,
+        bindGroup: terrainEntry.bindGroup,
         imageryBindGroup,
+        mesh,
       });
       tileIndex++;
     }
@@ -178,14 +194,18 @@ export class TerrainRenderer {
 
     // Terrain
     pass.setPipeline(this._pipeline);
-    pass.setVertexBuffer(0, mesh.vertexBuffer);
-    pass.setIndexBuffer(mesh.indexBuffer, 'uint32');
     pass.setBindGroup(2, gpu.globalUniformBindGroup);
+    let currentMesh: TerrainMesh | null = null;
     for (const draw of draws) {
+      if (draw.mesh !== currentMesh) {
+        currentMesh = draw.mesh;
+        pass.setVertexBuffer(0, currentMesh.vertexBuffer);
+        pass.setIndexBuffer(currentMesh.indexBuffer, 'uint32');
+      }
       pass.setBindGroup(0, gpu.uniformBindGroup, [draw.offset]);
       pass.setBindGroup(1, draw.bindGroup);
       pass.setBindGroup(3, draw.imageryBindGroup);
-      pass.drawIndexed(mesh.indexCount);
+      pass.drawIndexed(currentMesh.indexCount);
     }
 
     // Frozen coverage frustum lines

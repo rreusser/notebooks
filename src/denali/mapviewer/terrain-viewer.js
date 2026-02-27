@@ -4,12 +4,12 @@ import { SkyRenderer } from './rendering/sky-renderer.ts';
 import { TerrainRenderer } from './rendering/terrain-renderer.ts';
 import { LayerManager } from './layers/layer-manager.ts';
 import { createCameraController } from './camera/camera-controller.js';
-import { tilesetToMercatorBounds, tileUrlFromTemplate, getImageryZoom, lonToMercatorX, latToMercatorY } from './tiles/tile-math.js';
+import { tilesetToMercatorBounds, tileUrlFromTemplate, lonToMercatorX, latToMercatorY } from './tiles/tile-math.js';
 import { invertMat4 } from './math/mat4.ts';
-import { selectTiles, screenDensity, extractEyePosition, debugTile, debugSelectTiles } from './tiles/tile-coverage.js';
+import { selectTiles, selectImageryTiles, screenDensity, terrainScreenDensity, extractEyePosition, debugTile, debugSelectTiles } from './tiles/tile-coverage.js';
 import { TileManager } from './tiles/tile-manager.js';
 import { ImageryManager } from './tiles/imagery-manager.ts';
-import { ImageryCompositor } from './tiles/imagery-compositor.js';
+import { ImageryTileCache } from './tiles/imagery-tile-cache.js';
 import BVH from './interaction/bvh.ts';
 import { screenToRay, raycastTerrain } from './interaction/raycast.js';
 import { createSettings, createAttribution, estimateTreeline } from './settings.ts';
@@ -169,6 +169,7 @@ export class TerrainMap extends EventEmitter {
 
     this.canvas = canvas;
     this._terrainBounds = tilesetToMercatorBounds(terrain);
+    this._maxTerrainZoom = terrain.maxzoom || 14;
 
     const [minLon, minLat, maxLon, maxLat] = terrain.bounds;
     this._location = options.location || {
@@ -227,7 +228,6 @@ export class TerrainMap extends EventEmitter {
     this._tileManager.setBounds(this._terrainBounds);
 
     // Build base layers: each references a raster source
-    this._imageryDeltaZoom = 1;
     const layerDescriptors = [];
     for (const layer of baseLayers) {
       const src = rasterSources[layer.source];
@@ -245,7 +245,7 @@ export class TerrainMap extends EventEmitter {
     }
     this._minImageryZoom = layerDescriptors.length > 0 ? Math.min(...layerDescriptors.map(l => l.minzoom)) : Infinity;
     this._maxImageryZoom = layerDescriptors.length > 0 ? Math.max(...layerDescriptors.map(l => l.maxzoom)) : 0;
-    this._compositor = new ImageryCompositor(device, layerDescriptors, gpu.imageryBGL, gpu.imagerySampler);
+    this._imageryTileCache = new ImageryTileCache(device, layerDescriptors, gpu.imageryBGL, gpu.imagerySampler);
 
     this._coverageDirty = true;
     this._renderDirty = true;
@@ -255,6 +255,7 @@ export class TerrainMap extends EventEmitter {
 
     this._currentExaggeration = this.settings.verticalExaggeration;
     this._currentDensityThreshold = this.settings.densityThreshold;
+    this._currentImageryDensityThreshold = this.settings.imageryDensityThreshold;
     this._currentFreezeCoverage = false;
     this._refinementDirty = false;
     this._lastRefinementTime = 0;
@@ -296,7 +297,7 @@ export class TerrainMap extends EventEmitter {
       this._collisionManager.markStale();
       this._layerManager.invalidateLineElevations();
     };
-    this._compositor.onUpdate = () => { this._coverageDirty = true; this._renderDirty = true; };
+    this._imageryTileCache.onUpdate = () => { this._coverageDirty = true; this._renderDirty = true; };
 
     this._running = true;
     this._boundFrame = this._frame.bind(this);
@@ -326,9 +327,7 @@ export class TerrainMap extends EventEmitter {
       settings: this.settings,
       renderList: this._cachedRenderList,
       tileManager: this._tileManager,
-      compositor: this._compositor,
-      imageryDeltaZoom: this._imageryDeltaZoom,
-      maxImageryZoom: this._maxImageryZoom,
+      imageryTileCache: this._imageryTileCache,
       exaggeration: this._currentExaggeration,
       globalElevScale: this._globalElevScale,
       lineLayers: this._layerManager._lineLayers,
@@ -353,6 +352,11 @@ export class TerrainMap extends EventEmitter {
 
     if (this._currentDensityThreshold !== settings.densityThreshold) {
       this._currentDensityThreshold = settings.densityThreshold;
+      this._coverageDirty = true;
+    }
+
+    if (this._currentImageryDensityThreshold !== settings.imageryDensityThreshold) {
+      this._currentImageryDensityThreshold = settings.imageryDensityThreshold;
       this._coverageDirty = true;
     }
 
@@ -432,23 +436,34 @@ export class TerrainMap extends EventEmitter {
     if (this._coverageDirty) {
       const maxElevY = this._MAX_ELEV_Y * this._currentExaggeration;
       this._tileManager.beginFrame();
-      const hasImageryLayers = this._compositor.layers.length > 0;
+      const hasImageryLayers = this._imageryTileCache.layers.length > 0;
       const minImageryZoom = this._minImageryZoom;
-      this._cachedRenderList = selectTiles(
+      const cache = this._imageryTileCache;
+      // Track all imagery tiles touched during coverage (including pending ones
+      // that block subdivision) so the GC doesn't destroy them before they load.
+      const touchedImageryKeys = new Set();
+      this._cachedRenderList = selectImageryTiles(
         tileProjView, canvas.width, canvas.height, maxElevY,
         this._currentExaggeration, settings.densityThreshold,
         this._terrainBounds, this._tileManager,
+        this._maxTerrainZoom, this._maxImageryZoom,
         hasImageryLayers ? (z, x, y) => {
-          const entry = this._tileManager.getTile(z, x, y);
-          if (!entry || entry.isFlat) return true;
           if (z < minImageryZoom) return true;
-          if (!this._compositor.overlapsAnyLayer(z, x, y)) return true;
-          const iz = getImageryZoom(z, this._imageryDeltaZoom, this._maxImageryZoom);
-          this._compositor.ensureImagery(z, x, y, iz);
-          return this._compositor.hasImagery(z, x, y);
+          if (!cache.overlapsAnyLayer(z, x, y)) return true;
+          const key = `${z}/${x}/${y}`;
+          touchedImageryKeys.add(key);
+          cache.ensureImageryTile(z, x, y);
+          return cache.hasImagery(z, x, y);
         } : null,
         this._globalElevScale,
+        settings.imageryDensityThreshold,
       );
+
+      // Add terrain tile keys from render list to wantedKeys (for GC)
+      for (const tile of this._cachedRenderList) {
+        this._tileManager.wantedKeys.add(`${tile.terrainZ}/${tile.terrainX}/${tile.terrainY}`);
+      }
+
       // Sort front-to-back for early-z rejection of occluded terrain fragments
       const pv = tileProjView;
       this._cachedRenderList.sort((a, b) => {
@@ -456,10 +471,19 @@ export class TerrainMap extends EventEmitter {
         const bw = pv[3] * ((b.x + 0.5) / (1 << b.z)) + pv[11] * ((b.y + 0.5) / (1 << b.z)) + pv[15];
         return aw - bw;
       });
+
       this._tileManager.cancelStale();
       this._tileManager.evict();
       this._tileManager.stripQuadtrees();
-      this._compositor.gc(this._tileManager.wantedKeys);
+
+      // GC imagery tile cache: keep tiles in the render list + pending tiles
+      // that were touched during subdivision checks (so they survive until loaded)
+      const wantedImageryKeys = new Set(touchedImageryKeys);
+      for (const tile of this._cachedRenderList) {
+        wantedImageryKeys.add(`${tile.z}/${tile.x}/${tile.y}`);
+      }
+      this._imageryTileCache.gc(wantedImageryKeys);
+
       this._rebuildBVH();
       this._coverageDirty = false;
       this._renderDirty = true;
@@ -497,12 +521,27 @@ export class TerrainMap extends EventEmitter {
   }
 
   _rebuildBVH() {
-    const tiles = this._cachedRenderList;
-    if (tiles.length === 0) {
+    const renderTiles = this._cachedRenderList;
+    if (renderTiles.length === 0) {
       this._bvh = null;
       this._bvhTileList = [];
       return;
     }
+
+    // Extract unique terrain tiles for the BVH (raycasting is a terrain operation).
+    // Multiple imagery tiles can share the same terrain tile. Skip flat tiles —
+    // they have no real elevation data and produce spurious hits at y=0.
+    const terrainTileMap = new Map();
+    for (const tile of renderTiles) {
+      const key = `${tile.terrainZ}/${tile.terrainX}/${tile.terrainY}`;
+      if (!terrainTileMap.has(key)) {
+        const entry = this._tileManager.getTile(tile.terrainZ, tile.terrainX, tile.terrainY);
+        if (entry && entry.isFlat) continue;
+        terrainTileMap.set(key, { z: tile.terrainZ, x: tile.terrainX, y: tile.terrainY });
+      }
+    }
+
+    const tiles = Array.from(terrainTileMap.values());
 
     const aabbs = new Float64Array(tiles.length * 6);
     const tileList = new Array(tiles.length);
@@ -515,12 +554,12 @@ export class TerrainMap extends EventEmitter {
       const bounds = this._tileManager.getElevationBounds(z, x, y);
 
       const base = i * 6;
-      aabbs[base]     = x * s;                                                         // xmin
-      aabbs[base + 1] = bounds ? bounds.minElevation * this._globalElevScale * this._currentExaggeration : 0;  // ymin
-      aabbs[base + 2] = y * s;                                                         // zmin
-      aabbs[base + 3] = (x + 1) * s;                                                   // xmax
-      aabbs[base + 4] = bounds ? bounds.maxElevation * this._globalElevScale * this._currentExaggeration : this._MAX_ELEV_Y * this._currentExaggeration;  // ymax
-      aabbs[base + 5] = (y + 1) * s;                                                   // zmax
+      aabbs[base]     = x * s;
+      aabbs[base + 1] = bounds ? bounds.minElevation * this._globalElevScale * this._currentExaggeration : 0;
+      aabbs[base + 2] = y * s;
+      aabbs[base + 3] = (x + 1) * s;
+      aabbs[base + 4] = bounds ? bounds.maxElevation * this._globalElevScale * this._currentExaggeration : this._MAX_ELEV_Y * this._currentExaggeration;
+      aabbs[base + 5] = (y + 1) * s;
     }
 
     this._bvh = new BVH(aabbs, { maxItemsPerNode: 4 });
@@ -566,31 +605,36 @@ export class TerrainMap extends EventEmitter {
 
   /**
    * Query terrain elevation at a Mercator coordinate.
-   * Searches the current render list for the highest-zoom loaded tile covering (mx, my).
+   * Searches the current render list for the highest-zoom terrain tile covering (mx, my).
+   * With imagery-driven rendering, each render tile carries a terrain tile reference;
+   * we find the best terrain tile across all render tiles covering the point.
    * @returns {number|null} elevation in meters, or null if no tile covers the point
    */
   queryElevationMercator(mx, my) {
-    let bestTile = null;
-    let bestZ = -1;
+    let bestTerrainZ = -1;
+    let bestTerrainX = -1;
+    let bestTerrainY = -1;
 
     for (const tile of this._cachedRenderList) {
+      // Check if this imagery tile covers the point
       const s = 1 / (1 << tile.z);
       if (mx >= tile.x * s && mx < (tile.x + 1) * s &&
           my >= tile.y * s && my < (tile.y + 1) * s &&
-          tile.z > bestZ) {
-        bestTile = tile;
-        bestZ = tile.z;
+          tile.terrainZ > bestTerrainZ) {
+        bestTerrainZ = tile.terrainZ;
+        bestTerrainX = tile.terrainX;
+        bestTerrainY = tile.terrainY;
       }
     }
 
-    if (!bestTile) return null;
+    if (bestTerrainZ < 0) return null;
 
-    const entry = this._tileManager.getTile(bestTile.z, bestTile.x, bestTile.y);
+    const entry = this._tileManager.getTile(bestTerrainZ, bestTerrainX, bestTerrainY);
     if (!entry || !entry.elevations) return null;
 
-    const s = 1 / (1 << bestTile.z);
-    const u = (mx - bestTile.x * s) / s; // 0..1 within tile
-    const v = (my - bestTile.y * s) / s;
+    const s = 1 / (1 << bestTerrainZ);
+    const u = (mx - bestTerrainX * s) / s; // 0..1 within terrain tile
+    const v = (my - bestTerrainY * s) / s;
 
     // Map to 514-texel coordinates (skip 1px border)
     const tx = u * 512 + 1;
@@ -650,6 +694,7 @@ export class TerrainMap extends EventEmitter {
       tiles: freshTiles.map(t => ({
         z: t.z, x: t.x, y: t.y,
         density: screenDensity(p.projectionView, t.z, t.x, t.y, p.canvasH, ex, ey, ez),
+        terrainDensity: terrainScreenDensity(p.projectionView, t.z, t.x, t.y, p.canvasH, ex, ey, ez),
       })),
       projectionView: Array.from(p.projectionView),
     };
