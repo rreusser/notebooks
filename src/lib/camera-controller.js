@@ -339,14 +339,17 @@ export function createCameraController(element, opts = {}) {
 
   // Setup
   const enableWheel = opts.wheel !== false;
+  const enableTouch = opts.touch !== false;
   element.style.cursor = 'grab';
   element.addEventListener('mousedown', onMouseDown);
   if (enableWheel) {
     element.addEventListener('wheel', onWheel, { passive: false });
   }
-  element.addEventListener('touchstart', onTouchStart, { passive: false });
-  element.addEventListener('touchmove', onTouchMove, { passive: false });
-  element.addEventListener('touchend', onTouchEnd);
+  if (enableTouch) {
+    element.addEventListener('touchstart', onTouchStart, { passive: false });
+    element.addEventListener('touchmove', onTouchMove, { passive: false });
+    element.addEventListener('touchend', onTouchEnd);
+  }
   element.addEventListener('contextmenu', onContextMenu);
 
   function destroy() {
@@ -354,9 +357,11 @@ export function createCameraController(element, opts = {}) {
     if (enableWheel) {
       element.removeEventListener('wheel', onWheel);
     }
-    element.removeEventListener('touchstart', onTouchStart);
-    element.removeEventListener('touchmove', onTouchMove);
-    element.removeEventListener('touchend', onTouchEnd);
+    if (enableTouch) {
+      element.removeEventListener('touchstart', onTouchStart);
+      element.removeEventListener('touchmove', onTouchMove);
+      element.removeEventListener('touchend', onTouchEnd);
+    }
     element.removeEventListener('contextmenu', onContextMenu);
     window.removeEventListener('mousemove', onMouseMove);
     window.removeEventListener('mouseup', onMouseUp);

@@ -216,7 +216,7 @@ We start with a full presentation of the sphere eversion of Bednorz and Bednorz 
       const gpuContext = canvas.getContext('webgpu');
       gpuContext.configure({ device, format: canvasFormat });
 
-      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 10.0, theta: 0.7, phi: 0.1, wheel: false });
+      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 10.0, theta: 0.7, phi: 0.1, wheel: false, touch: false });
       const renderer = createRenderer(device, canvasFormat, shaderCodes);
 
       let dirty = true;
@@ -334,7 +334,7 @@ The variable ${tex`\phi`} parameterizes the polar angle of the cylinder from ${t
       const gpuContext = canvas.getContext('webgpu');
       gpuContext.configure({ device, format: canvasFormat });
 
-      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 100.0, theta: 0.4, phi: 0.1, wheel: true });
+      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 100.0, theta: 0.4, phi: 0.1, wheel: false });
       const renderer = createRenderer(device, canvasFormat, shaderCodes);
 
       let dirty = true;
@@ -472,7 +472,7 @@ Of course we want to evert a full sphere and not just a cylindrical band, so the
       const gpuContext = canvas.getContext('webgpu');
       gpuContext.configure({ device, format: canvasFormat });
 
-      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 10.0, theta: 0.4, phi: 0.1, wheel: false });
+      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 10.0, theta: 0.4, phi: 0.1, wheel: false, touch: false });
       const renderer = createRenderer(device, canvasFormat, shaderCodes);
 
       let dirty = true;
