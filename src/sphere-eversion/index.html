@@ -122,18 +122,22 @@ Before stepping through the eversion, we lay out our ground rules, of which ther
 We start with a full presentation of the sphere eversion of Bednorz and Bednorz in [Analytic sphere eversion using ruled surfaces](https://arxiv.org/abs/1711.10466). It goes by quickly, so we'll then break it down and try to understand it a bit better. Along the way, you can drag the slider at the top to examine cross-sections.
   </script>
 
-  <script id="regl-import" type="module">
-    import createREGL from 'npm:regl@2.1.1';
-    window.createREGL = createREGL;
+  <script id="webgpu-setup" type="module">
+    import { createWebGPUContext } from './lib/webgpu-canvas.js';
+    import { createCameraController } from './lib/camera-controller.js';
+    import { createRenderer } from './renderer.js';
+    import { createFrameLoop } from './lib/frame-loop.js';
+    import { peelShaderCode, peelCompositeShaderCode } from './shaders.js';
+    import { createSequencer, linear } from './sequencer.js';
+
+    const { device, canvasFormat } = await createWebGPUContext();
+    const shaderCodes = { peel: peelShaderCode, peelComposite: peelCompositeShaderCode };
   </script>
 
   <script id="scrollyteller-1" type="module">
     await new Promise(r => setTimeout(r, 100));
 
     {
-      const { createCamera } = await import('./lib/camera.js');
-      const { createDrawSphere } = await import('./lib/draw-sphere.js');
-      const { createSequencer, linear } = await import('./lib/sequencer.js');
       const Q = 2/3;
       const t0 = 1.0;
 
@@ -205,17 +209,15 @@ We start with a full presentation of the sphere eversion of Bednorz and Bednorz 
       canvas.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; cursor: grab;';
       canvasContainer.appendChild(canvas);
 
-      const quality = 'medium';
-      let preferredDPI = quality === 'low' ? 1 : quality === 'high' ? 2.0 : 1.5;
-      let preferredRes = quality === 'low' ? 75 : quality === 'high' ? 255 : 150;
-
-      const dpi = Math.min(preferredDPI, window.devicePixelRatio);
+      const dpi = Math.min(1.5, window.devicePixelRatio);
       canvas.width = Math.floor(canvasContainer.offsetWidth * dpi);
       canvas.height = Math.floor(canvasContainer.offsetHeight * dpi);
 
-      const regl = createREGL({ canvas, pixelRatio: dpi, extensions: ['OES_standard_derivatives'], attributes: { preserveDrawingBuffer: true } });
-      const camera = createCamera(regl, { distance: 6, damping: 0, near: 0.1, far: 10.0, theta: 0.1, phi: 0.7, noScroll: true, wheel: false });
-      const drawSphere = createDrawSphere(regl, preferredRes);
+      const gpuContext = canvas.getContext('webgpu');
+      gpuContext.configure({ device, format: canvasFormat });
+
+      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 10.0, theta: 0.7, phi: 0.1, wheel: false });
+      const renderer = createRenderer(device, canvasFormat, shaderCodes);
 
       let dirty = true;
       let smoothedPosition = 0;
@@ -233,15 +235,12 @@ We start with a full presentation of the sphere eversion of Bednorz and Bednorz 
         const bottomBelowViewport = rect.bottom >= window.innerHeight;
 
         if (topAboveViewport && bottomBelowViewport) {
-          // Fixed: scrollyteller spans the viewport
           background.classList.add('is-fixed');
           background.classList.remove('is-bottom');
         } else if (topAboveViewport && !bottomBelowViewport) {
-          // Bottom: scrollyteller bottom is above viewport bottom
           background.classList.remove('is-fixed');
           background.classList.add('is-bottom');
         } else {
-          // Top: scrollyteller top is below viewport top (scrolling in)
           background.classList.remove('is-fixed');
           background.classList.remove('is-bottom');
         }
@@ -249,8 +248,7 @@ We start with a full presentation of the sphere eversion of Bednorz and Bednorz 
         return rect.top < window.innerHeight && rect.bottom > 0;
       }
 
-      const frame = regl.frame(() => {
-        // Update position state and check if in view
+      const frameLoop = createFrameLoop(() => {
         const inView = updateBackgroundPosition();
         if (!inView) return;
 
@@ -261,14 +259,14 @@ We start with a full presentation of the sphere eversion of Bednorz and Bednorz 
         const state = sequencer.getState();
         const ar = canvas.offsetWidth / canvas.offsetHeight;
         const scale = ar > 1.0 ? 1.0 : ar;
-        camera((cameraState) => {
-          if (!dirty && !cameraState.dirty && !scrolling) return;
-          regl.clear({ color: [1, 1, 1, 1], depth: 1 });
-          const props = { ...state, scale: state.scale * scale };
-          drawSphere({ wire: false, ...props });
-          drawSphere({ wire: true, ...props });
-          dirty = false;
-        });
+
+        if (!dirty && !camera.dirty && !scrolling) return;
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const props = { ...state, scale: state.scale * scale, near: 0.1, far: 10.0, pixelRatio: dpi, opacity: 0.85, peelLayers: 4 };
+        renderer.render(gpuContext, props, camera, w, h);
+        dirty = false;
       });
 
       function onResize() {
@@ -279,7 +277,7 @@ We start with a full presentation of the sphere eversion of Bednorz and Bednorz 
       }
       window.addEventListener('resize', onResize);
 
-      invalidation.then(() => { frame.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); regl.destroy(); });
+      invalidation.then(() => { frameLoop.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); });
     }
   </script>
 
@@ -313,8 +311,6 @@ The variable ${tex`\phi`} parameterizes the polar angle of the cylinder from ${t
     await new Promise(r => setTimeout(r, 100));
 
     {
-      const { createCamera } = await import('./lib/camera.js');
-      const { createDrawSphere } = await import('./lib/draw-sphere.js');
       const Q = 2/3;
       const container = html`<figure class="surface-figure" style="width: 100%; height: min(90vw, 700px); position: relative;">
         <div id="surface-canvas-container" style="position: absolute; top: 0; left: 0; width: 100%; height: calc(100% - 40px);"></div>
@@ -329,27 +325,25 @@ The variable ${tex`\phi`} parameterizes the polar angle of the cylinder from ${t
       canvas.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; cursor: grab;';
       canvasContainer.appendChild(canvas);
 
-      const quality = 'medium';
-      let preferredDPI = quality === 'low' ? 1 : quality === 'high' ? 2.0 : 1.5;
-      let preferredRes = quality === 'low' ? 75 : quality === 'high' ? 255 : 150;
-
-      const dpi = Math.min(preferredDPI, window.devicePixelRatio);
-      // Ensure we have valid dimensions
+      const dpi = Math.min(1.5, window.devicePixelRatio);
       const containerWidth = canvasContainer.offsetWidth || 600;
       const containerHeight = canvasContainer.offsetHeight || 500;
       canvas.width = Math.floor(containerWidth * dpi);
       canvas.height = Math.floor(containerHeight * dpi);
 
-      const regl = createREGL({ canvas, pixelRatio: dpi, extensions: ['OES_standard_derivatives'], attributes: { preserveDrawingBuffer: true } });
-      const camera = createCamera(regl, { distance: 6, damping: 0, near: 0.1, far: 100.0, theta: 0.1, phi: 0.4, noScroll: true, wheel: true });
-      const drawSphere = createDrawSphere(regl, preferredRes);
+      const gpuContext = canvas.getContext('webgpu');
+      gpuContext.configure({ device, format: canvasFormat });
+
+      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 100.0, theta: 0.4, phi: 0.1, wheel: true });
+      const renderer = createRenderer(device, canvasFormat, shaderCodes);
 
       let dirty = true;
       const state = {
-        section: 10, shittyEversion: 0, color: 0, strips: 0, n: 2,
+        section: 10, shittyEversion: 0, strips: 0, n: 2,
         posClip: 0.5, negClip: 0.5, stereo: 0, fatEdge: 0, rotation: 0,
         translation: 0, scale: 0.45, t: 1 / Q - 1e-4, alpha: 1, beta: 1 / 20,
         q: Q, eta: 1, xi: 0, lambda: 1, omega: 2, Qinv: 1 / Q,
+        opacity: 0.85, peelLayers: 4,
       };
 
       tSlider.addEventListener('input', () => { state.t = tSlider.value; dirty = true; });
@@ -361,17 +355,17 @@ The variable ${tex`\phi`} parameterizes the polar angle of the cylinder from ${t
         dirty = true;
       });
 
-      const frame = regl.frame(() => {
+      const frameLoop = createFrameLoop(() => {
         const ar = canvas.offsetWidth / canvas.offsetHeight;
         const scale = ar > 1.0 ? 1.0 : ar;
-        camera((cameraState) => {
-          if (!dirty && !cameraState.dirty) return;
-          regl.clear({ color: [1, 1, 1, 1], depth: 1 });
-          const props = { ...state, scale: state.scale * scale };
-          drawSphere({ wire: false, ...props });
-          drawSphere({ wire: true, ...props });
-          dirty = false;
-        });
+
+        if (!dirty && !camera.dirty) return;
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const props = { ...state, scale: state.scale * scale, near: 0.1, far: 100.0, pixelRatio: dpi, opacity: state.opacity, peelLayers: state.peelLayers };
+        renderer.render(gpuContext, props, camera, w, h);
+        dirty = false;
       });
 
       function onResize() {
@@ -382,7 +376,7 @@ The variable ${tex`\phi`} parameterizes the polar angle of the cylinder from ${t
       }
       window.addEventListener('resize', onResize);
 
-      invalidation.then(() => { frame.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); regl.destroy(); });
+      invalidation.then(() => { frameLoop.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); });
     }
   </script>
 
@@ -398,9 +392,6 @@ Of course we want to evert a full sphere and not just a cylindrical band, so the
     await new Promise(r => setTimeout(r, 100));
 
     {
-      const { createCamera } = await import('./lib/camera.js');
-      const { createDrawSphere } = await import('./lib/draw-sphere.js');
-      const { createSequencer, linear } = await import('./lib/sequencer.js');
       const Q = 2/3;
       const t0 = 1.0, t1 = t0 + 2.0, t1p = t1 + 1.0, t2 = t1 + 7.0, t3 = t2 + 2.0, t4 = t3 + 2.0, t5 = t4 + 2.0;
 
@@ -474,17 +465,15 @@ Of course we want to evert a full sphere and not just a cylindrical band, so the
       canvas.style.cssText = 'position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: block; cursor: grab;';
       canvasContainer.appendChild(canvas);
 
-      const quality = 'medium';
-      let preferredDPI = quality === 'low' ? 1 : quality === 'high' ? 2.0 : 1.5;
-      let preferredRes = quality === 'low' ? 75 : quality === 'high' ? 255 : 150;
-
-      const dpi = Math.min(preferredDPI, window.devicePixelRatio);
+      const dpi = Math.min(1.5, window.devicePixelRatio);
       canvas.width = Math.floor(canvasContainer.offsetWidth * dpi);
       canvas.height = Math.floor(canvasContainer.offsetHeight * dpi);
 
-      const regl = createREGL({ canvas, pixelRatio: dpi, extensions: ['OES_standard_derivatives'], attributes: { preserveDrawingBuffer: true } });
-      const camera = createCamera(regl, { distance: 6, damping: 0, near: 0.1, far: 10.0, theta: 0.1, phi: 0.4, noScroll: true, wheel: false });
-      const drawSphere = createDrawSphere(regl, preferredRes);
+      const gpuContext = canvas.getContext('webgpu');
+      gpuContext.configure({ device, format: canvasFormat });
+
+      const camera = createCameraController(canvas, { distance: 6, near: 0.1, far: 10.0, theta: 0.4, phi: 0.1, wheel: false });
+      const renderer = createRenderer(device, canvasFormat, shaderCodes);
 
       let dirty = true;
       let smoothedPosition = 0;
@@ -502,15 +491,12 @@ Of course we want to evert a full sphere and not just a cylindrical band, so the
         const bottomBelowViewport = rect.bottom >= window.innerHeight;
 
         if (topAboveViewport && bottomBelowViewport) {
-          // Fixed: scrollyteller spans the viewport
           background.classList.add('is-fixed');
           background.classList.remove('is-bottom');
         } else if (topAboveViewport && !bottomBelowViewport) {
-          // Bottom: scrollyteller bottom is above viewport bottom
           background.classList.remove('is-fixed');
           background.classList.add('is-bottom');
         } else {
-          // Top: scrollyteller top is below viewport top (scrolling in)
           background.classList.remove('is-fixed');
           background.classList.remove('is-bottom');
         }
@@ -518,8 +504,7 @@ Of course we want to evert a full sphere and not just a cylindrical band, so the
         return rect.top < window.innerHeight && rect.bottom > 0;
       }
 
-      const frame = regl.frame(() => {
-        // Update position state and check if in view
+      const frameLoop = createFrameLoop(() => {
         const inView = updateBackgroundPosition();
         if (!inView) return;
 
@@ -530,14 +515,14 @@ Of course we want to evert a full sphere and not just a cylindrical band, so the
         const state = sequencer.getState();
         const ar = canvas.offsetWidth / canvas.offsetHeight;
         const scale = ar > 1.0 ? 1.0 : ar;
-        camera((cameraState) => {
-          if (!dirty && !cameraState.dirty && !scrolling) return;
-          regl.clear({ color: [1, 1, 1, 1], depth: 1 });
-          const props = { ...state, scale: state.scale * scale };
-          drawSphere({ wire: false, ...props });
-          drawSphere({ wire: true, ...props });
-          dirty = false;
-        });
+
+        if (!dirty && !camera.dirty && !scrolling) return;
+
+        const w = canvas.width;
+        const h = canvas.height;
+        const props = { ...state, scale: state.scale * scale, near: 0.1, far: 10.0, pixelRatio: dpi, opacity: 0.85, peelLayers: 4 };
+        renderer.render(gpuContext, props, camera, w, h);
+        dirty = false;
       });
 
       function onResize() {
@@ -548,7 +533,7 @@ Of course we want to evert a full sphere and not just a cylindrical band, so the
       }
       window.addEventListener('resize', onResize);
 
-      invalidation.then(() => { frame.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); regl.destroy(); });
+      invalidation.then(() => { frameLoop.cancel(); window.removeEventListener('resize', onResize); camera.destroy(); });
     }
   </script>
 
@@ -563,7 +548,7 @@ There's no shortage of really great visualizations and resources regarding spher
 - [Everting a Sphere by Chris Hills](https://chrishills.org.uk/ChrisHills/sphereeversion/): an excellent collection of links and resources
 - [Sphere Eversion on Wikipedia](https://en.wikipedia.org/wiki/Sphere_eversion)
 
-This post is created using [Notebook Kit](https://github.com/nickslevine/nb-kit) and [regl](https://github.com/regl-project/regl). You can find the full article [source here](https://github.com/rreusser/notebooks/tree/main/src/sphere-eversion).
+This post is created using [Notebook Kit](https://github.com/nickslevine/nb-kit) and WebGPU. You can find the full article [source here](https://github.com/rreusser/notebooks/tree/main/src/sphere-eversion).
 
 Comments? Questions? Corrections? [Let me know!](https://mathstodon.xyz/@rreusser)
   </script>

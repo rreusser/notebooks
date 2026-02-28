@@ -338,9 +338,12 @@ export function createCameraController(element, opts = {}) {
   }
 
   // Setup
+  const enableWheel = opts.wheel !== false;
   element.style.cursor = 'grab';
   element.addEventListener('mousedown', onMouseDown);
-  element.addEventListener('wheel', onWheel, { passive: false });
+  if (enableWheel) {
+    element.addEventListener('wheel', onWheel, { passive: false });
+  }
   element.addEventListener('touchstart', onTouchStart, { passive: false });
   element.addEventListener('touchmove', onTouchMove, { passive: false });
   element.addEventListener('touchend', onTouchEnd);
@@ -348,7 +351,9 @@ export function createCameraController(element, opts = {}) {
 
   function destroy() {
     element.removeEventListener('mousedown', onMouseDown);
-    element.removeEventListener('wheel', onWheel);
+    if (enableWheel) {
+      element.removeEventListener('wheel', onWheel);
+    }
     element.removeEventListener('touchstart', onTouchStart);
     element.removeEventListener('touchmove', onTouchMove);
     element.removeEventListener('touchend', onTouchEnd);
