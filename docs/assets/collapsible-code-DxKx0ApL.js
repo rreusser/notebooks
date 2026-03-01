@@ -7,4 +7,5 @@ function g({maxHeight:c=150,selector:i="main pre",skip:r=[],include:a=[],overrid
       background: var(--theme-background-alt, #f5f5f5);
       border: 1px solid #ccc; border-radius: 3px;
       cursor: pointer; font-size: 12px; color: #666;
+      user-select: none;
     `;const p="linear-gradient(transparent, var(--theme-background-alt, #f5f5f5) 60%)";l.onclick=()=>{const n=e.style.maxHeight!=="none";e.style.maxHeight=n?"none":`${u}px`,e.style.overflow=n?"":"hidden",t.style.background=n?"none":p,t.style.position=n?"static":"absolute",t.style.height=n?"auto":"60px",t.style.paddingBottom=n?"0":"8px",l.textContent=n?"Collapse":"Expand"},t.appendChild(l),e.appendChild(t)}}export{g as collapseCodeBlocks};

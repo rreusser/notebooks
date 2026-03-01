@@ -1,0 +1,8 @@
+publishedAt: "November 23, 2019"
+description: "Animating periodic three-body orbits using pure CSS keyframe animations generated from Fourier decomposition."
+maxWidth: 640px
+observableUrl: 'https://observablehq.com/@rreusser/pure-css-periodic-three-body-orbit-spinners'
+tags:
+  - CSS
+  - Physics
+  - Chaos

@@ -60,6 +60,7 @@ function processBlocks(blocks, { maxHeight, skip, include, overrides }) {
       background: var(--theme-background-alt, #f5f5f5);
       border: 1px solid #ccc; border-radius: 3px;
       cursor: pointer; font-size: 12px; color: #666;
+      user-select: none;
     `;
     const gradient = 'linear-gradient(transparent, var(--theme-background-alt, #f5f5f5) 60%)';
     btn.onclick = () => {

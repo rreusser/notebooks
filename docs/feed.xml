@@ -5,7 +5,7 @@
     <link>https://rreusser.github.io/notebooks/</link>
     <description>Interactive notebooks on graphics, math, and creative coding</description>
     <language>en-us</language>
-    <lastBuildDate>Sat, 28 Feb 2026 05:17:20 GMT</lastBuildDate>
+    <lastBuildDate>Sun, 01 Mar 2026 03:58:20 GMT</lastBuildDate>
     <atom:link href="https://rreusser.github.io/notebooks/feed.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Denali Terrain</title>
@@ -294,6 +294,14 @@
       <pubDate>Sun, 09 Feb 2020 08:00:00 GMT</pubDate>
       <description>Interactive bit-level visualization of how IEEE-754 single-precision floats represent integers.</description>
       <media:content url="https://rreusser.github.io/notebooks/meta/integers-in-single-precision-floating-point.jpg" medium="image" />
+    </item>
+    <item>
+      <title>HTML+CSS Periodic Three-Body Orbits</title>
+      <link>https://rreusser.github.io/notebooks/pure-css-periodic-three-body-orbits/</link>
+      <guid isPermaLink="true">https://rreusser.github.io/notebooks/pure-css-periodic-three-body-orbits/</guid>
+      <pubDate>Sat, 23 Nov 2019 08:00:00 GMT</pubDate>
+      <description>Animating periodic three-body orbits using pure CSS keyframe animations generated from Fourier decomposition.</description>
+      <media:content url="https://rreusser.github.io/notebooks/meta/pure-css-periodic-three-body-orbits.jpg" medium="image" />
     </item>
     <item>
       <title>Particle-Mesh Gravity in WebGPU</title>
