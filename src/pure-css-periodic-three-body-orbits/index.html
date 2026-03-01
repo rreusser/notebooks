@@ -1,0 +1,626 @@
+<!doctype html>
+<notebook theme="air">
+  <title>HTML+CSS Periodic Three-Body Orbits</title>
+
+  <script id="imports" type="module">
+    import ndarray from 'npm:ndarray';
+    import ndarrayFFT from 'npm:ndarray-fft';
+    import { sprintf } from 'npm:sprintf-js';
+    import { ode45 } from 'observable:@rreusser/integration';
+    import {
+      threeBodyInitialConditions
+    } from 'observable:@rreusser/periodic-three-body-initial-conditions';
+  </script>
+
+  <script id="title" type="text/markdown">
+    # HTML+CSS Periodic Three-Body Orbits
+  </script>
+
+  <script id="compact-example" type="module">
+    {
+      const iframe = document.createElement("iframe");
+      const src =
+        "<c><h><d><j>•</d><e><f><j>•</f><g><j>•<style>*{position:absolute}c,e{animation:q 5s infinite linear}e{animation-duration:1s}c{top:50vh;left:50vw}j{font-size:80px;transform:translate(-50%,-50%)}h{transform:translatex(20vw)}d{transform:translatex(-60vw)}f{transform:translatex(8vw)}g{transform:translatex(-8vw)}@keyframes q{to{transform:rotate(1turn)}}";
+      iframe.srcdoc = src;
+      iframe.style.width = "300px";
+      iframe.style.height = "300px";
+      iframe.style.border = "1px solid #eee";
+
+      const codeEl = document.createElement("pre");
+      codeEl.style.width = "300px";
+      codeEl.style.wordBreak = "break-all";
+      codeEl.style.whiteSpace = "pre-wrap";
+      codeEl.style.fontSize = "0.85em";
+      const codeInner = document.createElement("code");
+      codeInner.textContent = src;
+      codeEl.appendChild(codeInner);
+
+      const figure = document.createElement("figure");
+      const row = document.createElement("div");
+      row.style.display = "flex";
+      row.style.flexDirection = "row";
+      row.style.gap = "1em";
+      const left = document.createElement("div");
+      left.style.flex = "0 0 auto";
+      left.appendChild(iframe);
+      const right = document.createElement("div");
+      right.style.flex = "1";
+      right.appendChild(codeEl);
+      row.appendChild(left);
+      row.appendChild(right);
+      figure.appendChild(row);
+      const caption = document.createElement("figcaption");
+      caption.textContent = "The most concise physically accurate orbit I could construct, in 350 bytes.";
+      figure.appendChild(caption);
+      display(figure);
+    }
+  </script>
+
+  <script id="desc-1" type="text/markdown">
+    This notebook reworks my [Periodic Planar Three-Body Orbits](https://observablehq.com/@rreusser/periodic-planar-three-body-orbits) notebook with a bit of an odd goal: to animate periodic planar three-body orbits using pure HTML and CSS, without any JavaScript, and without fully enumerating every point along the paths.
+
+    The method is straightforward though a bit tedious. We integrate an orbit with fixed temporal spacing, assign the x and y components of each point along the trajectory to real and imaginary components in the complex plane, and compute the Discrete Fourier Transform (DFT). Then we threshold the frequency components, represent each frequency component as a rotating complex phasor, and convert to CSS transforms!
+  </script>
+
+  <script id="desc-2" type="text/markdown">
+    For a delightful illustration of the method, see Mike Bostock's [Fourier Series - Zoom](https://observablehq.com/@mbostock/fourier-series-zoom) notebook in which he illustrates drawing a portrait using the sum of complex phasors.
+
+    The most challenging aspect was converting the phasors to CSS, but in the end I was able to represent them as a chain of transforms in the style `transform(\${re}px, \${im}px) rotate(\${f}deg)` where `re` and `im` are precisely the DFT components, and the frequency `f` is the component's frequency relative to the sum total of all parent rotations, so that the rotational speed of the component is correct. *(Thanks, [Fabian Iwand](https://observablehq.com/@mootari) for digging up the [CSS transform interpolation specification](https://drafts.csswg.org/css-transforms/#interpolation-of-transforms) and confirming that parallel lists of transforms are matched up and interpolated one transform at a time!)*
+  </script>
+
+  <script id="desc-3" type="text/markdown">
+    Realistically, complex orbits require quite a few frequency components and actually end up quite large, but you can get a lovely figure-eight in just a little over two kilobytes.
+
+    The end result is below, followed by the orbit integration and frequency filtering.
+  </script>
+
+  <script id="spinner-display" type="module">
+    const container = document.createElement("div");
+    container.id = "spinner-container";
+    container.style.border = "1px solid #ddd";
+    container.style.display = "inline-block";
+    container.innerHTML = threeBodyHTML;
+    display(container);
+  </script>
+
+  <script id="input-speed" type="module">
+    const speed = view(Inputs.range([0.1, 10], {
+      value: 1,
+      label: "Speed",
+      step: 0.01,
+      transform: Math.log
+    }));
+  </script>
+
+  <script id="input-size" type="module">
+    const size = view(Inputs.range([20, 360], {
+      value: Math.min(width, 360),
+      label: "Div size, px",
+      step: 1
+    }));
+  </script>
+
+  <script id="input-radius" type="module">
+    const radius = view(Inputs.range([5, 50], {
+      value: 20,
+      label: "Body radius, px",
+      step: 1,
+      transform: Math.log
+    }));
+  </script>
+
+  <script id="input-precision" type="module">
+    const precision = view(Inputs.range([0, 5], {
+      value: 2,
+      label: "Precision, digits",
+      step: 1
+    }));
+  </script>
+
+  <script id="input-colorA" type="module">
+    const colorA = view(Inputs.color({ value: "#a0d323", label: "Color A" }));
+  </script>
+
+  <script id="input-colorB" type="module">
+    const colorB = view(Inputs.color({ value: "#23a0d3", label: "Color B" }));
+  </script>
+
+  <script id="input-colorC" type="module">
+    const colorC = view(Inputs.color({ value: "#d323a0", label: "Color C" }));
+  </script>
+
+  <script id="css-generation" type="module">
+    const duration = initialConditions.period / speed;
+    let transformCount = 0;
+    let range = 0;
+    trajectory.forEach(({ x, y }) => {
+      for (let i = 0; i < n; i++) {
+        range = Math.max(range, Math.abs(x[i]), Math.abs(y[i]));
+      }
+    });
+
+    const css = [];
+    for (let i = 0; i < filteredTrajectoryFFT.length; i++) {
+      const fftData = filteredTrajectoryFFT[i];
+      const len = fftData[0].length;
+      const nfft = Math.floor((len + 1) / 2);
+      const froms = [];
+      const tos = [];
+
+      function unitize(value, units) {
+        return parseFloat(value) === 0 ? value : `${value}${units}`;
+      }
+      let accumRotation = 0;
+      function assemble(intfreq, idx) {
+        const f = freq[idx];
+        const re = fftData[0][idx];
+        const im = fftData[1][idx];
+        const r2 = re * re + im * im;
+        const rad = (size * 0.4) / range;
+        const fmt = precision === 0 ? "%.0f" : `%.${precision}g`;
+        const x = sprintf(fmt, parseFloat((re * rad).toFixed(precision)));
+        const y = sprintf(fmt, parseFloat((im * rad).toFixed(precision)));
+        if (Math.hypot(parseFloat(x), parseFloat(y)) === 0) return;
+        if (r2 < threshold * threshold) return;
+        const rotDiff = intfreq - accumRotation;
+        accumRotation += rotDiff;
+        function translate(x, y) {
+          x = unitize(x, "px");
+          y = unitize(y, "px");
+          if (x === "0") return `translatey(${y})`;
+          if (y === "0") return `translatex(${x})`;
+          return `translate(${x},${y})`;
+        }
+        const tr = translate(x, y);
+        froms.push(`rotate(0)${tr}`);
+        tos.push(`rotate(${rotDiff}turn)${tr}`);
+      }
+
+      for (let j = nfft - 1; j > 0; j--) {
+        assemble(-j, len - j);
+      }
+      for (let j = 0; j < nfft; j++) {
+        assemble(j, j);
+      }
+      transformCount += froms.length;
+      css.push([froms.join(""), tos.join("")]);
+    }
+
+    const rad = initialConditions.m
+      .map((m, i) => {
+        if (m === 1) return "";
+        const r = (radius * Math.sqrt(m) + 0.5).toFixed(0);
+        return `.threebody-o>div:nth-child(${i + 1}):after{width:${r}px;height:${r}px}\n`;
+      })
+      .filter((x) => x)
+      .join("");
+
+    const threeBodyHTML = `<style>
+.threebody{width:${size}px;height:${size}px;position:relative}
+.threebody-o{position:absolute;top:50%;left:50%}
+.threebody-o>div{position:absolute;animation:${duration}s infinite linear}
+.threebody-o>div:after{content:'';position:absolute;width:${radius}px;height:${radius}px;border-radius:100%;transform:translate(-50%,-50%);background:inherit}
+${rad}.threebody-o>div:nth-child(1){background:${colorA};animation-name:threebody-0}
+.threebody-o>div:nth-child(2){background:${colorB};animation-name:threebody-1}
+.threebody-o>div:nth-child(3){background:${colorC};animation-name:threebody-2}
+${css.map(([from, to], i) => `@keyframes threebody-${i}{from{transform:${from}}to{transform:${to}}}`).join("\n")}
+</style>
+<div class="threebody"><div class="threebody-o"><div></div><div></div><div></div></div></div>`;
+
+    const codeContainer = document.createElement("div");
+    const pre = document.createElement("pre");
+    pre.style.overflow = "auto";
+    pre.style.maxHeight = "300px";
+    const code = document.createElement("code");
+    code.textContent = threeBodyHTML;
+    pre.appendChild(code);
+    codeContainer.appendChild(pre);
+
+    display(md`Total bytes (HTML + CSS): **${threeBodyHTML.length}** bytes
+Total CSS rotation transforms: **${transformCount}**`);
+    display(codeContainer);
+  </script>
+
+  <script id="orbit-section-header" type="text/markdown">
+    ## Integrate the orbits
+
+    To compute the above, the first step is to select initial conditions and integrate the trajectory. To accomplish this efficiently, I've integrated the orbits with a variable-timestep adaptive integrator and saved the output at fixed temporal spacing. Adaptive integration is essential to accurately compute the orbits.
+
+    Recommended orbits are the Broucke orbits and the Figure-Eight orbits, both of which compress quite well.
+  </script>
+
+  <script id="orbit-selector" type="module">
+    const selectedConditionsInput = (() => {
+      const form = document.createElement('form');
+      form.className = 'orbit-selector';
+
+      let currentGroup = 'Šuvakov';
+      let currentSequence = 'V - Figure 8';
+      let currentOrbit = 'V.1.A';
+
+      const sequencesByGroup = Object.keys(threeBodyInitialConditions).map(group => ({
+        label: group,
+        options: Object.keys(threeBodyInitialConditions[group]).map(seq => ({
+          label: seq,
+          value: `${group}: ${seq}`
+        }))
+      }));
+
+      const seqLabel = document.createElement('label');
+      seqLabel.innerHTML = '<small><em>Sequence</em></small><br>';
+      const seqSelect = document.createElement('select');
+      seqSelect.name = 'sequence';
+      sequencesByGroup.forEach(group => {
+        const optgroup = document.createElement('optgroup');
+        optgroup.label = group.label;
+        group.options.forEach(opt => {
+          const option = document.createElement('option');
+          option.value = opt.value;
+          option.textContent = opt.label;
+          if (opt.value === `${currentGroup}: ${currentSequence}`) option.selected = true;
+          optgroup.appendChild(option);
+        });
+        seqSelect.appendChild(optgroup);
+      });
+      seqLabel.appendChild(seqSelect);
+
+      const orbitLabel = document.createElement('label');
+      orbitLabel.innerHTML = '<small><em>Orbit</em></small><br>';
+      const orbitSelect = document.createElement('select');
+      orbitSelect.name = 'orbit';
+      orbitLabel.appendChild(orbitSelect);
+
+      function updateOrbitOptions() {
+        orbitSelect.innerHTML = '';
+        const orbits = Object.keys(threeBodyInitialConditions[currentGroup]?.[currentSequence] || {});
+        orbits.forEach(orbit => {
+          const option = document.createElement('option');
+          option.value = orbit;
+          option.textContent = orbit;
+          if (orbit === currentOrbit) option.selected = true;
+          orbitSelect.appendChild(option);
+        });
+        if (!orbits.includes(currentOrbit) && orbits.length > 0) {
+          currentOrbit = orbits[0];
+          orbitSelect.value = currentOrbit;
+        }
+      }
+
+      updateOrbitOptions();
+
+      const title = document.createElement('div');
+      title.innerHTML = '<strong style="font-size:0.9rem">Initial conditions</strong>';
+      form.appendChild(title);
+
+      const container = document.createElement('div');
+      container.style.cssText = 'display:flex;gap:1em;flex-wrap:wrap;';
+      container.appendChild(seqLabel);
+      container.appendChild(orbitLabel);
+      form.appendChild(container);
+
+      seqSelect.onchange = () => {
+        const [group, seq] = seqSelect.value.split(': ');
+        currentGroup = group;
+        currentSequence = seq;
+        updateOrbitOptions();
+        currentOrbit = orbitSelect.value;
+        form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
+        form.dispatchEvent(new CustomEvent('input', { bubbles: true }));
+      };
+
+      orbitSelect.onchange = () => {
+        currentOrbit = orbitSelect.value;
+        form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
+        form.dispatchEvent(new CustomEvent('input', { bubbles: true }));
+      };
+
+      form.value = { group: currentGroup, sequence: currentSequence, orbit: currentOrbit };
+      return form;
+    })();
+
+    display(selectedConditionsInput);
+    const selectedConditions = Generators.input(selectedConditionsInput);
+  </script>
+
+  <script id="parse-initial-conditions" type="module">
+    const initialConditions = (() => {
+      const { group, sequence, orbit } = selectedConditions;
+      const conditions = threeBodyInitialConditions[group]?.[sequence]?.[orbit];
+      if (!conditions) return null;
+
+      const p = conditions.x;
+      const v = conditions.v;
+      const m = conditions.m || [1, 1, 1];
+
+      return {
+        y0: [p[0][0], p[0][1], v[0][0], v[0][1],
+             p[1][0], p[1][1], v[1][0], v[1][1],
+             p[2][0], p[2][1], v[2][0], v[2][1]],
+        period: conditions.T,
+        m
+      };
+    })();
+  </script>
+
+  <script id="input-n" type="module">
+    const n = view(Inputs.range([10, 10000], {
+      label: "Steps",
+      transform: Math.log,
+      step: 1,
+      value: 1000
+    }));
+  </script>
+
+  <script id="physics" type="module">
+    function planarThreeBodyDerivative(yp, y, t) {
+      let dx, dy, r3;
+      const m0 = initialConditions.m[0];
+      const m1 = initialConditions.m[1];
+      const m2 = initialConditions.m[2];
+
+      (yp[0] = y[2]), (yp[1] = y[3]);
+      (yp[4] = y[6]), (yp[5] = y[7]);
+      (yp[8] = y[10]), (yp[9] = y[11]);
+
+      dx = y[4] - y[0];
+      dy = y[5] - y[1];
+      r3 = Math.pow(dx * dx + dy * dy, 1.5);
+      (dx /= r3), (dy /= r3);
+      yp[2] = dx * m1;
+      yp[3] = dy * m1;
+      yp[6] = -dx * m0;
+      yp[7] = -dy * m0;
+
+      dx = y[8] - y[0];
+      dy = y[9] - y[1];
+      r3 = Math.pow(dx * dx + dy * dy, 1.5);
+      (dx /= r3), (dy /= r3);
+      yp[2] += dx * m2;
+      yp[3] += dy * m2;
+      yp[10] = -dx * m0;
+      yp[11] = -dy * m0;
+
+      dx = y[8] - y[4];
+      dy = y[9] - y[5];
+      r3 = Math.pow(dx * dx + dy * dy, 1.5);
+      (dx /= r3), (dy /= r3);
+      yp[6] += dx * m2;
+      yp[7] += dy * m2;
+      yp[10] -= dx * m1;
+      yp[11] -= dy * m1;
+    }
+
+    function tabulateOrbit({ n }) {
+      const history = [
+        { x: [], y: [] },
+        { x: [], y: [] },
+        { x: [], y: [] }
+      ];
+
+      const state = {
+        t: 0,
+        y: initialConditions.y0.slice()
+      };
+
+      function storeStep(state) {
+        history[0].x.push(state.y[0]);
+        history[0].y.push(state.y[1]);
+        history[1].x.push(state.y[4]);
+        history[1].y.push(state.y[5]);
+        history[2].x.push(state.y[8]);
+        history[2].y.push(state.y[9]);
+      }
+
+      storeStep(state);
+
+      const config = { tolerance: 1e-9 };
+      for (let i = 0; i < n - 1; i++) {
+        let step = 0;
+        config.t = (i / n) * initialConditions.period;
+        config.tLimit = ((i + 1) / n) * initialConditions.period;
+        state.limitReached = false;
+        while (step++ < 1000 && !state.limitReached) {
+          ode45(state, planarThreeBodyDerivative, config);
+        }
+        storeStep(state);
+      }
+      return history;
+    }
+  </script>
+
+  <script id="trajectory" type="module">
+    const trajectory = tabulateOrbit({ n });
+  </script>
+
+  <script id="freq-section-header" type="text/markdown">
+    ## Filter the frequency components
+
+    The next step is to filter the trajectories. Adjust the threshold below and observe the effect on how closely it matches the original.
+  </script>
+
+  <script id="fft-functions" type="module">
+    function fft(x, y) {
+      const xfft = ndarray(x.slice());
+      const yfft = ndarray(y.slice());
+      ndarrayFFT(1, xfft, yfft);
+      const scale = (v) => v / n;
+      return [xfft.data.map(scale), yfft.data.map(scale)];
+    }
+
+    function ifft(re, im) {
+      const x = ndarray(re.slice());
+      const y = ndarray(im.slice());
+      ndarrayFFT(-1, x, y);
+      const scale = (v) => v * n;
+      return [x.data.map(scale), y.data.map(scale)];
+    }
+
+    function fftfreq(i, n, dx) {
+      return (i < Math.floor((n + 1) / 2) ? i / (n * dx) : -(n - i) / (n * dx)) * Math.PI * 2;
+    }
+  </script>
+
+  <script id="fft-compute" type="module">
+    const dt = 1 / n;
+    const nfft = Math.floor(n / 2) + 1;
+    const freq = new Array(n).fill(0).map((_, i) => fftfreq(i, n, 1.0 / n));
+    const trajectoryFFT = trajectory.map((orbit) => fft(orbit.x, orbit.y));
+    const trajectoryFFTMag = trajectoryFFT.map(([re, im]) =>
+      re.map((_, i) => Math.hypot(re[i], im[i]))
+    );
+  </script>
+
+  <script id="input-threshold" type="module">
+    const threshold = view(Inputs.range([1e-10, 10], {
+      value: 0.0001,
+      label: "Threshold",
+      transform: Math.log
+    }));
+  </script>
+
+  <script id="filtering" type="module">
+    const trajectoryFFTMask = trajectoryFFTMag.map((fftMag) =>
+      fftMag.map((x) => (x > threshold ? 1 : 0))
+    );
+
+    const filteredTrajectoryFFT = trajectoryFFT.map(([re, im], i) => {
+      const m = trajectoryFFTMask[i];
+      const mask = (x, j) => x * m[j];
+      return [re.map(mask), im.map(mask)];
+    });
+
+    const filteredTrajectory = filteredTrajectoryFFT.map((orbit) =>
+      ifft(orbit[0], orbit[1])
+    );
+  </script>
+
+  <script id="nonzero-count" type="module">
+    {
+      let count = 0;
+      filteredTrajectoryFFT.forEach(([re, im]) => {
+        const thresh2 = threshold * threshold;
+        for (let i = 0; i < re.length; i++) {
+          const mag2 = re[i] * re[i] + im[i] * im[i];
+          if (mag2 >= thresh2) count++;
+        }
+      });
+      display(md`Non-zero frequency components: **${count}**`);
+    }
+  </script>
+
+  <script id="filtered-orbit-plot" type="module">
+    {
+      const colors = [colorA, colorB, colorC];
+
+      const originalData = trajectory.flatMap((path, i) => {
+        const pts = path.x.map((x, j) => ({ x, y: path.y[j], body: i }));
+        pts.push({ x: path.x[0], y: path.y[0], body: i });
+        return pts;
+      });
+
+      const filteredData = filteredTrajectory.flatMap(([fx, fy], i) => {
+        const pts = fx.map((x, j) => ({ x, y: fy[j], body: i }));
+        pts.push({ x: fx[0], y: fy[0], body: i });
+        return pts;
+      });
+
+      const plot = Plot.plot({
+        width: Math.min(width, 640),
+        aspectRatio: 1,
+        color: { domain: [0, 1, 2], range: colors },
+        marks: [
+          Plot.line(originalData, {
+            x: "x", y: "y", z: "body",
+            stroke: "#ccc", strokeWidth: 1.5
+          }),
+          Plot.line(filteredData, {
+            x: "x", y: "y", z: "body", stroke: "body"
+          })
+        ]
+      });
+
+      const figure = document.createElement("figure");
+      figure.appendChild(plot);
+      const caption = document.createElement("figcaption");
+      caption.textContent = "Filtered orbit (colored) overlaid on the integrated trajectory (gray).";
+      figure.appendChild(caption);
+      display(figure);
+    }
+  </script>
+
+  <script id="diagnostics-plot" type="module">
+    {
+      const colors = [colorA, colorB, colorC];
+      const plotWidth = Math.min(width, 640);
+
+      // Frequency spectrum data
+      const spectrumData = trajectoryFFTMag.flatMap((orbit, i) =>
+        orbit.map((mag, j) => ({
+          freq: freq[j],
+          mag,
+          body: i,
+          active: trajectoryFFTMask[i][j] === 1
+        }))
+      );
+
+      const spectrumPlot = Plot.plot({
+        width: plotWidth,
+        height: 250,
+        marginBottom: 30,
+        x: { label: "Frequency", domain: [-Math.PI / dt, Math.PI / dt] },
+        y: { label: "Magnitude", type: "log" },
+        marks: [
+          Plot.dot(spectrumData.filter(d => !d.active), {
+            x: "freq", y: "mag", fill: "#bbb", r: 2
+          }),
+          Plot.dot(spectrumData.filter(d => d.active), {
+            x: "freq", y: "mag",
+            fill: d => colors[d.body],
+            r: 2
+          }),
+          Plot.ruleY([threshold], { stroke: "#888", strokeDasharray: "4,4" })
+        ]
+      });
+
+      // Error data
+      const t = new Array(n).fill(0).map((_, i) => (initialConditions.period * i) / n);
+      const errorData = trajectory.flatMap(({ x, y }, i) => {
+        const [fx, fy] = filteredTrajectory[i];
+        return x.map((xv, j) => ({
+          t: t[j],
+          error: Math.hypot(xv - fx[j], y[j] - fy[j]),
+          body: i
+        }));
+      });
+
+      const errorPlot = Plot.plot({
+        width: plotWidth,
+        height: 200,
+        marginTop: 20,
+        x: { label: "Time" },
+        y: { label: "Position error", type: "log", domain: [1e-8, 3] },
+        marks: [
+          Plot.dot(errorData, {
+            x: "t", y: "error", fill: d => colors[d.body], r: 1.5
+          })
+        ]
+      });
+
+      const figure = document.createElement("figure");
+      figure.appendChild(spectrumPlot);
+      figure.appendChild(errorPlot);
+      const caption = document.createElement("figcaption");
+      caption.textContent = "Top: frequency components (positive = counterclockwise, negative = clockwise). Bottom: absolute position error of filtered trajectory.";
+      figure.appendChild(caption);
+      display(figure);
+    }
+  </script>
+
+  <script id="styles" type="module">
+    display(html`<style>
+      .orbit-selector select {
+        margin-top: 0.25em;
+      }
+    </style>`);
+  </script>
+</notebook>
