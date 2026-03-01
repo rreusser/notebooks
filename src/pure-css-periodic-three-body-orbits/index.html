@@ -54,7 +54,7 @@
     }
   </script>
   <script id="4" type="text/markdown">
-    This notebook reworks my [Periodic Planar Three-Body Orbits](https://observablehq.com/@rreusser/periodic-planar-three-body-orbits) notebook with a bit of an odd goal: to animate periodic planar three-body orbits using pure HTML and CSS, without any JavaScript, and without fully enumerating every point along the paths.
+    This notebook reworks my [Periodic Planar Three-Body Orbits](https://rreusser.github.io/notebooks/periodic-planar-three-body-orbits/) notebook with a bit of an odd goal: to animate periodic planar three-body orbits using pure HTML and CSS, without any JavaScript, and without fully enumerating every point along the paths.
 
     The method is straightforward though a bit tedious. We integrate an orbit with fixed temporal spacing, assign the x and y components of each point along the trajectory to real and imaginary components in the complex plane, and compute the Discrete Fourier Transform (DFT). Then we threshold the frequency components, represent each frequency component as a rotating complex phasor, and convert to CSS transforms!
   </script>
